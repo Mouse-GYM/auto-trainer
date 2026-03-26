@@ -87,15 +87,9 @@ def main():
 
     # must be AFTER set_start_method before:
 
-    from tools.acquisition.model.app_model_status import AppModelStatus
+    from tools.acquisition.args import make_autotrainer_parser
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=Path)
-    parser.add_argument("--preferences-file", help="user preference ini file", default=None, type=Path)
-    parser.add_argument("--start-mode", help="The desired start system mode",
-                        choices=list(v.value for v in AppModelStatus), type=parse_start_mode,
-                        default=AppModelStatus.ACQUIRING)
+    parser = make_autotrainer_parser()
 
     args = parser.parse_args()
 

@@ -339,6 +339,9 @@ class AppModel(ObservableObject):
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
         pellet_m.events.pellet_sent += self._on_pellet_sent
 
+        sensor_analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
+        sensor_analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
+
         self._timer_send_status = no_op_timer
         def send_system_status_and_reschedule():
             self._send_api_system_status()
@@ -370,6 +373,10 @@ class AppModel(ObservableObject):
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
         logger.verbose("Created new daily timer in %.1f seconds", delay)
+
+    def check_max_pellet_loaded(self):
+        mon = self._analysis.system_maintenance_monitor
+        mon.update_pellet_loaded(self._preferences.pellet_load_count_total)
 
     @property
     def app_lock(self) -> threading.RLock:
@@ -1080,6 +1087,8 @@ class AppModel(ObservableObject):
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
         self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
 
+        self.check_max_pellet_loaded()
+
         return True
 
     def capture_stop(self, force: bool=False):
@@ -1436,11 +1445,22 @@ class AppModel(ObservableObject):
             pellet_m.force_send_pellet()
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
-        if name == UserPreferences.SELECTED_ANIMAL:
+        prefs = UserPreferences
+        if name == prefs.SELECTED_ANIMAL:
             for animal in self._animals:
                 if animal.name == new_value:
                     self.selected_animal = animal
                     break
+        elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
+            self.check_max_pellet_loaded()
+
+    def _on_alarm_monitor_property_changed(self, name, value, _):
+        alarm_mon = self._analysis.emergency_alarm_monitor
+        if name == alarm_mon.CONFIG:
+            pass
+
+    def _on_system_maint_prop_changed(self, name, value, _):
+        self.check_max_pellet_loaded()
 
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
@@ -1927,6 +1947,8 @@ class AppModel(ObservableObject):
         prefs.pellet_load_count_total += 1
         prefs.pellet_load_count_day += 1
         prefs.save()  # always
+        #
+        self.check_max_pellet_loaded()
 
     def _on_pellet_sent(self):
         selected = self._selected_animal

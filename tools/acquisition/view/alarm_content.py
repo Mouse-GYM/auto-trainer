@@ -19,6 +19,26 @@ from tools.acquisition.model.hardware_model import HardwareModel
 logger = get_verbose_logger(__name__)
 
 
+def make_alarm_icon(name):
+    return StatusIcon(
+        on_icon='fa5s.bell',
+        on_disabled_icon='fa5.bell',
+        off_icon='fa5.bell',
+        off_disabled_icon='fa5.bell',
+        on_color='red',
+        on_disabled_color='red',
+        off_color='black',
+        off_disabled_color='gray',
+        name=name,
+    )
+
+
+def make_icon(size: int = 18, off_color: str = "black", name: str = "NA"):
+    ico = StatusIcon(on_icon='fa5s.bell', off_icon='fa5.bell', on_color='red', off_color=off_color, size=size,
+                     name=name)
+    return ico
+
+
 class AlarmContent(ContentWidget):
     """
     Widget to display alarm content.
@@ -34,11 +54,14 @@ class AlarmContent(ContentWidget):
     use_external_door_changed = Signal(bool)
     external_door_status_changed = Signal(bool)
 
-    use_global_animal_presence = Signal(bool)
+    use_global_animal_presence_changed = Signal(bool)
     global_animal_presence_changed = Signal(bool)
 
     use_device_comm_error_changed = Signal(bool)
     device_comm_error_status_changed = Signal(bool)
+
+    use_system_maintenance_changed = Signal(bool)
+    system_maintenance_changed = Signal(bool)
 
     #
 
@@ -71,27 +94,12 @@ class AlarmContent(ContentWidget):
         form_layout_alarms.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
-        emergency_alarm_cfg = emergency_alarm.config
+        alarm_cfg = emergency_alarm.config
 
         label = QLabel("<b>Alarms</b>")
         label.setContentsMargins(0, 0, 0, 4)
         form_layout_alarms.addRow(label, None)
 
-        def make_icon(size: int = 18, off_color: str = "black", name: str = "NA"):
-            ico = StatusIcon(on_icon='fa5s.bell', off_icon='fa5.bell', on_color='red', off_color=off_color, size=size, name=name)
-            return ico
-
-        make_alarm_icon = lambda name: StatusIcon(
-            on_icon='fa5s.bell',
-            on_disabled_icon='fa5.bell',
-            off_icon='fa5.bell',
-            off_disabled_icon='fa5.bell',
-            on_color='red',
-            on_disabled_color='red',
-            off_color='black',
-            off_disabled_color='gray',
-            name=name,
-        )
         make_detector_icon = partial(make_icon, off_color="black")
 
         def make_label(txt: str) -> QLabel:
@@ -108,7 +116,7 @@ class AlarmContent(ContentWidget):
         form_layout_alarms.addRow(label, icon)
         self.use_load_cell_audio_thrash_changed.connect(label.setEnabled)
         self.use_load_cell_audio_thrash_changed.connect(icon.setInUse)
-        self.use_load_cell_audio_thrash_changed.emit(emergency_alarm_cfg.use_audio_load_cell_thrash)
+        self.use_load_cell_audio_thrash_changed.emit(alarm_cfg.use_audio_load_cell_thrash)
         self.load_cell_audio_thrash_changed.connect(icon.setStatus)
 
         icon = self._in_cage_after_tunnel_status = make_alarm_icon("alarm-missing")
@@ -116,7 +124,7 @@ class AlarmContent(ContentWidget):
         form_layout_alarms.addRow(label, icon)
         self.use_presence_in_cage_after_exit_tunnel_changed.connect(label.setEnabled)
         self.use_presence_in_cage_after_exit_tunnel_changed.connect(icon.setInUse)
-        self.use_presence_in_cage_after_exit_tunnel_changed.emit(emergency_alarm_cfg.use_presence_missing_after_exit_tunnel)
+        self.use_presence_in_cage_after_exit_tunnel_changed.emit(alarm_cfg.use_presence_missing_after_exit_tunnel)
         self.presence_in_cage_after_exit_tunnel_changed.connect(icon.setStatus)
 
         icon = self._external_door_status = make_alarm_icon("alarm-ext-doors")
@@ -124,14 +132,14 @@ class AlarmContent(ContentWidget):
         form_layout_alarms.addRow(label, icon)
         self.use_external_door_changed.connect(label.setEnabled)
         self.use_external_door_changed.connect(icon.setInUse)
-        self.use_external_door_changed.emit(emergency_alarm_cfg.use_external_doors_open)
+        self.use_external_door_changed.emit(alarm_cfg.use_external_doors_open)
         self.external_door_status_changed.connect(icon.setStatus)
 
         icon = self._device_comm_error_status = make_alarm_icon("alarm-ext-doors")
         label = self._device_comm_error_label = make_label("Device Comm. Error:")
         self.use_device_comm_error_changed.connect(label.setEnabled)
         self.use_device_comm_error_changed.connect(icon.setInUse)
-        self.use_device_comm_error_changed.emit(emergency_alarm_cfg.use_device_comm_error)
+        self.use_device_comm_error_changed.emit(alarm_cfg.use_device_comm_error)
         self.device_comm_error_status_changed.connect(icon.setStatus)
         form_layout_alarms.addRow(label, icon)
 
@@ -139,10 +147,18 @@ class AlarmContent(ContentWidget):
             icon = self._animal_missing_status = make_alarm_icon(name="animal-immobile")
             label = self._animal_missing_label = make_label("Animal Immobile:")
             form_layout_alarms.addRow(label, icon)
-            self.use_global_animal_presence.connect(label.setEnabled)
-            self.use_global_animal_presence.connect(icon.setInUse)
-            self.use_global_animal_presence.emit(emergency_alarm_cfg.use_global_animal_presence)
+            self.use_global_animal_presence_changed.connect(label.setEnabled)
+            self.use_global_animal_presence_changed.connect(icon.setInUse)
+            self.use_global_animal_presence_changed.emit(alarm_cfg.use_global_animal_presence)
             self.global_animal_presence_changed.connect(icon.setStatus)
+
+        icon = self._system_maintenance_status = make_alarm_icon(name="system-maintenance")
+        label = self._system_maintenance_label = make_label("System Maintenance:")
+        self.use_system_maintenance_changed.connect(label.setEnabled)
+        self.use_system_maintenance_changed.connect(icon.setInUse)
+        self.use_system_maintenance_changed.emit(alarm_cfg.use_system_maintenance)
+        self.system_maintenance_changed.connect(icon.setStatus)
+        form_layout_alarms.addRow(label, icon)
 
         #
 
@@ -243,8 +259,9 @@ class AlarmContent(ContentWidget):
             self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
             self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
             self.use_external_door_changed.emit(value.use_external_doors_open)
-            self.use_global_animal_presence.emit(value.use_global_animal_presence)
+            self.use_global_animal_presence_changed.emit(value.use_global_animal_presence)
             self.use_device_comm_error_changed.emit(value.use_device_comm_error)
+            self.use_system_maintenance_changed.emit(value.use_system_maintenance)
 
         elif name == p.IS_ENGAGED:
             if not value:
@@ -254,6 +271,7 @@ class AlarmContent(ContentWidget):
                 changed(p.AUDIO_LOAD_CELL_THRASHING_ENGAGED, mon.audio_load_cell_thrashing_engaged, None)
                 changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
                 changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
+                changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
 
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
@@ -274,6 +292,11 @@ class AlarmContent(ContentWidget):
             if not value and is_pause_emergency and not cfg.auto_resume_on_device_comm_error:
                 return
             self.device_comm_error_status_changed.emit(value)
+
+        elif name == p.SYSTEM_MAINTENANCE_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_system_maintenance:
+                return
+            self.system_maintenance_changed.emit(value)
 
     @invoke_method
     def _global_animal_presence_property_changed(self, name, value, _):

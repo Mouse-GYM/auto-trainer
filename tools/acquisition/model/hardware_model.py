@@ -430,7 +430,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             ))
             alarm_mon = self._sensor_analysis.emergency_alarm_monitor
             alarm_mon.device_comm_error_engaged = engaged
-            alarm_mon.check_state()
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
