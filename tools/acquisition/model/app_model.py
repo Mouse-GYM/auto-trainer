@@ -1,5 +1,4 @@
 import dataclasses
-import copy
 import enum
 import json
 import logging
@@ -17,8 +16,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union
 
 import yaml
-from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
-from watchdog.observers import Observer
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
     ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
@@ -50,7 +47,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorA
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
     IntersessionMachine, CaptureAnalysisResult
 
-from autotrainer.training import TrainingPlan, TrainingPhase
+from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo
 
 from autotrainer.api import (
     RpcService,
@@ -81,28 +78,6 @@ _daily_timer = make_daemon_timer
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
-
-class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
-
-    def __init__(self, app_model: "AppModel"):
-        super().__init__(patterns=["*.json"])
-        self._app_model = app_model
-
-    def _reload_app_model_plans(self):
-        self._app_model.reload_training_plans()
-
-    @staticmethod
-    def _on_any_event_match(path: Optional[str]):
-        return path is not None and path.lower().endswith(".json")
-
-    def on_any_event(self, event: FileSystemEvent) -> None:
-        logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
-        match = self._on_any_event_match
-        if (
-               (event.event_type in {'created', 'closed', 'deleted'} and match(event.src_path))
-            or (event.event_type == 'moved' and (match(event.dest_path) or match(event.src_path)))
-        ):
-            self._reload_app_model_plans()
 
 
 class InvalidTargetAppModelStatus(Exception):
@@ -212,6 +187,7 @@ class AppModel(ObservableObject):
 
         self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
+        logger.notice("Creating app_model with version %s", app_version)
 
         def log_on_error(title, msg):
             logger.error("%s: %s", title, msg)
@@ -245,8 +221,7 @@ class AppModel(ObservableObject):
 
         self.set_log_location()
 
-        logger.notice("Creating app_model with version %s", app_version)
-
+        self._plan_repo = PlanRepository()
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
@@ -317,8 +292,8 @@ class AppModel(ObservableObject):
                                          ) if inference_model is None else inference_model
         #
 
-        self._training_plans: List[Dict] = []
-        self._training_plan_by_plan_id: Dict[str, Dict] = {}
+        self._training_plans: List[PlanInfo] = []
+        self._training_plan_by_plan_id: Dict[str, PlanInfo] = {}
         self._plans_by_path: Dict[Path, Dict[str, Any]] = {}
 
         behavior_model = self._behavior = BehaviorModel(
@@ -363,10 +338,6 @@ class AppModel(ObservableObject):
         pellet_m = system_machine.pellet
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
         pellet_m.events.pellet_sent += self._on_pellet_sent
-
-        self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
-        self._plans_files_observer = Observer()
-        self._plans_files_observer.start()
 
         self._timer_send_status = no_op_timer
         def send_system_status_and_reschedule():
@@ -456,6 +427,8 @@ class AppModel(ObservableObject):
             self._analysis.stop()
         else:
             self._analysis.restart()
+        # reload training plans:
+        self.reload_training_plans()
         if value == AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
@@ -783,14 +756,14 @@ class AppModel(ObservableObject):
             value.command_request_delegate = self._handle_rpc_service_command
 
     @property
-    def training_plans(self) -> List[Dict[str, Any]]:
+    def training_plans(self) -> List[PlanInfo]:
         return self._training_plans
 
     @training_plans.setter
-    def training_plans(self, value):
+    def training_plans(self, value: List[PlanInfo]):
         self._training_plans = value
         self._training_plan_by_plan_id = {
-            get_plan_id(plan): plan
+            plan.plan_id: plan
             for idx, plan in enumerate(self._training_plans)
         }
         self._detach_training_plan()  # always
@@ -813,17 +786,7 @@ class AppModel(ObservableObject):
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
-        plan = self._training_plan_by_plan_id.get(plan_id)
-        if plan is None:
-            logger.warning("Unknown plan_id: %s", plan_id)
-            return None
-        pid = get_plan_id(plan)
-        for available_path, available_plan in self._plans_by_path.items():
-            if get_plan_id(available_plan) == pid:
-                # ensure any caller gets a fresh instance, without need re-read from disk:
-                return TrainingPlan.from_dict(copy.deepcopy(available_plan))
-        logger.warning("Plan %s not anymore available", pid)
-        return None
+        return self._plan_repo.get_plan(plan_id)
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
@@ -1147,7 +1110,7 @@ class AppModel(ObservableObject):
                 self.property_changed(self.Props.STATUS, AppModelStatus.IDLE, None)
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
-                self.reload_training_plans()
+                self.reload_training_plans(refresh=True)
             self._event_manager.post_event_content(ApiEventKind.acquisitionEnded)
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
@@ -1182,10 +1145,6 @@ class AppModel(ObservableObject):
             if camera.is_primary:
                 logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
-
-    def _get_plans_dir(self):
-        plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
-        return plans_path
 
     def set_log_location(self, location: Optional[Path] = None):
         if location is None:
@@ -1271,8 +1230,7 @@ class AppModel(ObservableObject):
         # only at the end:
         self.output_location = configuration.persistence.output_location
 
-        plans_path = self._get_plans_dir()
-        self.reload_training_plans(plans_path, reraise_on_error=True)
+        self.reload_training_plans(reraise_on_error=True)
 
         # and:
         self._load_animals()
@@ -1281,37 +1239,25 @@ class AppModel(ObservableObject):
         dev_ack_timeout = configuration.hardware.min_ack_timeout
         self._hardware.set_device_ack_timeout(dev_ack_timeout)
 
-        observer = self._plans_files_observer
-        observer.stop()
-        observer.join(2)
-        observer = self._plans_files_observer = Observer()
-        logger.debug("starting FS monitoring of %s", plans_path)
-        plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
-        observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
-        observer.start()
-
         return True
 
-    def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):
+    def reload_training_plans(self, *, refresh: bool=False, reraise_on_error: bool=False):
         if self._acquisition_started or self._status != AppModelStatus.IDLE:
             logger.notice("delaying reload training plans given acquisition started(%s) or status not idle: %s",
                           self._acquisition_started, self._status)
             self._reload_plans_needed = True
             return
-        if dir_path is None:
-            dir_path = self._get_plans_dir()
         try:
-            plans = load_training_plans(dir_path)
+            plan_infos = self._plan_repo.get_plans(refresh=refresh)
         except Exception as err:
+            logger.exception("Could not load plans: %s", err)
             if reraise_on_error:
                 raise RuntimeError(f"Could not load training plans: {err}") from None
-            logger.exception("Could not load plans from %s: %s", dir_path, err)
             self.on_error("Reload training protocols error",
-                          f"Could not reload plans from {dir_path.as_posix()}:\n\n"
+                          f"Could not reload plans:\n\n"
                           f"{err}\n\nPrevious plans are retained.")
             return
-        self._plans_by_path = plans
-        self.training_plans = list(plans.values())
+        self._training_plans = plan_infos
 
     def save_configuration(self):
         if self._loaded_configuration is None:

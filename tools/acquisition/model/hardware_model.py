@@ -218,7 +218,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """
         return self._head_magnet_position
 
-    def update_head_magnet_intensity(self, value: float) -> Optional[UUID]:
+    def update_head_magnet_intensity(self, value: Optional[float]) -> Optional[UUID]:
+        if value is None:  # caller should not call instead eventually
+            return
         if isinstance(value, str):
             value = float(value)
         if value != self._head_magnet_position:
