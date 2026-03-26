@@ -9,7 +9,7 @@ import math
 import queue
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, date
 from functools import partial
 from pathlib import Path
 from typing import Optional, Tuple, ClassVar, Any, Dict, Deque
@@ -288,6 +288,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_pellet_loaded_count = 0  # loaded
 
+        self._pellet_counts_day_date = date.today()
         self._pellets_consumed_day = 0  # consumed
         self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
@@ -327,8 +328,9 @@ class BehaviorAlgorithm(ObservableObject):
         )
         #
         self._check_start_thread(thread_lock=self._thread_lock)
-        self._today = None
-        self._start_day()
+        #
+        self._today = None  # only used in check_date, unused, atm
+        # self._start_day()
         #
         self._shift_xyz_handler = ShiftXYZHandler()
 
@@ -827,12 +829,23 @@ class BehaviorAlgorithm(ObservableObject):
 
     # counts
 
+    def _check_pellet_counts_day_date(self):
+        today = date.today()
+        if today != self._pellet_counts_day_date:
+            logger.verbose("resetting pellet day counts to 0")
+            self._pellet_counts_day_date = today
+            self.pellets_presented_day = 0
+            self.pellet_reaches_day = 0
+            self.pellet_consumed_day = 0
+            self.successful_reaches_day = 0
+
     @property
-    def day_pellet_count(self) -> int:
+    def pellet_consumed_day(self) -> int:
+        self._check_pellet_counts_day_date()
         return self._pellets_consumed_day
 
-    @day_pellet_count.setter
-    def day_pellet_count(self, value: int):
+    @pellet_consumed_day.setter
+    def pellet_consumed_day(self, value: int):
         prev_value, self._pellets_consumed_day = self._pellets_consumed_day, value
         self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT, value, prev_value)
         incr = value - prev_value
@@ -842,11 +855,11 @@ class BehaviorAlgorithm(ObservableObject):
             self._event_manager.post_event_content(BehaviorEventKind.dayDecreasePellet, context=value)
 
     @property
-    def total_pellet_count(self) -> int:
+    def pellet_consumed_total(self) -> int:
         return self._pellets_consumed_total
 
-    @total_pellet_count.setter
-    def total_pellet_count(self, value: int):
+    @pellet_consumed_total.setter
+    def pellet_consumed_total(self, value: int):
         prev, self._pellets_consumed_total = self._pellets_consumed_total, value
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT, value, prev)
 
@@ -867,13 +880,14 @@ class BehaviorAlgorithm(ObservableObject):
         #    self.end_session()
 
     def increase_pellets_consumed(self, quantity: int = 1):
-        self.day_pellet_count += quantity
-        self.total_pellet_count += quantity
+        self.pellet_consumed_day += quantity
+        self.pellet_consumed_total += quantity
         if quantity:
             self.pellets_consumed_evt(quantity)
 
     @property
     def pellets_presented_day(self):
+        self._check_pellet_counts_day_date()
         return self._pellets_presented_day
 
     @pellets_presented_day.setter
@@ -900,6 +914,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def pellet_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._reaches_day
 
     @pellet_reaches_day.setter
@@ -924,6 +939,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def successful_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._successful_reaches_day
 
     @successful_reaches_day.setter
@@ -1211,7 +1227,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._parts_pres_ctx.update_part_seen(part, seen, perf_now=perf_now)
 
     def pellet_loaded(self):
-        self._session_pellet_loaded_count += 1
+        self.session_pellet_loaded_count += 1
 
     def update_triangle_seen(self, seen: bool):
         self.update_part_seen(
@@ -1392,25 +1408,39 @@ class BehaviorAlgorithm(ObservableObject):
                                ctx.expected_distance, ctx.error_distance_threshold)
                 ctx.warned_bad_distance = True
 
-    def reset_selected_animal_counts(self, animal: AnimalSubject):
+    def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
-        self.day_pellet_count = 0
-        self.pellets_presented_day = 0
-        self.successful_reaches_day = 0
-        self.pellet_reaches_day = 0
-        self.total_pellet_count = 0
-        self.pellets_presented_total = 0
-        self.successful_reaches_total = 0
-        self.pellet_reaches_total = 0
+        if animal is None:
+            self.pellets_presented_day = \
+            self.pellet_reaches_day = \
+            self.pellet_consumed_day = \
+            self.successful_reaches_day = 0
+            self.pellets_presented_total = \
+            self.pellet_reaches_total = \
+            self.pellet_consumed_total = \
+            self.successful_reaches_total = 0
+            return
+        day_counts = animal.pellet_counts_day
+        self.pellets_presented_day = day_counts.presented
+        self.pellet_consumed_day = day_counts.consumed
+        self.pellet_reaches_day = day_counts.reaches
+        self.successful_reaches_day = day_counts.success_reaches
+        #
+        total_counts = animal.pellet_counts_total
+        self.pellets_presented_total = total_counts.presented
+        self.pellet_consumed_total = total_counts.consumed
+        self.pellet_reaches_total = total_counts.reaches
+        self.successful_reaches_total = total_counts.success_reaches
 
     def _start_day(self):
-        self.day_pellet_count = 0  # consumed
+        self.pellet_consumed_day = 0  # consumed
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
         self.pellet_reaches_day = 0
 
+    # unused atm...
     def _check_date(self):
-        today = datetime.now().date()
+        today = date.today()
         if today != self._today:
             self._event_manager.post_event_content(BehaviorEventKind.dayStarted)
             self._today = today

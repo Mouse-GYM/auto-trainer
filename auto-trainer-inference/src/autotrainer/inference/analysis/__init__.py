@@ -12,7 +12,9 @@ class IntersessionResponse:
 
     food_consumed: int = 0  # total pellets consumed during session/trial
     successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)
-    pellets_presented: int = 0  # there were that many total pellets presented
+    pellets_presented: int = 0  # there were that many total pellets presented.
+        # NB: this is now discarded/not used anymore. Instead, we use the pellet-sent event to count the
+        # pellets presented to animals.
     total_reaches: int = 0  # there were this many total reaches (both hands)
 
     def humanize(self, n_digits=2):

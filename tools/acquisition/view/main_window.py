@@ -20,6 +20,7 @@ import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual, ProjectInfo, get_perf_now
+from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -802,6 +803,10 @@ class MainWindow(QMainWindow):
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         action.triggered.connect(self._show_preferences)
 
+        tooltip = "Reset pellet and reach counts for this animal"
+        action = self._reset_animal_pellet_counts_action = QAction(QIcon(qta.icon("fa5s.sync")), tooltip, self)
+        action.triggered.connect(self._reset_animal_pellet_counts)
+
         action = self.emergency_stop_action = QAction("Emergency", self)
         action.setCheckable(True)
 
@@ -894,6 +899,8 @@ class MainWindow(QMainWindow):
         combo.currentIndexChanged.connect(self._animal_changed)
         combo.lineEdit().editingFinished.connect(self._add_animal)
         toolbar.addWidget(combo)
+
+        toolbar.addAction(self._reset_animal_pellet_counts_action)
 
         toolbar.addSeparator()
 
@@ -1432,3 +1439,20 @@ class MainWindow(QMainWindow):
         self.show_reach_event_action.setEnabled(True)
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
+
+    def _reset_animal_pellet_counts(self):
+        app_model = self._app_model
+        # apply it to the algo,
+        # so that event/change listeners will get reset too
+        algo = app_model.behavior.algorithm
+        algo.pellets_presented_day = algo.pellets_presented_total = 0
+        algo.successful_reaches_day = algo.successful_reaches_total = 0
+        algo.pellet_reaches_day = algo.pellet_reaches_total = 0
+        algo.pellet_consumed_day = algo.pellet_consumed_total = 0
+        # but animal isn't synced with that, so:
+        selected = self._app_model.selected_animal
+        if selected is not None:
+            selected.pellet_counts_day = AnimalPelletCounts()
+            selected.pellet_counts_total = AnimalPelletCounts()
+            self._app_model._save_animal_metadata(selected, sender="reset_animal_counts",
+                                                  backup_previous=True)

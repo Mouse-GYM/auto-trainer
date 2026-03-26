@@ -1,3 +1,4 @@
+import datetime
 import logging
 import platform
 import sys
@@ -18,6 +19,9 @@ def get_default_configuration_location() -> str:
     return SystemConfiguration.DEFAULT_CONFIG_DIR.expanduser().as_posix()
 
 
+_date_format = "%Y%m%d"
+
+
 class UserPreferences(ObservableObject):
 
     CONFIGURATION_LOCATION = "configuration_location"
@@ -31,6 +35,8 @@ class UserPreferences(ObservableObject):
     TUNNEL_PORT = "tunnel_port"
     REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION = "remove_raw_data_when_inactive_session"
     MEASUREMENT_GRAPH = "measurement_graph"
+    PELLET_LOAD_COUNT_TOTAL = "pellet_load_count_total"
+    PELLET_LOAD_COUNT_DAY = "pellet_load_count_day"
 
     def __init__(self, *, settings_file_path: Optional[Path] = None):
         super().__init__()
@@ -69,8 +75,19 @@ class UserPreferences(ObservableObject):
         self._log_location: str = settings.value("system/log_location", "")  # noqa
         self._log_level: int = settings.value("system/log_level", logging.WARNING, int)  # noqa
 
-        self._live_feed_refresh_rate: int = settings.value("display/refresh_rate", 15, int)  # noqa
+        self._pellet_load_count_total: int = settings.value("system/pellet_load_count_total", 0, int)  # noqa
+        self._pellet_load_count_day: int = settings.value("system/pellet_load_count_day", 0, int)  # noqa
+        today = self._cur_day = datetime.date.today()
+        today_str = today.strftime(_date_format)
+        prev_pellet_day = settings.value("system/pellet_load_count_day_date", "", str)
+        if today_str != prev_pellet_day:
+            logger.verbose("auto-setting pellet_load_count_day to 0 given previous day != today: %r",
+                           prev_pellet_day)
+            self._pellet_load_count_day = 0
+            settings.setValue("system/pellet_load_count_day", 0)
+            settings.setValue("system/pellet_load_count_day_date", today_str)
 
+        self._live_feed_refresh_rate: int = settings.value("display/refresh_rate", 15, int)  # noqa
         self._measurement_graph: str = settings.value("ui/measurement_graph", "")  # noqa
 
         # Transient values that may come from individual configuration files, but are conveniently accessed from
@@ -202,3 +219,32 @@ class UserPreferences(ObservableObject):
         prev, self._measurement_graph = self._measurement_graph, value
         self._settings.setValue("ui/measurement_graph", value)
         self._on_property_changed(self.MEASUREMENT_GRAPH, value, prev)
+
+    @property
+    def pellet_load_count_total(self) -> int:
+        return self._pellet_load_count_total
+
+    @pellet_load_count_total.setter
+    def pellet_load_count_total(self, value: int):
+        prev, self._pellet_load_count_total = self._pellet_load_count_total, value
+        self._settings.setValue("system/pellet_load_count_total", value)
+        self._on_property_changed(self.PELLET_LOAD_COUNT_TOTAL, value, prev)
+
+    @property
+    def pellet_load_count_day(self) -> int:
+        today = datetime.date.today()
+        if today != self._cur_day:
+            self._cur_day = today
+            self.pellet_load_count_day = 0
+            self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
+        return self._pellet_load_count_day
+
+    @pellet_load_count_day.setter
+    def pellet_load_count_day(self, value: int):
+        today = datetime.date.today()
+        if today != self._cur_day:
+            self._cur_day = today
+            self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
+        prev, self._pellet_load_count_day = self._pellet_load_count_day, value
+        self._settings.setValue("system/pellet_load_count_day", value)
+        self._on_property_changed(self.PELLET_LOAD_COUNT_DAY, value, prev)
