@@ -124,9 +124,8 @@ class ScenePartsPresenceContext:
         if perf_now is None:
             perf_now = self.last_perf_c
         presence_p = self.present_last_perf_c.get(part, None)
-        # absence_p = self.missing_last_perf_c.get(part, None)
-        if presence_p is None:  # or (absence_p is not None and absence_p > presence_p):
-            return math.inf
+        if presence_p is None:
+            return -math.inf
         return perf_now - presence_p
 
     def get_absence_age(self, part: str, *, perf_now: Optional[float] = None) -> float:

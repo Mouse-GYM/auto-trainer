@@ -67,7 +67,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
-        self._scene_parts_ctx = ScenePartsPresenceContext()
+        self._all_scene_parts_ctx = ScenePartsPresenceContext()  # both/all cams seen
         self._config = config
         self._load_cell_monitor = load_cell_monitor
         self._load_cell_tare_monitor = load_cell_tare_monitor
@@ -96,7 +96,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         global_animal_presence_monitor.property_changed += global_animal_presence_prop_changed
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
-        self._scene_parts_ctx = context
+        self._all_scene_parts_ctx = context
 
     def add_alarm_condition(self, name, check):
         ...  # TODO
@@ -255,7 +255,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam = topcam.to_local_value()  # to ensure consistent lookups
         load_cell = self._load_cell_monitor.context
         cfg = self._config
-        pres_ctx = self._scene_parts_ctx
+        pres_ctx = self._all_scene_parts_ctx
         tun_pres_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
         tun_miss_age = pres_ctx.get_animal_absence_age(perf_now=perf_now)
         engaged = (

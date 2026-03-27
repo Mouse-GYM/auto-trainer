@@ -465,17 +465,12 @@ class PoseAlgorithm:
         return locations
 
 
-def update_scene_elements_context_from_pose(context: ScenePartsPresenceContext, pose_response: PoseResponse):
-    """Update in-place the given context based on the given response"""
+def _loop_parts(perf_c, parts, is_seen, p_miss, p_pres):
     changes_seen = set()
     changes_miss = set()
-    p1, p2 = pose_response.parts_flags[:2]
-    p_miss = context.missing_last_perf_c
-    p_pres = context.present_last_perf_c
-    prev_parts = set(p_miss) | set(p_pres)
-    all_seen_parts = set(p1) | set(p2)
-    for part in all_seen_parts | prev_parts:
-        seen = p1.get(part, False) or p2.get(part, False)
+    for part in parts:
+        seen = is_seen(part)
+        #
         prev_miss = p_miss.get(part)
         prev_seen = p_pres.get(part)
         if seen:
@@ -485,8 +480,27 @@ def update_scene_elements_context_from_pose(context: ScenePartsPresenceContext, 
             if prev_miss is None or (prev_seen is not None and prev_seen > prev_miss):
                 changes_miss.add(part)
     #
-    context.last_perf_c = perf_c = pose_response.perf_c
     for part in changes_seen:
         p_pres[part] = perf_c
     for part in changes_miss:
         p_miss[part] = perf_c
+
+
+def update_scene_elements_context_from_pose(
+    any_cam_context: ScenePartsPresenceContext,
+    all_cams_context: ScenePartsPresenceContext,
+    pose_response: PoseResponse,
+):
+    """Update in-place the given context based on the given response"""
+    perf_c = pose_response.perf_c
+    p1, p2, pall = pose_response.parts_flags[:3]
+    p_any_miss = any_cam_context.missing_last_perf_c
+    p_any_pres = any_cam_context.present_last_perf_c
+    p_all_miss = all_cams_context.missing_last_perf_c
+    p_all_pres = all_cams_context.present_last_perf_c
+    prev_parts = set(p_any_miss) | set(p_any_pres)
+    all_seen_parts = set(p1) | set(p2)
+    all_parts = prev_parts | all_seen_parts
+    _loop_parts(perf_c, all_parts, lambda p: p1.get(p, False) or p2.get(p, False), p_any_miss, p_any_pres)
+    _loop_parts(perf_c, all_parts, lambda p: pall.get(p, False), p_all_miss, p_all_pres)
+    any_cam_context.last_perf_c = all_cams_context.last_perf_c = perf_c
