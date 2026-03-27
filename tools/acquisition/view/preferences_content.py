@@ -29,6 +29,16 @@ logger = get_verbose_logger(__name__)
 _DELAY_OR_DURATION_MAX_VALUE = 999_999  # in seconds, ~277 hours, ~= 11.5 days
 
 
+def apply_size_policy(tab, klasses):
+    tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    for childs in itertools.chain(map(lambda c: tab.findChildren(c), klasses)):
+        for child in childs:
+            child.setSizePolicy(
+                QSizePolicy.Policy.Fixed if isinstance(child, QSwitch) else QSizePolicy.Policy.Minimum,
+                QSizePolicy.Policy.Fixed
+            )
+
+
 class PreferencesContent(QWidget):
 
     def __init__(self, preferences: UserPreferences, app_model: AppModel):
@@ -654,19 +664,11 @@ class PreferencesContent(QWidget):
         # to enable/disable the inference dependant sub-widgets:
         refresh_enabled_states()
 
-        for r_idx in range(grid_layout.rowCount()):
-            for c_idx in range(grid_layout.columnCount()):
-                i = grid_layout.itemAtPosition(r_idx, c_idx)
-                if i is not None:
-                    w = i.widget()
-                    if isinstance(w, QSwitch):
-                        w.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-                    elif isinstance(w, (QSpinBox, QDoubleSpinBox)):
-                        # w.setAlignment(Qt.AlignmentFlag.AlignRight)
-                        w.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         #
         tab = QWidget()
         tab.setLayout(main_layout)
+
+        apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox))
 
         return tab
 
@@ -792,7 +794,6 @@ class PreferencesContent(QWidget):
             spinbox.setRange(0, 24 * 2)  # 2 days
             spinbox.setDecimals(2)
             spinbox.setSingleStep(1)
-            spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             spinbox.setValue(analysis.global_animal_presence_monitor.config.presence_missing_delay_hours)
             def value_changed(value):
                 analysis.global_animal_presence_monitor.config.presence_missing_delay_hours = value
@@ -812,7 +813,6 @@ class PreferencesContent(QWidget):
             assert GlobalAnimalPresenceMonitor.feature_enabled
             label.setContentsMargins(0, 10, 0, 0)
             spinbox.setContentsMargins(0, 10, 0, 0)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_min_ptp_change_count)
         def value_changed(value):
@@ -823,7 +823,6 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_min)
@@ -835,7 +834,6 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_max)
@@ -853,7 +851,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Threshold db:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setContentsMargins(0, 10, 0, 0)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 200)
         spinbox.setValue(analysis.audio_thrashing_monitor.config.threshold_db)
@@ -865,7 +862,6 @@ class PreferencesContent(QWidget):
 
         grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
         line_edit = QLineEdit()
-        line_edit.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         line_edit.setText(str(analysis.audio_thrashing_monitor.config.bins_list))
         def value_changed(line_edit=line_edit):
             value = line_edit.text()
@@ -886,7 +882,6 @@ class PreferencesContent(QWidget):
         right_layout.addRow("<b>TopCam Presence</b>", QWidget())
 
         spinbox = self._presence_sum_percent_threshold_spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
@@ -897,7 +892,6 @@ class PreferencesContent(QWidget):
         right_layout.addRow("% threshold:", spinbox)
 
         spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
@@ -908,7 +902,6 @@ class PreferencesContent(QWidget):
         right_layout.addRow("high-% exclude threshold:", spinbox)
 
         spinbox = QSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 255)
         spinbox.setSingleStep(1)
         spinbox.setValue(app_model.top_camera_presence_detection.mask_lower_zero)
@@ -918,7 +911,6 @@ class PreferencesContent(QWidget):
         right_layout.addRow("Mask Lower Zero:", spinbox)
 
         spinbox = QDoubleSpinBox()
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         spinbox.setRange(0, 100)
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
@@ -932,6 +924,7 @@ class PreferencesContent(QWidget):
         right_layout.addRow("<b>System Maintenance</b>", QWidget())
         maint_mon = analysis.system_maintenance_monitor
         maint_cfg = maint_mon.config
+
         spinbox = QSpinBox()
         spinbox.setRange(1, 99999)
         spinbox.setValue(maint_cfg.max_pellets_loaded_count)
@@ -946,18 +939,29 @@ class PreferencesContent(QWidget):
         label = QLabel(f"{prefs.pellet_load_count_total}")
         right_layout.addRow("Current count:", label)
 
+        spinbox = QSpinBox()
+        spinbox.setRange(1, 99999)
+        spinbox.setValue(maint_cfg.max_consecutive_failed_loaded)
+        def max_consecutive_failed_load_count_changed(value: int):
+            cfg = maint_mon.config
+            if value != cfg.max_consecutive_failed_loaded:
+                cfg.max_consecutive_failed_loaded = value
+                maint_mon.property_changed(maint_mon.CONFIG, cfg, None)
+        spinbox.valueChanged.connect(max_consecutive_failed_load_count_changed)
+        right_layout.addRow("Max Consecutive Failed Loads:", spinbox)
+
         top_layout.addLayout(right_layout)
 
         tab = QWidget(None)
         tab.setLayout(top_layout)
-        tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox, QLineEdit))
 
         return tab
 
     def _create_alarms_tab(self):
         app_model = self._app_model
         analysis = app_model.analysis
-        preferences = app_model.preferences
         alarm_monitor = analysis.emergency_alarm_monitor
         alarm_cfg = analysis.emergency_alarm_monitor.config
 
@@ -1268,11 +1272,8 @@ class PreferencesContent(QWidget):
 
         tab = QWidget(None)
         tab.setLayout(main_layout)
-        tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        for childs in itertools.chain(map(lambda c: tab.findChildren(c), (QSwitch, QSpinBox, QDoubleSpinBox))):
-            for child in childs:
-                child.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox))
 
         return tab
 
