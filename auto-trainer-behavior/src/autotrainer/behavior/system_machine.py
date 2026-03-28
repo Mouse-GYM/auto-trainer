@@ -79,8 +79,10 @@ class SystemMachine(StateMachine):
         )
 
         self._project_info: Optional[ProjectInfo] = project_info
+        self._need_set_stop_recorded = False  # this is used for when doing/analysing batch of trials
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
+        self._batch_project_sessions_finished: int = 0
         self._batch_failed_count: int = 0
         self._batch_sessions_total_duration: float = 0
 
@@ -242,7 +244,7 @@ class SystemMachine(StateMachine):
                         self._intersession.state, batch_projects)
                 else:
                     prj = batch_projects[0]
-                    # self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
+                    self._need_set_stop_recorded = True
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
@@ -257,17 +259,21 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            logger.verbose("setting stop_recorded event")
-            inference.stop_recorded_event.set()
             # todo: actually not needed if pose-process offline input knows it does not have to wait for this case...
             #
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0
+                self._batch_project_sessions_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
         else:
+            self._batch_project_sessions_finished = 0
             cur_prj = self._project_info.to_local_value()
+
+        if self._need_set_stop_recorded:
+            logger.verbose("setting stop_recorded event")
+            inference.stop_recorded_event.set()
 
         if self._pellet_machine.state == PelletState.monitoring:
             self._pellet_machine.move_retract()
@@ -276,7 +282,7 @@ class SystemMachine(StateMachine):
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
         kind = InferenceCommandMessageKind.ProcessOffline
-        # todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
+        # eventual todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
         #  for the stop_recorded event, see above previous comment.
         self._inference.send_message(kind, cur_prj)
         self._consider_close_gate_during_intersession()
@@ -440,6 +446,7 @@ class SystemMachine(StateMachine):
             if algo.clean_raw_data_on_inactive_session:
                 self._clean_raw_data(cur_project)
         #
+        self._batch_project_sessions_finished = 0
         if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
             if len(cur_sessions_batch) == 1 and self._project_info == cur_sessions_batch[0]:
                 logger.debug("only 1 session in batch, skipping batch")
@@ -447,6 +454,7 @@ class SystemMachine(StateMachine):
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
             prj = self._project_info.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+            self._need_set_stop_recorded = prj != self._project_info
             self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
@@ -460,6 +468,7 @@ class SystemMachine(StateMachine):
         logger.verbose("intersession ended: result=%s prj=%s", result, self._intersession.project)
         cur_batch = self._batch_project_sessions_list
         if len(cur_batch) > 0:
+            self._batch_project_sessions_finished += 1
             del cur_batch[0]
             if result == CaptureAnalysisResult.ANALYSIS_FAILED:
                 self._batch_failed_count += 1
