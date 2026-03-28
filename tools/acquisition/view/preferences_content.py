@@ -611,8 +611,11 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(combo, cur_row, cur_col + 1)
         cur_row += 1
 
+        release_mode_item_indent_px = 12
         # headClamp:autoClampNoActivityReleaseDelay
-        right_grid_layout.addWidget(QLabel("No-activity release delay (sec.) :"), cur_row, cur_col)
+        label = QLabel("No-activity release delay (sec.) :")
+        label.setContentsMargins(release_mode_item_indent_px, 0, 0, 0)
+        right_grid_layout.addWidget(label, cur_row, cur_col)
         activity_rows = [(cur_row, cur_col)]
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
@@ -625,7 +628,9 @@ class PreferencesContent(QWidget):
         cur_row += 1
 
         # headClamp:autoClampReleaseLoadCount
-        right_grid_layout.addWidget(QLabel("Release load count:"), cur_row, cur_col)
+        label = QLabel("Release load count:")
+        label.setContentsMargins(release_mode_item_indent_px, 0, 0, 0)
+        right_grid_layout.addWidget(label, cur_row, cur_col)
         activity_rows.append((cur_row, cur_col))
         spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
@@ -638,7 +643,9 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        right_grid_layout.addWidget(QLabel("Fixed duration:"), cur_row, cur_col)
+        label = QLabel("Fixed duration:")
+        label.setContentsMargins(release_mode_item_indent_px, 0, 0, 0)
+        right_grid_layout.addWidget(label, cur_row, cur_col)
         widget = QWidget()
         widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
         hbox = QHBoxLayout()
@@ -662,7 +669,7 @@ class PreferencesContent(QWidget):
                 value *= 60
             else:
                 assert unit == "seconds"
-            set_fixed_duration_value(value, s, c)
+            # set_fixed_duration_value(value, s, c)  auto-set to different unit eventually conveniently
             algo.active_config.head_clamp.fixed_duration_release_delay = value
         spinbox.valueChanged.connect(fixed_duration_value_changed)
         combo.addItems(["seconds", "minutes", "hours"])
@@ -686,13 +693,13 @@ class PreferencesContent(QWidget):
 
         def fixed_duration_unit_changed(unit, s=spinbox):
             value = algo.active_config.head_clamp.fixed_duration_release_delay
-            s.blockSignals(True)
             if unit == "hours":
                 value /= 3600
             elif unit == "minutes":
                 value /= 60
             else:
                 assert unit == "seconds"
+            s.blockSignals(True)
             s.setValue(value)
             s.blockSignals(False)
         combo.currentTextChanged.connect(fixed_duration_unit_changed)
