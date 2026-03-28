@@ -148,6 +148,7 @@ class FixedArrayMultiQueue:
         timeout -= p_now - p_before
         # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
         self.set_cam_tot_frames(cam_idx, cnt_net_q_put)
+        p_before = p_now
         barrier_wait(timeout=timeout)
         p_now = time.perf_counter()
         timeout -= p_now - p_before
