@@ -194,7 +194,7 @@ class AlarmContent(ContentWidget):
         form_layout_detectors.addRow("Pellet Misplaced:", icon)
 
         icon = self._pellets_before_refill_status = make_detector_icon(name="pellet-before-refill")
-        form_layout_detectors.addRow("Pellets before refill:", icon)
+        form_layout_detectors.addRow("Pellets Before Refill:", icon)
 
         icon = self._consecutive_failed_loads_status = make_detector_icon(name="consecutive-failed-loads")
         form_layout_detectors.addRow("Cons. Failed Loads:", icon)
