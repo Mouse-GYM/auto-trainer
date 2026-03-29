@@ -252,7 +252,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False  # NB: not saved in config
         self._clean_raw_data_on_inactive_session = False
 
-        self._parts_pres_ctx = ScenePartsPresenceContext()
+        self._parts_pres_ctx_any_cam = ScenePartsPresenceContext()
+        self._parts_pres_ctx_all_cams = ScenePartsPresenceContext()
 
         # now using self._active_config.head_clamp mainly,
         # and also:
@@ -750,19 +751,12 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def triangle_last_seen(self) -> float:  # only used by test atm
-        return self._parts_pres_ctx.present_last_perf_c.get(SceneElement.Triangle, -math.inf)
-
-    @property
-    def star_recently_seen(self) -> bool:
-        return self._parts_pres_ctx.get_recently_seen(
-            SceneElement.Star,
-            self.limits.triangle_missing_time,
-            perf_now=get_perf_now(),
-        )
+        return self._parts_pres_ctx_any_cam.present_last_perf_c.get(SceneElement.Triangle, -math.inf)
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return self._parts_pres_ctx.get_recently_seen(
+        # only used in tests and a log
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Triangle,
             self.limits.triangle_missing_time,
             perf_now=get_perf_now(),
@@ -770,7 +764,8 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def diamond_recently_seen(self) -> bool:
-        return self._parts_pres_ctx.get_recently_seen(
+        # only used in test
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Diamond,
             self.limits.triangle_missing_time,
             perf_now=get_perf_now(),
@@ -821,9 +816,10 @@ class BehaviorAlgorithm(ObservableObject):
         """Check if triangle is too far from pellet according to triangle_pellet_expected_distance & triangle_pellet_diff_too_far_threshold"""
         cfg = self._active_config.pellet_delivery
         last_dist_diff = abs(self.triangle_pellet_distance - cfg.triangle_pellet_expected_distance)
+        p_now = get_perf_now()
         return (
-            self.pellet_recently_seen
-            and self.triangle_recently_seen
+            self.is_part_recently_seen(SceneElement.Pellet, perf_now=p_now)
+            and self.is_part_recently_seen(SceneElement.Triangle, perf_now=p_now)
             and last_dist_diff >= cfg.triangle_pellet_diff_too_far_threshold
         )
 
@@ -1029,12 +1025,12 @@ class BehaviorAlgorithm(ObservableObject):
         return self._shift_xyz_handler
 
     @property
-    def scene_parts_presence_context(self) -> ScenePartsPresenceContext:
-        return self._parts_pres_ctx
+    def any_cams_scene_parts_presence_context(self) -> ScenePartsPresenceContext:
+        return self._parts_pres_ctx_any_cam
 
-    @scene_parts_presence_context.setter
-    def scene_parts_presence_context(self, value: ScenePartsPresenceContext):
-        self._parts_pres_ctx = value
+    @property
+    def all_cams_scene_parts_presence_context(self) -> ScenePartsPresenceContext:
+        return self._parts_pres_ctx_all_cams
 
     #
 
@@ -1105,14 +1101,23 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def pellet_presence_age(self) -> float:
         """Return value in seconds unit"""
-        return self._parts_pres_ctx.get_presence_age(SceneElement.Pellet)
+        return self._parts_pres_ctx_any_cam.get_presence_age(SceneElement.Pellet)
 
     @property
     def pellet_recently_seen(self):
-        return self._parts_pres_ctx.get_recently_seen(
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Pellet, self.limits.pellet_missing_time,
             perf_now=get_perf_now(),
         )
+
+    def is_part_recently_seen(self, part: str, *, use_any_cam: bool=False, perf_now: Optional[float]=None) -> bool:
+        ctx = self._parts_pres_ctx_any_cam if use_any_cam else self._parts_pres_ctx_all_cams
+        if perf_now is None:
+            perf_now = get_perf_now()
+        return ctx.get_recently_seen(part, self.limits.pellet_missing_time, perf_now=perf_now)
+
+    def is_pellet_recently_seen(self, *, use_any_cam: bool=False, perf_now: Optional[float]=None) -> bool:
+        return self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam, perf_now=perf_now)
 
     #
 
@@ -1126,12 +1131,17 @@ class BehaviorAlgorithm(ObservableObject):
         *,
         delivery_cfg: Optional[PelletDeliveryConfiguration] = None,
         pellet_state: PelletState = PelletState.monitoring,
+        use_any_cam: bool=False,
+        perf_now: Optional[float]=None,
     ) -> bool:
         """Say whether a load-pellet is needed or not, basically if pellet is missing confirmed"""
+        if perf_now is None:
+            perf_now = get_perf_now()
         pellet_missing = (
-            not self.pellet_recently_seen
-            and (self.triangle_recently_seen
-                 or (self.star_recently_seen and pellet_state == PelletState.monitoring))
+                not self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam)
+            and (self.is_part_recently_seen(SceneElement.Triangle, use_any_cam=use_any_cam)
+                 or (pellet_state == PelletState.monitoring
+                     and self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam)))
         )
         if pellet_missing:
             # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
@@ -1149,7 +1159,7 @@ class BehaviorAlgorithm(ObservableObject):
             return True
         return False
 
-    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring) -> bool:
+    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring, use_any_cam: bool=False) -> bool:
         """Say if a pellet can and must be loaded"""
         # is more has_to_load_pellet()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
@@ -1157,7 +1167,7 @@ class BehaviorAlgorithm(ObservableObject):
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state)
+        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam)
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
@@ -1204,14 +1214,15 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     def update_parts_seen(self, pose_rsp: PoseResponse):
-        ctx = self._parts_pres_ctx
-        get_seen = ctx.get_part_seen
+        any_ctx = self._parts_pres_ctx_any_cam
+        all_ctx = self._parts_pres_ctx_all_cams
+        get_seen = all_ctx.get_part_seen
         need_api_post = (
             [SceneElement.Triangle, BehaviorEventKind.triangleSeen, get_seen(SceneElement.Triangle)],
             [SceneElement.Pellet, BehaviorEventKind.pelletSeen, get_seen(SceneElement.Pellet)],
         )
         #
-        update_scene_elements_context_from_pose(ctx, pose_rsp)
+        update_scene_elements_context_from_pose(any_ctx, all_ctx, pose_rsp)
         # little special case for mouse:
         self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
         #
@@ -1224,7 +1235,8 @@ class BehaviorAlgorithm(ObservableObject):
         self.update_part_seen(SceneElement.Pellet, seen, perf_now=get_perf_now())
 
     def update_part_seen(self, part, seen: bool, *, perf_now: Optional[float] = None):
-        self._parts_pres_ctx.update_part_seen(part, seen, perf_now=perf_now)
+        self._parts_pres_ctx_any_cam.update_part_seen(part, seen, perf_now=perf_now)
+        self._parts_pres_ctx_all_cams.update_part_seen(part, seen, perf_now=perf_now)
 
     def pellet_loaded(self):
         self.session_pellet_loaded_count += 1
