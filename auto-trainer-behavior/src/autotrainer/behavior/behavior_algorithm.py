@@ -1138,10 +1138,10 @@ class BehaviorAlgorithm(ObservableObject):
         if perf_now is None:
             perf_now = get_perf_now()
         pellet_missing = (
-            not self.pellet_recently_seen
+                not self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam)
             and (self.is_part_recently_seen(SceneElement.Triangle, use_any_cam=use_any_cam)
-                 or (self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam)
-                     and pellet_state == PelletState.monitoring))
+                 or (pellet_state == PelletState.monitoring
+                     and self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam)))
         )
         if pellet_missing:
             # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
