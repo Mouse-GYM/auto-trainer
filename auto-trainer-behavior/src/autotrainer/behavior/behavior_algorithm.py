@@ -754,15 +754,8 @@ class BehaviorAlgorithm(ObservableObject):
         return self._parts_pres_ctx_any_cam.present_last_perf_c.get(SceneElement.Triangle, -math.inf)
 
     @property
-    def star_recently_seen(self) -> bool:
-        return self._parts_pres_ctx_any_cam.get_recently_seen(
-            SceneElement.Star,
-            self.limits.triangle_missing_time,
-            perf_now=get_perf_now(),
-        )
-
-    @property
     def triangle_recently_seen(self) -> bool:
+        # only used in tests and a log
         return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Triangle,
             self.limits.triangle_missing_time,
@@ -771,6 +764,7 @@ class BehaviorAlgorithm(ObservableObject):
 
     @property
     def diamond_recently_seen(self) -> bool:
+        # only used in test
         return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Diamond,
             self.limits.triangle_missing_time,
