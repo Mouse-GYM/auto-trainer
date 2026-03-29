@@ -31,7 +31,7 @@ _DELAY_OR_DURATION_MAX_VALUE = 999_999  # in seconds, ~277 hours, ~= 11.5 days
 
 
 def apply_size_policy(tab, klasses):
-    tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    # tab.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     for childs in itertools.chain(map(lambda c: tab.findChildren(c), klasses)):
         for child in childs:
             child.setSizePolicy(
@@ -134,7 +134,6 @@ class PreferencesContent(QWidget):
         form_layout.addRow("Device Id:", self._device_id_label)
 
         toggle = self._toggle_use_alternate_device_id = QSwitch()
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         form_layout.addRow("Use alternate:", toggle)
         def on_use_alternate_device_id_toggled(value: int):
             toggled = value != 0
@@ -173,6 +172,7 @@ class PreferencesContent(QWidget):
 
         tab = QWidget(None)
         tab.setLayout(form_layout)
+        apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox))
 
         return tab
 
@@ -197,7 +197,6 @@ class PreferencesContent(QWidget):
         analysis_layout = QHBoxLayout()
         analysis_layout.addWidget(QLabel("Live Analysis:"))
         toggle = self._inference_enabled_toggle = QSwitch()
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setToolTip("Enables real-time pose inference during live trials (mouse in tunnel).")
         toggle.setChecked(app_model.inference.is_enabled)
         def inference_enabled_state_changed(x: int):
@@ -231,23 +230,6 @@ class PreferencesContent(QWidget):
         cur_col = 0
         left_grid_layout = QGridLayout()
         left_grid_layout.setContentsMargins(0, 6, 0, 0)
-
-        def add_empty(min_width=0, min_height=0):
-            nonlocal cur_row, cur_col
-            empty = QLabel("")
-            # empty.setContentsMargins(min_width, min_height, 0, 0)
-            empty.setMinimumWidth(min_width)
-            empty.setMaximumWidth(min_width)
-            empty.setMinimumHeight(min_height)
-            empty.setMaximumHeight(min_height)
-            left_grid_layout.addWidget(empty, cur_row, cur_col, Qt.AlignmentFlag.AlignCenter)
-            if min_width != 0:
-                cur_col += 1
-            if min_height != 0:
-                cur_row += 1
-        add_height_separator = lambda: add_empty(min_height=2)
-        add_width_separator = lambda: add_empty(min_width=2)
-
         left_grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         left_grid_layout.setSpacing(2)
         left_grid_layout.setHorizontalSpacing(10)
@@ -255,12 +237,9 @@ class PreferencesContent(QWidget):
         grids_hbox_layout = QHBoxLayout()
         grids_hbox_layout.setContentsMargins(0, 0, 0, 0)
 
-        # add_height_separator()
-
         left_grid_layout.addWidget(QLabel("<b>Deliver Pellets:</b>"), cur_row, cur_col)
         toggle = self._deliver_pellet_toggle = QSwitch()
         add_enabled_state(lambda: self._deliver_pellet_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setToolTip(
             "Enables pellet load-send-release cycles based on pellet detection and related factors.")
         toggle.setChecked(algo.pellet_delivery_enabled)
@@ -297,7 +276,6 @@ class PreferencesContent(QWidget):
             self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
         ))
         toggle.setChecked(algo.pellet_cover_enabled)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def pellet_cover_toggle_state_changed(x: int):
             enabled = x != 0
             algo.pellet_cover_enabled = enabled
@@ -340,11 +318,8 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        add_height_separator()
-        #
         left_grid_layout.addWidget(QLabel("<b>Intertrial Pellet Shift:</b>"), cur_row, cur_col)
         toggle = self._allow_intersession_shift_toggle = QSwitch()
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setToolTip("Enables adjustment of the pellet delivery position based on post trial reach analysis.")
         add_enabled_state(lambda: self._allow_intersession_shift_toggle.setEnabled(self._inference_enabled_toggle.isChecked()))
         toggle.setChecked(algo.intersession_pellet_shift_enabled)
@@ -370,7 +345,6 @@ class PreferencesContent(QWidget):
         toggle = QSwitch()
         add_enabled_state(
             lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(algo.home_on_excessive_drift_distance_config.enabled)
         def home_on_excessive_toggle_changed(value: int):
             enabled = value != 0
@@ -404,12 +378,9 @@ class PreferencesContent(QWidget):
         # grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         # cur_row += 1
         #
-        add_height_separator()
-        #
         left_grid_layout.addWidget(QLabel("<b>Triangle-pellet distance too far detection:</b>"), cur_row, cur_col)
         toggle = QSwitch()
         add_enabled_state(lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(algo.use_triangle_pellet_distance_too_far)
         def use_triangle_pellet_distance_changed(value):
             enabled = value != 0
@@ -441,12 +412,9 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        add_height_separator()
-        #
         left_grid_layout.addWidget(QLabel("<b>Auto-close gate during intertrial analysis:</b>"), cur_row, cur_col)
         auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
         toggle = QSwitch()
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         toggle.setChecked(auto_close_gate_cfg.enabled)
         def toggle_changed(value):
             enabled = value != 0
@@ -482,12 +450,12 @@ class PreferencesContent(QWidget):
 
         # right part:
         right_grid_layout = QGridLayout()
-        right_grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        right_grid_layout.setContentsMargins(0, 0, 0, 0)
+        right_grid_layout.setContentsMargins(2, 6, 0, 0)
+        right_grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        right_grid_layout.setSpacing(2)
+        right_grid_layout.setHorizontalSpacing(10)
         cur_row = 0
         cur_col = 0
-
-        # add_empty(min_width=4, min_height=4)
 
         # headClamp: autoClampReleaseToneFreq
         label = QLabel("<b>Auto-Clamp:</b>")
@@ -647,7 +615,7 @@ class PreferencesContent(QWidget):
         label.setContentsMargins(release_mode_item_indent_px, 0, 0, 0)
         right_grid_layout.addWidget(label, cur_row, cur_col)
         widget = QWidget()
-        widget.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed)
+        widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         hbox = QHBoxLayout()
         hbox.setContentsMargins(0, 0, 0, 0)
         widget.setContentsMargins(0, 0, 0, 0)
@@ -709,7 +677,6 @@ class PreferencesContent(QWidget):
 
         show_headclamp_release_mode(algo.active_config.head_clamp.release_mode)
 
-        add_height_separator()
         #
         right_grid_layout.addWidget(QLabel("<b>Tunnel Sweep:</b>"), cur_row, cur_col)
         toggle = self._tunnel_auto_sweep_toggle = QSwitch()
@@ -761,8 +728,6 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
-        add_height_separator()
-        #
         right_grid_layout.addWidget(QLabel("<b>Batch trials while in tunnel:</b>"), cur_row, cur_col)
         toggle = QSwitch()
         toggle.setChecked(algo.batch_session_recording_config.enabled)
@@ -789,7 +754,7 @@ class PreferencesContent(QWidget):
 
         #
         grids_hbox_layout.addLayout(left_grid_layout)
-        grids_hbox_layout.addLayout(right_grid_layout)
+        grids_hbox_layout.addLayout(right_grid_layout, stretch=1)
         main_layout.addLayout(grids_hbox_layout)
         #
         tab = QWidget()
@@ -1088,20 +1053,12 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
 
-        def add_sep():
-            nonlocal cur_row
-            widget = QWidget()
-            widget.setMinimumHeight(5)
-            grid_layout.addWidget(widget, cur_row, cur_col)
-            cur_row += 1
-
         audio_load_cell_sub_widgets = []
 
         label = QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
         toggle = self._use_audio_load_cell_thrashing_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_audio_load_cell_thrash)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
@@ -1124,7 +1081,6 @@ class PreferencesContent(QWidget):
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.audio_load_cell_thrash_aggregate_delay = value
         spinbox.valueChanged.connect(value_changed)
@@ -1136,7 +1092,6 @@ class PreferencesContent(QWidget):
         audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_percent_on)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.load_cell_thrash_percent_on = value
         spinbox.valueChanged.connect(value_changed)
@@ -1148,7 +1103,6 @@ class PreferencesContent(QWidget):
         audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.load_cell_thrash_count)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.load_cell_thrash_count = value
         spinbox.valueChanged.connect(value_changed)
@@ -1160,7 +1114,6 @@ class PreferencesContent(QWidget):
         audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_percent_on)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.audio_thrash_percent_on = value
         spinbox.valueChanged.connect(value_changed)
@@ -1172,7 +1125,6 @@ class PreferencesContent(QWidget):
         audio_load_cell_sub_widgets.append(spinbox)
         spinbox.setRange(0, 100)
         spinbox.setValue(alarm_cfg.audio_thrash_count)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.audio_thrash_count = value
         spinbox.valueChanged.connect(value_changed)
@@ -1193,8 +1145,6 @@ class PreferencesContent(QWidget):
         self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(use_audio_load_cell_toggle_changed)
         use_audio_load_cell_toggle_changed(int(alarm_cfg.use_audio_load_cell_thrash))
 
-        add_sep()
-
         animal_missing_sub_widgets = []
 
         label = QLabel("<b>Use Animal Missing Alarm:</b>")
@@ -1204,7 +1154,6 @@ class PreferencesContent(QWidget):
         toggle = self._use_animal_missing_toggle = QSwitch()
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
@@ -1227,7 +1176,6 @@ class PreferencesContent(QWidget):
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             alarm_cfg.tunnel_to_cage_presence_missing_delay = value
         spinbox.valueChanged.connect(value_changed)
@@ -1258,7 +1206,6 @@ class PreferencesContent(QWidget):
         toggle = self._use_external_doors_open_toggle = QSwitch()
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_external_doors_open)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
@@ -1281,7 +1228,6 @@ class PreferencesContent(QWidget):
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
-        spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         def value_changed(value):
             analysis.external_doors_monitor.config.trigger_open_delay = value
             analysis.external_doors_monitor.check_state()
@@ -1307,7 +1253,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
         toggle = self._use_global_presence_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_global_animal_presence)
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
@@ -1338,7 +1283,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("<b>Use Device Comm. Error:</b>"), cur_row, cur_col)
         toggle = self._use_device_comm_error_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_device_comm_error)
-        # toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
@@ -1367,7 +1311,7 @@ class PreferencesContent(QWidget):
         # finally
         tab = QWidget(None)
         tab.setLayout(main_layout)
-        tab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox))
 
         return tab
 
