@@ -259,7 +259,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         tun_pres_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
         tun_miss_age = pres_ctx.get_animal_absence_age(perf_now=perf_now)
         engaged = (
-            not load_cell.is_engaged  # ~= not in tunnel
+                not load_cell.is_engaged  # ~= not in tunnel
             and load_cell.last_disengaged_perf_c > self._p_started
             and perf_now - load_cell.last_disengaged_perf_c > cfg.tunnel_to_cage_presence_missing_delay
                 # tunnel exited at least since missing delay threshold
