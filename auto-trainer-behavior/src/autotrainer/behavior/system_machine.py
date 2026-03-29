@@ -257,7 +257,11 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            wait_stop_recorded = cur_prj == self._project_info and len(batch_list) == 0
+            wait_stop_recorded = False
+            # don't wait stop recorded if it's a batch list processing,
+            # this is always ok since if current project info is/was single one in batch-list,
+            # then it's removed from batch and analyzed from current project instead, as regularly.
+            # See self._on_session_capture_ended().
 
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
