@@ -238,9 +238,9 @@ class SystemMachine(StateMachine):
             batch_projects = self._batch_project_sessions_list
             if len(batch_projects) > 0:
                 if self._intersession.state != IntersessionState.idle:
-                    logger.warning(
-                        "Unexpected intersession state with non-empty batch session list: %s, projects=%s",
-                        self._intersession.state, batch_projects)
+                    # this can happen is a batch-list is in processing, for instance
+                    logger.verbose("intersession state: %s with projects=%s",
+                                   self._intersession.state, batch_projects)
                 else:
                     prj = batch_projects[0]
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
