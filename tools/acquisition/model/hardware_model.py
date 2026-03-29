@@ -6,8 +6,10 @@ from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union
 
+from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
-                              get_verbose_logger, Motor, SensorAnalysis)
+                              get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration)
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device)
@@ -39,6 +41,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"
     DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"
 
+    # POS_X = "pos_x"
+    # POS_Y = "pos_y"
+    # POS_Z = "pos_z"
+    POS_XYZ = "pos_xyz"
+
     SEND_X = "send_x"
     SEND_Y = "send_y"
     SEND_Z = "send_z"
@@ -48,6 +55,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SET_Y = "set_y"
     SET_Z = "set_z"
 
+    HEAD_MAGNET_INTENSITY = "head_magnet_intensity"
+
     def __init__(
         self,
         message_handler: MessageHandler,
@@ -55,6 +64,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     ):
         super().__init__()
 
+        self._device_ack_timeout_delay: Optional[float] = None
         self._device: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
         self._sensor_analysis = sensor_analysis
@@ -69,6 +79,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._head_magnet_position: Optional[float] = None
 
+        self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
         # Support for relative x, y, z movements and whether they are persistent as the Send position various between
         # hardware implementations. One the Alogus hardware is used exclusively, it should be possible to remove these
         # and rely on SET_X/Y/Z commands with the extra arguments that support relative and/or movements that should
@@ -77,7 +88,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # what the motors report they've been SET (with possible drift corrected):
         self._motor_send_coordinates = _nans_offset3dTuple
         # What we've SET as coordinates:
-        self._last_requested_set_coordinates = _nans_offset3dTuple
+        self._last_requested_set_coordinates: Offset3DTuple = _nans_offset3dTuple
 
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
@@ -86,9 +97,27 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
+    def _check_dcs_cfg(self, *, return_none: bool=False):
+        cfg = self._dcs_config
+        if cfg is None or not cfg.fully_valid:
+            if return_none:
+                return None
+            raise RuntimeError(f"DCS config not defined or not fully valid: {None if cfg is None else cfg.__dict__}")
+        return cfg
+
+    def set_diamond_triangle_config(self, config: Optional[DiamondTriangleOffsetConfig]):
+        self._dcs_config = config
+
     @property
     def last_position(self) -> Optional[Offset3DTuple]:
         return self._last_motor_coordinates
+
+    @property
+    def last_dcs_position(self) -> Optional[Offset3DTuple]:
+        cfg = self._check_dcs_cfg(return_none=True)
+        if cfg is None:
+            return None
+        return cfg.motor_to_diamond(self._last_motor_coordinates)
 
     @property
     def last_set_position(self) -> Optional[Offset3DTuple]:
@@ -96,6 +125,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if any(map(math.isnan, value)):
             return None
         return value
+
+    @property
+    def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
+        value = self._motor_send_coordinates
+        if any(map(math.isnan, value)):
+            return None
+        cfg = self._check_dcs_cfg(return_none=True)
+        if cfg is None:
+            return None
+        return cfg.motor_to_diamond(value)
 
     @property
     def device_ack_timeout_engaged(self):
@@ -179,7 +218,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """
         return self._head_magnet_position
 
-    def update_head_magnet_intensity(self, value: float) -> Optional[UUID]:
+    def update_head_magnet_intensity(self, value: Optional[float]) -> Optional[UUID]:
+        if value is None:  # caller should not call instead eventually
+            return
         if isinstance(value, str):
             value = float(value)
         if value != self._head_magnet_position:
@@ -218,7 +259,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if new_value < 0:
             value = 0 if absolute else -prev_value
             new_value = 0
-            logger.debug("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
+            logger.verbose("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
                          "XYZ"[coord_idx], value, absolute)
         res = self._send_with_token(self._device, system_set_cmd,
                                      SystemDataArgsKwargs(value, relative=not absolute))
@@ -235,6 +276,23 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def set_z(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
         return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2, sender=sender)
+
+    def set_dcs_x(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(value, 0, 0)).x
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_X, coord_idx=0, sender=sender)
+
+    def set_dcs_y(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(0, value, 0)).y
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Y, coord_idx=1, sender=sender)
+
+    def set_dcs_z(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
+        cfg = self._check_dcs_cfg()
+        value = cfg.diamond_to_motor(Offset3DTuple(0, 0, value)).z
+        return self._set_axis(value, absolute=absolute, system_set_cmd=SystemCommandKind.SET_Z, coord_idx=2, sender=sender)
+
+    #
 
     def _move_axis(self, value: float, *, absolute: bool = True,
                    system_move_cmd: SystemCommandKind, coord_idx: int) -> Optional[UUID]:
@@ -296,6 +354,17 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.TUNNEL_FAN_OFF)
 
+    def set_device_ack_timeout(self, delay: Optional[float]):
+        self._device_ack_timeout_delay = delay
+        can_dev = self._can_device
+        if can_dev is not None:
+            if delay is None:
+                delay = CanDevice.default_command_ack_timeout_duration
+            else:
+                delay = max(CanDevice.default_command_ack_timeout_duration, delay)
+            can_dev.default_command_ack_timeout_duration = delay
+            logger.notice("Using %s for device ack timeout delay", delay)
+
     def connect(self, cmd_queue: Queue):
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
@@ -306,6 +375,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
         #
         can_device = self._can_device = CanDevice(buffer_size=buffer_size)
+        self.set_device_ack_timeout(self._device_ack_timeout_delay)  # ensure it's used
         can_device.property_changed += self._can_device_property_changed
 
         device_conn = self._device = DeviceConnection(can_device, cmd_queue, name="can-device")
@@ -365,16 +435,25 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def _message_handler_property_changed(self, name: str, value, old_value):
         if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
             prev, self._head_magnet_position = self._head_magnet_position, value
-            self._on_property_changed(MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY, value, prev)
+            self._on_property_changed(self.HEAD_MAGNET_INTENSITY, value, prev)
         elif name == MessageHandler.STEPPER_X_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(x=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(x=value.position)
+            self._last_motor_coordinates = new
             self.send_x = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.STEPPER_Y_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(y=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(y=value.position)
+            self._last_motor_coordinates = new
             self.send_y = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.STEPPER_Z_PROPERTY:
-            self._last_motor_coordinates = self._last_motor_coordinates.replace(z=value.position)
+            prev = self._last_motor_coordinates
+            new = prev.replace(z=value.position)
+            self._last_motor_coordinates = new
             self.send_z = value.send_position
+            self._on_property_changed(self.POS_XYZ, new, prev)
         elif name == MessageHandler.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
         elif name == MessageHandler.DRAWER_DOOR_PROPERTY:

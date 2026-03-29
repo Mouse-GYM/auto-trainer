@@ -15,10 +15,11 @@ from enum import IntEnum
 from multiprocessing import Process, Value, Array, synchronize
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedBase
 from threading import BrokenBarrierError
-from typing import Callable, Dict, Union, Optional, List, Tuple
+from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 
 import numpy
 import verboselogs
+from typing_extensions import Any
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
@@ -198,7 +199,7 @@ class VideoCapture(Process):
 
         if record_properties is not None:
             self._record_properties = record_properties
-            self._is_record_active = record_properties.should_record(False)
+            self._is_record_active = record_properties.should_record(False, is_from_start=True)
             self._record_batch_size = record_properties.queue_batch_size
         else:
             self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
@@ -216,7 +217,7 @@ class VideoCapture(Process):
         self._detection_attrs = attrs.presence_detection_attrs
         self._video_detection: Optional[VideoDetection] = None
 
-        self.command_handler: Dict[CaptureCommandKind, Callable[[object], None]] = {
+        self._command_handlers: Dict[CaptureCommandKind, Callable[[Any], ...]] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
             CaptureCommandKind.ENABLE_CAPTURE: self._begin_capture,
             CaptureCommandKind.DISABLE_CAPTURE: self._end_capture,
@@ -337,19 +338,19 @@ class VideoCapture(Process):
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         vid_detection = self._video_detection
 
-        frames_prebuffer_list: List[Tuple[numpy.ndarray, float, float]] = []
-        #                              frame, when, perf_now/index
-        def update_frames_prebuffer(f, w, p):
+        frames_prebuffer_list: List[Tuple[numpy.ndarray, Union[int, float], float, float]] = []
+        #                           frame, frame_when, time, perf_now
+        def update_frames_prebuffer(f, fw, t, p):
             idx = 0
             while True:
                 if (
                     idx >= len(frames_prebuffer_list)
-                    or (perf_now_ns - frames_prebuffer_list[idx][2]) / 1e9 < self._attrs.record_prebuffer_duration
+                    or frame_perf_now - frames_prebuffer_list[idx][3] < self._attrs.record_prebuffer_duration
                 ):
                     break
                 idx += 1
             del frames_prebuffer_list[:idx]
-            frames_prebuffer_list.append((f, w, p))
+            frames_prebuffer_list.append((f, fw, t, p))
 
         # primary_acquire/release:
         # is/was used for sync of start/stop recording, but was not really syncing in fact
@@ -371,8 +372,8 @@ class VideoCapture(Process):
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
                 self._set_error(RuntimeError("too many capture failure"))
-                self._end_capture(None)
-                self._user_terminate(None)
+                self._end_capture()
+                self._user_terminate()
                 break
 
             t_perf_now = time.perf_counter()
@@ -388,22 +389,25 @@ class VideoCapture(Process):
                     logger.error("Failed to capture a frame (frame = None) ; frame_idx=%s", cur_frame_idx)
                     fault_count += 1
                     continue
-
-                perf_now_ns = time.perf_counter_ns()
+                # NB: the frame 'when' can be in different clock than what we can assume,
+                # using time.time() and .perf_counter() for precision :
+                frame_perf_now = time.perf_counter()
+                frame_time = time.time()
                 cur_frame_idx += 1
 
                 if cur_frame_idx < 300:
                     when_secs = when / 1e9
-                    perf_now = perf_now_ns / 1e9
                     if cur_frame_idx == 0:
-                        logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, perf_now)
+                        self._record.first_frame_time = frame_time
+                        self._record.first_frame_when = when
+                        logger.success("captured first frame ; cam_when=%.4f perf_now=%.4f", when_secs, frame_perf_now)
                     elif net_q is not None and (
                         (cur_frame_idx < 300 and cur_frame_idx % 64 == 0)
                         or (cur_frame_idx < 64 and cur_frame_idx % 16 == 0)
                         or (cur_frame_idx < 32 and cur_frame_idx % 4 == 0)
                         or cur_frame_idx < 4
                     ):
-                        logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, perf_now)
+                        logger.debug("got frame %s cam_when=%.4f perf_now=%.4f", cur_frame_idx, when_secs, frame_perf_now)
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
@@ -420,17 +424,18 @@ class VideoCapture(Process):
                     if primary_acquire():
                         record_start_frame_idx = cur_frame_idx - len(frames_prebuffer_list)
                         first_frame_when = when if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][1]
-                        first_frame_perf_now = (perf_now_ns if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]) / 1e9
-                        logger.notice("Starting record with frame %s cam_when=%.4f perf_now=%.4f ; prebuffer_cnt=%s",
-                                      record_start_frame_idx, first_frame_when / 1e9, first_frame_perf_now,
-                                      len(frames_prebuffer_list))
+                        first_frame_time = frame_time if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][2]
+                        first_frame_p_now = frame_perf_now if len(frames_prebuffer_list) == 0 else frames_prebuffer_list[0][3]
+                        logger.notice("Starting record with frame %s perf_now=%.4f ; prebuffer_cnt=%s",
+                                      record_start_frame_idx, first_frame_p_now, len(frames_prebuffer_list))
                         #
                         self._record.first_frame_when = first_frame_when
+                        self._record.first_frame_time = first_frame_time
                         #
                         if len(frames_prebuffer_list) > 0:
-                            record_q.put(frames_prebuffer_list)
+                            record_q.put([(f, fw, p) for f, fw, _, p in frames_prebuffer_list])
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
-                        record_q.put([(frame, when, perf_now_ns)])  # thread queue
+                        record_q.put([(frame, when, frame_perf_now)])  # thread queue
                         record_q_list = self._record_queue_list = []  # ensure we (re)start clean
                         #
                         primary_release()
@@ -452,7 +457,7 @@ class VideoCapture(Process):
                     record_q_list = self._record_queue_list
                     if not primary_acquire():
                         # continue, all sync cams have not yet received their stop recording message
-                        record_q_list.append((frame, when, perf_now_ns))
+                        record_q_list.append((frame, when, frame_perf_now))
                     else:
                         # end of record/save-to-disk session/mode
                         primary_release()
@@ -473,7 +478,7 @@ class VideoCapture(Process):
                             logger.info(
                                 "sending EOF_RECORDING batch frame indices to signify eof recording. "
                                 "last frame index: %s when=%.4f perf=%.4f",
-                                cur_frame_idx, when / 1e9, perf_now_ns / 1e9)
+                                cur_frame_idx, when / 1e9, frame_perf_now)
                             net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
                                                            cam_idx=net_q_idx, timeout=1)
 
@@ -485,7 +490,7 @@ class VideoCapture(Process):
 
                 elif self._is_record_active and record_start_frame_idx is not None:
                     # normal recording case
-                    record_q_list.append((frame, when, perf_now_ns))
+                    record_q_list.append((frame, when, frame_perf_now))
                     if len(record_q_list) >= self._record_batch_size:
                         record_q.put(record_q_list)
                         record_q_list = self._record_queue_list = []
@@ -500,10 +505,10 @@ class VideoCapture(Process):
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
-                    vid_detection.update_frame(when, frame)
+                    vid_detection.update_frame(when, frame, frame_perf_now)
 
                 if not (self._is_record_active and record_start_frame_idx is not None) and self._attrs.record_prebuffer_duration > 0:
-                    update_frames_prebuffer(frame, when, perf_now_ns)
+                    update_frames_prebuffer(frame, when, frame_time, frame_perf_now)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)
@@ -544,26 +549,31 @@ class VideoCapture(Process):
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info(f"<%s> executing %s", self._name, cmd)
-        handler = self.command_handler.get(cmd)
+        handler = self._command_handlers.get(cmd)
         if handler is None:
             logger.warning("No handler for command %s", cmd)
         else:
-            handler(context)
+            args, kwargs = context
+            handler(*args, **kwargs)
             logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
-    def _user_terminate(self, _: object):
+    def _user_terminate(self):
         self._is_running = False
 
-    def _begin_capture(self, _: object):
+    def _begin_capture(self):
         self._is_capturing = True
 
-    def _end_capture(self, _: object):
+    def _end_capture(self):
         self._is_capturing = False
 
-    def _enable_record(self, _: object):
-        self._is_record_active = self._record_properties.should_record(True)
-        logger.verbose("%s: is_record_active=%s", self, self._is_record_active)
+    def _enable_record(self, *, is_from_start: bool=False):
+        self._is_record_active = self._record_properties.should_record(True, is_from_start=is_from_start)
+        logger.verbose("_enable_record: is_record_active=%s", self._is_record_active)
 
-    def _disable_record(self, _: object):
-        self._is_record_active = self._record_properties.should_record(False)
-        logger.verbose("%s: recording disabled. is_record_active=%s", self, self._is_record_active)
+    def _disable_record(self, *, is_triggered: Optional[bool]=False, is_from_start: bool=False):
+        entry_is_triggered = is_triggered
+        if is_triggered is None:
+            is_triggered = self._is_record_active
+        self._is_record_active = self._record_properties.should_record(is_triggered, is_from_start=is_from_start)
+        logger.verbose("_disable_record(is_triggered=%s, is_from_start=%s): is_record_active=%s",
+                       entry_is_triggered, is_from_start, self._is_record_active)

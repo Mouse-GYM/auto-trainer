@@ -7,19 +7,18 @@ import faulthandler
 from pathlib import Path
 from multiprocessing import set_start_method
 
-from autotrainer.core import PersistenceConfiguration
-
 
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
 def _exec_main(args):
 
-    from autotrainer.core.logging import get_verbose_logger, get_console_handler, set_log_location
-    from autotrainer.core.project import ProjectInfo
+    from autotrainer.core.logging import get_verbose_logger, get_console_handler
+    from autotrainer.core.event import try_register_api_event_plugin
 
-    from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.model.app_model import AppModel
+    from tools.acquisition.model.app_model_status import AppModelStatus
+    from tools.acquisition.model.user_preferences import UserPreferences
 
     logger = get_verbose_logger("autotrainer.headless")
 
@@ -33,14 +32,19 @@ def _exec_main(args):
 
     app_model = AppModel(preferences)
 
+    plugin = try_register_api_event_plugin()
+    app_model.rpc_service = plugin.service
+
+    config_file = app_model.get_config_location(configuration)
     try:
-        app_model.load_configuration(configuration)
+        app_model.load_configuration(config_file)
     except Exception as err:
         logger.exception("Could not load config: %s", err)
         app_model.on_close()
         return 1
 
-    if not app_model.capture_start():
+    target_status = args.start_mode
+    if not app_model.capture_start(target_status=target_status):
         logger.error("failed to start capture")
         app_model.on_close()
         return 1
@@ -64,19 +68,38 @@ def _exec_main(args):
     return exit_rc
 
 
+def parse_start_mode(value: str):
+    from tools.acquisition.model.app_model_status import AppModelStatus
+    try:
+        return AppModelStatus(value.lower())  # values are lower, so force it
+    except ValueError:
+        pass
+    try:
+        return getattr(AppModelStatus, value.upper())  # names are upper, so force it
+    except AttributeError:
+        pass
+    raise ValueError(f"Unknown AppModelStatus: {value!r}")
+
+
 def main():
     faulthandler.enable()
     set_start_method("spawn")
 
-    parser = argparse.ArgumentParser()
+    # must be AFTER set_start_method before:
+
+    from tools.acquisition.model.app_model_status import AppModelStatus
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=Path)
     parser.add_argument("--preferences-file", help="user preference ini file", default=None, type=Path)
+    parser.add_argument("--start-mode", help="The desired start system mode",
+                        choices=list(v.value for v in AppModelStatus), type=parse_start_mode,
+                        default=AppModelStatus.ACQUIRING)
 
     args = parser.parse_args()
 
-    # must be AFTER set_start_method below:
-    from autotrainer.core.logging import setup_logging, get_console_handler, stop_multiproc_logging
+    from autotrainer.core.logging import setup_logging, stop_multiproc_logging
 
     logger = setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
 

@@ -3,7 +3,7 @@ import enum
 
 class FrameIndexCategory(enum.IntEnum):
 
-    SWITCH_TO_ONLINE = -5
+    SWITCH_TO_ONLINE = -5  # not anymore used, replaced by InferenceCommandMessageKind.SetOfflineToLive
     PADDING = -4
     EOF_OFFLINE_PROCESSING = -3
     EOF_RECORDING = -2
@@ -12,6 +12,10 @@ class FrameIndexCategory(enum.IntEnum):
 
     RECORDING_OR_OFFLINE_PROCESSING = 1
     # NB: positive or zero frane index means recording online or offline reprocessing.
+
+    @classmethod
+    def is_signaling_index(cls, frame_idx) -> bool:
+        return frame_idx < cls.ONLINE_NO_RECORDING
 
     @classmethod
     def _missing_(cls, value):

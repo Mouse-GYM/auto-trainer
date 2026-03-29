@@ -1,9 +1,10 @@
 import contextlib
 import logging
+import math
 import queue
 import threading
-import collections.abc
-from contextlib import AbstractContextManager
+import time
+from multiprocessing import synchronize
 
 from pathlib import Path
 from functools import partial
@@ -41,10 +42,19 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
 
 
-def get_fake_perf_now():
+def simulate_get_perf_now():
     global fake_perf_now
     fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
     return fake_perf_now
+
+
+def get_current_simulate_perf_now():
+    return fake_perf_now
+
+
+def increase_simulate_perf_now(delay: float = 60):
+    global fake_perf_now
+    fake_perf_now += delay
 
 
 # for small diff of timers delay:
@@ -57,7 +67,7 @@ class AlmostEqualFloat(float):
 def mock_get_perf_now(monkeypatch):
     global fake_perf_now
     fake_perf_now = 0
-    monkeypatch.setattr(autotrainer.core, "_get_perf_now", get_fake_perf_now)
+    monkeypatch.setattr(autotrainer.core, "_get_perf_now", simulate_get_perf_now)
 
 
 @pytest.fixture(autouse=True)
@@ -144,9 +154,22 @@ def pose_algo():
     return PoseAlgorithm()
 
 
+class VoidInference(InferenceProtocol):
+
+    def __init__(self):
+        super().__init__()
+        self._stop_recorded_event = threading.Event()  # noqa
+
+    @property
+    def stop_recorded_event(self) -> synchronize.Event:
+        # still required,
+        # could maye be added to InferenceProtocol, which is more actually InferenceBase class...
+        return self._stop_recorded_event
+
+
 @pytest.fixture
 def inference():
-    inference = InferenceProtocol()
+    inference = VoidInference()
     inference.status = InferenceStatus.live
     yield inference
     # inference.terminate()
@@ -170,7 +193,7 @@ def system_msg_queue():
 
 
 @pytest.fixture
-def sensor_analysis():
+def sensor_analysis(mock_get_perf_now):
     s = SensorAnalysis()
     try:
         yield s
@@ -249,7 +272,8 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg = algo.pellet_delivery_config
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
-    cfg.pellet_hand_uncover_distance = None  # disabled
+    algo.pellet_uncover_delay = 0
+    algo.pellet_uncover_y_dcs = -math.inf
     # might be needed to reset:
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
@@ -277,13 +301,9 @@ class MockSystemMachine:
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
 
-    @staticmethod
-    def increment_perf_now(inc: float=60):
-        global fake_perf_now
-        fake_perf_now += inc
+    increment_perf_now = staticmethod(increase_simulate_perf_now)
 
-    def get_current_perf_now(self) -> float:
-        return fake_perf_now
+    get_current_perf_now = staticmethod(get_current_simulate_perf_now)
 
     @pytest.fixture(autouse=True)
     def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
@@ -453,14 +473,19 @@ class MockSystemMachine:
         # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
         batch_count = self._load_cell._engaged_batch_count
         for _ in range(2 * batch_count):
-            self._ts_now += self._load_cell.config.threshold_duration / batch_count + 0.001
-            self._load_cell.update(self._load_cell.config.weight_active_threshold + 0.001, self._ts_now, self._ts_now)
+            self.increment_perf_now(self._load_cell.config.threshold_duration / batch_count + 0.001)
+            p_now = self.get_current_perf_now()
+            self._load_cell.update(
+                self._load_cell.config.weight_active_threshold + 0.001, time.time(), int(p_now * 1e9)
+            )
 
     def make_load_cell_inactive(self):
         batch_count = self._load_cell._engaged_batch_count
         for _ in range(3 * batch_count):
-            self._ts_now += self._load_cell.config.min_post_event_hold_duration / batch_count + 0.001
-            self._load_cell.update(self._load_cell.config.weight_inactive_threshold - 0.001, self._ts_now, self._ts_now)
+            self.increment_perf_now(self._load_cell.config.min_post_event_hold_duration / batch_count + 0.001)
+            p_now = self.get_current_perf_now()
+            self._load_cell.update(
+                self._load_cell.config.weight_inactive_threshold - 0.001, time.time(), int(p_now * 1e9))
 
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm

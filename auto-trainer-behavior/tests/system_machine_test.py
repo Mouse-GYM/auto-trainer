@@ -109,16 +109,15 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert pellet_m._api_status_token is not None
     # pellet must be seen after loading to go to sending
     mock_system.mock_pose_response(pellet_seen=True)
-    mock_system.mock_pellet_ack()  # ack the loading
+    mock_system.mock_pellet_ack(until_none=True)  # ack everything
     assert mock_system.pellet_state_trans == [
         PelletState.covering,
         PelletState.sending,
         PelletState.monitoring,
     ]
     mock_system.pellet_state_trans.clear()
-    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
-    assert pellet_m._api_status_token is None
 
+    assert pellet_m._api_status_token is None
     assert mock_system.machine_state_trans == []
 
     mock_system.mock_pose_response(pellet_seen=False)
@@ -145,6 +144,8 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert algo.is_in_session is False
     assert algo.pellet_recently_seen
 
+    mock_system.mock_pellet_ack(until_none=True)  # ack the loading AFTER put pellet_seen
+
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
@@ -153,19 +154,16 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
         PelletState.monitoring,
     ]
 
+    assert algo.pellet_recently_seen
+    assert algo.is_in_session, "Once pellet seen and send acked and in monitoring"
     mock_system.mock_pellet_ack()  # ack the sending, covering is included.
-
-    assert algo.pellet_recently_seen
-    assert algo.is_in_session is True, "Once pellet seen and send acked and in monitoring"
-
     mock_system.make_load_cell_inactive()
-
     assert not algo.is_in_session
-    assert algo.pellet_recently_seen
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
     mock_system.machine_state_trans.clear()
 
     mock_system.make_load_cell_active()
+    mock_system.mock_pose_response(pellet_seen=True)
 
     assert algo.pellet_recently_seen
 
@@ -245,23 +243,23 @@ def test_inference_detection_ready(machine):
         successful_reaches=4,
     )
     # before:
-    assert algo.day_pellet_count == 0
+    assert algo.pellet_consumed_day == 0
     assert algo.successful_reaches_total == 0
     assert algo.pellets_presented_total == 0
     #
     machine._inference.detection_result_ready(machine.project, result)
     # after:
-    assert algo.day_pellet_count == 20
+    assert algo.pellet_consumed_day == 20
     assert algo.successful_reaches_total == 4
-    assert algo.pellets_presented_total == 40
+    assert algo.pellets_presented_total == 0   # NB: this now accounts for pellet-sent
     # now:
     result.food_consumed = 15
     result.successful_reaches = 2
     result.pellets_presented = 30
     machine._inference.detection_result_ready(machine.project, result)
-    assert algo.day_pellet_count == 35
-    assert algo.pellets_presented_total == 70
+    assert algo.pellet_consumed_day == 35
     assert algo.successful_reaches_total == 6
+    assert algo.pellets_presented_total == 0  # NB: this now accounts for pellet-sent
 
 
 @pytest.mark.parametrize("feature_enabled", [False, True])
@@ -425,7 +423,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
         return r
     #
     def pose_changed():
-        machine._pose_changed(make_rsp())
+        machine._on_pose_changed(make_rsp())
     #
     assert algo.get_diamond_triangle_drifts() is None
     pose_changed()
@@ -438,16 +436,17 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert algo.get_diamond_triangle_drifts() is None
     #
     presents.pop(se.Pellet)
-    self.increment_perf_now(algo.pellet_missing_time)
     pose_changed()
+    self.increment_perf_now(algo.pellet_missing_time)
     assert algo.get_diamond_triangle_drifts(reset=True) is not None
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in loading now
+    assert pellet_m.state == PelletState.loading
+    assert algo.get_diamond_triangle_drifts() is not None   #
     presents[se.Pellet] = True
     pose_changed()
+    # assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     self.mock_pellet_ack()  # ack load
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     assert pellet_m.state == PelletState.monitoring  # even if already monitoring
     assert not pellet_m.can_use_pellet_command()  # sending not finished
     self.mock_pellet_ack()  # ack send

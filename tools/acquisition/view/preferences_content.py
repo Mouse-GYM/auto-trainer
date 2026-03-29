@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QFileDialog, QTabWidget, QVBoxLayout, QCheckBox, QDoubleSpinBox, QSpinBox, QGridLayout,
                                QLayout, QSizePolicy, QMessageBox)
 
-from autotrainer.api.api_event_kind import ApiAlarmKind
+from autotrainer.api import ApiAlarmKind
 
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration
@@ -23,6 +23,9 @@ from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.analysis_content import AVAILABLE_GRAPHS
 
 logger = get_verbose_logger(__name__)
+
+
+_DELAY_OR_DURATION_MAX_VALUE = 999_999  # in seconds, ~277 hours, ~= 11.5 days
 
 
 class PreferencesContent(QWidget):
@@ -255,8 +258,8 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("<b>Cover Pellets:</b>"), cur_row, cur_col)
         toggle = self._pellet_cover_toggle = QSwitch()
         toggle.setToolTip(
-            "Covers the pellet when the mouse is not in the tunnel.  Release then generates a tone when the tunnel is "
-            "entered.")
+            "Covers the pellet when the mouse is not in the tunnel. "
+            "Release then generates a tone when the tunnel is entered.")
         add_enabled_state(lambda: self._pellet_cover_toggle.setEnabled(
             self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
         ))
@@ -270,44 +273,37 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
-        # pelletDelivery:pelletHandUncoverDistance [1]
-        grid_layout.addWidget(QLabel("Pellet-hand minimum distance:"), cur_row, cur_col)
-        toggle = self._pellet_hand_uncover_distance_toggle = QSwitch()
-        toggle.setToolTip("Pellet-hand distance below which cover is released")
-        add_enabled_state(lambda: self._pellet_hand_uncover_distance_toggle.setEnabled(
-            self._deliver_pellet_toggle.isEnabled()
-            and self._deliver_pellet_toggle.isChecked()
-            and self._pellet_cover_toggle.isChecked()
-        ))
-        toggle.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        toggle.setChecked(algo.pellet_hand_uncover_distance is not None)
-        def toggle_pellet_hand_uncover_distance_changed(value: int):
-            enabled = value != 0
-            if enabled:
-                value = PelletDeliveryConfiguration.pellet_hand_uncover_distance or 10
-                self._pellet_hand_uncover_distance_spinbox.setValue(value)
-            else:
-                algo.pellet_hand_uncover_distance = None
-            refresh_enabled_states()
-        toggle.stateChanged.connect(toggle_pellet_hand_uncover_distance_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
-        pellet_hand_uncover_label = QLabel("Pellet-hand uncover distance (mm) :")
-        grid_layout.addWidget(pellet_hand_uncover_label, cur_row, cur_col)
-        spinbox = self._pellet_hand_uncover_distance_spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=self._pellet_hand_uncover_distance_toggle:
-            s.setEnabled(t.isEnabled() and t.isChecked())
+        grid_layout.addWidget(QLabel("Y DCS (mm) :"), cur_row, cur_col)
+        spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Min Y DCS for all hand parts")
+        add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
+            s.setEnabled(t.isChecked())
         )
-        if algo.pellet_hand_uncover_distance is not None:
-            spinbox.setValue(algo.pellet_hand_uncover_distance)
-        spinbox.setMinimum(0)
-        spinbox.setMaximum(100)
+        spinbox.setValue(algo.pellet_uncover_y_dcs)
+        spinbox.setMinimum(-30)
+        spinbox.setMaximum(30)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(0.5)
-        def pellet_hand_uncover_distance_changed(value):
-            algo.pellet_hand_uncover_distance = value
-        spinbox.valueChanged.connect(pellet_hand_uncover_distance_changed)
+        def pellet_uncover_y_dcs_changed(value):
+            algo.pellet_uncover_y_dcs = value
+        spinbox.valueChanged.connect(pellet_uncover_y_dcs_changed)
+        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        #
+        grid_layout.addWidget(QLabel("duration (sec.) :"), cur_row, cur_col)
+        spinbox = self._uncover_delay_spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Duration with min Y DCS valid before trigger uncover")
+        add_enabled_state(lambda s=spinbox, t=self._pellet_cover_toggle:
+                          s.setEnabled(t.isChecked())
+                          )
+        spinbox.setValue(algo.pellet_uncover_delay)
+        spinbox.setMinimum(0)
+        spinbox.setMaximum(5)
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(0.1)
+        def pellet_uncover_delay_changed(value):
+            algo.pellet_uncover_delay = value
+        spinbox.valueChanged.connect(pellet_uncover_delay_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
@@ -442,7 +438,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("delay after cage enter to close (sec.):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(auto_close_gate_cfg.delay_after_cage_enter)
         def spinbox_value_changed(value):
@@ -492,7 +488,7 @@ class PreferencesContent(QWidget):
         spinbox = pre_release_dur_spinbox = QDoubleSpinBox(None)
         spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 100)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(1)
         spinbox.setValue(algo.head_clamp_config.prerelease_duration)
@@ -519,7 +515,7 @@ class PreferencesContent(QWidget):
         spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setMinimum(0)
-        spinbox.setMaximum(100_000)
+        spinbox.setMaximum(_DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_release_tone_freq)
         def auto_clamp_release_tone_freq_changed(value):
             algo.auto_clamp_release_tone_freq = value
@@ -542,6 +538,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("No-activity release delay (sec.) :"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
         def auto_clamp_no_activity_release_delay_changed(value):
             algo.auto_clamp_no_activity_release_delay = value
@@ -569,7 +566,7 @@ class PreferencesContent(QWidget):
         spinbox = QDoubleSpinBox()
         spinbox.setToolTip(tooltip)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 600)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(algo.auto_clamp_before_reengage_delay)
         def auto_clamp_before_reengage_delay_changed(value):
@@ -598,7 +595,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Pellet Misplaced Trigger Delay (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.misplaced_trigger_delay)
         def value_changed(value):
@@ -610,7 +607,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Rate Limit Delay (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 10_000)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(0)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.rate_limit_delay)
         def value_changed(value):
@@ -621,7 +618,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Tunnel FAN ON duration (sec.)"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.auto_tunnel_sweep_monitor.config.tunnel_fan_on_duration)
         def value_changed(value):
@@ -995,7 +992,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         audio_load_cell_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 60)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1098,7 +1095,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         animal_missing_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 120)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -1152,7 +1149,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         use_external_doors_sub_widgets.append(spinbox)
-        spinbox.setRange(0, 3600)
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
         spinbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)

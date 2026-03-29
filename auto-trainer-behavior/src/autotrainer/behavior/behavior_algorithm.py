@@ -9,7 +9,7 @@ import math
 import queue
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, date
 from functools import partial
 from pathlib import Path
 from typing import Optional, Tuple, ClassVar, Any, Dict, Deque
@@ -18,15 +18,17 @@ from typing import Callable
 
 from typing_extensions import Self
 
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig, \
+    PelletUncoverConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
 
 from autotrainer.video import CaptureProcessStatus
 
@@ -37,7 +39,25 @@ from .pellet_shift import ShiftXYZBufferHandler, ShiftXYZHandler
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
+from autotrainer.inference import PoseResponse
+from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
+
 logger = get_verbose_logger(__name__)
+
+
+@dataclasses.dataclass
+class PelletUncoverContext:
+    y_dcs_valid: bool = False
+    start_min_y: float = math.nan  # mm
+    start_y_dcs_valid_perf_c: float = math.nan  # second
+
+    def reset(self):
+        self.y_dcs_valid = False
+        self.start_min_y = math.nan
+        self.start_y_dcs_valid_perf_c = math.nan
+
+    def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
+        return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
 
 
 class CoverServoStatus(int, enum.Enum):
@@ -75,7 +95,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     BASELINE_INTENSITY = 'baseline_intensity'
     HEAD_FIXATION_ENABLED = 'head_fixation_enabled'  # this is head-clamp
 
-    # global:
+    # runtime context:
     DAY_PELLET_COUNT = 'day_pellet_count'  # consumed
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
@@ -85,31 +105,37 @@ class BehaviorAlgoProps(str, enum.Enum):
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
 
-    INTERSESSION_ENABLED = 'intersession_enabled'
+    INTERSESSION_ENABLED = 'intersession_enabled'  # config
     # INTERSESSION_PELLET_SHIFT_ENABLED = 'intersession_pellet_shift_enabled'
 
     # PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     # PELLET_COVER_ENABLED = 'pellet_cover_enabled'
 
+    # run ctx
     SESSION_PELLET_COUNT = 'session_pellet_count'
     SESSION_MOUSE_SEEN = 'session_mouse_seen'
+    # NB: only updated/set once per session, once set it's kept until end of session
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     # PELLET_MOTOR_DRIFT = 'pellet_motor_drift'  # unused
-    COVER_SERVO_STATUS = 'cover_servo_status'
-    COVER_PELLET_DISTANCE = "cover_pellet_distance"
-    RELEASE_PELLET_DISTANCE = "release_pellet_distance"
+
+    PELLET_UNCOVER_DELAY = 'pellet_uncover_delay'
+    PELLET_UNCOVER_Y_DCS = 'pellet_uncover_y_dcs'
+
+    COVER_SERVO_STATUS = 'cover_servo_status'  # ctx
+    COVER_PELLET_DISTANCE = "cover_pellet_distance"  # cfg
+    RELEASE_PELLET_DISTANCE = "release_pellet_distance"  # cfg
 
     # IS_IN_SESSION = 'is_in_session'  # property unused
     # INTERSESSION_STATE = 'intersession_state'  # unused
-    CAPTURE_STATUS = 'capture_status'
+    # CAPTURE_STATUS = 'capture_status'  # unused
 
     # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
-    HANDS_NEAR_PELLET_SEEN = 'hands_near_pellet_seen'  # used !
-
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
+
+
 
 #
 
@@ -129,11 +155,15 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     while isinstance(func, partial):
         func = func.func
 
+    base_func = func.__func__ if inspect.ismethod(func) else func
+
     # handle bound method vs normal function:
-    @functools.wraps(func.__func__ if inspect.ismethod(func) else func)
+    @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
-
+    #
+    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
+    #
     return wrapped
 
 #
@@ -157,17 +187,23 @@ class BehaviorAlgoEvents:
             """When a session batch analysis starts"""
 
     session_processing_starting = Callable[[], None]
-    session_ending = Callable[[CaptureAnalysisResult], None]
 
     class batch_analysis_ending:  # noqa
         def __call__(self, *, failed_count: int):
             """When a session batch analysis is finished"""
 
+    session_ending = Callable[[CaptureAnalysisResult], None]
+
+    #
+
     cover_servo_status_changed = Callable[[CoverServoStatus], None]
 
+    # NB:
+    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
     pellets_presented_evt = Callable[[int], None]
     pellets_consumed_evt = Callable[[int], None]
     successful_reaches_evt = Callable[[int], None]
+    total_reaches_evt = Callable[[int], None]
 
 
 class BehaviorAlgorithm(ObservableObject):
@@ -183,9 +219,12 @@ class BehaviorAlgorithm(ObservableObject):
 
     cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed  # unused
 
+    # NB:
+    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
     pellets_consumed_evt: BehaviorAlgoEvents.pellets_consumed_evt
     successful_reaches_evt: BehaviorAlgoEvents.successful_reaches_evt
+    total_reaches_evt: BehaviorAlgoEvents.total_reaches_evt
 
     #
 
@@ -213,6 +252,9 @@ class BehaviorAlgorithm(ObservableObject):
         self._head_fixation_enabled = False  # NB: not saved in config
         self._clean_raw_data_on_inactive_session = False
 
+        self._parts_pres_ctx_any_cam = ScenePartsPresenceContext()
+        self._parts_pres_ctx_all_cams = ScenePartsPresenceContext()
+
         # now using self._active_config.head_clamp mainly,
         # and also:
         self._baseline_intensity = self._active_config.head_clamp.min_baseline_intensity
@@ -231,17 +273,12 @@ class BehaviorAlgorithm(ObservableObject):
         self._stop_session_reason = RecordingEndingReason.NA
 
         self._session_mouse_seen = False
-        self._pellet_seen = False
-        self._pellet_last_seen_perf_c = -math.inf
         self._pellet_hands_min_distance: float = math.inf
-        self._hands_near_pellet_seen = False
         self._mouse_seen_last_perf_c = -math.inf
-        self._triangle_seen = False
-        self._triangle_last_seen_perf_c = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
-        self._diamond_last_seen_perf_c = -math.inf
         self._next_diamond_triangle_log_report = -math.inf
-        self._star_last_seen_perf_c = -math.inf
+
+        self._uncover_ctx = PelletUncoverContext()
 
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
@@ -252,6 +289,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         self._session_pellet_loaded_count = 0  # loaded
 
+        self._pellet_counts_day_date = date.today()
         self._pellets_consumed_day = 0  # consumed
         self._pellets_consumed_total = 0  # consumed
         self._pellets_presented_day: int = 0
@@ -291,8 +329,9 @@ class BehaviorAlgorithm(ObservableObject):
         )
         #
         self._check_start_thread(thread_lock=self._thread_lock)
-        self._today = None
-        self._start_day()
+        #
+        self._today = None  # only used in check_date, unused, atm
+        # self._start_day()
         #
         self._shift_xyz_handler = ShiftXYZHandler()
 
@@ -385,7 +424,9 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                setattr(machine_transitions, trig, cls.relay_func(meth))
+                wrapped = cls.relay_func(meth)
+                logger.spam("relaying transition %s -> %s", trig, wrapped)
+                setattr(machine_transitions, trig, wrapped)
 
     @classmethod
     def put_func_call(
@@ -490,7 +531,7 @@ class BehaviorAlgorithm(ObservableObject):
     def capture_status(self, value: CaptureProcessStatus):
         prev, self._capture_status = self._capture_status, value
         self._last_capture_status_change_perf_c = get_perf_now()
-        self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
+        # self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
 
     @property
     def capture_status_age(self) -> float:
@@ -536,6 +577,30 @@ class BehaviorAlgorithm(ObservableObject):
         self._active_config.pellet_delivery.is_pellet_cover_enabled = value
         # prev, cfg.is_pellet_cover_enabled = cfg.is_pellet_cover_enabled, value
         # self._on_property_changed(BehaviorAlgoProps.PELLET_COVER_ENABLED, value, prev)
+
+    @property
+    def uncover_context(self) -> PelletUncoverContext:
+        return self._uncover_ctx
+
+    @property
+    def pellet_uncover_y_dcs(self) -> float:
+        return self._active_config.pellet_uncover.min_y_dcs
+
+    @pellet_uncover_y_dcs.setter
+    def pellet_uncover_y_dcs(self, value: float):
+        cfg = self._active_config.pellet_uncover
+        prev, cfg.min_y_dcs = cfg.min_y_dcs, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_UNCOVER_Y_DCS, value, prev)
+
+    @property
+    def pellet_uncover_delay(self) -> float:
+        return self._active_config.pellet_uncover.trigger_delay
+
+    @pellet_uncover_delay.setter
+    def pellet_uncover_delay(self, value: float):
+        cfg = self._active_config.pellet_uncover
+        prev, cfg.trigger_delay = cfg.trigger_delay, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_UNCOVER_DELAY, value, prev)
 
     @property
     def pellet_missing_time(self) -> float:
@@ -685,20 +750,26 @@ class BehaviorAlgorithm(ObservableObject):
     #
 
     @property
-    def triangle_last_seen(self) -> float:
-        return self._triangle_last_seen_perf_c
-
-    @property
-    def star_recently_seen(self) -> bool:
-        return get_perf_now() - self._star_last_seen_perf_c < self.limits.triangle_missing_time
+    def triangle_last_seen(self) -> float:  # only used by test atm
+        return self._parts_pres_ctx_any_cam.present_last_perf_c.get(SceneElement.Triangle, -math.inf)
 
     @property
     def triangle_recently_seen(self) -> bool:
-        return get_perf_now() - self._triangle_last_seen_perf_c < self.limits.triangle_missing_time
+        # only used in tests and a log
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
+            SceneElement.Triangle,
+            self.limits.triangle_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     @property
     def diamond_recently_seen(self) -> bool:
-        return get_perf_now() - self._diamond_last_seen_perf_c < self.limits.triangle_missing_time
+        # only used in test
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
+            SceneElement.Diamond,
+            self.limits.triangle_missing_time,
+            perf_now=get_perf_now(),
+        )
 
     @property
     def triangle_pellet_offset(self) -> Offset3DTuple:  # not used
@@ -733,7 +804,7 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def triangle_pellet_diff_too_far_threshold(self) -> float:
         """Diff threshold above which pellet is considered "too-far" from triangle.
-        That is if abs(current_distance - expected_dictance) >= diff_threshold -> too far
+        That is if abs(current_distance - expected_distance) >= diff_threshold -> too far
         """
         return self._active_config.pellet_delivery.triangle_pellet_diff_too_far_threshold
 
@@ -745,20 +816,32 @@ class BehaviorAlgorithm(ObservableObject):
         """Check if triangle is too far from pellet according to triangle_pellet_expected_distance & triangle_pellet_diff_too_far_threshold"""
         cfg = self._active_config.pellet_delivery
         last_dist_diff = abs(self.triangle_pellet_distance - cfg.triangle_pellet_expected_distance)
+        p_now = get_perf_now()
         return (
-            self.pellet_recently_seen
-            and self.triangle_recently_seen
+            self.is_part_recently_seen(SceneElement.Pellet, perf_now=p_now)
+            and self.is_part_recently_seen(SceneElement.Triangle, perf_now=p_now)
             and last_dist_diff >= cfg.triangle_pellet_diff_too_far_threshold
         )
 
     # counts
 
+    def _check_pellet_counts_day_date(self):
+        today = date.today()
+        if today != self._pellet_counts_day_date:
+            logger.verbose("resetting pellet day counts to 0")
+            self._pellet_counts_day_date = today
+            self.pellets_presented_day = 0
+            self.pellet_reaches_day = 0
+            self.pellet_consumed_day = 0
+            self.successful_reaches_day = 0
+
     @property
-    def day_pellet_count(self) -> int:
+    def pellet_consumed_day(self) -> int:
+        self._check_pellet_counts_day_date()
         return self._pellets_consumed_day
 
-    @day_pellet_count.setter
-    def day_pellet_count(self, value: int):
+    @pellet_consumed_day.setter
+    def pellet_consumed_day(self, value: int):
         prev_value, self._pellets_consumed_day = self._pellets_consumed_day, value
         self._on_property_changed(BehaviorAlgoProps.DAY_PELLET_COUNT, value, prev_value)
         incr = value - prev_value
@@ -768,11 +851,11 @@ class BehaviorAlgorithm(ObservableObject):
             self._event_manager.post_event_content(BehaviorEventKind.dayDecreasePellet, context=value)
 
     @property
-    def total_pellet_count(self) -> int:
+    def pellet_consumed_total(self) -> int:
         return self._pellets_consumed_total
 
-    @total_pellet_count.setter
-    def total_pellet_count(self, value: int):
+    @pellet_consumed_total.setter
+    def pellet_consumed_total(self, value: int):
         prev, self._pellets_consumed_total = self._pellets_consumed_total, value
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT, value, prev)
 
@@ -793,13 +876,14 @@ class BehaviorAlgorithm(ObservableObject):
         #    self.end_session()
 
     def increase_pellets_consumed(self, quantity: int = 1):
-        self.day_pellet_count += quantity
-        self.total_pellet_count += quantity
+        self.pellet_consumed_day += quantity
+        self.pellet_consumed_total += quantity
         if quantity:
             self.pellets_consumed_evt(quantity)
 
     @property
     def pellets_presented_day(self):
+        self._check_pellet_counts_day_date()
         return self._pellets_presented_day
 
     @pellets_presented_day.setter
@@ -818,14 +902,15 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_PRESENTED, value, prev)
             self._event_manager.post_event_content(BehaviorEventKind.pelletPresented, context=value)
 
-    def increase_pellets_presented(self, quantity: int = 1):
-        self.pellets_presented_day += quantity
-        self.pellets_presented_total += quantity
-        if quantity:
-            self.pellets_presented_evt(quantity)
+    def increase_pellets_presented(self, increment: int = 1):
+        self.pellets_presented_day += increment
+        self.pellets_presented_total += increment
+        if increment:
+            self.pellets_presented_evt(increment)
 
     @property
     def pellet_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._reaches_day
 
     @pellet_reaches_day.setter
@@ -842,8 +927,15 @@ class BehaviorAlgorithm(ObservableObject):
         prev, self._reaches_total = self._reaches_total, value
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_REACHES, value, prev)
 
+    def increase_pellet_total_reaches(self, increment: int = 1):
+        self.pellet_reaches_day += increment
+        self.pellet_reaches_total += increment
+        if increment:
+            self.total_reaches_evt(increment)
+
     @property
     def successful_reaches_day(self):
+        self._check_pellet_counts_day_date()
         return self._successful_reaches_day
 
     @successful_reaches_day.setter
@@ -862,11 +954,11 @@ class BehaviorAlgorithm(ObservableObject):
             self._on_property_changed(BehaviorAlgoProps.TOTAL_SUCCESSFUL_REACHES, value, prev)
             self._event_manager.post_event_content(BehaviorEventKind.pelletSuccessfulReach, context=value)
 
-    def increase_successful_reaches(self, quantity: int = 1):
-        self.successful_reaches_day += quantity
-        self.successful_reaches_total += quantity
-        if quantity:
-            self.successful_reaches_evt(quantity)
+    def increase_successful_reaches(self, increment: int = 1):
+        self.successful_reaches_day += increment
+        self.successful_reaches_total += increment
+        if increment:
+            self.successful_reaches_evt(increment)
 
     #
 
@@ -932,6 +1024,14 @@ class BehaviorAlgorithm(ObservableObject):
     def shift_xyz_handler(self) -> ShiftXYZHandler:
         return self._shift_xyz_handler
 
+    @property
+    def any_cams_scene_parts_presence_context(self) -> ScenePartsPresenceContext:
+        return self._parts_pres_ctx_any_cam
+
+    @property
+    def all_cams_scene_parts_presence_context(self) -> ScenePartsPresenceContext:
+        return self._parts_pres_ctx_all_cams
+
     #
 
     def start_session(self, *, reason: str = "NA"):
@@ -958,8 +1058,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
-        self._pellet_seen = False
-        self._hands_near_pellet_seen = False
+        self._uncover_ctx.reset()  # always
 
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!
@@ -1000,13 +1099,25 @@ class BehaviorAlgorithm(ObservableObject):
         self.session_pellet_loaded_count = 0
 
     @property
-    def pellet_seen_age(self) -> float:
-        """In nbr of seconds"""
-        return get_perf_now() - self._pellet_last_seen_perf_c
+    def pellet_presence_age(self) -> float:
+        """Return value in seconds unit"""
+        return self._parts_pres_ctx_any_cam.get_presence_age(SceneElement.Pellet)
 
     @property
     def pellet_recently_seen(self):
-        return get_perf_now() - self._pellet_last_seen_perf_c < self.limits.pellet_missing_time
+        return self._parts_pres_ctx_any_cam.get_recently_seen(
+            SceneElement.Pellet, self.limits.pellet_missing_time,
+            perf_now=get_perf_now(),
+        )
+
+    def is_part_recently_seen(self, part: str, *, use_any_cam: bool=False, perf_now: Optional[float]=None) -> bool:
+        ctx = self._parts_pres_ctx_any_cam if use_any_cam else self._parts_pres_ctx_all_cams
+        if perf_now is None:
+            perf_now = get_perf_now()
+        return ctx.get_recently_seen(part, self.limits.pellet_missing_time, perf_now=perf_now)
+
+    def is_pellet_recently_seen(self, *, use_any_cam: bool=False, perf_now: Optional[float]=None) -> bool:
+        return self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam, perf_now=perf_now)
 
     #
 
@@ -1015,30 +1126,48 @@ class BehaviorAlgorithm(ObservableObject):
             return False
         return self._active_config.pellet_delivery.is_enabled and not self._algo_paused
 
-    def can_load_pellet(self, pellet_state: PelletState = PelletState.monitoring) -> bool:
+    def would_load_pellet(
+        self,
+        *,
+        delivery_cfg: Optional[PelletDeliveryConfiguration] = None,
+        pellet_state: PelletState = PelletState.monitoring,
+        use_any_cam: bool=False,
+        perf_now: Optional[float]=None,
+    ) -> bool:
+        """Say whether a load-pellet is needed or not, basically if pellet is missing confirmed"""
+        if perf_now is None:
+            perf_now = get_perf_now()
+        pellet_missing = (
+                not self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam)
+            and (self.is_part_recently_seen(SceneElement.Triangle, use_any_cam=use_any_cam)
+                 or (pellet_state == PelletState.monitoring
+                     and self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam)))
+        )
+        if pellet_missing:
+            # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
+            return True
+        # NB: todo: pellet_too_far should probably not immediately trigger a load-pellet...
+        # first a tunnel FAN can be executed..
+        # then maybe normal pellet-load (with pellet fully mussing) will be triggered
+        pellet_too_far = (
+            (delivery_cfg is None or delivery_cfg.use_triangle_pellet_distance_too_far)
+             and pellet_state == PelletState.monitoring
+             and self.is_triangle_pellet_distance_too_far()
+        )
+        if pellet_too_far:
+            # logger.verbose("BehaviorAlgo.can_load_pellet: pellet too far")
+            return True
+        return False
+
+    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring, use_any_cam: bool=False) -> bool:
+        """Say if a pellet can and must be loaded"""
         # is more has_to_load_pellet()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
             return False
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        pellet_missing = (
-            not self.pellet_recently_seen
-            and (self.triangle_recently_seen
-                or (self.star_recently_seen and pellet_state == PelletState.monitoring))
-        )
-        if pellet_missing:
-            logger.verbose("BehaviorAlgo.can_load_pellet: pellet_missing")
-            return True
-        pellet_too_far = (
-            (cfg.use_triangle_pellet_distance_too_far
-             and pellet_state == PelletState.monitoring
-             and self.is_triangle_pellet_distance_too_far())
-        )
-        if pellet_too_far:
-            logger.verbose("BehaviorAlgo.can_load_pellet: triangle/pellet too far")
-            return True
-        return False
+        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam)
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
@@ -1054,15 +1183,15 @@ class BehaviorAlgorithm(ObservableObject):
             return False
         if self._algo_paused:
             return False
-
         cfg = self._active_config.pellet_delivery
-
+        uncov_cfg = self._active_config.pellet_uncover
+        ctx = self._uncover_ctx
         if self.can_cover_pellet():
             if self._is_in_session:
+                p_now = get_perf_now()
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING
-                    and self.capture_status_age >= self._recording_age_release_pellet_threshold
-                    and (cfg.pellet_hand_uncover_distance is None or self._hands_near_pellet_seen)
+                    and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
 
@@ -1084,54 +1213,62 @@ class BehaviorAlgorithm(ObservableObject):
 
     #
 
-    def update_diamond_seen(self, seen: bool):
-        if seen:
-            self._diamond_last_seen_perf_c = get_perf_now()
-
-    def update_star_seen(self, seen: bool):
-        if seen:
-            self._star_last_seen_perf_c = get_perf_now()
-
-    def update_triangle_seen(self, seen: bool = True):
-        if self._triangle_seen != seen:
-            self._triangle_seen = seen
-            self._event_manager.post_event_content(BehaviorEventKind.triangleSeen, context=seen)
-        if seen:
-            self._triangle_last_seen_perf_c = get_perf_now()
+    def update_parts_seen(self, pose_rsp: PoseResponse):
+        any_ctx = self._parts_pres_ctx_any_cam
+        all_ctx = self._parts_pres_ctx_all_cams
+        get_seen = all_ctx.get_part_seen
+        need_api_post = (
+            [SceneElement.Triangle, BehaviorEventKind.triangleSeen, get_seen(SceneElement.Triangle)],
+            [SceneElement.Pellet, BehaviorEventKind.pelletSeen, get_seen(SceneElement.Pellet)],
+        )
+        #
+        update_scene_elements_context_from_pose(any_ctx, all_ctx, pose_rsp)
+        # little special case for mouse:
+        self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
+        #
+        post = self._event_manager.post_event_content
+        for part, evt, prev_seen in need_api_post:
+            if prev_seen != (seen := get_seen(part)):
+                post(evt, context=seen)
 
     def update_pellet_seen(self, seen: bool = True):
-        if self._pellet_seen != seen:
-            self._pellet_seen = seen
-            self._event_manager.post_event_content(BehaviorEventKind.pelletSeen, context=seen)
-        if seen:
-            self._pellet_last_seen_perf_c = get_perf_now()
+        self.update_part_seen(SceneElement.Pellet, seen, perf_now=get_perf_now())
+
+    def update_part_seen(self, part, seen: bool, *, perf_now: Optional[float] = None):
+        self._parts_pres_ctx_any_cam.update_part_seen(part, seen, perf_now=perf_now)
+        self._parts_pres_ctx_all_cams.update_part_seen(part, seen, perf_now=perf_now)
 
     def pellet_loaded(self):
-        self._session_pellet_loaded_count += 1
+        self.session_pellet_loaded_count += 1
 
-    def update_mouse_seen(self, seen: bool = True):
+    def update_triangle_seen(self, seen: bool):
+        self.update_part_seen(
+            SceneElement.Triangle, seen,
+            perf_now=get_perf_now(),
+        )
+
+    def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
+        # NB: "mouse" == SceneElement.Nose
+        self.update_part_seen(SceneElement.Nose, seen, perf_now=perf_now)  # ensure presence_context gets updated
         if seen:
-            self._mouse_seen_last_perf_c = get_perf_now()
+            if perf_now is None:
+                perf_now = get_perf_now()
+            self._mouse_seen_last_perf_c = perf_now
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
-            # property currently unused:
-            self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, prev_seen)
-            if not prev_seen:
+                # property currently unused:
+                self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, False)
                 self._event_manager.post_event_content(BehaviorEventKind.sessionMouseSeen)
 
     @property
-    def mouse_seen_age(self) -> float:
+    def mouse_last_seen_age(self) -> float:
         return get_perf_now() - self._mouse_seen_last_perf_c
 
     @property
     def session_mouse_seen(self):
         return self._session_mouse_seen
-
-    @property
-    def hands_near_pellet_seen(self):
-        return self._hands_near_pellet_seen
 
     @property
     def active_config(self) -> BehaviorConfiguration:
@@ -1145,29 +1282,7 @@ class BehaviorAlgorithm(ObservableObject):
     def pellet_delivery_config(self) -> PelletDeliveryConfiguration:
         return self._active_config.pellet_delivery
 
-    @property
-    def pellet_hands_min_distance(self) -> float:
-        return self._pellet_hands_min_distance
-
-    @pellet_hands_min_distance.setter
-    def pellet_hands_min_distance(self, value: float):
-        pellet_hand_uncover_dist = self._active_config.pellet_delivery.pellet_hand_uncover_distance
-        if pellet_hand_uncover_dist is not None and value <= pellet_hand_uncover_dist:
-            if not self._hands_near_pellet_seen:
-                logger.verbose("Hand(s) near pellet seen ; distance = %.2f mm", value)
-                self._hands_near_pellet_seen = True  # must be set BEFORE doing the on_property_changed
-                self._on_property_changed(
-                    BehaviorAlgoProps.HANDS_NEAR_PELLET_SEEN, True, False)
-        # self._pellet_hands_min_distance = self._on_property_changed(  # property unused
-        #     BehaviorAlgoProps.PELLET_HANDS_DISTANCE, value, self._pellet_hands_min_distance)
-
-    @property
-    def pellet_hand_uncover_distance(self) -> Optional[float]:
-        return self._active_config.pellet_delivery.pellet_hand_uncover_distance
-
-    @pellet_hand_uncover_distance.setter
-    def pellet_hand_uncover_distance(self, value):
-        self._active_config.pellet_delivery.pellet_hand_uncover_distance = value
+    #
 
     def reset_configuration(self):
         """Reset current config to the previous loaded config (via load_configuration)"""
@@ -1305,25 +1420,39 @@ class BehaviorAlgorithm(ObservableObject):
                                ctx.expected_distance, ctx.error_distance_threshold)
                 ctx.warned_bad_distance = True
 
-    def reset_selected_animal_counts(self, animal: AnimalSubject):
+    def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
-        self.day_pellet_count = 0
-        self.pellets_presented_day = 0
-        self.successful_reaches_day = 0
-        self.pellet_reaches_day = 0
-        self.total_pellet_count = 0
-        self.pellets_presented_total = 0
-        self.successful_reaches_total = 0
-        self.pellet_reaches_total = 0
+        if animal is None:
+            self.pellets_presented_day = \
+            self.pellet_reaches_day = \
+            self.pellet_consumed_day = \
+            self.successful_reaches_day = 0
+            self.pellets_presented_total = \
+            self.pellet_reaches_total = \
+            self.pellet_consumed_total = \
+            self.successful_reaches_total = 0
+            return
+        day_counts = animal.pellet_counts_day
+        self.pellets_presented_day = day_counts.presented
+        self.pellet_consumed_day = day_counts.consumed
+        self.pellet_reaches_day = day_counts.reaches
+        self.successful_reaches_day = day_counts.success_reaches
+        #
+        total_counts = animal.pellet_counts_total
+        self.pellets_presented_total = total_counts.presented
+        self.pellet_consumed_total = total_counts.consumed
+        self.pellet_reaches_total = total_counts.reaches
+        self.successful_reaches_total = total_counts.success_reaches
 
     def _start_day(self):
-        self.day_pellet_count = 0  # consumed
+        self.pellet_consumed_day = 0  # consumed
         self.pellets_presented_day = 0
         self.successful_reaches_day = 0
         self.pellet_reaches_day = 0
 
+    # unused atm...
     def _check_date(self):
-        today = datetime.now().date()
+        today = date.today()
         if today != self._today:
             self._event_manager.post_event_content(BehaviorEventKind.dayStarted)
             self._today = today

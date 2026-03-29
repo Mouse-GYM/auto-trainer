@@ -8,6 +8,14 @@ def get_mp_ctx():
     return multiprocessing.get_context("spawn")
 
 
+class EmptyWithContext:
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
 
 class DaemonTimer(threading.Timer):
     """A Timer that does not block main process exit"""

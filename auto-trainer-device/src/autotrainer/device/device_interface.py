@@ -57,8 +57,8 @@ class Source:
     Base class of any data set received by the device
     """
     target: Target = None
-    timestamp_ns: int = dataclasses.field(init=False, default=0)
-    index: int = dataclasses.field(init=False, default=0)
+    timestamp_ns: int = dataclasses.field(init=False, default=0)  # realtime unix timestamp but in integer nanoseconds
+    index: int = dataclasses.field(init=False, default=0)  # perf counter in integer nanosecond
     # init=False: preserve the original behavior/semantic of constructor with position args
     # for subclasses adding other fields.
 

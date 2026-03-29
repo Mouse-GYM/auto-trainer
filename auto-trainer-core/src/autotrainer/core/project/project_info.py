@@ -64,14 +64,13 @@ class IntervalFileInfo(NamedTuple):
     current_interval: int
 
 
-def _safe_ensure_location(location: str) -> bool:
+def _ensure_location(location: str):
     try:
         path = Path(location)
         path.mkdir(parents=True, exist_ok=True)
     except Exception as err:
         logger.error("Could not create dir %r: %s", location, err)
-        return False
-    return True
+        raise
 
 
 # Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
@@ -186,7 +185,7 @@ class ProjectInfo(_ProjectInfo):
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
 
-    def get_day_path(self, skip_ensure: bool = False, when: Optional[datetime]=None) -> Union[Tuple[str, str], Tuple[None, None]]:
+    def get_day_path(self, skip_ensure: bool = False, when: Optional[datetime]=None) -> Tuple[str, str]:
         """Get the location and related datetime for given arguments.
         If when is None then self.when is used, which can eventually be None, in which case now() is used.
         """
@@ -197,8 +196,7 @@ class ProjectInfo(_ProjectInfo):
             location = os.path.join(location, self.device_id)
 
         if not skip_ensure and self.ensure_exists:
-            if not _safe_ensure_location(location):
-                return None, None
+            _ensure_location(location)
 
         return location, today
 
@@ -229,15 +227,14 @@ class ProjectInfo(_ProjectInfo):
         return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
     def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
-                         when: Optional[datetime] = None) -> Optional[SessionSource]:
+                         when: Optional[datetime] = None) -> SessionSource:
         (location, today) = self.get_day_path(True, when=when)
         if session < 0:
             session = self.session
         session_str = f"trial{session:03}"
         location = os.path.join(location, session_str)
         if not skip_ensure and self.ensure_exists:
-            if not _safe_ensure_location(location):
-                return None
+            _ensure_location(location)
         d = f"_{self.device_id}" if self.device_id else ""
         prefix = f"{today}{d}_{session_str}"
         s = f"_{name}" if name else ""
@@ -336,13 +333,12 @@ class ProjectInfo(_ProjectInfo):
         interval: ProjectInterval = ProjectInterval.NONE,
         session: int = -1,
         when: Optional[datetime] = None,
-    ) -> Union[Tuple[str, str], Tuple[None, None]]:
+    ) -> Tuple[str, str]:
         """Get the 2-tuple of image paths for given arguments"""
         base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True, when=when)
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
         if self.ensure_exists:
-            if not _safe_ensure_location(image_location):
-                return None, None
+            _ensure_location(image_location)
         image_file_format_str = base.prefix + "_{when}" + ".png"
         return image_location, image_file_format_str
 

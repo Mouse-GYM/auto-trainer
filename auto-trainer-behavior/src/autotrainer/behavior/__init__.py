@@ -5,13 +5,16 @@ from typing import Callable
 
 # keeping top level atm, given not quite sure where to put
 
+def _unconfigured_complete_action(once, success):
+    raise RuntimeError("complete attribute unconfigured")
+
 
 @dataclass
 class SegmentationConfiguration:
     nonce: str
     session_index: int
     session_when: datetime
-    complete: Callable[[str, bool], None]
+    complete: Callable[[str, bool], None] = _unconfigured_complete_action
 
 
 @dataclass
@@ -19,7 +22,7 @@ class DetectionConfiguration:
     nonce: str
     session_index: int
     session_when: datetime
-    complete: Callable[[str, bool], None]
+    complete: Callable[[str, bool], None] = _unconfigured_complete_action
 
 
 @dataclass

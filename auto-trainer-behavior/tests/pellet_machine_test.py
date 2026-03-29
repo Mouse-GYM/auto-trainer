@@ -1,4 +1,5 @@
 import logging
+import math
 from unittest import mock
 
 import pytest
@@ -9,8 +10,7 @@ from autotrainer.behavior import SystemState, PelletDeviceProtocol, BehaviorAlgo
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 
-from top_fixtures import MockSystemMachine, mock_system
-
+from top_fixtures import MockSystemMachine, mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
 
 
 @pytest.mark.parametrize("cover_enabled", [False, True])
@@ -31,6 +31,7 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
 
     # 1st pellet missing:
     mock_system.mock_pose_response(pellet_seen=False)
+    assert algo.session_pellet_loaded_count == 0
     assert pellet_m.state == PelletState.monitoring  # still
     assert algo.pellet_recently_seen  # still
     # now:
@@ -38,10 +39,13 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     assert not algo.pellet_recently_seen  # now not recently seen
     mock_system.mock_pose_response(pellet_seen=False)
     assert not algo.pellet_recently_seen  # still ofc
+    assert algo.session_pellet_loaded_count == 0
     assert pellet_m.state == PelletState.loading
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.pellet_recently_seen  # back !
+    assert algo.session_pellet_loaded_count == 1
     mock_system.mock_pellet_ack()  # ack the load
+    mock_system.mock_pellet_ack()  # ack the sending
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
@@ -49,11 +53,9 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
         PelletState.sending,
         PelletState.monitoring
     ]
-    assert pellet_m._api_status_token is not None, "should be the pellet-send token"
     mock_system.mock_pellet_ack()  # ack the send
     assert algo.can_cover_pellet() is (True if cover_enabled else False)
     assert algo.can_release_pellet() is (False if cover_enabled else True)
-    assert algo.session_pellet_loaded_count == 0
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.session_pellet_loaded_count == 1
     mock_system.mock_pose_response(pellet_seen=True)
@@ -98,7 +100,7 @@ def test_send_pellet_after_load_when_triangle_not_seen(mock_system, machine, cov
     assert pellet_m.state == PelletState.loading  # still
     assert pellet_m._api_status_token is not None  # must be acked
     #
-    mock_system.mock_pellet_ack()  # ack the load
+    mock_system.mock_pellet_ack(until_none=True)  # ack the load
     assert not algo.triangle_recently_seen  # still ofc
     assert algo.session_pellet_loaded_count == 0
     assert mock_system.pellet_state_trans == [
@@ -118,7 +120,10 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
     load_cell = machine._analysis.load_cell_monitor
     algo = machine.algorithm
     algo.pellet_cover_enabled = True
-    algo.pellet_hand_uncover_distance = None
+    uncov_cfg = algo.active_config.pellet_uncover
+    # algo.pellet_hand_uncover_distance = None
+    uncov_cfg.min_y_dcs = -math.inf
+    uncov_cfg.trigger_delay = 0
     pellet_m._covered_state = True  # fake already covered to simplify test
     #
     algo.update_pellet_seen(True)
@@ -128,11 +133,16 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
 
     load_cell.is_engaged = True
     assert algo.is_in_session
-    assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == []
-    # now:
+
     mock_system.make_recording_aged_enough()
+
+    algo.uncover_context.y_dcs_valid = True
+    algo.uncover_context.start_y_dcs_valid_perf_c = get_current_simulate_perf_now()
     pellet_m.environment_changed()
+
+    assert pellet_m.state == PelletState.monitoring
+    # now:
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
         PelletState.monitoring,
@@ -144,7 +154,9 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     pellet_m = machine.pellet
     algo = machine.algorithm
     algo.pellet_cover_enabled = True
-    algo.pellet_hand_uncover_distance = 5
+    uncov_cfg = algo.active_config.pellet_uncover
+    uncov_cfg.min_y_dcs = 5
+    uncov_cfg.trigger_delay = 2.5
     load_cell = machine._analysis.load_cell_monitor
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
@@ -158,7 +170,15 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     assert mock_system.pellet_state_trans == [], "contrary to test_uncover_when_record_aged_enough"
     #
     # now make pellet-hands-min distance trigger:
-    algo.pellet_hands_min_distance = algo.pellet_hand_uncover_distance / 2
+    algo.pellet_hands_min_distance = algo.pellet_uncover_y_dcs / 2
+    algo.uncover_context.y_dcs_valid = True
+    algo.uncover_context.start_y_dcs_valid_perf_c = get_current_simulate_perf_now()
+    pellet_m.environment_changed()
+    #
+    assert mock_system.pellet_state_trans == []  # not yet
+    #
+    increase_simulate_perf_now(uncov_cfg.trigger_delay)
+    pellet_m.environment_changed()
     # and :
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
@@ -192,14 +212,13 @@ def test_force_home_with_load_retract_count_triggered(machine, mock_system, monk
     caplog.set_level(logging.INFO)
     #
     pellet_m.move_retract()
-    mock_system.mock_pellet_ack()
+    mock_system.mock_pellet_ack(until_none=True)
     for _ in range(trigger_count - 1):
-        mock_system.increment_perf_now(60)
         pellet_m.move_retract()
-        mock_system.mock_pellet_ack()
+        mock_system.mock_pellet_ack(until_none=True)
     if trigger_count > 0:
         assert machine._pellet_device.send_home.call_args_list == [mock.call()]
-        assert f"Forcing a send_home to reset to limits due to load (0) + retract ({trigger_count})" in caplog.text
+        assert f'Forcing a send_home to reset to limits due to load + retract count greater-or-equal than threshold: {trigger_count} vs {trigger_count}' in caplog.text
     else:
         assert machine._pellet_device.send_home.call_args_list == []
         assert "Forcing a send_home to reset to limits" not in caplog.text, "when 0 it's disabled"
@@ -256,12 +275,11 @@ def test_can_cover_pellet_in_monitoring(machine, mock_system):
     algo.update_pellet_seen(True)
     algo.update_triangle_seen(True)
     # otherwise there would be a load-pellet executed.
-    mock_system.mock_pellet_ack()
+    mock_system.mock_pellet_ack(until_none=True)
     #
     assert mock_system.pellet_state_trans == [
-        PelletState.covering,
-        PelletState.monitoring,
-    ]
+        PelletState.covering, PelletState.sending, PelletState.monitoring,
+    ], "should be now sending+monitoring given pellet seen"
     assert pellet_m._api_status_token is None
 
 
@@ -283,8 +301,9 @@ def test_release_pellet(machine, mock_system):
     mock_system.mock_pellet_ack()
     assert mock_system.pellet_state_trans == [
         PelletState.releasing,
-        PelletState.monitoring,
+        PelletState.sending,
     ]
+    mock_system.mock_pellet_ack()
     assert pellet_m._api_status_token is None
 
 
@@ -321,7 +340,7 @@ def test_manual_send_pellet(machine, mock_system, before_state, cover_enabled):
     algo.pellet_delivery_enabled = True  # otherwise cannot send_pellet
     algo.pellet_cover_enabled = cover_enabled
     pellet_m = machine.pellet
-    pellet_m._covered_state = cover_enabled
+    # pellet_m._covered_state = cover_enabled
     #
     pellet_m.state = before_state
     mock_system.pellet_state_trans.clear()

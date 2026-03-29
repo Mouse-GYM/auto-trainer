@@ -4,7 +4,7 @@ import pathlib
 import time
 import logging
 from multiprocessing.context import BaseContext
-from typing import Optional, List, Tuple, cast, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any
 from multiprocessing import synchronize
 from threading import Event
 import urllib
@@ -16,7 +16,7 @@ from numpy import ndarray
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.project import ProjectInfo, ProjectDependentProtol
+from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
@@ -45,7 +45,7 @@ def create_camera_list():
     return cameras
 
 
-class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
+class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     CAMERA_PROP = "camera"
     CAMERA_LIST_PROP = "camera_list"
@@ -432,9 +432,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def save_configuration(self) -> CameraConfiguration:
         parsed = urlparse(self._camera_source.url)
-        params = VideoManager.parse_params(self._camera_source.url)
-        # allow to not have below assignations to floats or bools being annotated as "type-error" :
-        params = cast(Dict[str, Any], params)
+        params: Dict[str, Any] = VideoManager.parse_params(self._camera_source.url)
         for key in params:
             try:
                 val = float(params[key])
@@ -462,21 +460,21 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
     def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
         perf_timeout = time.perf_counter() + timeout
-        logger.debug(f"<%s> waiting for %s acknowledgement", self._name, expected)
+        logger.debug("<%s> waiting for %s acknowledgement", self._name, expected)
         while (cur_status := CaptureProcessStatus(self._video_status.value)) != expected:
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
-                logger.error(f"<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
+                logger.error("<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
                              cur_status)
                 return False
             time.sleep(0.001)
         return True
 
-    def on_trigger_recording(self, record: bool):
+    def on_trigger_recording(self, record: bool, *, is_triggered: bool=False, is_from_start: bool=False):
         if record:
-            self._send_command(CaptureCommandKind.ENABLE_RECORDING)
+            self._send_command(CaptureCommandKind.ENABLE_RECORDING, is_from_start=is_from_start)
         else:
-            self._send_command(CaptureCommandKind.DISABLE_RECORDING)
+            self._send_command(CaptureCommandKind.DISABLE_RECORDING, is_triggered=is_triggered, is_from_start=is_from_start)
 
     def _on_trigger(self, notification: Notification):
         if self._video_capture is not None:
@@ -491,7 +489,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
 
         value = cam.url
 
-        if "&name" not in value:
+        if "&name=" not in value:
             if "?" in value:
                 value = value + f"&name={self._name}"
             else:
@@ -534,9 +532,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtol):
             logger.debug("%s: joined video_reader", self._name)
             self._video_reader = None
 
-    def _send_command(self, cmd: CaptureCommandKind, context: object = None):
+    def _send_command(self, cmd: CaptureCommandKind, *args, **kwargs):
         if self._video_command_queue is not None:
-            self._video_command_queue.put((cmd, context))
+            self._video_command_queue.put((cmd, (args, kwargs)))
         else:
             logger.warning("%s: _send_command: %s but video command queue is None", self._name, cmd)
 

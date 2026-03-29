@@ -59,6 +59,8 @@ class ValueHolderDescriptor:
         self._priv_name = f"_{name}"
 
     def __get__(self, instance, owner):
+        if instance is None:
+            return self
         return self._convert_from(getattr(instance, self._priv_name).value)
 
     def __set__(self, instance, value):

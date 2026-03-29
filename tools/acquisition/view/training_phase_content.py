@@ -122,9 +122,21 @@ class TrainingPhaseCard(CardWidget):
 
         grid.addWidget(QLabel("Magnet Starting Intensity"), r, c)
         hbox = QHBoxLayout()
-        hbox.addWidget(QLabel(str(phase.starting_baseline_intensity)))
+        hbox.addWidget(QLabel(str(phase.magnet_intensity)))
         hbox.addWidget(self._make_unit_label("%"))
+        hbox.setStretch(0, 1)
         grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        r += 1
+
+        for coord, value in zip("XYZ", (phase.send_x, phase.send_y, phase.send_z)):
+            if value is not None:
+                grid.addWidget(QLabel(f"Send-{coord}"), r, c)
+                hbox = QHBoxLayout()
+                hbox.addWidget(QLabel(f"{value}"))
+                hbox.addWidget(self._make_unit_label("mm"))
+                hbox.setStretch(0, 1)
+                grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+                r += 1
 
         self._apply_background(grid)
 

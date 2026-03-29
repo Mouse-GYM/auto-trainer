@@ -5,7 +5,7 @@ from .project_info import ProjectInterval
 from .project_info import video_write_ext
 
 
-class ProjectDependentProtol(Protocol):
+class ProjectDependentProtocol(Protocol):
 
     @property
     def project(self) -> ProjectInfo:
@@ -14,3 +14,6 @@ class ProjectDependentProtol(Protocol):
     @project.setter
     def project(self, value: ProjectInfo):
         """Project-info setter"""
+
+
+ProjectDependentProtol = ProjectDependentProtocol  # previous typo alias
