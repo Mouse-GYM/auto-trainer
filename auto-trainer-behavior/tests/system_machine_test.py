@@ -243,23 +243,23 @@ def test_inference_detection_ready(machine):
         successful_reaches=4,
     )
     # before:
-    assert algo.day_pellet_count == 0
+    assert algo.pellet_consumed_day == 0
     assert algo.successful_reaches_total == 0
     assert algo.pellets_presented_total == 0
     #
     machine._inference.detection_result_ready(machine.project, result)
     # after:
-    assert algo.day_pellet_count == 20
+    assert algo.pellet_consumed_day == 20
     assert algo.successful_reaches_total == 4
-    assert algo.pellets_presented_total == 40
+    assert algo.pellets_presented_total == 0   # NB: this now accounts for pellet-sent
     # now:
     result.food_consumed = 15
     result.successful_reaches = 2
     result.pellets_presented = 30
     machine._inference.detection_result_ready(machine.project, result)
-    assert algo.day_pellet_count == 35
-    assert algo.pellets_presented_total == 70
+    assert algo.pellet_consumed_day == 35
     assert algo.successful_reaches_total == 6
+    assert algo.pellets_presented_total == 0  # NB: this now accounts for pellet-sent
 
 
 @pytest.mark.parametrize("feature_enabled", [False, True])
@@ -423,7 +423,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
         return r
     #
     def pose_changed():
-        machine._pose_changed(make_rsp())
+        machine._on_pose_changed(make_rsp())
     #
     assert algo.get_diamond_triangle_drifts() is None
     pose_changed()
@@ -436,16 +436,17 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert algo.get_diamond_triangle_drifts() is None
     #
     presents.pop(se.Pellet)
-    self.increment_perf_now(algo.pellet_missing_time)
     pose_changed()
+    self.increment_perf_now(algo.pellet_missing_time)
     assert algo.get_diamond_triangle_drifts(reset=True) is not None
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in loading now
+    assert pellet_m.state == PelletState.loading
+    assert algo.get_diamond_triangle_drifts() is not None   #
     presents[se.Pellet] = True
     pose_changed()
+    # assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     self.mock_pellet_ack()  # ack load
     pose_changed()
-    assert algo.get_diamond_triangle_drifts() is None  # given in sending now
     assert pellet_m.state == PelletState.monitoring  # even if already monitoring
     assert not pellet_m.can_use_pellet_command()  # sending not finished
     self.mock_pellet_ack()  # ack send

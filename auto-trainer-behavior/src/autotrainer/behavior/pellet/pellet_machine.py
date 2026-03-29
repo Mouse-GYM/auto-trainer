@@ -178,14 +178,15 @@ class PelletMachine(StateMachine):
             self.post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
         return can
 
-    def can_load_pellet(self, *, force: bool=False):
+    def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
+        """Is more: *should* or *has to* load pellet"""
         can_use = self.can_use_pellet_command()
-        algo_would_load = self._algorithm.would_load_pellet(pellet_state=self._state)
+        algo_would_load = self._algorithm.would_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
         if can_use and algo_would_load:
             self._check_pellet_load_failed()
         can = (
             can_use
-            and self._algorithm.can_load_pellet(pellet_state=self._state)
+            and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
         ) or force
         if can != self._prev_can_load:
             self._prev_can_load = can
@@ -284,7 +285,7 @@ class PelletMachine(StateMachine):
     # endregion
 
     def _notify_pellet_loaded_ok(self):
-        # always check:
+        # always double check:
         if self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
             self._prev_notify_loaded_perf_c = get_perf_now()
             logger.info("Notifying pellet loaded successfully")
@@ -324,6 +325,8 @@ class PelletMachine(StateMachine):
         caller: str,
         is_from_inference: bool = False,
     ):
+        # NB: pellet_seen is on any cam
+
         algo = self._algorithm
         reason: str = "unknown"
         retrying = False
@@ -342,8 +345,7 @@ class PelletMachine(StateMachine):
                 algo.is_in_session, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
                 algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
-                algo.system_state, algo.intersession_state,
-                algo.pellet_seen_age, self._covered_state,
+                algo.system_state, algo.intersession_state, algo.pellet_presence_age, self._covered_state,
             )
 
         def log_could_retry_shortly():
@@ -352,6 +354,16 @@ class PelletMachine(StateMachine):
             retrying = True
             reason = f"would have retried shortly {reason}"
             logit()
+
+        p_now = get_perf_now()
+
+        if (
+            pellet_seen
+            and is_from_inference
+            and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c
+            and algo.is_pellet_recently_seen(perf_now=p_now)
+        ):
+            self._notify_pellet_loaded_ok()
 
         if algo.algo_paused:  # really unsure we should keep,
             # we may want to handle the user commands still when algo-paused (emergency)
@@ -370,17 +382,11 @@ class PelletMachine(StateMachine):
                 return
             # this is going to be called at end of intersession after going to detection phase,
             # basically when inference is back to live
-            if self.can_load_pellet():
+            if self.can_load_pellet(use_any_cam=True):
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 self.load_pellet()
             else:
-                # either pellet is seen, or we don't know (might be not visible on cameras),
-                if cur_state == PelletState.loading and pellet_seen and is_from_inference:
-                    # TODO: using only 1 inference result to notify pellet loaded is risky in case of false positive
-                    # could/should use instead of more reliable way,
-                    # as waiting to have at least more than only 1 inference result..
-                    self._notify_pellet_loaded_ok()
                 # current state is either retract or loading (loaded),
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
@@ -418,11 +424,6 @@ class PelletMachine(StateMachine):
                 log_could_retry_shortly()
 
         elif cur_state == PelletState.monitoring:
-
-            # previous load-pellet could have missed to notify for pellet-loaded event,
-            # if/when pellet is not visible at end of load-pellet sequence. So have to recheck here:
-            if pellet_seen and is_from_inference:
-                self._notify_pellet_loaded_ok()
 
             if self.can_load_pellet():
                 reason = "load_pellet_when_monitoring_can_load_pellet"
@@ -545,18 +546,10 @@ class PelletMachine(StateMachine):
     transitions = transitions_allow_functions([
         dict(
             trigger=load_pellet,
-            source="*",  # "[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
-            dest=PelletState.loading,
-            before=_before_load_pellet,
-            conditions=can_load_pellet,
-        ),
-
-        dict(
-            trigger=force_load_pellet,
             source="*",
             dest=PelletState.loading,
             before=_before_load_pellet,
-            # conditions=can_load_pellet,  # contrary to load_pellet
+            conditions=can_load_pellet,
         ),
 
         dict(
@@ -568,14 +561,6 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
-            trigger=force_send_pellet,
-            source="*",
-            dest=PelletState.sending,
-            before=_before_send_pellet,
-            # conditions=can_send_pellet,  # contrary to send_pellet
-        ),
-
-        dict(
             trigger=cover_pellet,
             source="*",
             dest=PelletState.covering,
@@ -584,27 +569,11 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
-            trigger=force_cover_pellet,
-            source="*",
-            dest=PelletState.covering,
-            before=_before_cover_pellet,
-            # conditions=can_cover_pellet,
-        ),
-
-        dict(
             trigger=release_pellet,
             source="*",
             dest=PelletState.releasing,
             before=_before_release_pellet,
             conditions=can_release_pellet,
-        ),
-
-        dict(
-            trigger=force_release_pellet,
-            source="*",
-            dest=PelletState.releasing,
-            before=_before_release_pellet,
-            # conditions=can_release_pellet,
         ),
 
         dict(

@@ -31,6 +31,7 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
 
     # 1st pellet missing:
     mock_system.mock_pose_response(pellet_seen=False)
+    assert algo.session_pellet_loaded_count == 0
     assert pellet_m.state == PelletState.monitoring  # still
     assert algo.pellet_recently_seen  # still
     # now:
@@ -38,9 +39,11 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     assert not algo.pellet_recently_seen  # now not recently seen
     mock_system.mock_pose_response(pellet_seen=False)
     assert not algo.pellet_recently_seen  # still ofc
+    assert algo.session_pellet_loaded_count == 0
     assert pellet_m.state == PelletState.loading
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.pellet_recently_seen  # back !
+    assert algo.session_pellet_loaded_count == 1
     mock_system.mock_pellet_ack()  # ack the load
     mock_system.mock_pellet_ack()  # ack the sending
     assert pellet_m.state == PelletState.monitoring
@@ -53,7 +56,6 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     mock_system.mock_pellet_ack()  # ack the send
     assert algo.can_cover_pellet() is (True if cover_enabled else False)
     assert algo.can_release_pellet() is (False if cover_enabled else True)
-    assert algo.session_pellet_loaded_count == 0
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.session_pellet_loaded_count == 1
     mock_system.mock_pose_response(pellet_seen=True)

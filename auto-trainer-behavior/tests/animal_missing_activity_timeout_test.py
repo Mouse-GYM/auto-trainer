@@ -9,7 +9,7 @@ from autotrainer.behavior import CaptureAnalysisResult, IntersessionState, Recor
 from autotrainer.behavior import SystemState, SystemMachine
 
 
-class TestConsiderAutoEndSession(MockSystemMachine):
+class BaseAutoEndSession(MockSystemMachine):
 
     capture_end_reason = None
     capture_end_count = 0
@@ -24,6 +24,21 @@ class TestConsiderAutoEndSession(MockSystemMachine):
 
     def patch_timer(self):  # noqa
         return super().patch_timer("autotrainer.behavior.system_machine._consider_auto_end_session_timer")
+
+    def test_its_canceled_on_end_session(self, machine):
+        with self.patch_timer() as m_timer:
+            self.start_session_in_tunnel()
+        assert m_timer.return_value.cancel.call_args_list == []
+        self.exit_tunnel()
+        assert not self.algo.is_in_session
+        assert m_timer.return_value.cancel.call_args_list == [mock.call()]
+
+
+class TestWithMissingNoseActivity(BaseAutoEndSession):
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        self.algo.active_config.auto_end_session.animal_tunnel_no_activity_delay = 0  # disable this one
 
     @pytest.mark.parametrize("timeout_delay_minutes", [1, 3])
     def test_it_triggers(self, machine, timeout_delay_minutes):
@@ -75,10 +90,21 @@ class TestConsiderAutoEndSession(MockSystemMachine):
         ]
         assert m_timer.return_value.cancel.call_args_list == [mock.call()]
 
-    def test_its_canceled_on_end_session(self, machine):
+
+class TestWithAnimalTunnelMissingActivity(BaseAutoEndSession):
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        cfg = self.algo.active_config.auto_end_session
+        cfg.animal_tunnel_no_activity_delay = 30
+        cfg.no_activity_delay_minutes = 0  # disable this one
+
+    def test_it_triggers(self, machine):
+        algo = self.algo
+        cfg = algo.active_config.auto_end_session
         with self.patch_timer() as m_timer:
             self.start_session_in_tunnel()
-        assert m_timer.return_value.cancel.call_args_list == []
-        self.exit_tunnel()
-        assert not self.algo.is_in_session
-        assert m_timer.return_value.cancel.call_args_list == [mock.call()]
+        delay = AlmostEqualFloat(cfg.animal_tunnel_no_activity_delay)
+        assert m_timer.call_args_list == [
+            mock.call(delay, machine._consider_auto_end_session)
+        ]

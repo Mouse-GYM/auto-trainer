@@ -52,7 +52,8 @@ class HardwareControlContent(ContentWidget):
         add_cmd_widget = self._commands_widgets.append
 
         def log_hardware_cmd(cmd: Callable):
-            logger.verbose("User-control: Executing %s", cmd)
+            orig_func = getattr(cmd, "_orig_func_qualname", cmd)
+            logger.verbose("User-control: Executing %s", orig_func)
             return cmd()
 
         # Header

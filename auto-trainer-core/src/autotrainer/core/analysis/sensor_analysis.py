@@ -89,6 +89,7 @@ class SensorAnalysis(ObservableObject):
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
+            load_cell_tare_monitor=self._tare_detector,
             audio_monitor=self._audio_thrashing_monitor,
             external_doors_monitor=self._external_doors_monitor,
             global_animal_presence_monitor=self._global_animal_presence_monitor,
@@ -197,11 +198,11 @@ class SensorAnalysis(ObservableObject):
     ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
         # logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
-        weights: List[float] = []
-        switch: List[float] = []
-        pressure: List[float] = []
-        temperature: List[float] = []
-        humidity: List[float] = []
+        weight_vals: List[float] = []
+        switch_vals: List[float] = []
+        pressure_vals: List[float] = []
+        temperature_vals: List[float] = []
+        humidity_vals: List[float] = []
 
         if self._record_file is not None:
             now = datetime.now()
@@ -216,11 +217,11 @@ class SensorAnalysis(ObservableObject):
         load_cell_mon = self._load_cell_monitor
 
         for m in measurements:
-            weights.append(m.weight)
-            switch.append(m.switch)
-            pressure.append(m.pressure)
-            temperature.append(m.temperature)
-            humidity.append(m.humidity)
+            weight_vals.append(m.weight)
+            switch_vals.append(m.switch)
+            pressure_vals.append(m.pressure)
+            temperature_vals.append(m.temperature)
+            humidity_vals.append(m.humidity)
 
             if self._record_file is not None:
                 try:
@@ -240,17 +241,17 @@ class SensorAnalysis(ObservableObject):
             self._load_cell_monitor.update(m.weight, m.when, m.timestamp)
 
         # Headbar analog pressure monitor.
-        self._headbar_pressure_monitor.update(pressure, first_measure.when, first_measure.timestamp)
+        self._headbar_pressure_monitor.update(pressure_vals, first_measure.when, first_measure.timestamp)
 
         # Headbar digital switch - no real implementation at this time.
-        self._is_headbar_switch_engaged = numpy.mean(switch) > 0.5
+        self._is_headbar_switch_engaged = numpy.mean(switch_vals) > 0.5
         # (Auto-)tare detection.
-        self._tare_detector.update(weights)
+        self._tare_detector.update(weight_vals)
 
         # Performance monitoring.
         self._perf_monitor.add_cycles(len(measurements))
 
-        return weights, switch, pressure, temperature, humidity
+        return weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals
 
     def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
         if spectrum is None or not spectrum.magnitudes:

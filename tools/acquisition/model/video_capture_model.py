@@ -4,7 +4,7 @@ import pathlib
 import time
 import logging
 from multiprocessing.context import BaseContext
-from typing import Optional, List, Tuple, cast, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any
 from multiprocessing import synchronize
 from threading import Event
 import urllib
@@ -432,9 +432,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     def save_configuration(self) -> CameraConfiguration:
         parsed = urlparse(self._camera_source.url)
-        params = VideoManager.parse_params(self._camera_source.url)
-        # allow to not have below assignations to floats or bools being annotated as "type-error" :
-        params = cast(Dict[str, Any], params)
+        params: Dict[str, Any] = VideoManager.parse_params(self._camera_source.url)
         for key in params:
             try:
                 val = float(params[key])
@@ -462,11 +460,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
         perf_timeout = time.perf_counter() + timeout
-        logger.debug(f"<%s> waiting for %s acknowledgement", self._name, expected)
+        logger.debug("<%s> waiting for %s acknowledgement", self._name, expected)
         while (cur_status := CaptureProcessStatus(self._video_status.value)) != expected:
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
-                logger.error(f"<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
+                logger.error("<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
                              cur_status)
                 return False
             time.sleep(0.001)

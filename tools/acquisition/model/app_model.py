@@ -1,5 +1,4 @@
 import dataclasses
-import copy
 import enum
 import json
 import logging
@@ -17,8 +16,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union
 
 import yaml
-from watchdog.events import FileSystemEvent, PatternMatchingEventHandler
-from watchdog.observers import Observer
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
     ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
@@ -29,17 +26,18 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
+from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, no_op_timer
+from autotrainer.core.multiproc import no_op_timer
 from autotrainer.core.logging import get_verbose_logger, set_log_location
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
-from autotrainer.core.project.project_info import DATE_FORMAT, DATE_TIME_FORMAT
+from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
@@ -47,9 +45,9 @@ from autotrainer.video import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
-    IntersessionMachine
+    IntersessionMachine, CaptureAnalysisResult
 
-from autotrainer.training import TrainingPlan, TrainingPhase
+from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo
 
 from autotrainer.api import (
     RpcService,
@@ -59,6 +57,7 @@ from autotrainer.api import (
     ApiTopic,
     ApiEventKind,
 )
+from tools.acquisition.model.app_model_status import AppModelStatus
 
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -80,45 +79,22 @@ def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
 
 
-class TrainingPlansFSEventHandler(PatternMatchingEventHandler):
-
-    def __init__(self, app_model: "AppModel"):
-        super().__init__(patterns=["*.json"])
-        self._app_model = app_model
-
-    def _reload_app_model_plans(self):
-        self._app_model.reload_training_plans()
-
-    def on_any_event(self, event: FileSystemEvent) -> None:
-        match = lambda p: False if p is None else p.lower().endswith(".json")
-        logger.debug("Any Event[%s]: %s -> %s", event.event_type, event.src_path, event.dest_path)
-        if (
-               (event.event_type in {'created', 'closed', 'deleted'} and match(event.src_path))
-            or (event.event_type == 'moved' and (match(event.dest_path) or match(event.src_path)))
-        ):
-            self._reload_app_model_plans()
-
 
 class InvalidTargetAppModelStatus(Exception):
     """When trying to switch to invalid, or disabled, target app model status"""
 
 
-class AppModelStatus(str, enum.Enum):
-    IDLE = "idle"  # nothing running
-    ACQUIRING = "acquiring"  # camera + system running, but without animal-in-device
-    ANIMAL_IN_DEVICE = "animal_in_device"  # this is ACQUIRING with animal-in-device
-    ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
-    CALIBRATION_3D = "calibration_3d"  # executing calib 3d
-    CALIBRATION_DCS = "calibration_dcs"  # executing calib dcs
+def app_status_is_target_status_valid(self: AppModelStatus, target: AppModelStatus):
+    return target in _app_model_status_valid_targets.get(self, ())
 
-    def is_target_status_valid(self, target: "AppModelStatus"):
-        return target in _app_model_status_valid_targets.get(self, ())
 
-    def to_api_app_mode(self) -> ApiApplicationMode:
-        return _app_model_status_2_api_app_mode[self]
+def app_status_to_api_app_mode(self: AppModelStatus) -> ApiApplicationMode:
+    return _app_model_status_2_api_app_mode[self]
 
-    def to_behavior_algo_status(self) -> Optional[BehaviorAlgoStatus]:
-        return _to_behavior_algo_status.get(self, None)
+
+def app_status_to_behavior_algo_status(self: AppModelStatus) -> Optional[BehaviorAlgoStatus]:
+    return _to_behavior_algo_status.get(self, None)
+
 
 
 _app_model_status_2_api_app_mode = {
@@ -211,6 +187,8 @@ class AppModel(ObservableObject):
 
         self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
+        logger.notice("Creating app_model with version %s ; env=%s",
+                      app_version, dict(os.environ))
 
         def log_on_error(title, msg):
             logger.error("%s: %s", title, msg)
@@ -219,8 +197,9 @@ class AppModel(ObservableObject):
 
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
-        self._mp_manager = multiprocessing.get_context("spawn").Manager()
         mp_ctx = get_mp_ctx()
+        self._mp_manager = mp_ctx.Manager()
+
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
@@ -243,8 +222,7 @@ class AppModel(ObservableObject):
 
         self.set_log_location()
 
-        logger.notice("Creating app_model with version %s", app_version)
-
+        self._plan_repo = PlanRepository()
         self._training_mode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
@@ -306,18 +284,17 @@ class AppModel(ObservableObject):
         self._inference_queue = None
 
         self._pose_algorithm: PoseAlgorithm = None
-        self._inference: InferenceModel = None  # noqa
-
+        self._inference: Optional[InferenceModel] = None  # needed before reload_calib
         self.reload_calib(calib_dir)
-        self._inference = InferenceModel(self._pose_algorithm,
+        #
+        inference = self._inference = InferenceModel(self._pose_algorithm,
                                          calib_dir=calib_dir,
                                          mp_manager=self._mp_manager,
                                          ) if inference_model is None else inference_model
-
         #
 
-        self._training_plans: List[Dict] = []
-        self._training_plan_by_plan_id: Dict[str, Dict] = {}
+        self._training_plans: List[PlanInfo] = []
+        self._training_plan_by_plan_id: Dict[str, PlanInfo] = {}
         self._plans_by_path: Dict[Path, Dict[str, Any]] = {}
 
         behavior_model = self._behavior = BehaviorModel(
@@ -325,6 +302,7 @@ class AppModel(ObservableObject):
             topcam_presence=self._top_camera_presence_detection,
             system_machine=system_machine,
         )
+        system_machine = behavior_model.system_machine  # ensure same
 
         self._models: List[ProjectDependentProtocol] = [
             self._left_camera,
@@ -347,17 +325,20 @@ class AppModel(ObservableObject):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._hardware.property_changed += self._on_hardware_property_changed
-        self._inference.property_changed += self._on_inference_property_changed
-        self._inference.pose_response_ready += self._on_pose_response_ready
+        inference.property_changed += self._on_inference_property_changed
+        inference.pose_response_ready += self._on_pose_response_ready
+        inference.detection_result_ready += self._on_detection_result_ready
         preferences.property_changed += self._on_preferences_property_changed
         behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
-        behavior_model.system_machine.intersession.events.property_changed += self._on_intersession_property_changed
 
-        self._plans_files_event_handler = TrainingPlansFSEventHandler(self)
-        self._plans_files_observer = Observer()
-        self._plans_files_observer.start()
+        intersession = system_machine.intersession
+        intersession.events.property_changed += self._on_intersession_property_changed
+
+        pellet_m = system_machine.pellet
+        pellet_m.events.pellet_loaded += self._on_pellet_loaded
+        pellet_m.events.pellet_sent += self._on_pellet_sent
 
         self._timer_send_status = no_op_timer
         def send_system_status_and_reschedule():
@@ -402,7 +383,7 @@ class AppModel(ObservableObject):
     def check_target_status_valid(self, target: AppModelStatus):
         current_status = self._status
         if target != current_status:
-            valid = current_status.is_target_status_valid(target)
+            valid = app_status_is_target_status_valid(current_status, target)
             if not valid:
                 raise InvalidTargetAppModelStatus(f"New status {target} not valid for current status {current_status}")
         if target == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -429,10 +410,10 @@ class AppModel(ObservableObject):
             return
         self.check_target_status_valid(value)
         self._status = value
-        algo_status = value.to_behavior_algo_status()
+        algo_status = app_status_to_behavior_algo_status(value)
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
-        self._on_property_changed(self.Props.STATUS, value, prev)
+        self.property_changed(self.Props.STATUS, value, prev)
         is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
             if value == AppModelStatus.ANIMAL_IN_DEVICE:
@@ -443,9 +424,18 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continous mode and is_from_start is not True, or else it was already recording.
-        if value is AppModelStatus.ANIMAL_IN_TRAINING:
+        if value in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
+            self._analysis.stop()
+        else:
+            self._analysis.restart()
+        # reload training plans:
+        self.reload_training_plans()
+        if value == AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
             self._behavior.system_machine.pellet.send_pellet()
+            self._hardware.open_tunnel_gate()
+        else:
+            self._hardware.close_tunnel_gate()
 
     def reload_calib(self, calib_dir: Optional[Path]):
         calib_src_dir = (
@@ -494,7 +484,7 @@ class AppModel(ObservableObject):
         if algo.is_in_session:
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
-                           algo.pellet_recently_seen, algo.pellet_seen_age)
+                           algo.pellet_recently_seen, algo.pellet_presence_age)
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
@@ -554,12 +544,19 @@ class AppModel(ObservableObject):
         return self._preferences
 
     @property
-    def loaded_configuration(self):
+    def loaded_configuration(self) -> Optional[SystemConfiguration]:
         return self._loaded_configuration
 
     @property
     def project(self) -> Optional[ProjectInfo]:
         return self._project_info
+
+    @project.setter
+    def project(self, value):
+        self._project_info = value
+        for model in self._models:
+            model.project = value
+        self._analysis.project_info = value
 
     @property
     def left_camera(self):
@@ -633,6 +630,7 @@ class AppModel(ObservableObject):
         algo.shift_xyz_handler.reset()
         if animal is None:
             self.training_plan = None
+            algo.reset_selected_animal_counts(None)
         else:
             logger.debug("animal pellet=%s is_dcs=%s",
                          (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
@@ -718,11 +716,16 @@ class AppModel(ObservableObject):
 
     @output_location.setter
     def output_location(self, value: str):
-        if self._output_location == value:
+        if self._output_location == value and self._project_info is not None:
             return
         old_value = self._output_location
         self._output_location = value
         self.property_changed(self.Props.OUTPUT_LOCATION, value, old_value)
+        new_prj = self.make_project_info()
+        self.project = new_prj
+        logger.success("Set new project to %s", dataclasses.asdict(new_prj))
+        log_path = new_prj.get_log_file_path(auto_new=False)
+        self.set_log_location(log_path)
 
     @property
     def animal_name(self) -> str:
@@ -754,14 +757,14 @@ class AppModel(ObservableObject):
             value.command_request_delegate = self._handle_rpc_service_command
 
     @property
-    def training_plans(self) -> List[Dict[str, Any]]:
+    def training_plans(self) -> List[PlanInfo]:
         return self._training_plans
 
     @training_plans.setter
-    def training_plans(self, value):
+    def training_plans(self, value: List[PlanInfo]):
         self._training_plans = value
         self._training_plan_by_plan_id = {
-            get_plan_id(plan): plan
+            plan.plan_id: plan
             for idx, plan in enumerate(self._training_plans)
         }
         self._detach_training_plan()  # always
@@ -784,17 +787,7 @@ class AppModel(ObservableObject):
     def get_training_plan_by_id(self, plan_id: Optional[str]) -> Optional[TrainingPlan]:
         if plan_id is None:
             return None
-        plan = self._training_plan_by_plan_id.get(plan_id)
-        if plan is None:
-            logger.warning("Unknown plan_id: %s", plan_id)
-            return None
-        pid = get_plan_id(plan)
-        for available_path, available_plan in self._plans_by_path.items():
-            if get_plan_id(available_plan) == pid:
-                # ensure any caller gets a fresh instance, without need re-read from disk:
-                return TrainingPlan.from_dict(copy.deepcopy(available_plan))
-        logger.warning("Plan %s not anymore available", pid)
-        return None
+        return self._plan_repo.get_plan(plan_id)
 
     def _attach_training_plan(self, plan: TrainingPlan):
         algo = self._behavior.algorithm
@@ -876,7 +869,7 @@ class AppModel(ObservableObject):
         if len(matching_animals) == 0:
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
-            self._save_animal_metadata(animal)
+            self._save_animal_metadata(animal, sender="add_animal")
 
             # Ensure property change events for listeners
             animals = self._animals
@@ -890,7 +883,7 @@ class AppModel(ObservableObject):
             self.selected_animal = animal
         return animal
 
-    def make_project_info(self):
+    def make_project_info(self) -> ProjectInfo:
         left = None if self._left_camera is None else self._left_camera.name
         right = None if self._right_camera is None else self._right_camera.name
         return ProjectInfo(
@@ -921,16 +914,16 @@ class AppModel(ObservableObject):
     def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
-            cur_status = self._status
-            if target_status == cur_status:
-                logger.verbose("AppModelStatus already %s", cur_status)
+            before_status = self._status
+            if target_status == before_status:
+                logger.verbose("AppModelStatus already %s", before_status)
                 return True
             if self._acquisition_started:
                 if self.is_target_status_valid(target_status):
                     self.status = target_status
                     return True
                 self.on_error("AppModelStatus change error",
-                              f"Target status {target_status} not valid for source status {self._status}")
+                              f"Target status {target_status} not valid for source status {before_status}")
                 return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
@@ -945,13 +938,7 @@ class AppModel(ObservableObject):
         # and left behind their context.
 
         # also:
-        self._project_info = self.make_project_info()
-
-        # Now put the new project info to all "models" :
-        for model in self._models:
-            model.project = self._project_info
-
-        analysis.project_info = self._project_info
+        self.project_info = self.make_project_info()
 
         algo = self._behavior.algorithm
         algo.reload_diamond_triangle_config()
@@ -1053,7 +1040,7 @@ class AppModel(ObservableObject):
 
         if not did_start:
             logger.error("failed to start all subprocesses")
-            self.capture_stop()
+            self.capture_stop(force=True)
             return False
 
         # once cameras successfully started:
@@ -1066,8 +1053,9 @@ class AppModel(ObservableObject):
             self._inference.start(self._inference_queue)
 
         logger.debug("connecting hardware ...")
-        self._hardware.connect(self._system_message_handler.input_queue)
-        self._hardware.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
         logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
@@ -1095,16 +1083,17 @@ class AppModel(ObservableObject):
 
         return True
 
-    def capture_stop(self):
+    def capture_stop(self, force: bool=False):
         logger.debug("AppModel.capture_stop")
         with self.app_lock:
-            if not self._acquisition_started:
+            if not self._acquisition_started and not force:
                 logger.verbose("acquisition not running")
                 return
             if self._acquisition_stopping:
                 logger.verbose("acquisition already stopping")
                 return
             self._acquisition_stopping = True
+            before_status = self._status
         try:
             self._capture_stop()
         finally:
@@ -1117,9 +1106,12 @@ class AppModel(ObservableObject):
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
+            if before_status is AppModelStatus.IDLE:
+                # force:
+                self.property_changed(self.Props.STATUS, AppModelStatus.IDLE, None)
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
-                self.reload_training_plans()
+                self.reload_training_plans(refresh=True)
             self._event_manager.post_event_content(ApiEventKind.acquisitionEnded)
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
@@ -1155,10 +1147,6 @@ class AppModel(ObservableObject):
                 logger.verbose("stopping capture to %s", camera.name)
                 camera.on_capture_stop()
 
-    def _get_plans_dir(self):
-        plans_path = Path(self._preferences.configuration_location).joinpath("training/protocols")
-        return plans_path
-
     def set_log_location(self, location: Optional[Path] = None):
         if location is None:
             prj = self._project_info
@@ -1174,50 +1162,34 @@ class AppModel(ObservableObject):
         if prev_loc is not None:
             logger.success("Switched from %s to %s ; app_version=%s", prev_loc, location, self._app_version)
 
-    def load_configuration(self, location: Optional[str] = None):
+    def get_config_location(self, location: Optional[str] = None) -> Path:
         if location is None:
             # Check to see if there is a file in the new default location.  If so, use it.
             location = Path(self._preferences.configuration_location)
-            location.mkdir(parents=True, exist_ok=True)
             logger.info("did not receive explicit configuration file, trying default p_location=%s", location)
-            configuration = SystemConfiguration.load_default(location)
-            # Fallback to the old last configuration preference if this device has not converted.
-            # TODO - remove this once all devices have migrated.
-            if configuration is not None:
-                file_path = SystemConfiguration.make_default_yaml_config_path(location)
-            else:
-                logger.info("default not yet in use, trying last configuration")
-                file_path = Path(self._preferences.last_configuration)
-                if file_path.is_file():
-                    configuration = SystemConfiguration.load_yaml_file(file_path)
-                    if configuration is not None:
-                        # Migrate to new default location.
-                        configuration.save_default(self._preferences.configuration_location)
-        else:
-            # Always allow for a custom configuration file if provided.
-            logger.info("using explicit configuration %s", location)
-            file_path = Path(location)
-            configuration = SystemConfiguration.load_yaml_file(file_path)
+            default_path = SystemConfiguration.make_default_yaml_config_path(location)
+            if default_path.is_file():
+                return default_path
+            file_path = Path(self._preferences.last_configuration)
+            if file_path.is_file():
+                return file_path
+            default_path = SystemConfiguration.make_default_yaml_config_path(Path(get_default_configuration_location()))
+            return default_path
+        path = Path(location)
+        if path.is_dir():
+            return SystemConfiguration.make_default_yaml_config_path(path)
+        return path
 
-        if configuration is None:
+    def load_configuration(self, location: Optional[Path] = None):
+        if location is None:
+            location = self.get_config_location()
+        if location.exists():
+            logger.info("using configuration from %r", location.as_posix())
+            configuration = SystemConfiguration.load_yaml_file(location)
+        else:
             logger.info("using default configuration")
             configuration = SystemConfiguration()
-            file_path = SystemConfiguration.make_default_yaml_config_path(
-                Path(get_default_configuration_location()))
-        else:
-            logger.info("using configuration from %r", file_path.as_posix())
-
-        assert isinstance(configuration, SystemConfiguration)
-
-        self.output_location = configuration.persistence.output_location
-
-        # must be after assign of self.output_location:
-        prev_prj = self._project_info
-        prj = self._project_info = self.make_project_info()
-        prev_log_path = None if prev_prj is None else prev_prj.get_log_file_path(auto_new=False)
-        log_path = prj.get_log_file_path(auto_new=False)
-        if log_path != prev_log_path:
-            self.set_log_location(log_path)
+            configuration.save_file(location, as_yaml=True)
 
         prebuffer_duration = 0
 
@@ -1240,17 +1212,6 @@ class AppModel(ObservableObject):
         if (camera := configuration.get_camera(CameraId.Web)) is not None:
             self._top_camera.load_configuration(camera)
 
-        # re-create project-info after load of cams config
-        prev_prj = self._project_info
-        prj = self._project_info = self.make_project_info()
-        prev_log_path, log_path = log_path, prj.get_log_file_path(auto_new=False)
-        if log_path != prev_log_path:
-            self.set_log_location(log_path)
-
-        # Also ensure children models have also same one:
-        for model in self._models:
-            model.project = prj
-
         if prebuffer_duration > 0:
             prebuffer_scale = os.getenv("AUTOTRAINER_PREBUFFER_SCALE")
             if prebuffer_scale is not None:
@@ -1264,49 +1225,40 @@ class AppModel(ObservableObject):
         self.inference.load_configuration(configuration.inference)
         self.behavior.load_configuration(configuration.behavior)
 
-        # only at the end:
         self._loaded_configuration = configuration
-        self._loaded_config_dir_path = file_path.parent.resolve()
+        self._loaded_config_dir_path = location.parent.resolve()
 
-        plans_path = self._get_plans_dir()
-        self.reload_training_plans(plans_path, reraise_on_error=True)
+        # only at the end:
+        self.output_location = configuration.persistence.output_location
+
+        self.reload_training_plans(reraise_on_error=True)
 
         # and:
         self._load_animals()
 
         self.configuration_loaded_event(configuration)
-
-        observer = self._plans_files_observer
-        observer.stop()
-        observer.join(2)
-        observer = self._plans_files_observer = Observer()
-        logger.debug("starting FS monitoring of %s", plans_path)
-        plans_path.mkdir(parents=True, exist_ok=True)  # observer requires the path/dir to exists, otherwise exception
-        observer.schedule(self._plans_files_event_handler, path=plans_path.resolve(), recursive=False)
-        observer.start()
+        dev_ack_timeout = configuration.hardware.min_ack_timeout
+        self._hardware.set_device_ack_timeout(dev_ack_timeout)
 
         return True
 
-    def reload_training_plans(self, dir_path: Optional[Path] = None, *, reraise_on_error: bool=False):
+    def reload_training_plans(self, *, refresh: bool=False, reraise_on_error: bool=False):
         if self._acquisition_started or self._status != AppModelStatus.IDLE:
             logger.notice("delaying reload training plans given acquisition started(%s) or status not idle: %s",
                           self._acquisition_started, self._status)
             self._reload_plans_needed = True
             return
-        if dir_path is None:
-            dir_path = self._get_plans_dir()
         try:
-            plans = load_training_plans(dir_path)
+            plan_infos = self._plan_repo.get_plans(refresh=refresh)
         except Exception as err:
+            logger.exception("Could not load plans: %s", err)
             if reraise_on_error:
                 raise RuntimeError(f"Could not load training plans: {err}") from None
-            logger.exception("Could not load plans from %s: %s", dir_path, err)
             self.on_error("Reload training protocols error",
-                          f"Could not reload plans from {dir_path.as_posix()}:\n\n"
+                          f"Could not reload plans:\n\n"
                           f"{err}\n\nPrevious plans are retained.")
             return
-        self._plans_by_path = plans
-        self.training_plans = list(plans.values())
+        self._training_plans = plan_infos
 
     def save_configuration(self):
         if self._loaded_configuration is None:
@@ -1399,11 +1351,28 @@ class AppModel(ObservableObject):
                 return
 
         animals = []
-        path = Path(self._preferences.animal_location)
-        if path.exists() and path.is_dir():
-            files = [x.name for x in path.glob("*.json")]
-            loaded = [AnimalSubject.from_file(path.joinpath(x)) for x in files]
-            animals = sorted((x for x in loaded if x is not None), key=lambda a: a.name)
+        animals_dir_path = Path(self._preferences.animal_location)
+
+        if animals_dir_path.is_dir():
+            files = list(animals_dir_path.glob("*.json"))
+            animals: Dict[Path, AnimalSubject] = {
+                path: animal
+                for path, animal in (
+                    (path, AnimalSubject.from_file(path))
+                    for path in files
+                )
+                if animal is not None
+            }
+
+            for path, animal in animals.items():
+                prev_day_date = animal.pellet_counts_day_date
+                prev_counts = animal.pellet_counts_day
+                animal.check_today_date()
+                if animal.pellet_counts_day_date != prev_day_date:
+                    logger.info("Reset animal day count to 0 given saved before today: %s ; prev counts=%s",
+                                prev_day_date, prev_counts)
+                    animal.to_file(path)
+            animals = sorted(animals.values(), key=lambda a: a.name)
 
         pref_animal = self._preferences.selected_animal
         for animal in animals:
@@ -1479,9 +1448,9 @@ class AppModel(ObservableObject):
 
     def _on_behavior_algo_property_changed(self, name: str, value, _):
         props = BehaviorAlgoProps
+        animal = self._selected_animal
         #
         if name == props.BASELINE_INTENSITY:
-            animal = self._selected_animal
             if animal is None:
                 return
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
@@ -1493,7 +1462,6 @@ class AppModel(ObservableObject):
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
-        hard = self._hardware
         if animal is not None and name in {'set_x', 'set_y', 'set_z'}:
             # only when manual:
             if self._training_mode != TrainingMode.MANUAL:
@@ -1556,7 +1524,7 @@ class AppModel(ObservableObject):
         # maybe todo: make these configurable:
         min_check_delay = 5  # seconds ; if no valid check/measure within this delay -> error + emergency
         delay_inference_begin = 3  # seconds ; wait inference started for that duration before consider min_check_delay
-        max_dist_diff = 1.5  # mm ; if distance between obtained & expected above that -> invalid measure
+        max_dist_diff = 5  # mm ; if distance between obtained & expected above that -> invalid measure
         #
         loc3d = response.locations_3d.get(SceneElement.Diamond)
         raw3d = response.raw_loc_3d.get(SceneElement.Diamond)
@@ -1593,6 +1561,27 @@ class AppModel(ObservableObject):
                                  diff.distance,
                                  loc3d.humanize(), cfg.diamond_coord.humanize())
 
+    def _on_detection_result_ready(self, project: ProjectInfo, result: IntersessionResponse):
+        selected = self._selected_animal
+        if selected is None:
+            return
+        # NB: instead of reacting to inference.detection_result_ready event,
+        # we could eventually sub-depend on system_machine._on_detection_result_ready cb handler,
+        # and simply assign from the behavior algo instance pellets counts .. to be sure to be in sync with it.
+        day_changed = selected.check_today_date()  # 1st
+        day_counts = selected.pellet_counts_day
+        total_counts = selected.pellet_counts_total
+        #
+        # NB2: presented count is handled via pellet-sent event.
+        day_counts.success_reaches += result.successful_reaches
+        total_counts.success_reaches += result.successful_reaches
+        day_counts.consumed += result.food_consumed
+        total_counts.consumed += result.food_consumed
+        day_counts.reaches += result.total_reaches
+        total_counts.reaches += result.total_reaches
+        if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
+            self._save_animal_metadata(selected, sender="detection_result_ready")
+
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
         if name == "current_phase":
@@ -1623,12 +1612,13 @@ class AppModel(ObservableObject):
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
                 prev_animals[idx] = animal
+                break
+        animal.check_today_date()  # in case of
         dst = Path(self._preferences.animal_location).joinpath(f"{animal.name}.json")
         logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
-        if backup_previous:
-            if dst.exists():
-                now = datetime.now()
-                dst.with_suffix(f'.bak-{now.strftime(DATE_TIME_FORMAT)}').write_bytes(dst.read_bytes())
+        if backup_previous and dst.exists():
+            now = datetime.now()
+            dst.with_suffix(f'.{now.strftime(DATE_TIME_FORMAT)}.json.bak').write_bytes(dst.read_bytes())
         animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
@@ -1889,7 +1879,7 @@ class AppModel(ObservableObject):
         animal = self._selected_animal
 
         system_status = ApiSystemStatus(
-            application_mode=self._status.to_api_app_mode(),
+            application_mode=app_status_to_api_app_mode(self._status),
             training_mode=training_mode_to_api_training_mode(self._training_mode),
             animal_id=None if animal is None else animal.id,
             detectors=detectors,
@@ -1929,3 +1919,29 @@ class AppModel(ObservableObject):
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
         self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)
+
+    # pellet machine events
+
+    def _on_pellet_loaded(self):
+        prefs = self._preferences
+        prefs.pellet_load_count_total += 1
+        prefs.pellet_load_count_day += 1
+        prefs.save()  # always
+
+    def _on_pellet_sent(self):
+        selected = self._selected_animal
+        status = self._status
+        recent = self._behavior.algorithm.pellet_recently_seen
+        algo = self._behavior.algorithm
+        logger.debug("on_pellet_sent: status=%s pellet_recently_seen=%s sel=%s",
+                     status, recent, selected)
+        if (
+                selected is not None
+            and recent
+            and status == AppModelStatus.ANIMAL_IN_TRAINING
+        ):
+            algo.increase_pellets_presented(1)
+            # now recopy the values from algo:
+            selected.pellet_counts_day.presented = algo.pellets_presented_day
+            selected.pellet_counts_total.presented = algo.pellets_presented_total
+            self._save_animal_metadata(selected, sender="on_pellet_sent")  # always
