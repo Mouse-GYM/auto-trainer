@@ -73,7 +73,6 @@ class AlarmContent(ContentWidget):
 
     def __init__(self, app_model: AppModel, hardware_model: HardwareModel):
         super().__init__()
-        # self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._app_model = app_model
         self._hardware_model = hardware_model
@@ -194,19 +193,22 @@ class AlarmContent(ContentWidget):
         icon = self._pellet_misplaced_status = make_detector_icon(name="pellet-misplaced")
         form_layout_detectors.addRow("Pellet Misplaced:", icon)
 
+        icon = self._pellets_before_refill_status = make_detector_icon(name="pellet-before-refill")
+        form_layout_detectors.addRow("Pellets before refill:", icon)
+
+        icon = self._consecutive_failed_loads_status = make_detector_icon(name="consecutive-failed-loads")
+        form_layout_detectors.addRow("Cons. Failed Loads:", icon)
+
         content_layout.addLayout(form_layout_alarms)
         content_layout.addLayout(form_layout_detectors)
 
         content_widget = QWidget()
         content_widget.setLayout(content_layout)
-        # content_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         card.setContentWidget(content_widget)
         card.setContentsMargins(0, 0, 0, 0)
-        # card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout()
-        # layout.setSizeConstraint(QHBoxLayout.SizeConstraint.SetMinimumSize)
         layout.addWidget(card)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -224,6 +226,7 @@ class AlarmContent(ContentWidget):
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
         # analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
         analysis.pellet_misplaced_monitor.property_changed += self._pellet_misplaced_property_changed
+        analysis.system_maintenance_monitor.property_changed += self._system_maint_mon_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -300,10 +303,20 @@ class AlarmContent(ContentWidget):
 
     @invoke_method
     def _global_animal_presence_property_changed(self, name, value, _):
-        if name == "is_engaged":
+        mon = self._app_model.analysis.global_animal_presence_monitor
+        if name == mon.IS_ENGAGED:
             self.global_animal_presence_changed.emit(value)
 
     @invoke_method
     def _pellet_misplaced_property_changed(self, name, value, _):
-        if name == "is_engaged":
+        mon = self._app_model.analysis.pellet_misplaced_monitor
+        if name == mon.IS_ENGAGED:
             self._pellet_misplaced_status.setStatus(value)
+
+    @invoke_method
+    def _system_maint_mon_property_changed(self, name, value, _):
+        mon = self._app_model.analysis.system_maintenance_monitor
+        if name == mon.MAX_PELLET_LOADED_ENGAGED:
+            self._pellets_before_refill_status.setStatus(value)
+        elif name == mon.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED:
+            self._consecutive_failed_loads_status.setStatus(value)

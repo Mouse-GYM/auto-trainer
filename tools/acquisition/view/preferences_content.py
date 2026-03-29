@@ -921,7 +921,6 @@ class PreferencesContent(QWidget):
         right_layout.addRow("Max Delay Skip Seconds:", spinbox)
 
         #
-        right_layout.addRow("<b>System Maintenance</b>", QWidget())
         maint_mon = analysis.system_maintenance_monitor
         maint_cfg = maint_mon.config
 
@@ -934,7 +933,7 @@ class PreferencesContent(QWidget):
                 cfg.max_pellets_loaded_count = value
                 maint_mon.property_changed(maint_mon.CONFIG, cfg, None)
         spinbox.valueChanged.connect(max_pellet_loaded_count_changed)
-        right_layout.addRow("Max Pellet Loaded Count:", spinbox)
+        right_layout.addRow("<b>Pellets before refill:</b>", spinbox)
         #
         label = QLabel(f"{prefs.pellet_load_count_total}")
         right_layout.addRow("Current count:", label)
@@ -948,7 +947,7 @@ class PreferencesContent(QWidget):
                 cfg.max_consecutive_failed_loaded = value
                 maint_mon.property_changed(maint_mon.CONFIG, cfg, None)
         spinbox.valueChanged.connect(max_consecutive_failed_load_count_changed)
-        right_layout.addRow("Max Consecutive Failed Loads:", spinbox)
+        right_layout.addRow("<b>Max Consecutive Failed Loads:</b>", spinbox)
 
         top_layout.addLayout(right_layout)
 
