@@ -897,7 +897,9 @@ class SystemMachine(StateMachine):
             else:
                 tunnel_dev.open_tunnel_gate()
                 self._update_magnet_position(algo.baseline_intensity)
-                # pellet_dev.send_pellet()
+                # No need of pellet_dev.send_pellet() :
+                # pellet-machine will resume whatever operation needs to be, like going from home -> send-pellet,
+                # or load-pellet, depending on live conditions.
                 #
                 # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
                 self._on_load_cell_monitor_property_changed(
