@@ -79,7 +79,6 @@ class SystemMachine(StateMachine):
         )
 
         self._project_info: Optional[ProjectInfo] = project_info
-        self._need_set_stop_recorded = False  # this is used for when doing/analysing batch of trials
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
         self._batch_project_sessions_finished: int = 0
@@ -244,7 +243,6 @@ class SystemMachine(StateMachine):
                         self._intersession.state, batch_projects)
                 else:
                     prj = batch_projects[0]
-                    self._need_set_stop_recorded = True
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
@@ -259,8 +257,8 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            # todo: actually not needed if pose-process offline input knows it does not have to wait for this case...
-            #
+            wait_stop_recorded = cur_prj == self._project_info and len(batch_list) == 0
+
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0
@@ -270,10 +268,7 @@ class SystemMachine(StateMachine):
         else:
             self._batch_project_sessions_finished = 0
             cur_prj = self._project_info.to_local_value()
-
-        if self._need_set_stop_recorded:
-            logger.verbose("setting stop_recorded event")
-            inference.stop_recorded_event.set()
+            wait_stop_recorded = True
 
         if self._pellet_machine.state == PelletState.monitoring:
             self._pellet_machine.move_retract()
@@ -282,9 +277,7 @@ class SystemMachine(StateMachine):
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
         kind = InferenceCommandMessageKind.ProcessOffline
-        # eventual todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
-        #  for the stop_recorded event, see above previous comment.
-        self._inference.send_message(kind, cur_prj)
+        self._inference.send_message(kind, (cur_prj, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -454,7 +447,6 @@ class SystemMachine(StateMachine):
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
             prj = self._project_info.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
-            self._need_set_stop_recorded = prj != self._project_info
             self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
