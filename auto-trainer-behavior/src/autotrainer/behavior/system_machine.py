@@ -341,7 +341,7 @@ class SystemMachine(StateMachine):
         # second possibility:
         ctx = load_cell_tare.get_context()
         load_cell_low_var_age = perf_now - ctx.low_variance_engaged_perf_c
-        tun_missing_age = algo.any_cams_scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
+        tun_missing_age = algo.all_cams_scene_parts_presence_context.get_animal_absence_age(perf_now=perf_now)
         if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
             if ctx.low_variance_engaged:
                 min_age = min(tun_missing_age, load_cell_low_var_age)
@@ -736,7 +736,7 @@ class SystemMachine(StateMachine):
         #
         algo.update_parts_seen(response)  # replace many previous update_xxx_seen()
         # refresh analysis with the parts presence context:
-        analysis.emergency_alarm_monitor.update_parts_context(algo.any_cams_scene_parts_presence_context)
+        analysis.emergency_alarm_monitor.update_parts_context(algo.all_cams_scene_parts_presence_context)
         #
         if not prev_pellet_seen and response.pellet_seen and (
             self._state == SystemState.tunnel
