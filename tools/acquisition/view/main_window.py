@@ -50,6 +50,9 @@ from tools.acquisition.view.preferences_dialog import PreferencesDialog
 
 logger = get_verbose_logger(__name__)
 
+_this_dir = Path(__file__).parent.resolve()
+
+
 _calibrate_timer = make_daemon_timer
 
 DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acquisition
@@ -97,6 +100,9 @@ class MainWindow(QMainWindow):
         self._stop_capture_thread = None
 
         self.setWindowTitle(self._title)
+
+        icon = QIcon(_this_dir.joinpath("autotrainer.png").absolute().as_posix())
+        self.setWindowIcon(icon)
 
         self._open_dialogs = []
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
