@@ -592,7 +592,7 @@ class PreferencesContent(QWidget):
             is_activity = mode == HeadClampReleaseMode.ACTIVITY
             for r in activity_rows:
                 set_row_col_visible(right_grid_layout, *r, is_activity)
-            is_fixed_duration = algo.active_config.head_clamp.release_mode == HeadClampReleaseMode.FIXED_DURATION
+            is_fixed_duration = mode == HeadClampReleaseMode.FIXED_DURATION
             for r in fixed_duration_rows:
                 set_row_col_visible(right_grid_layout, *r, is_fixed_duration)
 
