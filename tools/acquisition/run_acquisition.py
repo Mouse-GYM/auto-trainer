@@ -11,6 +11,7 @@ from autotrainer.core.logging import (get_verbose_logger, get_console_handler, s
 from autotrainer.pyside import CardHeader
 
 from autotrainer.behavior import BehaviorAlgorithm
+from tools.acquisition.model.app_model_status import AppModelStatus
 
 logger = get_verbose_logger(__name__)
 
@@ -32,7 +33,13 @@ def verify_configuration(configuration: str):
     return True
 
 
-def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_emulation: bool = False) -> int:
+def run_acquisition(
+    configuration: str = None,
+    is_dev: bool = False,
+    allow_can_emulation: bool = False,
+    *,
+    target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+) -> int:
     from PySide6.QtWidgets import QApplication
 
     from autotrainer.model import EnvironmentProvider
@@ -85,7 +92,7 @@ def run_acquisition(configuration: str = None, is_dev: bool = False, allow_can_e
     window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
 
     try:
-        window.on_activated()
+        window.on_activated(target_status=target_status)
     except:
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()

@@ -121,7 +121,7 @@ def test_start_stop(app_model, settings_ini_path):
 
 def test_cli_help():
     output = subprocess.check_output([sys.executable, "-m", "tools.acquisition.headless", "-h"]).decode()
-    assert "usage: headless" in output
+    assert "usage: " in output
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")

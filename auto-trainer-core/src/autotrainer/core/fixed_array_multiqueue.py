@@ -59,9 +59,13 @@ class FixedArrayMultiQueue:
         self._frames_per_camera = frames_per_camera
         self._primary = primary
 
+        # writers:
         self._buffer_index = [0] * self._cam_count
         self._batch_index = [0] * self._cam_count
+
+        # reader:
         self._read_index = 0
+        self._read_sem_acquired = [False] * self._cam_count
 
         self._shape = shape
         self._byte_count = shape[0] * shape[1]  # 1 frame byte count, no RGB, only 8-bit gray.
@@ -82,12 +86,10 @@ class FixedArrayMultiQueue:
             self._buffers.append(buffer)
             self._buff_views.append(view)
 
-        self._is_dirty = [
-            # 1 shared array to mark frames in shared mem as ready or not.
-            # if value true: means "dirty" means has valid frame in it.
-            mp_ctx.RawArray(ctypes.c_bool, self._depth * self._frames_per_camera)
-            for _ in range(self._cam_count)
-        ]
+        # "free" buckets:
+        self._sem_free = [mp_ctx.Semaphore(self._depth) for _ in range(self._cam_count)]
+        # "busy" buckets:
+        self._sem_busy = [mp_ctx.Semaphore(0) for _ in range(self._cam_count)]
 
         self._cams_tot_frames = [
             mp_ctx.Value(ctypes.c_int64)
@@ -133,15 +135,7 @@ class FixedArrayMultiQueue:
 
     def set_cam_tot_frames(self, cam_idx: int, tot_frames: int):
         """Set the total nbr of frames for cam_idx for eventual sync between camera writers"""
-        # See self.get_cam_missing_frames()
         self._cams_tot_frames[cam_idx].value = tot_frames
-
-    def is_frame_ready(self, frame_idx):
-        frame_idx = frame_idx % (self._depth * self._frames_per_camera)
-        for cdx in range(self._cam_count):
-            if not self._is_dirty[cdx][frame_idx]:
-                return False
-        return True
 
     def pad_to_batch_size(self, cam_idx: int, empty_frame, cnt_net_q_put, *, timeout: float=10):
         """Pad the queue so that all the cams are on same bucket, and the start of it."""
@@ -149,19 +143,19 @@ class FixedArrayMultiQueue:
         #
         p_before = time.perf_counter()
         barrier_wait(timeout=timeout)
-        dirty = self.get_dirty_buckets()
         p_now = time.perf_counter()
         timeout -= p_now - p_before
         # set the tot_frames in different sync_barrier session than the next get_cam_missing_frames
         self.set_cam_tot_frames(cam_idx, cnt_net_q_put)
+        p_before = p_now
         barrier_wait(timeout=timeout)
         p_now = time.perf_counter()
         timeout -= p_now - p_before
         missing = self.get_cam_missing_frames(cam_idx)
         p_before = p_now
         barrier_wait(timeout=timeout)
-        logger.verbose("padding %s frames (put=%s) to sync with others writers, dirty=%s",
-                     missing, cnt_net_q_put, dirty)
+        logger.verbose("padding %s frames (put=%s) to sync with others writers",
+                     missing, cnt_net_q_put)
         for _ in range(missing):
             p_now = time.perf_counter()
             timeout -= p_now - p_before
@@ -181,37 +175,17 @@ class FixedArrayMultiQueue:
         logger.debug("get_cam_missing_frames(%s): res=%s tot_puts=%s", cam_idx, res, tot_puts)
         return res
 
-    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10, sleep_retry: float=0.001):
-        timeout = time.perf_counter() + timeout
-        while self.put(content, camera, frame_idx) != BufferResult.Ok:
-            if time.perf_counter() > timeout:
-                raise RuntimeError(f"Timeout waiting space in queue for cam-{camera}")
-            time.sleep(sleep_retry)
+    def put_block(self, content: numpy.ndarray, camera: int, frame_idx: int, *, timeout: float=10):
+        if self.put(content, camera, frame_idx, timeout=timeout) != BufferResult.Ok:
+            raise RuntimeError(f"Timeout waiting space in queue for cam-{camera}")
 
-    def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int], allow_overflow: bool = True) -> BufferResult:
-        buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1
+    def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int],
+            *, block=True, timeout=0.01) -> BufferResult:
         batch_index = self._batch_index[camera]  # 0 ... up to frames per camera - 1
-        dirty_idx = buffer_index * self._frames_per_camera + batch_index
-        is_overflow = self._is_dirty[camera][dirty_idx]
-        t_perf = time.perf_counter()
-        if t_perf > self._next_counts_log_time:
-            self._next_counts_log_time = t_perf + 15
-            logger.debug("%s[%s]: put=%s overflow=%s", self, camera, self._put_count, self._overflow_count)
-            self._put_count = self._overflow_count = 0
-        if is_overflow:
-            self._overflow_count += 1
-            if not allow_overflow:
+        if batch_index == 0:
+            if not self._sem_free[camera].acquire(block, timeout):
                 return BufferResult.Overflow
-            # NB: doing overwrite of a dirty bucket as was done previously is NOT good:
-            # the reader could be reading that same bucket at the same time...
-            # getting totally mixed data from different frames.
-            # we could overwrite on the previous bucket though,
-            # given that would be the lowest chance of the reader to have reached it.
-            # at the moment deciding to NOT overwrite: so to not induce this extra "overload" while the reader
-            # is already slow/far behind.
-            # the caller of this function has to check its return code/value to decide to retry or not.
-            return BufferResult.Overflow
-            #
+        buffer_index = self._buffer_index[camera]  # 0 ... up to depth - 1
         cur_view = memoryview(self._buffers[buffer_index][camera][batch_index]).cast("B")
         # reshape does not copy if not necessary
         cur_view[:] = content.reshape(-1)
@@ -221,21 +195,25 @@ class FixedArrayMultiQueue:
             ).reshape((self._cam_count, self._depth, self._frames_per_camera))[camera]
             b[buffer_index][batch_index] = frame_idx
         self._put_count += 1
-        self._is_dirty[camera][dirty_idx] = True
         #
         batch_index = self._batch_index[camera] = (batch_index + 1) % self._frames_per_camera
         if batch_index == 0:
+            self._sem_busy[camera].release()
             self._buffer_index[camera] = (1 + buffer_index) % self._depth
 
-        return BufferResult.Ok if not is_overflow else BufferResult.Overflow
+        return BufferResult.Ok  # if not is_overflow else BufferResult.Overflow
 
-    def get_output(self, output: numpy.ndarray, frames_indices: Optional[numpy.ndarray] = None):
-        """Get the next available "output" : i.e: 1 batch of frames_per_camera * nbr_cameras
-        """
+    def get_output(self, output: numpy.ndarray, frames_indices: Optional[numpy.ndarray] = None, *, timeout: float=0.01) -> bool:
+        """Get the next available "output" : i.e: 1 batch of frames_per_camera * nbr_cameras"""
+        for cdx in range(self._cam_count):
+            if not self._read_sem_acquired[cdx]:
+                p0 = time.perf_counter()
+                if not self._sem_busy[cdx].acquire(timeout=timeout):
+                    return False
+                p1 = time.perf_counter()
+                timeout -= p1 - p0
+                self._read_sem_acquired[cdx] = True
         read_idx_value = self._read_index
-        # lookup up to frames_per_camera:
-        if not self.is_frame_ready(read_idx_value * self._frames_per_camera + self._frames_per_camera - 1):
-            return False
         buffer = self._buffers[read_idx_value]
         for idx, cdx in enumerate(self._camera_indexing):  # cdx: 0 1 0 1 0 1 0 1
             v = numpy.frombuffer(
@@ -245,7 +223,7 @@ class FixedArrayMultiQueue:
             # we have so to copy 3 times the current gray image/frame into the 3 planes:
             # for fn in range(3):
             #     output[idx, :, :, fn] = v
-            # we do that after setting dirty back to 0
+            # we do that after releasing the sema free below
             output[idx, :, :, 0] = v
 
         if frames_indices is not None:
@@ -256,12 +234,12 @@ class FixedArrayMultiQueue:
                 (self._cam_count, self._depth, self._frames_per_camera)
             )[:, read_idx_value, :]
 
-        # set dirty flag back to False for what we've read:
-        dx = read_idx_value * self._frames_per_camera
+        # put back the used/copied bucket as free:
         for cdx in range(self._cam_count):
-            self._is_dirty[cdx][dx : dx + self._frames_per_camera] = [False] * self._frames_per_camera
+            self._sem_free[cdx].release()
+            self._read_sem_acquired[cdx] = False
 
-        # make the copy for rgb after having unset dirty
+        # make the copy for rgb after having released sema_free
         for idx, cdx in enumerate(self._camera_indexing):
             for fn in (1, 2):
                 output[idx, :, :, fn] = output[idx, :, :, 0]
@@ -280,9 +258,6 @@ class FixedArrayMultiQueue:
                     # put_block() will take care to raise if timeout occurs
                     self.put_block(frame, cdx, frame_idx, timeout=timeout)
                     timeout -= time.perf_counter() - t0
-
-    def get_dirty_buckets(self) -> List[List[bool]]:
-        return [list(v) for v in self._is_dirty]
 
     def get_frame_indices(self):
         return list(self._frame_indices)

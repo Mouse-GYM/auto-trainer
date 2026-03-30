@@ -96,7 +96,7 @@ class OfflineInputProcess:
         cur_th = self._cur_thread
         return cur_th is not None and cur_th.is_alive() and self._project is not None
 
-    def set_project_info(self, project_info: ProjectInfo):
+    def set_project_info(self, project_info: ProjectInfo, *, wait_stop_recorded: bool=True):
         cur_th = self._cur_thread
         prev_prj = self._cur_project_info
         if prev_prj == project_info and cur_th.is_alive():
@@ -131,7 +131,7 @@ class OfflineInputProcess:
         self._cur_batch_nr = 0
         cur_th = self._cur_thread = threading.Thread(
             target=self._feed_intersession_analysis,
-            args=(project_info,),
+            args=(project_info, wait_stop_recorded),
             name="OfflineRead",
             daemon=True,
         )
@@ -205,9 +205,9 @@ class OfflineInputProcess:
                                 for idx in range(self._nr_cams * self._frames_per_cam)])
         return True
 
-    def _feed_intersession_analysis(self, project):
+    def _feed_intersession_analysis(self, project, wait_stop_recorded):
         try:
-            self._feed_intersession_analysis_execute(project)
+            self._feed_intersession_analysis_execute(project, wait_stop_recorded)
         except InferenceIncorrectStatus as err:
             got_error = err
         except Exception as err:
@@ -238,7 +238,7 @@ class OfflineInputProcess:
         # finally:
         self._cur_project_info = None
 
-    def _feed_intersession_analysis_execute(self, project):
+    def _feed_intersession_analysis_execute(self, project, wait_stop_recorded):
         cams = (project.camera_1, project.camera_2)
         n_cams = len(cams)
         cams_paths = [
@@ -257,13 +257,14 @@ class OfflineInputProcess:
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
-        logger.debug("waiting stop_recorded on %s", self._stop_recorded)
-        while not self._stop_recorded.wait(0.1):
-            if get_perf_now() > perf_timeout:
-                raise RuntimeError("timeout waiting for intersession stop_recorded event")
-            check_correct_status()
-        self._stop_recorded.clear()
-        logger.notice("got stop_recorded")
+        if wait_stop_recorded:
+            logger.debug("waiting stop_recorded on %s", self._stop_recorded)
+            while not self._stop_recorded.wait(0.1):
+                if get_perf_now() > perf_timeout:
+                    raise RuntimeError("timeout waiting for intersession stop_recorded event")
+                check_correct_status()
+            self._stop_recorded.clear()
+            logger.notice("got stop_recorded")
 
         # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
         # so this small sleep, for them to get more chance to do it:

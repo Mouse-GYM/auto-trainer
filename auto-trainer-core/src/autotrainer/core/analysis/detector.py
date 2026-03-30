@@ -31,11 +31,12 @@ class BaseDetector(ObservableObject):
         self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
         self._logger = get_verbose_logger(self.__class__.__module__)
+        self._event_manager = EventManager.default()
 
     def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
             enabled = self._running
-        EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
+        self._event_manager.post_event_content(ApiEventKind.detectorChanged, context={
             "detector_id": detector_id,
             "is_active": active,
             "is_enabled": enabled,
@@ -79,6 +80,11 @@ class BaseDetector(ObservableObject):
 
     def _check_state(self) -> Optional[float]:
         raise NotImplementedError
+
+    def check_state_if_not_detector_thread(self):
+        th_q = self._thread_queue
+        if th_q is None or threading.current_thread() != th_q[0]:
+            self.check_state()
 
     def check_state(self):
         with self._lock:

@@ -215,7 +215,7 @@ class PoseProcess(Process):
                     self._set_process_live(reason=str(cmd))
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:
                     logger.warning("unexpected cmd %s while wait for start", cmd)
-                    self._set_process_offline()
+                    # self._set_process_offline()
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Empty:
@@ -240,7 +240,8 @@ class PoseProcess(Process):
                     self._offline_input.set_live(True)
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     self._set_process_offline()
-                    self._offline_input.set_project_info(context)
+                    prj, wait_stop_recorded = context
+                    self._offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
                 # elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
                 #     self._set_process_offline()
                 #     self._offline_input.set_project_info(context)
@@ -291,9 +292,7 @@ class PoseProcess(Process):
         i_q: Optional[FixedArrayMultiQueue] = live_input
 
         def get_live_input():
-            res = live_input.get_output(frame_buffer1, frames_indices1)
-            if not res:
-                time.sleep(0.001)
+            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.01)
             return res
 
         def get_offline_input():

@@ -20,6 +20,7 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.core.configuration.behavior_configuration import HeadClampReleaseMode
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind, InferenceMonitorDataMsg
 from autotrainer.inference.analysis import IntersessionResponse
@@ -34,7 +35,6 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-
 
 logger = get_verbose_logger(__name__)
 
@@ -81,6 +81,7 @@ class SystemMachine(StateMachine):
         self._project_info: Optional[ProjectInfo] = project_info
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
+        self._batch_project_sessions_finished: int = 0
         self._batch_failed_count: int = 0
         self._batch_sessions_total_duration: float = 0
 
@@ -237,12 +238,11 @@ class SystemMachine(StateMachine):
             batch_projects = self._batch_project_sessions_list
             if len(batch_projects) > 0:
                 if self._intersession.state != IntersessionState.idle:
-                    logger.warning(
-                        "Unexpected intersession state with non-empty batch session list: %s, projects=%s",
-                        self._intersession.state, batch_projects)
+                    # this can happen is a batch-list is in processing, for instance
+                    logger.verbose("intersession state: %s with projects=%s",
+                                   self._intersession.state, batch_projects)
                 else:
                     prj = batch_projects[0]
-                    # self._inference.send_message(InferenceCommandMessageKind.ForceProcessOffline, prj)
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
@@ -257,17 +257,22 @@ class SystemMachine(StateMachine):
             cur_prj = batch_list[0]
             intersession.project = cur_prj
             inference.project = cur_prj
-            logger.verbose("setting stop_recorded event")
-            inference.stop_recorded_event.set()
-            # todo: actually not needed if pose-process offline input knows it does not have to wait for this case...
-            #
+            wait_stop_recorded = False
+            # don't wait stop recorded if it's a batch list processing,
+            # this is always ok since if current project info is/was single one in batch-list,
+            # then it's removed from batch and analyzed from current project instead, as regularly.
+            # See self._on_session_capture_ended().
+
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
                 self._batch_failed_count = 0
+                self._batch_project_sessions_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
         else:
+            self._batch_project_sessions_finished = 0
             cur_prj = self._project_info.to_local_value()
+            wait_stop_recorded = True
 
         if self._pellet_machine.state == PelletState.monitoring:
             self._pellet_machine.move_retract()
@@ -276,9 +281,7 @@ class SystemMachine(StateMachine):
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
         kind = InferenceCommandMessageKind.ProcessOffline
-        # todo: use a different kind so that pose-process offline input knows it possibly does not have to wait
-        #  for the stop_recorded event, see above previous comment.
-        self._inference.send_message(kind, cur_prj)
+        self._inference.send_message(kind, (cur_prj, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -440,6 +443,7 @@ class SystemMachine(StateMachine):
             if algo.clean_raw_data_on_inactive_session:
                 self._clean_raw_data(cur_project)
         #
+        self._batch_project_sessions_finished = 0
         if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
             if len(cur_sessions_batch) == 1 and self._project_info == cur_sessions_batch[0]:
                 logger.debug("only 1 session in batch, skipping batch")
@@ -460,6 +464,7 @@ class SystemMachine(StateMachine):
         logger.verbose("intersession ended: result=%s prj=%s", result, self._intersession.project)
         cur_batch = self._batch_project_sessions_list
         if len(cur_batch) > 0:
+            self._batch_project_sessions_finished += 1
             del cur_batch[0]
             if result == CaptureAnalysisResult.ANALYSIS_FAILED:
                 self._batch_failed_count += 1
@@ -558,8 +563,9 @@ class SystemMachine(StateMachine):
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
         p_now = get_perf_now()
+        cfg = algo.active_config.head_clamp
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
-        remains = algo.auto_clamp_before_reengage_delay - disengage_age
+        remains = cfg.before_reengage_delay - disengage_age
         if remains > 0:
             logger.verbose("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
                          remains, disengage_age)
@@ -567,20 +573,23 @@ class SystemMachine(StateMachine):
             self._timer_auto_clamp_evaluate = timer
             timer.start()
             return
-        algo = self._algorithm
-        logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+        intensity = cfg.auto_clamp_intensity
+        logger.info("auto-clamp setting position to %s", intensity)
         self._auto_clamp_in_progress = True
-        self._update_magnet_position(algo.auto_clamp_intensity)
+        self._update_magnet_position(intensity)
         self._disengage_auto_clamp_load_count = 0
         self._timer_auto_clamp_disengage.cancel()  # in case of
-        t_delay = algo.auto_clamp_no_activity_release_delay
+        if cfg.release_mode == HeadClampReleaseMode.ACTIVITY:
+            t_delay = cfg.auto_clamp_no_activity_release_delay
+        else:
+            t_delay = cfg.fixed_duration_release_delay
         if t_delay > 0:
             logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
             new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
                 t_delay, self._disengage_auto_clamp,
             )
             new_timer.start()
-        EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
+        self._event_manager.post_event_content(BehaviorEventKind.headFixationEnabled)
 
     @BehaviorAlgorithm.relay_func
     def _on_load_cell_tare_requested(self):
@@ -927,19 +936,22 @@ class SystemMachine(StateMachine):
 
         self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
 
+        #
+        clamp_cfg = algo.active_config.head_clamp
         self._disengage_auto_clamp_load_count += 1
-        if self._disengage_auto_clamp_load_count >= algo.auto_clamp_release_load_count:
-            self._disengage_auto_clamp()
+        if clamp_cfg.release_mode == HeadClampReleaseMode.ACTIVITY:
+            if self._disengage_auto_clamp_load_count >= clamp_cfg.auto_clamp_release_load_count:
+                self._disengage_auto_clamp()
 
         if algo.is_in_session and self._state != SystemState.intersession:
             self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
 
     def _on_pellet_loaded(self):
         self._algorithm.pellet_loaded()
+        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=0)
 
     def _on_pellet_load_failed(self, *, consecutive: int):
-        logger.info("Pellet load failed consecutive count: %s", consecutive)
-        # could use to trigger alarm condition if consecutive failed load is too great
+        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=consecutive)
 
     def _on_pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
