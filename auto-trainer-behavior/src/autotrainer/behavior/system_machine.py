@@ -20,6 +20,7 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.core.configuration.behavior_configuration import HeadClampReleaseMode
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind, InferenceMonitorDataMsg
 from autotrainer.inference.analysis import IntersessionResponse
@@ -34,7 +35,6 @@ from .pellet_device_protocol import PelletDeviceProtocol
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-
 
 logger = get_verbose_logger(__name__)
 
@@ -558,8 +558,9 @@ class SystemMachine(StateMachine):
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
         p_now = get_perf_now()
+        cfg = algo.active_config.head_clamp
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
-        remains = algo.auto_clamp_before_reengage_delay - disengage_age
+        remains = cfg.before_reengage_delay - disengage_age
         if remains > 0:
             logger.verbose("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
                          remains, disengage_age)
@@ -567,20 +568,23 @@ class SystemMachine(StateMachine):
             self._timer_auto_clamp_evaluate = timer
             timer.start()
             return
-        algo = self._algorithm
-        logger.info("auto-clamp setting position to %s", algo.auto_clamp_intensity)
+        intensity = cfg.auto_clamp_intensity
+        logger.info("auto-clamp setting position to %s", intensity)
         self._auto_clamp_in_progress = True
-        self._update_magnet_position(algo.auto_clamp_intensity)
+        self._update_magnet_position(intensity)
         self._disengage_auto_clamp_load_count = 0
         self._timer_auto_clamp_disengage.cancel()  # in case of
-        t_delay = algo.auto_clamp_no_activity_release_delay
+        if cfg.release_mode == HeadClampReleaseMode.ACTIVITY:
+            t_delay = cfg.auto_clamp_no_activity_release_delay
+        else:
+            t_delay = cfg.fixed_duration_release_delay
         if t_delay > 0:
             logger.debug("starting new timer for disengage_auto_clamp in %.2f seconds", t_delay)
             new_timer = self._timer_auto_clamp_disengage = _consider_disengage_autoclamp_timer(
                 t_delay, self._disengage_auto_clamp,
             )
             new_timer.start()
-        EventManager.default().post_event_content(BehaviorEventKind.headFixationEnabled)
+        self._event_manager.post_event_content(BehaviorEventKind.headFixationEnabled)
 
     @BehaviorAlgorithm.relay_func
     def _on_load_cell_tare_requested(self):
@@ -927,9 +931,12 @@ class SystemMachine(StateMachine):
 
         self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
 
+        #
+        clamp_cfg = algo.active_config.head_clamp
         self._disengage_auto_clamp_load_count += 1
-        if self._disengage_auto_clamp_load_count >= algo.auto_clamp_release_load_count:
-            self._disengage_auto_clamp()
+        if clamp_cfg.release_mode == HeadClampReleaseMode.ACTIVITY:
+            if self._disengage_auto_clamp_load_count >= clamp_cfg.auto_clamp_release_load_count:
+                self._disengage_auto_clamp()
 
         if algo.is_in_session and self._state != SystemState.intersession:
             self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
