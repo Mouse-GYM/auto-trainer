@@ -117,7 +117,6 @@ class SpinCam(CameraBase):
         self._is_primary = False
         self._is_secondary = True
 
-        self._pause_log = False
         self._acquisition_started = False
         self._skip_duplicate_frame_copy = False
 
@@ -143,8 +142,6 @@ class SpinCam(CameraBase):
     @fps.setter
     def fps(self, value: float) -> None:
         self._fps = value
-        if not self._pause_log:
-            logger.debug(f"<{self._name}> fps: {self._fps}")
 
     @property
     def width(self):
@@ -449,13 +446,11 @@ class SpinCam(CameraBase):
 
     def _set_bounded_bool_property_node(self, prop_node, value: bool) -> bool:
         set_value = value
-
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 prop_node.SetValue(value)
                 set_value = prop_node.GetValue()
-                if not self._pause_log:
-                    logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+                logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
             elif prop_node.GetAccessMode() == PySpin.RO:
                 set_value = prop_node.GetValue()
                 logger.warning(
