@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 from dataclasses import dataclass, field
 from typing import Type, Optional, Dict
 from typing_extensions import Self
@@ -119,6 +120,11 @@ class PelletDeliveryConfiguration:
         ), skip_remaining=True))
 
 
+class HeadClampReleaseMode(str, enum.Enum):
+    ACTIVITY = "Activity"
+    FIXED_DURATION = "Fixed duration"
+
+
 @dataclass
 class HeadClampConfiguration:
     """
@@ -130,12 +136,20 @@ class HeadClampConfiguration:
     auto_clamp_intensity: float = 100.0
     auto_clamp_release_tone_freq: int = 7000
     auto_clamp_release_tone_delay: float = 0.1
-    auto_clamp_no_activity_release_delay: float = 30
-    auto_clamp_release_load_count: int = 100_000
     before_reengage_delay: float = 5  # how long to wait/delay before allow/execute a re-engage after a disengage.
 
     prerelease_intensity: float = 70  # absolute % value
     prerelease_duration: float = 0  # seconds, if 0 then this pre-release is disabled / does not occur.
+
+    release_mode: str = HeadClampReleaseMode.ACTIVITY.value
+
+    # HeadClampReleaseMode.ACTIVITY
+    auto_clamp_no_activity_release_delay: float = 30  # seconds
+    auto_clamp_release_load_count: int = 100_000
+
+    # HeadClampReleaseMode.FIXED_DURATION
+    fixed_duration_release_delay: float = 30  # seconds
+
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:

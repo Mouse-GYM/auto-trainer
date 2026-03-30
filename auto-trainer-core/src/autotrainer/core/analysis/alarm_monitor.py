@@ -70,7 +70,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
-        self._scene_parts_ctx = ScenePartsPresenceContext()
+        self._all_scene_parts_ctx = ScenePartsPresenceContext()  # both/all cams seen
         self._config = config
         self._load_cell_monitor = load_cell_monitor
         self._load_cell_tare_monitor = load_cell_tare_monitor
@@ -98,7 +98,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
-        self._scene_parts_ctx = context
+        self._all_scene_parts_ctx = context
 
     def add_alarm_condition(self, name, check):
         ...  # TODO
@@ -273,11 +273,11 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam = topcam.to_local_value()  # to ensure consistent lookups
         load_cell = self._load_cell_monitor.context
         cfg = self._config
-        pres_ctx = self._scene_parts_ctx
+        pres_ctx = self._all_scene_parts_ctx
         tun_pres_age = pres_ctx.get_animal_presence_age(perf_now=perf_now)
         tun_miss_age = pres_ctx.get_animal_absence_age(perf_now=perf_now)
         engaged = (
-            not load_cell.is_engaged  # ~= not in tunnel
+                not load_cell.is_engaged  # ~= not in tunnel
             and load_cell.last_disengaged_perf_c > self._p_started
             and perf_now - load_cell.last_disengaged_perf_c > cfg.tunnel_to_cage_presence_missing_delay
                 # tunnel exited at least since missing delay threshold

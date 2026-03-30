@@ -187,7 +187,8 @@ class AppModel(ObservableObject):
 
         self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
-        logger.notice("Creating app_model with version %s", app_version)
+        logger.notice("Creating app_model with version %s ; env=%s",
+                      app_version, dict(os.environ))
 
         def log_on_error(title, msg):
             logger.error("%s: %s", title, msg)
