@@ -961,7 +961,9 @@ class AppModel(ObservableObject):
                 self._inference_queue = FixedArrayMultiQueue(
                     # live queue does not need/require a lot of "depth" == total nbr of batches that can sit
                     # in the ring-buffer-queue at the same time.
-                    3,
+                    # Now only using a "depth" of 1 frame batches,
+                    # this should makes less delay / be more reactive in live inference results,
+                    1,
                     2,
                     3,
                     shape=shape_1,

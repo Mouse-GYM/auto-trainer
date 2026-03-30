@@ -292,9 +292,7 @@ class PoseProcess(Process):
         i_q: Optional[FixedArrayMultiQueue] = live_input
 
         def get_live_input():
-            res = live_input.get_output(frame_buffer1, frames_indices1)
-            if not res:
-                time.sleep(0.001)
+            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.01)
             return res
 
         def get_offline_input():
