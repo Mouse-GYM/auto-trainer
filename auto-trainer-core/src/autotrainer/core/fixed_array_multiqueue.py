@@ -135,7 +135,6 @@ class FixedArrayMultiQueue:
 
     def set_cam_tot_frames(self, cam_idx: int, tot_frames: int):
         """Set the total nbr of frames for cam_idx for eventual sync between camera writers"""
-        # See self.get_cam_missing_frames()
         self._cams_tot_frames[cam_idx].value = tot_frames
 
     def pad_to_batch_size(self, cam_idx: int, empty_frame, cnt_net_q_put, *, timeout: float=10):
@@ -181,7 +180,6 @@ class FixedArrayMultiQueue:
             raise RuntimeError(f"Timeout waiting space in queue for cam-{camera}")
 
     def put(self, content: numpy.ndarray, camera: int, frame_idx: Optional[int],
-            allow_overflow: bool = True,
             *, block=True, timeout=0.01) -> BufferResult:
         batch_index = self._batch_index[camera]  # 0 ... up to frames per camera - 1
         if batch_index == 0:
@@ -206,8 +204,7 @@ class FixedArrayMultiQueue:
         return BufferResult.Ok  # if not is_overflow else BufferResult.Overflow
 
     def get_output(self, output: numpy.ndarray, frames_indices: Optional[numpy.ndarray] = None, *, timeout: float=0.01) -> bool:
-        """Get the next available "output" : i.e: 1 batch of frames_per_camera * nbr_cameras
-        """
+        """Get the next available "output" : i.e: 1 batch of frames_per_camera * nbr_cameras"""
         for cdx in range(self._cam_count):
             if not self._read_sem_acquired[cdx]:
                 p0 = time.perf_counter()
