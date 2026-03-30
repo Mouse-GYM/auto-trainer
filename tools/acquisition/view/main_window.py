@@ -132,17 +132,22 @@ class MainWindow(QMainWindow):
             app_model.load_configuration(config_file)
         except Exception as err:
             tb = traceback.format_exc()
-            app_model.on_error(f"Failed load configuration",
+            app_model.on_error("Failed load configuration",
                                f"\nConfiguration file {config_file.as_posix()!r} has issue,\n\n"
                                f"please check and fix following error:\n\n{err}\n\n{tb}")
             # app_model.on_close()
             # raise RuntimeError(f"Could not load config: {err}") from err
 
+        analysis = app_model.analysis
+        self._set_reset_vat_text()
+
         app_model.property_changed += self._on_app_model_property_changed
         app_model.inference.property_changed += self._on_inference_property_changed
         app_model.hardware.property_changed += self._on_hardware_property_changed
-
         user_preferences.property_changed += self._on_preferences_property_changed
+        analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
+        analysis.system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
+
         self.running_status_changed.connect(self._set_start_or_stop)
         #
         self._reload_animals(self._app_model.animals)
@@ -292,6 +297,11 @@ class MainWindow(QMainWindow):
             return
         prj, rsp = raw
         self.main_content.show_analysis_reach_events(prj)
+
+    def on_reset_pellet_loaded_count(self):
+        prefs = self._preferences
+        prefs.pellet_load_count_total = prefs.pellet_load_count_day = 0
+        self._app_model.check_max_pellet_loaded()
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
@@ -538,7 +548,7 @@ class MainWindow(QMainWindow):
         finally:
             app_model.status = prev_status
 
-    def on_activated(self):
+    def on_activated(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
         logger.success("main window activated")
         self.main_content.on_activated()
         app_status = self._app_model.status
@@ -547,7 +557,7 @@ class MainWindow(QMainWindow):
             logger.verbose("No loaded valid config, skipping auto-start")
         else:
             if app_status == AppModelStatus.IDLE:
-                self._on_capture_start_stop(True)
+                self._on_capture_start_stop(True, target_status=target_status)
             else:
                 logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
@@ -725,6 +735,17 @@ class MainWindow(QMainWindow):
         self._add_box_to_open_dialogs(dialog)
         dialog.exec()
 
+    def _set_reset_vat_text(self):
+        analysis = self._app_model.analysis
+        maint_cfg = analysis.system_maintenance_monitor.config
+        prefs = self._preferences
+        txt = (
+            f"Reset vat pellet count (vat refilled)\n"
+            f"{prefs.pellet_load_count_total} of "
+            f"{maint_cfg.max_pellets_loaded_count} pellets presented before refill"
+        )
+        self._reset_pellet_loaded_count_action.setToolTip(txt)
+
     def _create_actions(self):
         action = self.edit_camera_settings_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Camera Settings", self)
         action.setToolTip("Edit Camera Settings")
@@ -750,6 +771,9 @@ class MainWindow(QMainWindow):
         action.setCheckable(True)
         action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
         action.triggered.connect(self.on_show_reach_event)
+
+        action = self._reset_pellet_loaded_count_action = QAction(QIcon(qta.icon("fa5s.fill")), "", self)
+        action.triggered.connect(self.on_reset_pellet_loaded_count)
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
@@ -873,6 +897,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         toolbar.addAction(self.show_reach_event_action)
+        toolbar.addAction(self._reset_pellet_loaded_count_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
@@ -1093,10 +1118,23 @@ class MainWindow(QMainWindow):
 
     @invoke_method
     def _on_preferences_property_changed(self, name, value, _):
-        if name == "log_level":
+        prefs = self._preferences
+        if name == prefs.LOG_LEVEL:
             self._update_log_level(value)
-        elif name == "remove_raw_data_when_inactive_session":
+        elif name == prefs.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION:
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
+        elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
+            self._set_reset_vat_text()
+
+    @invoke_method
+    def _on_alarm_monitor_property_changed(self, name, value, _):
+        pass
+
+    @invoke_method
+    def _on_system_maintenance_prop_changed(self, name, value, _):
+        mon = self._app_model.analysis.system_maintenance_monitor
+        if name == mon.CONFIG:
+            self._set_reset_vat_text()
 
     def _simulate_intersession_segmentation(self, intersession_block):
         logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)

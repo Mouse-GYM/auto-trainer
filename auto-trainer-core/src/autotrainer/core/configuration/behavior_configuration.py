@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 from dataclasses import dataclass, field
 from typing import Type, Optional, Dict
 from typing_extensions import Self
@@ -9,6 +10,7 @@ from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
+from .system_maintenance_config import SystemMaintenanceConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
 from ..analysis import HeadbarPressureConfiguration
@@ -118,6 +120,11 @@ class PelletDeliveryConfiguration:
         ), skip_remaining=True))
 
 
+class HeadClampReleaseMode(str, enum.Enum):
+    ACTIVITY = "Activity"
+    FIXED_DURATION = "Fixed duration"
+
+
 @dataclass
 class HeadClampConfiguration:
     """
@@ -129,12 +136,20 @@ class HeadClampConfiguration:
     auto_clamp_intensity: float = 100.0
     auto_clamp_release_tone_freq: int = 7000
     auto_clamp_release_tone_delay: float = 0.1
-    auto_clamp_no_activity_release_delay: float = 30
-    auto_clamp_release_load_count: int = 100_000
     before_reengage_delay: float = 5  # how long to wait/delay before allow/execute a re-engage after a disengage.
 
     prerelease_intensity: float = 70  # absolute % value
     prerelease_duration: float = 0  # seconds, if 0 then this pre-release is disabled / does not occur.
+
+    release_mode: str = HeadClampReleaseMode.ACTIVITY.value
+
+    # HeadClampReleaseMode.ACTIVITY
+    auto_clamp_no_activity_release_delay: float = 30  # seconds
+    auto_clamp_release_load_count: int = 100_000
+
+    # HeadClampReleaseMode.FIXED_DURATION
+    fixed_duration_release_delay: float = 30  # seconds
+
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
@@ -186,6 +201,7 @@ class _BehaviorConfiguration:
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
     auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
+    system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -254,6 +270,7 @@ _cls_2_tag = {
     ShiftXYZTarget: "ShiftXYZTarget",
     ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
+    SystemMaintenanceConfig: "SystemMaintenanceConfig",
 }
 
 

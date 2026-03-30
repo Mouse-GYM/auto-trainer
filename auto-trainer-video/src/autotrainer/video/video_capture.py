@@ -501,7 +501,9 @@ class VideoCapture(Process):
                         FrameIndexCategory.ONLINE_NO_RECORDING if record_start_frame_idx is None
                         else cur_frame_idx - record_start_frame_idx
                     )
-                    if net_q_put(frame, net_q_idx, frame_idx_cat, allow_overflow=False) == BufferResult.Ok:
+                    if net_q_put(frame, net_q_idx, frame_idx_cat,
+                                 timeout=0.003,  # half FPS duration
+                    ) == BufferResult.Ok:
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
