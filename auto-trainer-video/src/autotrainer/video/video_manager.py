@@ -100,13 +100,17 @@ class VideoManager:
             logger.error("Cannot create %s-cam ; is library installed ?", parsed.scheme)
             return None
 
-        camera.init()
-
+        # set cam params before init:
         params = parsed.query.split("&")
-
         for param in params:
             values = param.split("=")
             if len(values) == 2:
-                camera.set_property(values[0], values[1])
+                p_name, p_value = values
+                camera.set_property(p_name, p_value)
+            else:
+                logger.verbose("Skipping param without '=': %s", param)
+
+        # init cam after set of properties here before:
+        camera.init()
 
         return camera

@@ -11,16 +11,28 @@ logger = logging.getLogger(__name__)
 
 
 class OpenCVCam(CameraBase):
+
     def __init__(self, device_idx: int, name: str = ""):
         super().__init__(name)
         self._device_idx = device_idx
         self._video_capture: Optional[cv2.VideoCapture] = None
+        self._mjpeg = None
 
     def init(self):
         self._video_capture = cv2.VideoCapture(self._device_idx)
-        self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self._apply_settings()
+        # re-read:
+        self._refresh_height_width()
         self._fps = self._video_capture.get(cv2.CAP_PROP_FPS)
+
+    def _apply_settings(self):
+        vc = self._video_capture
+        vc.set(cv2.CAP_PROP_FPS, self._fps)
+        vc.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
+        vc.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+        mjpeg = self._mjpeg
+        if mjpeg is not None:
+            vc.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 
     @property
     def fps(self) -> float:
@@ -28,9 +40,7 @@ class OpenCVCam(CameraBase):
 
     @fps.setter
     def fps(self, value: float) -> None:
-        self._video_capture.set(cv2.CAP_PROP_FPS, value)
-        self._fps = int(self._video_capture.get(cv2.CAP_PROP_FPS))
-        logger.debug(f"<{self._name}> fps: {self._fps}")
+        self._fps = value
 
     @property
     def width(self):
@@ -38,9 +48,7 @@ class OpenCVCam(CameraBase):
 
     @width.setter
     def width(self, value):
-        self._video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, value)
-        self._refresh_height_width()
-        logger.debug(f"<{self._name}> try setting width to {value} - response: ({self._width}x{self._height})")
+        self._width = value
 
     @property
     def height(self):
@@ -48,14 +56,11 @@ class OpenCVCam(CameraBase):
 
     @height.setter
     def height(self, value):
-        self._video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, value)
-        self._refresh_height_width()
-        logger.debug(f"<{self._name}> try setting height to {value} - response: ({self._width}x{self._height})")
+        self._height = value
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "mjpeg":
-            if self._video_capture is not None:
-                self._video_capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self._mjpeg = value
         else:
             return super().set_property(name, value)
 
@@ -66,14 +71,12 @@ class OpenCVCam(CameraBase):
 
     def end_capture(self):
         super().end_capture()
-
         self._video_capture.release()
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
         super().capture()
 
         ret, frame = self._video_capture.read()
-
         if ret:
             self._last_when = time.time_ns()
 
