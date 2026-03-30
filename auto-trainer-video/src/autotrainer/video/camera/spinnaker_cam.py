@@ -86,18 +86,17 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        self._width = 1440
-        self._height = 1080
-
-        self._exposure = 5000
+        self._exposure = 140
         self._fps = 150
-        self._horizontal_binning = 1
-        self._vertical_binning = 1
-        self._offset_x = 0
-        self._offset_y = 0
+        self._horizontal_binning = 4
+        self._vertical_binning = 4
+        self._width = 256
+        self._height = 256
+        self._offset_x = 52
+        self._offset_y = 6
 
-        self._gain: Optional[float] = None
-        self._gamma: Optional[float] = None
+        self._gain: Optional[float] = 1
+        self._gamma: Optional[float] = 0.7
 
         self._is_primary = False
         self._is_secondary = True
