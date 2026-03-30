@@ -55,7 +55,7 @@ _calibrate_timer = make_daemon_timer
 DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acquisition
 DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
-DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
+DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.25  # distance over which data is considered noisy, and a retry proposed
 
 
 def _make_separator():
@@ -387,12 +387,22 @@ class MainWindow(QMainWindow):
         logger.info("raw-diamond-inference-position: avg=%s stdev=%s", avg_rawdia_loc3, stdev_rawdia_loc3d)
         #
         noisy = False
-        for val in chain(stdev_offset, stdev_pos, stdev_dia_loc3d, stdev_rawdia_loc3d):
-            if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
+        all_vals = (
+            ("offset", stdev_offset),
+            ("position", stdev_pos),
+            ("dia_loc3d", stdev_dia_loc3d),
+            ("raw_dia_loc3d", stdev_rawdia_loc3d),
+        )
+        for val_name, val in all_vals:
+            if any(v >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE for v in val):
                 noisy = True
+                logger.error("%s: value noisy: stdev_value=%s", val_name, val.round(3))
         if noisy:
+            msg = "The data is noisy, do you want retry longer ?\n\nDetails:\n"
+            details = "\n".join(f"{val_name}: {val.round(3)} ; dist={val.distance}" for val_name, val in all_vals)
             rsp = QMessageBox.warning(
-                self, "Confirmation", f"The data is noisy, do you want retry longer ?",
+                self, "Confirmation", f"{msg}{details}"
+                ,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if rsp == QMessageBox.StandardButton.Yes:
