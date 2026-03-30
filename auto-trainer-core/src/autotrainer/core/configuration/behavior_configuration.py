@@ -10,6 +10,7 @@ from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
+from .system_maintenance_config import SystemMaintenanceConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
 from ..analysis import HeadbarPressureConfiguration
@@ -200,6 +201,7 @@ class _BehaviorConfiguration:
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
     auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
+    system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -268,6 +270,7 @@ _cls_2_tag = {
     ShiftXYZTarget: "ShiftXYZTarget",
     ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
+    SystemMaintenanceConfig: "SystemMaintenanceConfig",
 }
 
 

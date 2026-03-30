@@ -948,10 +948,10 @@ class SystemMachine(StateMachine):
 
     def _on_pellet_loaded(self):
         self._algorithm.pellet_loaded()
+        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=0)
 
     def _on_pellet_load_failed(self, *, consecutive: int):
-        logger.info("Pellet load failed consecutive count: %s", consecutive)
-        # could use to trigger alarm condition if consecutive failed load is too great
+        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=consecutive)
 
     def _on_pellet_state_changed(self, old_value, new_value):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)

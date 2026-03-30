@@ -2,21 +2,21 @@ from __future__ import annotations
 
 import csv
 import os
-import time
 from datetime import datetime
 from typing import Optional, List, Tuple, IO
 
 import numpy
 
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.project import ProjectInfo, ProjectInterval
+from autotrainer.core.perf_monitor import PerfMonitor
+from autotrainer.core.observable_object import ObservableObject
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from ..configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
-from ..logging import get_verbose_logger
-from ..project import ProjectInfo, ProjectInterval
-from ..perf_monitor import PerfMonitor
-from ..observable_object import ObservableObject
+from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 from ..message.audio_spectrum_message import AudioSpectrumMessage
 
 from .head_fix_measurement import HeadFixMeasurement
@@ -29,7 +29,7 @@ from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from .external_doors_monitor import ExternalDoorsMonitor
 from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
 from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor, AutoTunnelSweepConfiguration
-
+from .system_maintenance_monitor import SystemMaintenanceMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -86,6 +86,8 @@ class SensorAnalysis(ObservableObject):
             pellet_misplaced_detector=self._pellet_misplaced_monitor,
         )
 
+        self._system_maintenance_monitor = SystemMaintenanceMonitor(config=SystemMaintenanceConfig())
+
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
@@ -93,6 +95,7 @@ class SensorAnalysis(ObservableObject):
             audio_monitor=self._audio_thrashing_monitor,
             external_doors_monitor=self._external_doors_monitor,
             global_animal_presence_monitor=self._global_animal_presence_monitor,
+            system_maintenance_monitor=self._system_maintenance_monitor,
             topcam_presence_attrs=topcam_presence,
         )
 
@@ -104,6 +107,7 @@ class SensorAnalysis(ObservableObject):
             self._global_animal_presence_monitor,
             self._pellet_misplaced_monitor,
             self._auto_tunnel_sweep_monitor,
+            self._system_maintenance_monitor,
             self._alarm_monitor,
         ]
 
@@ -181,6 +185,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def auto_tunnel_sweep_monitor(self) -> AutoTunnelSweepMonitor:
         return self._auto_tunnel_sweep_monitor
+
+    @property
+    def system_maintenance_monitor(self) -> SystemMaintenanceMonitor:
+        return self._system_maintenance_monitor
 
     @property
     def is_headbar_switch_engaged(self):

@@ -13,7 +13,10 @@ def _exec_main(args, logger):
     # strtobool compatibility is all over the place.
     allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
 
-    exit_val = run_acquisition(args.configuration, args.dev, allow_emulation)
+    exit_val = run_acquisition(
+        args.configuration, args.dev, allow_emulation,
+        target_status=args.start_mode,
+    )
     (logger.success if exit_val in (0, None) else logger.error)("application finished ; exit_val=%s", exit_val)
     return exit_val
 
@@ -23,12 +26,9 @@ def main():
     fork_method = "spawn"  # please check python multiprocessing fork method documentation
     multiprocessing.set_start_method(fork_method)  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
 
-    parser = argparse.ArgumentParser()
+    from tools.acquisition.args import make_autotrainer_parser
 
-    parser.add_argument("-c", "--configuration", help="configuration file", default=None, type=str)
-    parser.add_argument("-d", "--dev", help="enable development mode and options", action="store_true")
-    parser.add_argument("-e", "--allow-can-emulation", help="include CAN emulation as a connection option",
-                        default="", type=str)
+    parser = make_autotrainer_parser(allow_dev_mode=True)
 
     args = parser.parse_args()
 
