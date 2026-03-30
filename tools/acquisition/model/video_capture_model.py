@@ -431,8 +431,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self.camera_source = source
 
     def save_configuration(self) -> CameraConfiguration:
-        parsed = urlparse(self._camera_source.url)
-        params: Dict[str, Any] = VideoManager.parse_params(self._camera_source.url)
+        parsed, params = VideoManager.parse_params(self._camera_source.url)
+        params: Dict[str, Any]
         for key in params:
             try:
                 val = float(params[key])
@@ -495,7 +495,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             else:
                 value = value + f"?name={self._name}"
 
-        properties = VideoManager.parse_params(value)
+        parsed, properties = VideoManager.parse_params(value)
 
         self.shape = None
 

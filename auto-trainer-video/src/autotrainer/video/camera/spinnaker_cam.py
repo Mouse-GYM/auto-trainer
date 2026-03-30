@@ -55,6 +55,20 @@ class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
 
+    default_params = dict(
+        # NB: as they are defined in config file
+        exposure = 140,
+        fps = 150,
+        hbin = 4,
+        vbin = 4,
+        width = 256,
+        height = 256,
+        offsetx = 52,
+        offsety = 6,
+        gain = 1,
+        gamma = 0.7,
+    )
+
     @classmethod
     def list(cls) -> List[str]:
         _start_spincam_lib_instance()
@@ -86,17 +100,19 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        self._exposure = 140
-        self._fps = 150
-        self._horizontal_binning = 4
-        self._vertical_binning = 4
-        self._width = 256
-        self._height = 256
-        self._offset_x = 52
-        self._offset_y = 6
+        get_def = self.default_params.get
 
-        self._gain: Optional[float] = 1
-        self._gamma: Optional[float] = 0.7
+        self._exposure = get_def("exposure")
+        self._fps = get_def("fps")
+        self._horizontal_binning = get_def("hbin")
+        self._vertical_binning = get_def("vbin")
+        self._width = get_def("width")
+        self._height = get_def("height")
+        self._offset_x = get_def("offsetx")
+        self._offset_y = get_def("offsety")
+
+        self._gain: Optional[float] = get_def("gain")
+        self._gamma: Optional[float] = get_def("gamma")
 
         self._is_primary = False
         self._is_secondary = True
@@ -365,9 +381,9 @@ class SpinCam(CameraBase):
         elif name == "secondary":
             self._is_secondary = is_truthy_str_value(value)
             self._is_primary = not self._is_secondary
-        elif name == "offsetx":
+        elif name in {"offsetx", "offset_x"}:
             self.offset_x = int(value)
-        elif name == "offsety":
+        elif name in {"offsety", "offset_y"}:
             self.offset_y = int(value)
         elif name == "hbin":
             self.horizontal_binning = int(value)

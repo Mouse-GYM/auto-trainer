@@ -1,7 +1,8 @@
+import copy
 import sys
 from enum import Enum
-from typing import Optional, Dict, List
-from urllib.parse import urlparse
+from typing import Optional, Dict, List, Tuple
+from urllib.parse import urlparse, ParseResult
 
 import cv2
 
@@ -70,20 +71,25 @@ class VideoManager:
         return spincam_cls.create(serial_number, name)
 
     @classmethod
-    def parse_params(cls, camera_url: str) -> Dict[str, str]:
+    def parse_params(cls, camera_url: str) -> Tuple[
+        ParseResult, Dict[str, str]
+    ]:
         parameters = dict()
         parsed = urlparse(camera_url)
+        if parsed.scheme == "spinnaker":
+            spincam_cls = _get_spincam_cls()
+            parameters.update(copy.deepcopy(spincam_cls.default_params))
+
         params = parsed.query.split("&")
         for param in params:
             values = param.split("=")
             if len(values) == 2:
                 parameters[values[0].lower()] = values[1]
-        return parameters
+        return parsed, parameters
 
     @classmethod
     def create_camera(cls, camera_url: str, name: str = "") -> Optional[CameraBase]:
         parsed = urlparse(camera_url)
-
         if parsed.scheme == CameraKind.Random:
             camera = RandomCam(name)
         elif parsed.scheme == CameraKind.Spinnaker:

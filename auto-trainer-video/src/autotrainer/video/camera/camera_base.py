@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Tuple, Optional
+from typing import Tuple, Optional, ClassVar, Dict, Any
 
 import numpy
 
@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 class CameraBase:
+
+    default_params: ClassVar[Dict[str, Any]] = {}
+
     def __init__(self, name: str = "camera"):
         self._name = name
         self._width = 300
