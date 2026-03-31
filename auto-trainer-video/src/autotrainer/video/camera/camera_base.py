@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 @dataclasses.dataclass
 class CameraBaseDefaultParams:
 
-    width = 300
-    height = 200
-    fps = 30
+    width: int = 300
+    height: int = 200
+    fps: int = 30
 
 
 class CameraBase:
