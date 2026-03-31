@@ -53,7 +53,7 @@ class AcquisitionMode(IntEnum):
 
 
 @dataclasses.dataclass
-class SpinCamDefault:
+class SpinCamDefaultParams:
     exposure: float = 140
     fps: int = 150
     hbin: int = 4
@@ -70,7 +70,7 @@ class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
 
-    default_params = dataclasses.asdict(SpinCamDefault())
+    default_params = dataclasses.asdict(SpinCamDefaultParams())
 
     @classmethod
     def list(cls) -> List[str]:
