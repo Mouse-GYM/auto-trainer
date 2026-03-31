@@ -859,6 +859,7 @@ class PreferencesContent(QWidget):
         analysis = app_model.analysis
         prefs = app_model.preferences
         load_cell_monitor = analysis.load_cell_monitor
+        algo_cfg = app_model.behavior.algorithm.active_config
 
         top_layout = QHBoxLayout()
 
@@ -867,38 +868,38 @@ class PreferencesContent(QWidget):
 
         left_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
-        grid_layout = QGridLayout()
-        grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        grid_layout.setSpacing(4)
-        grid_layout.setHorizontalSpacing(10)
-        left_layout.addLayout(grid_layout)
+        left_grid_layout = QGridLayout()
+        left_grid_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        left_grid_layout.setSpacing(4)
+        left_grid_layout.setHorizontalSpacing(10)
+        left_layout.addLayout(left_grid_layout)
 
         cur_row = 0
         cur_col = 0
 
         if GlobalAnimalPresenceMonitor.feature_enabled:
-            grid_layout.addWidget(QLabel("<b>Global Animal Presence</b>"), cur_row, cur_col)
+            left_grid_layout.addWidget(QLabel("<b>Global Animal Presence</b>"), cur_row, cur_col)
             cur_row += 1
 
-            grid_layout.addWidget(QLabel("Missing delay (hours):"), cur_row, cur_col)
+            left_grid_layout.addWidget(QLabel("Missing delay (hours):"), cur_row, cur_col)
             spinbox = QDoubleSpinBox()
             spinbox.setRange(0, 24 * 2)  # 2 days
             spinbox.setDecimals(2)
             spinbox.setSingleStep(1)
             spinbox.setValue(analysis.global_animal_presence_monitor.config.presence_missing_delay_hours)
-            def value_changed(value):
+            def global_animal_presence_missing_delay_changed(value):
                 analysis.global_animal_presence_monitor.config.presence_missing_delay_hours = value
                 analysis.global_animal_presence_monitor.check_state()
-            spinbox.valueChanged.connect(value_changed)
-            grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+            spinbox.valueChanged.connect(global_animal_presence_missing_delay_changed)
+            left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
             cur_row += 1
 
         #
         label = QLabel("<b>Load Cell Thrash Detector</b>")
-        grid_layout.addWidget(label, cur_row, cur_col)
+        left_grid_layout.addWidget(label, cur_row, cur_col)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, cur_col)
         spinbox = QSpinBox()
         if cur_row != 1:
             assert GlobalAnimalPresenceMonitor.feature_enabled
@@ -906,55 +907,55 @@ class PreferencesContent(QWidget):
             spinbox.setContentsMargins(0, 10, 0, 0)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_min_ptp_change_count)
-        def value_changed(value):
+        def thrashing_min_ptp_changed(value):
             load_cell_monitor.config.thrashing_min_ptp_change_count = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        spinbox.valueChanged.connect(thrashing_min_ptp_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Thrashing min threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setDecimals(1)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_min)
-        def value_changed(value):
+        def thrashing_min_weight_threshold_changed(value):
             load_cell_monitor.config.thrashing_var_weight_threshold_min = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        spinbox.valueChanged.connect(thrashing_min_weight_threshold_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Thrashing max threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setDecimals(1)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_var_weight_threshold_max)
-        def value_changed(value):
+        def thrashing_max_weight_threshold_changed(value):
             load_cell_monitor.config.thrashing_var_weight_threshold_max = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        spinbox.valueChanged.connect(thrashing_max_weight_threshold_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         label = QLabel("<b>Audio Detector</b>")
         label.setContentsMargins(0, 10, 0, 0)
-        grid_layout.addWidget(label, cur_row, cur_col)
+        left_grid_layout.addWidget(label, cur_row, cur_col)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Threshold db:"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Threshold db:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setContentsMargins(0, 10, 0, 0)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 200)
         spinbox.setValue(analysis.audio_thrashing_monitor.config.threshold_db)
-        def value_changed(value):
+        def thrashing_threshold_db_changed(value):
             analysis.audio_thrashing_monitor.config.threshold_db = value
-        spinbox.valueChanged.connect(value_changed)
-        grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        spinbox.valueChanged.connect(thrashing_threshold_db_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
         line_edit = QLineEdit()
         line_edit.setText(str(analysis.audio_thrashing_monitor.config.bins_list))
-        def value_changed(line_edit=line_edit):
+        def thrashing_bins_list_changed(line_edit=line_edit):
             value = line_edit.text()
             try:
                 value = ast.literal_eval(value)
@@ -964,10 +965,23 @@ class PreferencesContent(QWidget):
                 QMessageBox.critical(self, "Invalid", f"Invalid value for bins list: {err}")
             else:
                 analysis.audio_thrashing_monitor.config.bins_list = list(value)
-        line_edit.editingFinished.connect(value_changed)
-        grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
+        line_edit.editingFinished.connect(thrashing_bins_list_changed)
+        left_grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
+        system_fault_mon = analysis.system_fault_monitor
+        left_grid_layout.addWidget(QLabel("<b>Free Disk Space Min MB:</b>"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        spinbox.setMinimum(50)
+        spinbox.setMaximum(1e9)
+        spinbox.setValue(system_fault_mon.config.free_disk_space_min_limit_mb)
+        def free_disk_space_min_limit_mb_changed(value):
+            system_fault_mon.config.free_disk_space_min_limit_mb = value
+            system_fault_mon.check_state()
+        spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+
+        # right side
         right_layout = QFormLayout()
 
         right_layout.addRow("<b>TopCam Presence</b>", QWidget())
@@ -977,9 +991,9 @@ class PreferencesContent(QWidget):
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
         spinbox.setValue(app_model.top_camera_presence_detection.pc_threshold)
-        def value_changed(value: float):
+        def topcam_pres_det_pc_threshold_changed(value: float):
             app_model.top_camera_presence_detection.pc_threshold = value
-        spinbox.valueChanged.connect(value_changed)
+        spinbox.valueChanged.connect(topcam_pres_det_pc_threshold_changed)
         right_layout.addRow("% threshold:", spinbox)
 
         spinbox = QDoubleSpinBox()
@@ -987,18 +1001,18 @@ class PreferencesContent(QWidget):
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
         spinbox.setValue(app_model.top_camera_presence_detection.pc_high_exclude_threshold)
-        def value_changed(value: float):
+        def topcam_pres_det_high_exc_threshold_changed(value: float):
             app_model.top_camera_presence_detection.pc_high_exclude_threshold = value
-        spinbox.valueChanged.connect(value_changed)
+        spinbox.valueChanged.connect(topcam_pres_det_high_exc_threshold_changed)
         right_layout.addRow("high-% exclude threshold:", spinbox)
 
         spinbox = QSpinBox()
         spinbox.setRange(0, 255)
         spinbox.setSingleStep(1)
         spinbox.setValue(app_model.top_camera_presence_detection.mask_lower_zero)
-        def value_changed(value: float):
+        def topcam_pres_det_mask_lower_zero_changed(value: float):
             app_model.top_camera_presence_detection.mask_lower_zero = value
-        spinbox.valueChanged.connect(value_changed)
+        spinbox.valueChanged.connect(topcam_pres_det_mask_lower_zero_changed)
         right_layout.addRow("Mask Lower Zero:", spinbox)
 
         spinbox = QDoubleSpinBox()
@@ -1006,9 +1020,9 @@ class PreferencesContent(QWidget):
         spinbox.setSingleStep(0.1)
         spinbox.setDecimals(1)
         spinbox.setValue(app_model.top_camera_presence_detection.max_delay_skip_threshold)
-        def value_changed(value: float):
+        def topcam_pres_det_max_delay_skip_threshold_changed(value: float):
             app_model.top_camera_presence_detection.max_delay_skip_threshold = value
-        spinbox.valueChanged.connect(value_changed)
+        spinbox.valueChanged.connect(topcam_pres_det_max_delay_skip_threshold_changed)
         right_layout.addRow("Max Delay Skip Seconds:", spinbox)
 
         #
@@ -1268,8 +1282,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        # add_sep()
-
         grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
         toggle = self._use_global_presence_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_global_animal_presence)
@@ -1355,6 +1367,34 @@ class PreferencesContent(QWidget):
             cfg.auto_resume_on_system_maintenance = toggled
             alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         toggle.stateChanged.connect(auto_resume_system_maintenance_toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        # System fault
+        grid_layout.addWidget(QLabel("<b>Use System Fault:</b>"), cur_row, cur_col)
+        toggle = self._use_system_fault_toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.use_system_fault)
+        def use_system_fault_toggle_changed(value):
+            toggled = value != 0
+            refresh_enabled_states()
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_system_fault:
+                cfg.use_system_fault = toggled
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        self._use_system_fault_toggle.stateChanged.connect(use_system_fault_toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_system_fault_toggle.isChecked()))
+        toggle.setChecked(alarm_cfg.auto_resume_on_system_fault)
+        toggle.setEnabled(alarm_cfg.use_system_fault)
+        def auto_resume_system_fault_toggle_changed(value):
+            toggled = value != 0
+            cfg = alarm_monitor.config
+            cfg.auto_resume_on_system_fault = toggled
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        toggle.stateChanged.connect(auto_resume_system_fault_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 

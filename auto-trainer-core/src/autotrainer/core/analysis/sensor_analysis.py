@@ -16,6 +16,7 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from ..configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
+from ..configuration.system_fault_config import SystemFaultConfig
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 from ..message.audio_spectrum_message import AudioSpectrumMessage
 
@@ -30,6 +31,7 @@ from .external_doors_monitor import ExternalDoorsMonitor
 from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
 from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor, AutoTunnelSweepConfiguration
 from .system_maintenance_monitor import SystemMaintenanceMonitor
+from .system_fault_monitor import SystemFaultMonitor
 
 logger = get_verbose_logger(__name__)
 
@@ -87,6 +89,7 @@ class SensorAnalysis(ObservableObject):
         )
 
         self._system_maintenance_monitor = SystemMaintenanceMonitor(config=SystemMaintenanceConfig())
+        self._system_fault_monitor = SystemFaultMonitor(config=SystemFaultConfig())
 
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
@@ -96,19 +99,23 @@ class SensorAnalysis(ObservableObject):
             external_doors_monitor=self._external_doors_monitor,
             global_animal_presence_monitor=self._global_animal_presence_monitor,
             system_maintenance_monitor=self._system_maintenance_monitor,
+            system_fault_monitor=self._system_fault_monitor,
             topcam_presence_attrs=topcam_presence,
         )
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
         self._detectors = [
+            self._alarm_monitor,  # put first
             self._load_cell_monitor,
+            self._tare_detector,
+            self._audio_thrashing_monitor,
             self._external_doors_monitor,
             self._global_animal_presence_monitor,
             self._pellet_misplaced_monitor,
             self._auto_tunnel_sweep_monitor,
             self._system_maintenance_monitor,
-            self._alarm_monitor,
+            self._system_fault_monitor,
         ]
 
     @property
@@ -189,6 +196,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def system_maintenance_monitor(self) -> SystemMaintenanceMonitor:
         return self._system_maintenance_monitor
+
+    @property
+    def system_fault_monitor(self) -> SystemFaultMonitor:
+        return self._system_fault_monitor
 
     @property
     def is_headbar_switch_engaged(self):

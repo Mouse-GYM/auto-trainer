@@ -1,6 +1,9 @@
 from typing import Optional, Set, List
 
+import psutil
+
 from .detector import BaseDetector
+from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 
 
@@ -16,6 +19,7 @@ class SystemMaintenanceMonitor(BaseDetector):
         self._config = config
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
+        self._free_disk_space_engaged = False
         self._engaged_reasons: Set[str] = set()
 
     @property
@@ -26,6 +30,7 @@ class SystemMaintenanceMonitor(BaseDetector):
     def config(self, value):
         prev, self._config = self._config, value
         self._on_property_changed(self.CONFIG, value, prev)
+        self._logger.verbose("Received config: %s", value)
 
     @property
     def engaged_reasons(self) -> List[str]:
@@ -39,6 +44,8 @@ class SystemMaintenanceMonitor(BaseDetector):
     def max_pellet_loaded_engaged(self, value):
         prev, self._max_pellet_loaded_engaged = self._max_pellet_loaded_engaged, value
         self._on_property_changed(self.MAX_PELLET_LOADED_ENGAGED, value, prev)
+        if value != prev:
+            self.check_state_if_not_detector_thread()
 
     @property
     def max_consecutive_failed_load_engaged(self):
@@ -48,6 +55,8 @@ class SystemMaintenanceMonitor(BaseDetector):
     def max_consecutive_failed_load_engaged(self, value):
         prev, self._max_consecutive_failed_load_engaged = self._max_consecutive_failed_load_engaged, value
         self._on_property_changed(self.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED, value, prev)
+        if value != prev:
+            self.check_state_if_not_detector_thread()
 
     def _check_state(self) -> Optional[float]:
         cfg = self._config
@@ -68,10 +77,8 @@ class SystemMaintenanceMonitor(BaseDetector):
         cfg = self._config
         engaged = loaded >= cfg.max_pellets_loaded_count
         self.max_pellet_loaded_engaged = engaged
-        self._check_state()
 
     def update_failed_pellet_load(self, *, consecutive: int):
         cfg = self._config
         engaged = consecutive >= cfg.max_consecutive_failed_loaded
         self.max_consecutive_failed_load_engaged = engaged
-        self._check_state()
