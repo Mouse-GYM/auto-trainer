@@ -32,26 +32,29 @@ class FileEventPlugin(EventManagerPlugin):
     def set_enable(self, enable: bool) -> None:
         self._write_active = enable
 
-    def process_event(self, info: EventInfo, repeat_count: int) -> None:
-        if self._event_file is not None:
-            output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}\n"
-
-            file_timestamp = datetime.now()
-
-            needs_update = file_timestamp.hour != self._current_record_interval
-
-            if needs_update:
-                self._update_event_file()
-
-            self._event_file.write(output)
+    def process_event(self, info: EventInfo, repeat_count: int):
+        if not self._write_active:
+            logger.debug("write not active, skipping %s", info)
+            return
+        event_file = self._event_file
+        if event_file is None:
+            logger.verbose("event_file None, skipping %s", info)
+            return
+        output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}\n"
+        file_timestamp = datetime.now()
+        needs_update = file_timestamp.hour != self._current_record_interval
+        if needs_update:
+            self._update_event_file()
+        event_file.write(output)
 
     def flush(self):
         if self._event_file is not None:
             self._event_file.flush()
 
     def close(self) -> None:
-        if self._event_file is not None:
-            self._event_file.close()
+        event_file = self._event_file
+        if event_file is not None:
+            event_file.close()
             self._event_file = None
 
     def _update_event_file(self):
@@ -65,7 +68,7 @@ class FileEventPlugin(EventManagerPlugin):
                                                                   when=datetime.now())
 
             if event_file_info is None:
-                logger.error(f"unable to write to expected event file location")
+                logger.error("unable to write to expected event file location")
                 return
 
             try:
