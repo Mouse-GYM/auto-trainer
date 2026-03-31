@@ -12,6 +12,7 @@ logger = get_verbose_logger(__name__)
 
 
 class PlaybackCam(CameraBase):
+
     def __init__(self, file_name, name: str = ""):
         super().__init__(name)
         self._file_name = file_name

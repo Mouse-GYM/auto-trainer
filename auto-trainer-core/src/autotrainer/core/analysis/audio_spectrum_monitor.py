@@ -49,6 +49,10 @@ class AudioSpectrumThrashMonitor(BaseDetector):
         self._t_perf_next_report: float = perf_now
         self._when_next_check: float = 0
 
+    def _check_state(self) -> Optional[float]:
+        # all handled by .update()
+        return None
+
     @property
     def config(self):
         return self._config

@@ -372,7 +372,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             self._video_capture = None
 
         # NB: clearing video cmd queue having waited & joined the capture process is best.
-        clear_queue(self._video_command_queue, name="video_cmd_queue")
+        video_cmd_q = self._video_command_queue
+        self._video_command_queue = None  # set to None before clearing queue
+        clear_queue(video_cmd_q, name="video_cmd_queue")
 
         self._video_image_queue = None
         # video_image_queue is our FixedArrayQueue which cannot be "cleared" by another thread than the
@@ -431,20 +433,20 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self.camera_source = source
 
     def save_configuration(self) -> CameraConfiguration:
-        parsed = urlparse(self._camera_source.url)
-        params: Dict[str, Any] = VideoManager.parse_params(self._camera_source.url)
-        for key in params:
+        parsed, params = VideoManager.parse_params(self._camera_source.url)
+        params: Dict[str, Any]
+        for key, value in params.items():
             try:
-                val = float(params[key])
+                val = float(value)
                 if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
                     val = int(val)
-                params[key] = val
+                value = val
             except (ValueError, TypeError):
-                if str(params[key]).lower() == "true":
-                    params[key] = True
-                elif str(params[key]).lower() == "false":
-                    params[key] = False
-
+                if str(value).lower() == "true":
+                    value = True
+                elif str(value).lower() == "false":
+                    value = False
+            params[key] = value
         # undo the %-encode which happened in self.load_configuration():
         path = urllib.parse.unquote(parsed.path)[1:]  # [1:] for strip of first leading "/"
 
@@ -495,7 +497,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             else:
                 value = value + f"?name={self._name}"
 
-        properties = VideoManager.parse_params(value)
+        parsed, properties = VideoManager.parse_params(value)
 
         self.shape = None
 

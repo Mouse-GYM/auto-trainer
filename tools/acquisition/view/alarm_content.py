@@ -63,6 +63,9 @@ class AlarmContent(ContentWidget):
     use_system_maintenance_changed = Signal(bool)
     system_maintenance_changed = Signal(bool)
 
+    use_system_fault_changed = Signal(bool)
+    system_fault_changed = Signal(bool)
+
     #
 
     load_cell_thrashing_changed = Signal(bool, name="load_cell_thrashing_changed")
@@ -159,6 +162,14 @@ class AlarmContent(ContentWidget):
         self.system_maintenance_changed.connect(icon.setStatus)
         form_layout_alarms.addRow(label, icon)
 
+        icon = self._system_fault_status = make_alarm_icon(name="system-fault")
+        label = self._system_fault_label = make_label("System Fault:")
+        self.use_system_fault_changed.connect(label.setEnabled)
+        self.use_system_fault_changed.connect(icon.setInUse)
+        self.use_system_fault_changed.emit(alarm_cfg.use_system_fault)
+        self.system_fault_changed.connect(icon.setStatus)
+        form_layout_alarms.addRow(label, icon)
+
         #
 
         form_layout_detectors = QFormLayout()
@@ -227,6 +238,7 @@ class AlarmContent(ContentWidget):
         # analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
         analysis.pellet_misplaced_monitor.property_changed += self._pellet_misplaced_property_changed
         analysis.system_maintenance_monitor.property_changed += self._system_maint_mon_property_changed
+        analysis.system_fault_monitor.property_changed += self._on_system_fault_mon_property_changed
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -265,6 +277,7 @@ class AlarmContent(ContentWidget):
             self.use_global_animal_presence_changed.emit(value.use_global_animal_presence)
             self.use_device_comm_error_changed.emit(value.use_device_comm_error)
             self.use_system_maintenance_changed.emit(value.use_system_maintenance)
+            self.use_system_fault_changed.emit(value.use_system_fault)
 
         elif name == p.IS_ENGAGED:
             if not value:
@@ -275,6 +288,7 @@ class AlarmContent(ContentWidget):
                 changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
                 changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
                 changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
+                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_maintenance_engaged, None)
 
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
@@ -301,6 +315,11 @@ class AlarmContent(ContentWidget):
                 return
             self.system_maintenance_changed.emit(value)
 
+        elif name == p.SYSTEM_FAULT_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_system_fault:
+                return
+            self.system_fault_changed.emit(value)
+
     @invoke_method
     def _global_animal_presence_property_changed(self, name, value, _):
         mon = self._app_model.analysis.global_animal_presence_monitor
@@ -320,3 +339,9 @@ class AlarmContent(ContentWidget):
             self._pellets_before_refill_status.setStatus(value)
         elif name == mon.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED:
             self._consecutive_failed_loads_status.setStatus(value)
+
+    @invoke_method
+    def _on_system_fault_mon_property_changed(self, name, value, _):
+        mon = self._app_model.analysis.system_fault_monitor
+        if name == mon.IS_ENGAGED:
+            self._system_fault_status.setStatus(value)

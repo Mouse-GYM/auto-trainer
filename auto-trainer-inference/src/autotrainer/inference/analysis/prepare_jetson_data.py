@@ -8,6 +8,7 @@ import sys
 import os
 import glob
 import pickle
+import math
 
 import pandas
 import yaml
@@ -40,6 +41,20 @@ DEFAULT_CAM_OFFSET_VALS = {
 def make_cam_offsets_dict():
     return DEFAULT_CAM_OFFSET_VALS.copy()
 
+
+def dict_almost_equal(d1, d2, rel_tol=1e-9, abs_tol=0.0):
+    if set(d1) != set(d2):
+        return False
+    for k in d1:
+        v1 = d1[k]
+        v2 = d2[k]
+        if isinstance(v1, float) or isinstance(v2, float):
+            if not math.isclose(v1, v2, rel_tol=rel_tol, abs_tol=abs_tol):
+                return False
+        else:
+            if v1 != v2:
+                return False
+    return True
 
 
 def identify_dropped_frames(timestamp_file, frame_rate):
@@ -627,7 +642,7 @@ def reorient_and_center_step1(
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
 
-    if orig_cam_offsets is not None and cam_offsets != orig_cam_offsets:
+    if orig_cam_offsets is not None and not dict_almost_equal(cam_offsets, orig_cam_offsets, rel_tol=0.01):
         logger.warning("Loaded cam_offsets != generated: %s vs %s", orig_cam_offsets, cam_offsets)
 
     # if orig_cam_offsets is not None:
