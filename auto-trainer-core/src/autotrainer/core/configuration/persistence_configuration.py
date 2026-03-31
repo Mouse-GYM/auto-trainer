@@ -12,7 +12,7 @@ class PersistenceConfiguration:
 
     DEFAULT_OUTPUT_PATH: ClassVar[Path] = Path("~/Documents/RawDataLocal")  # must use .expanduser() on it
 
-    output_location: str = ""
+    output_location: str = DEFAULT_OUTPUT_PATH.expanduser().as_posix()
 
     @classmethod
     def get_default_output_path(cls) -> Path:
