@@ -5,7 +5,7 @@ import psutil
 from .detector import BaseDetector
 from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_fault_config import SystemFaultConfig
-from ..event import post_api_event_content
+from ..event import post_api_detector_event_content
 from ...api import ApiDetectorKind
 
 
@@ -55,8 +55,8 @@ class SystemFaultMonitor(BaseDetector):
         self._on_property_changed(self.FREE_DISK_SPACE_ENGAGED, value, prev)
         if value != prev:
             self.check_state_if_not_detector_thread()
-            post_api_event_content(self._event_manager, ApiDetectorKind.lowFreeDiskSpace,
-                                   value, self._config.use_free_disk_space)
+            post_api_detector_event_content(self._event_manager, ApiDetectorKind.lowFreeDiskSpace,
+                                            value, self._config.use_free_disk_space)
 
     def _check_free_disk_space(self):
         cfg = self._config

@@ -10,7 +10,7 @@ from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.core.event import post_api_event_content
+from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device)
@@ -156,7 +156,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 iface = dev.device_interface
                 enabled = iface is not None and iface.is_open
         # could be in app_model or system_machine, in react property changed, but ok here too:
-        post_api_event_content(self._event_manager, ApiDetectorKind.deviceAckTimeOut, value, enabled)
+        post_api_detector_event_content(self._event_manager, ApiDetectorKind.deviceAckTimeOut, value, enabled)
 
     @property
     def send_x(self):

@@ -41,7 +41,7 @@ def try_register_api_event_plugin() -> Optional[ApiEventPlugin]:
 
     return None
 
-def post_api_event_content(event_manager: EventManager, detector_id, active, enabled):
+def post_api_detector_event_content(event_manager: EventManager, detector_id, active, enabled):
     event_manager.post_event_content(ApiEventKind.detectorChanged, context={
         "detector_id": detector_id,
         "is_active": active,

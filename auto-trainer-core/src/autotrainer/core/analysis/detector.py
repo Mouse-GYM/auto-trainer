@@ -6,7 +6,7 @@ from typing import Dict, Tuple, Optional, Union
 
 from autotrainer.api import ApiEventKind
 from autotrainer.core import ObservableObject, get_perf_now, EventManager
-from autotrainer.core.event import post_api_event_content
+from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 
@@ -37,7 +37,7 @@ class BaseDetector(ObservableObject):
     def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
             enabled = self._running
-        post_api_event_content(self._event_manager, detector_id, active, enabled)
+        post_api_detector_event_content(self._event_manager, detector_id, active, enabled)
 
     @property
     def running(self):
