@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
-class CameraBaseDefault:
+class CameraBaseDefaultParams:
+
     width = 300
     height = 200
     fps = 30
@@ -17,7 +18,7 @@ class CameraBaseDefault:
 
 class CameraBase:
 
-    default_params: ClassVar[Dict[str, Any]] = dataclasses.asdict(CameraBaseDefault())
+    default_params: ClassVar[Dict[str, Any]] = dataclasses.asdict(CameraBaseDefaultParams())
     # possible default "params" for camera class,
     # must use same keys than in config file.
     # Is used to pre-set/applied on the camera instance, once it's created,
