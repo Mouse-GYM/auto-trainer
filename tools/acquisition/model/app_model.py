@@ -1357,7 +1357,7 @@ class AppModel(ObservableObject):
 
     def _load_animals(self):
         if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = Path.home().joinpath("Documents/RawDataLocal/Animals")
+            default_location = Path(self._output_location).joinpath("Animals")
             try:
                 default_location.mkdir(parents=True, exist_ok=True)
                 self._preferences.animal_location = str(default_location)
