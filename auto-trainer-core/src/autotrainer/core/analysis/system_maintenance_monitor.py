@@ -9,14 +9,10 @@ from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 
 class SystemMaintenanceMonitor(BaseDetector):
 
-    use_daemon = True  # for free disk space checks
-    default_timer_delay = 30 * 60  # secs, 30 minutes
-
     CONFIG = "config"
 
     MAX_PELLET_LOADED_ENGAGED = "max_pellet_loaded_engaged"
     MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED = "max_consecutive_failed_load_engaged"
-    FREE_DISK_SPACE_ENGAGED = "free_disk_space_engaged"
 
     def __init__(self, *, config: SystemMaintenanceConfig):
         super().__init__()
@@ -25,11 +21,6 @@ class SystemMaintenanceMonitor(BaseDetector):
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
         self._engaged_reasons: Set[str] = set()
-        self._persistence_cfg = PersistenceConfiguration()
-
-    def set_persistence_config(self, config: PersistenceConfiguration):
-        self._persistence_cfg = config
-        self._logger.verbose("Received persistence config: %s", config)
 
     @property
     def config(self) -> SystemMaintenanceConfig:
@@ -67,32 +58,12 @@ class SystemMaintenanceMonitor(BaseDetector):
         if value != prev:
             self.check_state_if_not_detector_thread()
 
-    @property
-    def free_disk_space_engaged(self):
-        return self._free_disk_space_engaged
-
-    @free_disk_space_engaged.setter
-    def free_disk_space_engaged(self, value):
-        prev, self._free_disk_space_engaged = self._free_disk_space_engaged, value
-        self._on_property_changed(self.FREE_DISK_SPACE_ENGAGED, value, prev)
-        if value != prev:
-            self.check_state_if_not_detector_thread()
-
-    def _check_free_disk_space(self):
-        cfg = self._config
-        usage = psutil.disk_usage(self._persistence_cfg.output_location)
-        # usage free is in bytes:
-        engaged = usage.free / 2 ** 20 < cfg.free_disk_space_min_limit_mb
-        self.free_disk_space_engaged = engaged
-
     def _check_state(self) -> Optional[float]:
-        self._check_free_disk_space()
         cfg = self._config
         reasons = set()
         for reason, use, engaged in (
             (self.MAX_PELLET_LOADED_ENGAGED, cfg.use_max_pellet_loaded, self._max_pellet_loaded_engaged),
             (self.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED, cfg.use_max_consecutive_failed_load, self._max_consecutive_failed_load_engaged),
-            (self.FREE_DISK_SPACE_ENGAGED, cfg.use_free_disk_space, self._free_disk_space_engaged),
         ):
             if use and engaged:
                 reasons.add(reason)

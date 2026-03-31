@@ -126,6 +126,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         analysis.external_doors_monitor.config = config.external_doors
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
         analysis.system_maintenance_monitor.config = config.system_maintenance
+        analysis.system_fault_monitor.config = config.system_fault
 
     def save_configuration(self) -> BehaviorConfiguration:
         algo = self._system_machine.algorithm
@@ -153,6 +154,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         config.external_doors = analysis.external_doors_monitor.config
         config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
         config.system_maintenance = analysis.system_maintenance_monitor.config
+        config.system_fault = analysis.system_fault_monitor.config
 
         config = dataclasses.replace(algo.active_config, **assigned)
         orig_fields = {f.name for f in dataclasses.fields(config)}

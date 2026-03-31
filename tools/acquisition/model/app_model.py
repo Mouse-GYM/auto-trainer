@@ -1248,7 +1248,7 @@ class AppModel(ObservableObject):
         # and:
         self._load_animals()
 
-        self._analysis.system_maintenance_monitor.set_persistence_config(configuration.persistence)
+        self._analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
 
         dev_ack_timeout = configuration.hardware.min_ack_timeout
         self._hardware.set_device_ack_timeout(dev_ack_timeout)

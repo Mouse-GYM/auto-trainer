@@ -969,17 +969,15 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
+        system_fault_mon = analysis.system_fault_monitor
         left_grid_layout.addWidget(QLabel("<b>Free Disk Space Min MB:</b>"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setMinimum(50)
         spinbox.setMaximum(1e9)
-        spinbox.setValue(algo_cfg.system_maintenance.free_disk_space_min_limit_mb)
+        spinbox.setValue(system_fault_mon.config.free_disk_space_min_limit_mb)
         def free_disk_space_min_limit_mb_changed(value):
-            # algo_cfg.system_maintenance.free_disk_space_min_limit_mb = value
-            analysis.system_maintenance_monitor.config.free_disk_space_min_limit_mb = value
-            # both system_maintenance config refer to same object,
-            # slightly better to set on the detector/monitor itself, eventually.
-            analysis.system_maintenance_monitor.check_state()
+            system_fault_mon.config.free_disk_space_min_limit_mb = value
+            system_fault_mon.check_state()
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
 
@@ -1284,8 +1282,6 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        # add_sep()
-
         grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
         toggle = self._use_global_presence_toggle = QSwitch()
         toggle.setChecked(alarm_cfg.use_global_animal_presence)
@@ -1371,6 +1367,34 @@ class PreferencesContent(QWidget):
             cfg.auto_resume_on_system_maintenance = toggled
             alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
         toggle.stateChanged.connect(auto_resume_system_maintenance_toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+
+        # System fault
+        grid_layout.addWidget(QLabel("<b>Use System Fault:</b>"), cur_row, cur_col)
+        toggle = self._use_system_fault_toggle = QSwitch()
+        toggle.setChecked(alarm_cfg.use_system_fault)
+        def use_system_fault_toggle_changed(value):
+            toggled = value != 0
+            refresh_enabled_states()
+            cfg = alarm_monitor.config
+            if toggled != cfg.use_system_fault:
+                cfg.use_system_fault = toggled
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        self._use_system_fault_toggle.stateChanged.connect(use_system_fault_toggle_changed)
+        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+        toggle = QSwitch()
+        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_system_fault_toggle.isChecked()))
+        toggle.setChecked(alarm_cfg.auto_resume_on_system_fault)
+        toggle.setEnabled(alarm_cfg.use_system_fault)
+        def auto_resume_system_fault_toggle_changed(value):
+            toggled = value != 0
+            cfg = alarm_monitor.config
+            cfg.auto_resume_on_system_fault = toggled
+            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+        toggle.stateChanged.connect(auto_resume_system_fault_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
