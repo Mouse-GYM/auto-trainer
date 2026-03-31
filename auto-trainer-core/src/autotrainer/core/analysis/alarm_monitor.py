@@ -3,7 +3,7 @@ import enum
 import math
 from typing import Optional, List, Set, Callable
 
-from autotrainer.api import ApiDetectorKind, ApiEventKind, ApiAlarmKind
+from autotrainer.api import ApiEventKind, ApiAlarmKind
 
 from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
@@ -18,6 +18,7 @@ from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrash
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 from autotrainer.core.analysis.load_cell_tare_monitor import LoadCellTareMonitor
 from autotrainer.core.analysis.system_maintenance_monitor import SystemMaintenanceMonitor
+from autotrainer.core.analysis.system_fault_monitor import SystemFaultMonitor
 
 
 logger = get_verbose_logger(__name__)
@@ -33,6 +34,7 @@ class EmergencyReason(str, enum.Enum):
     GLOBAL_ANIMAL_PRESENCE = "GLOBAL_ANIMAL_PRESENCE"
     DEVICE_COMM_ERROR = "DEVICE_COMM_ERROR"
     SYSTEM_MAINTENANCE = "SYSTEM_MAINTENANCE"
+    SYSTEM_FAULT = "SYSTEM_FAULT"
 
 
 @dataclasses.dataclass
@@ -46,14 +48,15 @@ class AlarmCondition:
 
 class EmergencyAlarmMonitor(BaseDetector):
     IS_ENGAGED = "is_engaged"
-
     CONFIG = "config"
+
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
     EXT_DOORS_OPEN_ENGAGED = "ext_doors_open_engaged"
     GLOBAL_ANIMAL_PRESENCE_ENGAGED = "global_animal_presence_engaged"
     DEVICE_COMM_ERROR_ENGAGED = "device_comm_error_engaged"
     SYSTEM_MAINTENANCE_ENGAGED = "system_maintenance_engaged"
+    SYSTEM_FAULT_ENGAGED = "system_fault_engaged"
 
     use_daemon = True
 
@@ -67,6 +70,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         external_doors_monitor: ExternalDoorsMonitor,
         global_animal_presence_monitor: GlobalAnimalPresenceMonitor,
         system_maintenance_monitor: SystemMaintenanceMonitor,
+        system_fault_monitor: SystemFaultMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
@@ -78,6 +82,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._external_doors_monitor = external_doors_monitor
         self._global_animal_presence_monitor = global_animal_presence_monitor
         self._system_maintenance_monitor = system_maintenance_monitor
+        self._system_fault_monitor = system_fault_monitor
         self._topcam_presence_attrs = topcam_presence_attrs
         self._load_cell_thrash_values = []
         self._load_cell_engaged_values = []
@@ -90,12 +95,14 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._global_animal_presence_engaged = False
         self._device_comm_error_engaged = False
         self._system_maintenance_engaged = False
+        self._system_fault_engaged = False
         #
         load_cell_monitor.property_changed += self._on_load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._on_audio_prop_changed
         external_doors_monitor.property_changed += self._on_ext_doors_prop_changed
         global_animal_presence_monitor.property_changed += self._on_global_animal_presence_prop_changed
         system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
+        system_fault_monitor.property_changed += self._on_system_fault_prop_changed
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context
@@ -205,6 +212,18 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.SYSTEM_MAINTENANCE_ENGAGED, value, prev)
+        self.check_state_if_not_detector_thread()
+
+    @property
+    def system_fault_engaged(self):
+        return self._system_fault_engaged
+
+    @system_fault_engaged.setter
+    def system_fault_engaged(self, value):
+        prev, self._system_fault_engaged = self._system_fault_engaged, value
+        if value == prev:
+            return
+        self.property_changed(self.SYSTEM_FAULT_ENGAGED, value, prev)
         self.check_state_if_not_detector_thread()
 
     #
@@ -347,6 +366,10 @@ class EmergencyAlarmMonitor(BaseDetector):
         if self._system_maintenance_engaged and cfg.use_system_maintenance:
             reasons.add(EmergencyReason.SYSTEM_MAINTENANCE)
         #
+        self.system_fault_engaged = self._system_fault_monitor.is_engaged
+        if self._system_fault_engaged and cfg.use_system_fault:
+            reasons.add(EmergencyReason.SYSTEM_FAULT)
+        #
         is_emergency = len(reasons) > 0
         #
         if is_emergency and not self._is_engaged:
@@ -373,6 +396,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             EmergencyReason.GLOBAL_ANIMAL_PRESENCE: cfg.auto_resume_on_global_animal_presence,
             EmergencyReason.DEVICE_COMM_ERROR: cfg.auto_resume_on_device_comm_error,
             EmergencyReason.SYSTEM_MAINTENANCE: cfg.auto_resume_on_system_maintenance,
+            EmergencyReason.SYSTEM_FAULT: cfg.auto_resume_on_system_fault,
         }
         #
         if not is_emergency:
@@ -446,9 +470,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             self.check_state()
 
     def _on_system_maintenance_prop_changed(self, name, value, _):
-        if not self._running:
-            return
-        # if not self._config.use_system_maintenance:
-        #     return
-        # if name == SystemMaintenanceMonitor.IS_ENGAGED:
+        self.check_state()
+
+    def _on_system_fault_prop_changed(self, name, value, _):
         self.check_state()

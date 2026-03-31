@@ -49,6 +49,10 @@ class LoadCellTareMonitor(BaseDetector):
 
         self._reset()
 
+    def _check_state(self) -> Optional[float]:
+        # all handled by .update()
+        return None
+
     @property
     def context(self) -> LoadCellAutoTareContext:
         return self._context

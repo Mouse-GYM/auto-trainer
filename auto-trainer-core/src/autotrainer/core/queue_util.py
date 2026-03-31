@@ -18,7 +18,6 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue],
     if not name:
         name = str(queue)
 
-    warned = False
     flushed = 0
     task_done = getattr(queue, "task_done", lambda: None)
     try:
@@ -33,12 +32,9 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue],
                 empty = queue.empty()
                 qsize = queue.qsize()
                 if not empty or qsize > 0:
-                    if not warned:
-                        log_dumped = True
-                        warned = True
-                        logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
-                                       name, empty, qsize)
-                    continue
+                    logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
+                                   name, empty, qsize)
+                    # continue
                 break
     except Exception as err:
         logger.error("Could not clear queue %s: %s", name, err)

@@ -1,7 +1,8 @@
+import copy
 import sys
 from enum import Enum
-from typing import Optional, Dict, List
-from urllib.parse import urlparse
+from typing import Optional, Dict, List, Tuple, Type
+from urllib.parse import urlparse, ParseResult
 
 import cv2
 
@@ -69,21 +70,35 @@ class VideoManager:
         spincam_cls = _get_spincam_cls()
         return spincam_cls.create(serial_number, name)
 
+    @staticmethod
+    def get_cam_class(cam_kind: CameraKind) -> Type[CameraBase]:
+        if cam_kind == CameraKind.Spinnaker:
+            return _get_spincam_cls()
+        cam_cls = {
+            CameraKind.Random: RandomCam,
+            CameraKind.OpenCV: OpenCVCam,
+            CameraKind.Playback: PlaybackCam,
+        }.get(cam_kind, None)
+        if cam_cls is None:
+            raise ValueError(f"Unhandled camera kind: {cam_kind!r}")
+        return cam_cls
+
     @classmethod
-    def parse_params(cls, camera_url: str) -> Dict[str, str]:
-        parameters = dict()
+    def parse_params(cls, camera_url: str) -> Tuple[ParseResult, Dict[str, str]]:
         parsed = urlparse(camera_url)
+        kind = CameraKind(parsed.scheme)
+        cam_cls = cls.get_cam_class(kind)
+        parameters = copy.deepcopy(cam_cls.default_params)
         params = parsed.query.split("&")
         for param in params:
             values = param.split("=")
             if len(values) == 2:
                 parameters[values[0].lower()] = values[1]
-        return parameters
+        return parsed, parameters
 
     @classmethod
     def create_camera(cls, camera_url: str, name: str = "") -> Optional[CameraBase]:
-        parsed = urlparse(camera_url)
-
+        parsed, parameters = cls.parse_params(camera_url)
         if parsed.scheme == CameraKind.Random:
             camera = RandomCam(name)
         elif parsed.scheme == CameraKind.Spinnaker:
@@ -100,13 +115,11 @@ class VideoManager:
             logger.error("Cannot create %s-cam ; is library installed ?", parsed.scheme)
             return None
 
+        # set cam params before init:
+        for name, value in parameters.items():
+            camera.set_property(name, value)
+
+        # init cam after set of properties here before:
         camera.init()
-
-        params = parsed.query.split("&")
-
-        for param in params:
-            values = param.split("=")
-            if len(values) == 2:
-                camera.set_property(values[0], values[1])
 
         return camera

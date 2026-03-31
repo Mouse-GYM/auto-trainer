@@ -1,4 +1,6 @@
+import ast
 import atexit
+import dataclasses
 import logging
 from enum import IntEnum
 from typing import Tuple, List, Dict, Optional, Type
@@ -12,6 +14,9 @@ from .camera_base import CameraBase
 
 
 logger = get_verbose_logger(__name__)
+
+def is_truthy_str_value(value: str):
+    return value.lower() in {"true", "yes", "on", "1"}
 
 
 sSystem = None
@@ -47,9 +52,25 @@ class AcquisitionMode(IntEnum):
     MultiFrame = 2
 
 
+@dataclasses.dataclass
+class SpinCamDefaultParams:
+    exposure: float = 140
+    fps: int = 150
+    hbin: int = 4
+    vbin: int = 4
+    width: int = 256
+    height: int = 256
+    offsetx: int = 52
+    offsety: int = 6
+    gain: float = 1
+    gamma: float = 0.7
+
+
 class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
+
+    default_params = dataclasses.asdict(SpinCamDefaultParams())
 
     @classmethod
     def list(cls) -> List[str]:
@@ -82,20 +103,27 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        self._width = 1440
-        self._height = 1080
+        def get_def(k):
+            v = self.default_params.get(k)
+            if v is None:
+                logger.verbose("No default for param %r", k)
+            return v
 
-        self._fps = 150
-        self._horizontal_binning = 1
-        self._vertical_binning = 1
-        self._exposure = 5000
-        self._offset_x = 0
-        self._offset_y = 0
+        self._exposure = get_def("exposure")
+        self._fps = get_def("fps")
+        self._horizontal_binning = get_def("hbin")
+        self._vertical_binning = get_def("vbin")
+        self._width = get_def("width")
+        self._height = get_def("height")
+        self._offset_x = get_def("offsetx")
+        self._offset_y = get_def("offsety")
+
+        self._gain: Optional[float] = get_def("gain")
+        self._gamma: Optional[float] = get_def("gamma")
 
         self._is_primary = False
         self._is_secondary = True
 
-        self._pause_log = False
         self._acquisition_started = False
         self._skip_duplicate_frame_copy = False
 
@@ -120,11 +148,7 @@ class SpinCam(CameraBase):
 
     @fps.setter
     def fps(self, value: float) -> None:
-        self._camera.AcquisitionFrameRateEnable.SetValue(True)
-        self._camera.AcquisitionFrameRate.SetValue(value)
         self._fps = value
-        if not self._pause_log:
-            logger.debug(f"<{self._name}> fps: {self._fps}")
 
     @property
     def width(self):
@@ -132,7 +156,7 @@ class SpinCam(CameraBase):
 
     @width.setter
     def width(self, value):
-        self._width = self._set_bounded_int_property_node(self._camera.Width, value)
+        self._width = value
 
     @property
     def height(self):
@@ -140,7 +164,7 @@ class SpinCam(CameraBase):
 
     @height.setter
     def height(self, value):
-        self._height = self._set_bounded_int_property_node(self._camera.Height, value)
+        self._height = value
 
     @property
     def offset_x(self):
@@ -148,7 +172,7 @@ class SpinCam(CameraBase):
 
     @offset_x.setter
     def offset_x(self, value):
-        self._offset_x = self._set_bounded_int_property_node(self._camera.OffsetX, value)
+        self._offset_x = value
 
     @property
     def offset_y(self):
@@ -156,7 +180,7 @@ class SpinCam(CameraBase):
 
     @offset_y.setter
     def offset_y(self, value):
-        self._offset_y = self._set_bounded_int_property_node(self._camera.OffsetY, value)
+        self._offset_y = value
 
     @property
     def horizontal_binning(self) -> int:
@@ -164,7 +188,7 @@ class SpinCam(CameraBase):
 
     @horizontal_binning.setter
     def horizontal_binning(self, value: int) -> None:
-        self._horizontal_binning = self._set_bounded_int_property_node(self._camera.BinningHorizontal, value)
+        self._horizontal_binning = value
 
     @property
     def vertical_binning(self) -> int:
@@ -172,7 +196,7 @@ class SpinCam(CameraBase):
 
     @vertical_binning.setter
     def vertical_binning(self, value: int) -> None:
-        self._vertical_binning = self._set_bounded_int_property_node(self._camera.BinningVertical, value)
+        self._vertical_binning = value
 
     @property
     def exposure(self) -> int:
@@ -180,7 +204,16 @@ class SpinCam(CameraBase):
 
     @exposure.setter
     def exposure(self, value: int) -> None:
-        self._exposure = self._set_bounded_int_property_node(self._camera.ExposureTime, value)
+        self._exposure = value
+
+    def _reinit_cam(self):
+        spincam = self._camera
+        logger.notice("doing cam reset with begin+end acquisition")
+        # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
+        spincam.BeginAcquisition()
+        spincam.EndAcquisition()
+        spincam.DeInit()
+        spincam.Init()
 
     def init(self):
         spincam = self._camera
@@ -191,11 +224,7 @@ class SpinCam(CameraBase):
         self._node_map = spincam.GetNodeMap()
 
         if spincam.Width.GetAccessMode() != PySpin.RW:
-            # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
-            spincam.BeginAcquisition()
-            spincam.EndAcquisition()
-            spincam.DeInit()
-            spincam.Init()
+            self._reinit_cam()
 
         node_acquisition_mode = PySpin.CEnumerationPtr(self._node_map.GetNode('AcquisitionMode'))
 
@@ -227,20 +256,37 @@ class SpinCam(CameraBase):
             handling_mode_entry = handling_mode.GetEntryByName("OldestFirst")
             handling_mode.SetIntValue(handling_mode_entry.GetValue())
 
-        self._pause_log = True
+        self._apply_settings()
 
-        # Set to class defaults.  Camera URL may override later.
-        self.offset_x = self._offset_x
-        self.offset_y = self._offset_y
-        self.horizontal_binning = self._horizontal_binning
-        self.vertical_binning = self._vertical_binning
-        self.exposure = self._exposure
-        self.fps = self._fps
+    def _apply_settings(self):
+        # exposure first:
+        self._set_bounded_int_property_node(self._camera.ExposureTime, self._exposure)
+        # then FPS:
+        self._camera.AcquisitionFrameRateEnable.SetValue(True)
+        self._camera.AcquisitionFrameRate.SetValue(self._fps)
 
-        self.width = self.width
-        self.height = self.height
+        # binning first
+        self._set_bounded_int_property_node(self._camera.BinningHorizontal, self._horizontal_binning)
+        self._set_bounded_int_property_node(self._camera.BinningVertical, self._vertical_binning)
 
-        self._pause_log = False
+        # then size:
+        self._set_bounded_int_property_node(self._camera.Width, self._width)
+        self._set_bounded_int_property_node(self._camera.Height, self._height)
+
+        # then offset:
+        # self.offset_x = self._offset_x
+        self._set_bounded_int_property_node(self._camera.OffsetX, self._offset_x)
+        self._set_bounded_int_property_node(self._camera.OffsetY, self._offset_y)
+
+        if self._gain is not None:
+            self._set_bounded_float_property_node(self._camera.Gain, self._gain)
+
+        gamma = self._gamma
+        if gamma is not None:
+            self._set_bounded_bool_property_node(self._camera.GammaEnable, True)
+            self._set_bounded_float_property_node(self._camera.Gamma, gamma)
+        else:
+            self._set_bounded_bool_property_node(self._camera.GammaEnable, False)
 
     def prepare_capture(self):
         super().prepare_capture()
@@ -338,14 +384,14 @@ class SpinCam(CameraBase):
 
     def set_property(self, name: str, value: str) -> bool:
         if name == "primary":
-            self._is_primary = value.lower() in {"true", "yes", "on", "1"}
+            self._is_primary = is_truthy_str_value(value)
             self._is_secondary = not self._is_primary
         elif name == "secondary":
-            self._is_secondary = value.lower() in {"true", "yes", "on", "1"}
+            self._is_secondary = is_truthy_str_value(value)
             self._is_primary = not self._is_secondary
-        elif name == "offsetx":
+        elif name in {"offsetx", "offset_x"}:
             self.offset_x = int(value)
-        elif name == "offsety":
+        elif name in {"offsety", "offset_y"}:
             self.offset_y = int(value)
         elif name == "hbin":
             self.horizontal_binning = int(value)
@@ -354,12 +400,11 @@ class SpinCam(CameraBase):
         elif name == "exposure":
             self.exposure = int(value)
         elif name == "gain":
-            self._set_bounded_float_property_node(self._camera.Gain, float(value))
+            self._gain = ast.literal_eval(value)  # allows None or float (or actually any literal)
         elif name == "gamma":
-            self._set_bounded_bool_property_node(self._camera.GammaEnable, True)
-            self._set_bounded_float_property_node(self._camera.Gamma, float(value))
+            self._gamma = ast.literal_eval(value)  # allows None or float (or actually any literal)
         elif name == "skip_duplicate_frame_copy":
-            self._skip_duplicate_frame_copy = value.lower() in {"true", "yes", "on", "1"}
+            self._skip_duplicate_frame_copy = is_truthy_str_value(value)
         else:
             return super().set_property(name, value)
 
@@ -388,47 +433,56 @@ class SpinCam(CameraBase):
         self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
     def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
-        return int(self._set_bounded_float_property_node(prop_node, value))
+        return int(self._set_bounded_property(prop_node, value))
 
     def _set_bounded_float_property_node(self, prop_node, value: float) -> float:
-        set_value = value
+        return float(self._set_bounded_property(prop_node, value))
 
+    def _set_bounded_property(self, prop_node, value):
+        name = prop_node.GetDisplayName()
+        if value is None:
+            logger.warning("%s: received None value for _set_bounded_float_property_node", name)
+            return 0
+        set_value = value
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 max_width = prop_node.GetMax()
-                set_value = min(max_width, value)
-                prop_node.SetValue(value)
+                if max_width is None:
+                    set_value = value
+                    logger.debug("%s: has no Max value", name)
+                else:
+                    set_value = min(max_width, value)
+                prop_node.SetValue(set_value)
                 set_value = prop_node.GetValue()
-                if not self._pause_log:
-                    logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+                logger.debug("%s: applied %s requested=%s (max=%s)", name, set_value, value, max_width)
             elif prop_node.GetAccessMode() == PySpin.RO:
                 set_value = prop_node.GetValue()
-                logger.warning(
-                    f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+                logger.error("%s GenApi is not writeable - current value is %s", name, set_value)
             else:
-                logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
-        except Exception as ex:
-            logger.error(f"<{self._name}> {prop_node.GetDisplayName()} Exception during set {ex}")
+                logger.error("%s GenApi is not readable or writeable", name)
+        except Exception as err:
+            logger.error("%s: Exception during set: %s", name, err)
+            raise
 
         return set_value
 
     def _set_bounded_bool_property_node(self, prop_node, value: bool) -> bool:
         set_value = value
-
+        name = prop_node.GetDisplayName()
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 prop_node.SetValue(value)
                 set_value = prop_node.GetValue()
-                if not self._pause_log:
-                    logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+                logger.debug("%s: set to %s ; requested %s", name, set_value, value)
             elif prop_node.GetAccessMode() == PySpin.RO:
                 set_value = prop_node.GetValue()
                 logger.warning(
-                    f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+                    "%s: GenApi is not writeable - current value is %s", name, set_value)
             else:
-                logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
-        except Exception as ex:
-            logger.error(f"<{self._name}> {prop_node.GetDisplayName()} Exception during set {ex}")
+                logger.warning("%s: GenApi is not readable or writeable", name)
+                set_value = None
+        except Exception as err:
+            logger.error("%s: Exception during set: %s", err)
 
         return set_value
 

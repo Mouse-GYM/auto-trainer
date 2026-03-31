@@ -43,6 +43,10 @@ class _EmergencyAlarmConfiguration:
     use_system_maintenance: bool = True
     auto_resume_on_system_maintenance: bool = True
 
+    # 7th
+    use_system_fault: bool = True
+    auto_resume_on_system_fault: bool = True
+
 
 @dataclasses.dataclass
 class EmergencyAlarmConfiguration(_EmergencyAlarmConfiguration):

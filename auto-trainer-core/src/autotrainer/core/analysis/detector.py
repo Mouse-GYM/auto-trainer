@@ -125,9 +125,9 @@ class BaseDetector(ObservableObject):
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
-        delay = None
         self._logger.info("%s running", self.__class__.__name__)
         while True:
+            delay = self.check_state()  # always check immediately
             if delay is None:
                 delay = self.default_timer_delay
                 if delay is None:
@@ -148,7 +148,6 @@ class BaseDetector(ObservableObject):
                 # we only support None exit sentinel
                 assert r is None
                 break
-            delay = self.check_state()
         self._logger.verbose("%s: exiting main loop", self.__class__.__name__)
 
     def _stop(self):

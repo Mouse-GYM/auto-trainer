@@ -268,9 +268,10 @@ class AppModel(ObservableObject):
         ]
 
         self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
-        # so: using a multiprocess queue instead, would allow to put the CAN connection thread into a dedicated process,
-        # also giving more space/freedom for the main/UI process python GIL acquire/release.
-        sensor_analysis = self._analysis = SensorAnalysis(topcam_presence=self._top_camera_presence_detection) if sensor_analysis is None else sensor_analysis
+
+        sensor_analysis = self._analysis = SensorAnalysis(
+            topcam_presence=self._top_camera_presence_detection
+        ) if sensor_analysis is None else sensor_analysis
         #
         self._system_message_handler = SystemMessageHandler(self._system_message_queue,
                                                             sensor_analysis=sensor_analysis) if system_message_handler is None else system_message_handler
@@ -1247,9 +1248,12 @@ class AppModel(ObservableObject):
         # and:
         self._load_animals()
 
-        self.configuration_loaded_event(configuration)
+        self._analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
+
         dev_ack_timeout = configuration.hardware.min_ack_timeout
         self._hardware.set_device_ack_timeout(dev_ack_timeout)
+
+        self.configuration_loaded_event(configuration)
 
         return True
 
