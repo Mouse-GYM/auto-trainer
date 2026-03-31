@@ -433,18 +433,18 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
     def save_configuration(self) -> CameraConfiguration:
         parsed, params = VideoManager.parse_params(self._camera_source.url)
         params: Dict[str, Any]
-        for key in params:
+        for key, value in params.items():
             try:
-                val = float(params[key])
+                val = float(value)
                 if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
                     val = int(val)
-                params[key] = val
+                value = val
             except (ValueError, TypeError):
-                if str(params[key]).lower() == "true":
-                    params[key] = True
-                elif str(params[key]).lower() == "false":
-                    params[key] = False
-
+                if str(value).lower() == "true":
+                    value = True
+                elif str(value).lower() == "false":
+                    value = False
+            params[key] = value
         # undo the %-encode which happened in self.load_configuration():
         path = urllib.parse.unquote(parsed.path)[1:]  # [1:] for strip of first leading "/"
 

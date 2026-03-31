@@ -1,5 +1,6 @@
 import ast
 import atexit
+import dataclasses
 import logging
 from enum import IntEnum
 from typing import Tuple, List, Dict, Optional, Type
@@ -51,23 +52,25 @@ class AcquisitionMode(IntEnum):
     MultiFrame = 2
 
 
+@dataclasses.dataclass
+class SpinCamDefault:
+    exposure = 140
+    fps = 150
+    hbin = 4
+    vbin = 4
+    width = 256
+    height = 256
+    offsetx = 52
+    offsety = 6
+    gain = 1
+    gamma = 0.7
+
+
 class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
 
-    default_params = dict(
-        # NB: as they are defined in config file
-        exposure = 140,
-        fps = 150,
-        hbin = 4,
-        vbin = 4,
-        width = 256,
-        height = 256,
-        offsetx = 52,
-        offsety = 6,
-        gain = 1,
-        gamma = 0.7,
-    )
+    default_params = dataclasses.asdict(SpinCamDefault())
 
     @classmethod
     def list(cls) -> List[str]:
@@ -446,19 +449,21 @@ class SpinCam(CameraBase):
 
     def _set_bounded_bool_property_node(self, prop_node, value: bool) -> bool:
         set_value = value
+        name = prop_node.GetDisplayName()
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 prop_node.SetValue(value)
                 set_value = prop_node.GetValue()
-                logger.debug(f"<{self._name}> {prop_node.GetDisplayName()} set to {set_value}")
+                logger.debug("%s: set to %s ; requested %s", name, set_value, value)
             elif prop_node.GetAccessMode() == PySpin.RO:
                 set_value = prop_node.GetValue()
                 logger.warning(
-                    f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not writeable - current value is {set_value}")
+                    "%s: GenApi is not writeable - current value is %s", name, set_value)
             else:
-                logger.warning(f"<{self._name}> {prop_node.GetDisplayName()} GenApi is not readable or writeable")
-        except Exception as ex:
-            logger.error(f"<{self._name}> {prop_node.GetDisplayName()} Exception during set {ex}")
+                logger.warning("%s: GenApi is not readable or writeable", name)
+                set_value = None
+        except Exception as err:
+            logger.error("%s: Exception during set: %s", err)
 
         return set_value
 

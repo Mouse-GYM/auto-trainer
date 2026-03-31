@@ -19,7 +19,9 @@ class OpenCVCam(CameraBase):
         self._mjpeg = None
 
     def init(self):
-        self._video_capture = cv2.VideoCapture(self._device_idx)
+        vc = self._video_capture = cv2.VideoCapture()
+        if not vc.open(self._device_idx) and vc.isOpened():
+            raise RuntimeError(f"Could not connect to video capture device {self._device_idx}")
         self._apply_settings()
         # re-read:
         self._refresh_height_width()

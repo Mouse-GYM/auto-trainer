@@ -1,7 +1,7 @@
 import copy
 import sys
 from enum import Enum
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Type
 from urllib.parse import urlparse, ParseResult
 
 import cv2
@@ -70,16 +70,25 @@ class VideoManager:
         spincam_cls = _get_spincam_cls()
         return spincam_cls.create(serial_number, name)
 
-    @classmethod
-    def parse_params(cls, camera_url: str) -> Tuple[
-        ParseResult, Dict[str, str]
-    ]:
-        parameters = dict()
-        parsed = urlparse(camera_url)
-        if parsed.scheme == "spinnaker":
-            spincam_cls = _get_spincam_cls()
-            parameters.update(copy.deepcopy(spincam_cls.default_params))
+    @staticmethod
+    def get_cam_class(cam_kind: CameraKind) -> Type[CameraBase]:
+        if cam_kind == CameraKind.Spinnaker:
+            return _get_spincam_cls()
+        cam_cls = {
+            CameraKind.Random: RandomCam,
+            CameraKind.OpenCV: OpenCVCam,
+            CameraKind.Playback: PlaybackCam,
+        }.get(cam_kind, None)
+        if cam_cls is None:
+            raise ValueError(f"Unhandled camera kind: {cam_kind!r}")
+        return cam_cls
 
+    @classmethod
+    def parse_params(cls, camera_url: str) -> Tuple[ParseResult, Dict[str, str]]:
+        parsed = urlparse(camera_url)
+        kind = CameraKind(parsed.scheme)
+        cam_cls = cls.get_cam_class(kind)
+        parameters = copy.deepcopy(cam_cls.default_params)
         params = parsed.query.split("&")
         for param in params:
             values = param.split("=")

@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import time
 from typing import Tuple, Optional, ClassVar, Dict, Any
@@ -7,15 +8,26 @@ import numpy
 logger = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass
+class CameraBaseDefault:
+    width = 300
+    height = 200
+    fps = 30
+
+
 class CameraBase:
 
-    default_params: ClassVar[Dict[str, Any]] = {}
+    default_params: ClassVar[Dict[str, Any]] = dataclasses.asdict(CameraBaseDefault())
+    # possible default "params" for camera class,
+    # must use same keys than in config file.
+    # Is used to pre-set/applied on the camera instance, once it's created,
+    # but before any eventual custom params from config file, that can so override them.
 
     def __init__(self, name: str = "camera"):
         self._name = name
-        self._width = 300
-        self._height = 200
-        self._fps = 30
+        self._width = 0
+        self._height = 0
+        self._fps = 0
         self._is_primary = False
         self._frame_count = 0
         self._capture_start = 0
@@ -66,14 +78,11 @@ class CameraBase:
         This method will be called after any property changes from the camera url params have been applied.
         """
 
-        pass
-
     def prepare_capture(self) -> None:
         """ Should be called once before capturing frames.
 
         Subclasses must call this method when overriding to reset frame count.
         """
-
         self._last_when = 0
         self._frame_count = 0
 
