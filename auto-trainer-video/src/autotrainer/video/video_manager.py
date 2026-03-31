@@ -116,14 +116,8 @@ class VideoManager:
             return None
 
         # set cam params before init:
-        params = parsed.query.split("&")
-        for param in params:
-            values = param.split("=")
-            if len(values) == 2:
-                p_name, p_value = values
-                camera.set_property(p_name, p_value)
-            else:
-                logger.verbose("Skipping param without '=': %s", param)
+        for name, value in parameters.items():
+            camera.set_property(name, value)
 
         # init cam after set of properties here before:
         camera.init()
