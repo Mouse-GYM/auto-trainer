@@ -54,16 +54,16 @@ class AcquisitionMode(IntEnum):
 
 @dataclasses.dataclass
 class SpinCamDefault:
-    exposure = 140
-    fps = 150
-    hbin = 4
-    vbin = 4
-    width = 256
-    height = 256
-    offsetx = 52
-    offsety = 6
-    gain = 1
-    gamma = 0.7
+    exposure: float = 140
+    fps: int = 150
+    hbin: int = 4
+    vbin: int = 4
+    width: int = 256
+    height: int = 256
+    offsetx: int = 52
+    offsety: int = 6
+    gain: float = 1
+    gamma: float = 0.7
 
 
 class SpinCam(CameraBase):
@@ -103,7 +103,11 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        get_def = self.default_params.get
+        def get_def(k):
+            v = self.default_params.get(k)
+            if v is None:
+                logger.verbose("No default for param %r", k)
+            return v
 
         self._exposure = get_def("exposure")
         self._fps = get_def("fps")
@@ -425,16 +429,26 @@ class SpinCam(CameraBase):
         self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
     def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
-        return int(self._set_bounded_float_property_node(prop_node, value))
+        return int(self._set_bounded_property(prop_node, value))
 
     def _set_bounded_float_property_node(self, prop_node, value: float) -> float:
-        set_value = value
+        return float(self._set_bounded_property(prop_node, value))
+
+    def _set_bounded_property(self, prop_node, value):
         name = prop_node.GetDisplayName()
+        if value is None:
+            logger.warning("%s: received None value for _set_bounded_float_property_node", name)
+            return 0
+        set_value = value
         try:
             if prop_node.GetAccessMode() == PySpin.RW:
                 max_width = prop_node.GetMax()
-                set_value = min(max_width, value)
-                prop_node.SetValue(value)
+                if max_width is None:
+                    set_value = value
+                    logger.debug("%s: has no Max value", name)
+                else:
+                    set_value = min(max_width, value)
+                prop_node.SetValue(set_value)
                 set_value = prop_node.GetValue()
                 logger.debug("%s: applied %s requested=%s (max=%s)", name, set_value, value, max_width)
             elif prop_node.GetAccessMode() == PySpin.RO:
@@ -443,7 +457,8 @@ class SpinCam(CameraBase):
             else:
                 logger.error("%s GenApi is not readable or writeable", name)
         except Exception as err:
-            logger.exception("%s: Exception during set: %s", name, err)
+            logger.error("%s: Exception during set: %s", name, err)
+            raise
 
         return set_value
 
