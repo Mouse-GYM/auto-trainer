@@ -5,8 +5,9 @@ import time
 from typing import Dict, Tuple, Optional, Union
 
 from autotrainer.api import ApiEventKind
-from autotrainer.core import ObservableObject, get_perf_now, EventManager
+from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.event import post_api_detector_event_content
+from autotrainer.core.event.event_manager import EventManager
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 

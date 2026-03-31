@@ -15,9 +15,11 @@ from autotrainer.core.logging import get_verbose_logger
 
 from .detector import BaseDetector
 
-from .. import get_perf_now, EventManager
-from ..configuration.load_cell_config import LoadCellConfiguration
-from ..multiproc import make_daemon_timer, no_op_timer
+from autotrainer.core import get_perf_now
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
+from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
+from autotrainer.core.event.event_manager import EventManager
+
 
 logger = get_verbose_logger(__name__)
 
