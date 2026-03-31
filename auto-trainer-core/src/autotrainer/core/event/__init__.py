@@ -4,13 +4,11 @@ from typing import Optional
 from autotrainer.api.api_event_kind import ApiEventKind
 from autotrainer.api import create_default_api_options
 
-from autotrainer.core.event.api_event_plugin import ApiEventPlugin
+from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.event.api_event_plugin import ApiEventPlugin
 
-from .event_info import EventInfo
 from .event_manager import EventManager
-from .event_manager_plugin import EventManagerPlugin
-from ..logging import get_verbose_logger
+
 
 logger = get_verbose_logger(__name__)
 
@@ -18,6 +16,7 @@ logger = get_verbose_logger(__name__)
 __all__ = [
     "ApiEventKind",
     "try_register_api_event_plugin",
+    "post_api_detector_event_content",
 ]
 
 
