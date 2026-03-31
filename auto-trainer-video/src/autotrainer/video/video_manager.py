@@ -98,7 +98,7 @@ class VideoManager:
 
     @classmethod
     def create_camera(cls, camera_url: str, name: str = "") -> Optional[CameraBase]:
-        parsed = urlparse(camera_url)
+        parsed, parameters = cls.parse_params(camera_url)
         if parsed.scheme == CameraKind.Random:
             camera = RandomCam(name)
         elif parsed.scheme == CameraKind.Spinnaker:

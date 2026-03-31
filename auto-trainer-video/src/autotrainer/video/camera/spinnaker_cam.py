@@ -206,6 +206,15 @@ class SpinCam(CameraBase):
     def exposure(self, value: int) -> None:
         self._exposure = value
 
+    def _reinit_cam(self):
+        spincam = self._camera
+        logger.notice("doing cam reset with begin+end acquisition")
+        # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
+        spincam.BeginAcquisition()
+        spincam.EndAcquisition()
+        spincam.DeInit()
+        spincam.Init()
+
     def init(self):
         spincam = self._camera
         spincam.Init()
@@ -215,12 +224,7 @@ class SpinCam(CameraBase):
         self._node_map = spincam.GetNodeMap()
 
         if spincam.Width.GetAccessMode() != PySpin.RW:
-            logger.notice("doing cam reset with begin+end acquisition")
-            # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
-            spincam.BeginAcquisition()
-            spincam.EndAcquisition()
-            spincam.DeInit()
-            spincam.Init()
+            self._reinit_cam()
 
         node_acquisition_mode = PySpin.CEnumerationPtr(self._node_map.GetNode('AcquisitionMode'))
 
