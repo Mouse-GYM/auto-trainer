@@ -206,7 +206,7 @@ class SystemMachine(StateMachine):
     @project.setter
     def project(self, value: ProjectInfo):
         self._project_info = value
-        EventManager.default().project = value
+        self._event_manager.project = value
         self._algorithm.project = value
         self._intersession.project = value
 
@@ -218,7 +218,7 @@ class SystemMachine(StateMachine):
         if self._state == SystemState.cage:
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
-        EventManager.default().post_event_content(BehaviorEventKind.tunnelEnter)
+        self._event_manager.post_event_content(BehaviorEventKind.tunnelEnter)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
@@ -231,7 +231,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
         self._disengage_auto_clamp()
-        EventManager.default().post_event_content(BehaviorEventKind.tunnelExit)
+        self._event_manager.post_event_content(BehaviorEventKind.tunnelExit)
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
@@ -502,25 +502,25 @@ class SystemMachine(StateMachine):
         # if self._state == SystemState.intersession:
         #     logger.info("ignoring headbar pressure property changed while intersession")
         #     # TODO new need event kind
-        #     # EventManager.default().post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
+        #     # self._event_manager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
         #     # but don't we want this in evaluate_auto_clamp() itself ?
         #     return
 
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
-            EventManager.default().post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
             if value:
                 self._evaluate_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_monitor_property_changed(self, name: str, value, _):
         if self._state == SystemState.intersession:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
+            self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
                                                       context=value)
             # return
             # allow following code still, we want it always. it's checking state furthermore.
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
+            self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
                 self._consider_enter_tunnel(reason="load_cell_engaged_when_in_cage")
@@ -537,7 +537,7 @@ class SystemMachine(StateMachine):
                         self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
                         # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
-                    EventManager.default().post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
+                    self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
                                                               context=self._state)
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -595,7 +595,7 @@ class SystemMachine(StateMachine):
     def _on_load_cell_tare_requested(self):
         if not self._analysis.load_cell_monitor.is_engaged:
             self._tunnel_device.tare_load_cell()
-            EventManager.default().post_event_content(BehaviorEventKind.headfixAutoTare)
+            self._event_manager.post_event_content(BehaviorEventKind.headfixAutoTare)
         return False
 
     def _evaluate_home_on_excessive_drift(self):
@@ -1088,7 +1088,7 @@ class SystemMachine(StateMachine):
                 token = meth(val, absolute=False, sender="processed_shift_xyz")
                 if token is None:
                     logger.error("Could not apply %s ; command not successfully sent", kind)
-                EventManager.default().post_event_content(kind, context=val)
+                self._event_manager.post_event_content(kind, context=val)
             else:
                 logger.debug("%s == 0 ; skip", kind)
 

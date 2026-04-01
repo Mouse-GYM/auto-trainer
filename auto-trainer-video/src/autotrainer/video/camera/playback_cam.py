@@ -28,9 +28,9 @@ class PlaybackCam(CameraBase):
         self.fps = vc.get(cv2.CAP_PROP_FPS)
         if self.fps == 0:
             self.fps = 30
-        self.width = vc.get(cv2.CAP_PROP_FRAME_WIDTH)
-        self.height = vc.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        self._video_frame_count = vc.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.width = int(vc.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(vc.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self._video_frame_count = int(vc.get(cv2.CAP_PROP_FRAME_COUNT))
         logger.notice("init with fps=%s W=%s H=%s", self.fps, self.width, self.height)
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
