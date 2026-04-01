@@ -92,11 +92,10 @@ class DeviceConnection(DeviceConnectionProtocol):
         #  way - see TODOs in request_(dis)connect.
         thread = self._current_thread
         if thread is not None:
-            assert isinstance(thread, Thread)
-            logger.debug("joinging %s", thread)
+            logger.debug("joining %s", thread)
             thread.join(3)
             if thread.is_alive():
-                logger.warning("thread %s still alive", thread)
+                logger.warning("thread %s still alive, but continuing", thread)
             self._current_thread = None
 
     def request_connect(self):
