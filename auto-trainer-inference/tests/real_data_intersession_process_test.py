@@ -105,6 +105,11 @@ def test_index_error(project_info, caplog):
 agx001_20251015_15_expected_result = IntersessionResponse(
     rh_max_vp_list=[Offset3DTuple(-1.6103162548648218, -2.4711684859384793, 1.2448511625494527)],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
+    reach_events=[{'delay_since_presented': 0.6933333333333334,
+                  'end': 164,
+                  'init': 104,
+                  'max': 147,
+                  'outcome': 'dropped'}]
 )
 
 
@@ -137,6 +142,11 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
 agx001_20260205_11_expected_result = IntersessionResponse(
     rh_max_vp_list=[Offset3DTuple(-0.4815189074758326, -5.378078246747098, -0.350716635920838)],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
+    reach_events=[{'delay_since_presented': 0.0,
+                  'end': 33,
+                  'init': 0,
+                  'max': 17,
+                  'outcome': 'dropped'}]
 )
 
 
