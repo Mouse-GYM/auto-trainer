@@ -289,13 +289,13 @@ def segment_reaches_f2(
     if len(pellet_events) == 0:
         print(f"Pellet never found for {vid_name_base}")
 
-    for p, pellet_event in enumerate(pellet_events):
+    for pellet_event in pellet_events:
         if pellet_event['lost'] >= 0:
             end_search = pellet_event['lost'] + position_window
             if end_search >= frm_ct:
-                end_search = frm_ct-1
-            # print(np.round((Z_dist_p[pellet_events[p]['placed']:end_search])))
-            # print(pellet_events[p]['placed'],end_search)
+                end_search = frm_ct - 1
+            # print(np.round((Z_dist_p[pellet_event['placed']:end_search])))
+            # print(pellet_event['placed'],end_search)
             if np.nanmin(Z_dist_p[pellet_event['placed']:end_search]) <= pellet_drop_dist:
                 if debug >= 2:
                     print(f'DROP: Z dist at {get_ln()}')
