@@ -140,12 +140,12 @@ def _disable_timers():
 
 
 @pytest.fixture
-def tunnel_device():
+def tunnel_device() -> TunnelDeviceProtocol:
     return mock.create_autospec(TunnelDeviceProtocol)
 
 
 @pytest.fixture
-def pellet_device():
+def pellet_device() -> PelletDeviceProtocol:
     return mock.create_autospec(PelletDeviceProtocol)
 
 
@@ -168,7 +168,7 @@ class VoidInference(InferenceProtocol):
 
 
 @pytest.fixture
-def inference():
+def inference() -> VoidInference:
     inference = VoidInference()
     inference.status = InferenceStatus.live
     yield inference
@@ -193,7 +193,7 @@ def system_msg_queue():
 
 
 @pytest.fixture
-def sensor_analysis(mock_get_perf_now):
+def sensor_analysis(mock_get_perf_now) -> SensorAnalysis:
     s = SensorAnalysis()
     try:
         yield s
@@ -251,7 +251,7 @@ def fake_system_msg_handler(fake_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch, mock_get_perf_now) -> SystemMachine:
+def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch, mock_get_perf_now, fake_system_msg_handler) -> SystemMachine:
     # Disable algo handler thread
     assert BehaviorAlgorithm._no_handler_thread is False
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
@@ -266,6 +266,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
         analysis=sensor_analysis,
         inference=inference,
         project_info=project_info,
+        msg_handler=fake_system_msg_handler,
     )
     algo = machine.algorithm
     # most tests rely on:
@@ -285,7 +286,6 @@ class MockSystemMachine:
     """Allow make test case on a fully prepared 'SystemMachine' instance, with many helper methods included"""
 
     def _init(self, machine: SystemMachine):
-        self._ts_now = 0
         self._machine: SystemMachine = machine
         self._load_cell = machine._analysis.load_cell_monitor  # noqa
         # register state_changed (and system_state_changed for algo at end) transition recorder,

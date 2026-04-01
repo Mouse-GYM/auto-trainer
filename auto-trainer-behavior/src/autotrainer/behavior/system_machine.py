@@ -56,13 +56,14 @@ class SystemMachine(StateMachine):
     states = list(SystemState)
 
     def __init__(self,
+                 *,
+                 msg_handler: SystemMessageHandler,
+                 analysis: SensorAnalysis,
+                 tunnel_device: TunnelDeviceProtocol,
+                 pellet_device: PelletDeviceProtocol,
+                 inference: InferenceProtocol,
                  algorithm: Optional[BehaviorAlgorithm] = None,
                  project_info: Optional[ProjectInfo] = None,
-                 msg_handler: SystemMessageHandler = None,
-                 analysis: SensorAnalysis = None,
-                 tunnel_device: TunnelDeviceProtocol = None,
-                 pellet_device: PelletDeviceProtocol = None,
-                 inference: InferenceProtocol = None,
                  topcam_presence: Optional[PresenceDetectionAttrs] = None,
                  ):
 
