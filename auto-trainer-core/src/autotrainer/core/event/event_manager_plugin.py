@@ -16,7 +16,6 @@ class EventManagerPlugin(Protocol):
         Args:
              project: The new project info (or none).
         """
-        ...
 
     def set_enable(self, enable: bool) -> None:
         """
@@ -25,26 +24,22 @@ class EventManagerPlugin(Protocol):
         Args:
             enable: True if the event manager is enabled, false otherwise.
         """
-        ...
 
-    def process_event(self, event_info: EventInfo, repeat_count: int) -> None:
+    def process_event(self, info: EventInfo, repeat_count: int) -> None:
         """
         Called when an event occurs.
 
         Args:
-            event_info: The event info.
+            info: The event info.
             repeat_count: Number of times this event has been repeated until a different event was received.
         """
-        ...
 
     def flush(self):
         """
         For event sinks that may buffer output, this should forcibly flush any pending output.
         """
-        ...
 
     def close(self) -> None:
         """
         Called when the event manager is closed.  Any pending output should be flushed, resources released, etc.
         """
-        ...
