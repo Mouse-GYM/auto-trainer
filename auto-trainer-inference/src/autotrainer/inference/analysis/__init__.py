@@ -1,6 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict, Any
 
 from autotrainer.core import Offset3DTuple
 
@@ -9,6 +9,8 @@ from autotrainer.core import Offset3DTuple
 class IntersessionResponse:
     # NB: all 3 x/y/z are relative values here:
     rh_max_vp_list: List[Offset3DTuple] = dataclasses.field(default_factory=list)
+
+    reach_events: List[Dict[str, Any]] = dataclasses.field(default_factory=dict)
 
     food_consumed: int = 0  # total pellets consumed during session/trial
     successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)

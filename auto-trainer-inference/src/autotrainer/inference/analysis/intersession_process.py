@@ -54,17 +54,16 @@ def intersession_process(
     df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     #
     results_dict = segment_reaches(
+        project_info=project,
         session=location,
         center_method=center_method,
         df_lr=df_lr,
         df_3d=centered_df_3d,
         debug=debug_level,
+        frame_rate=150,  # TODO: pass from video camera settings/parameters
     )
     logger.verbose("process intersession pose data complete %s", results_dict)
-    return IntersessionResponse(
-        rh_max_vp_list=results_dict['rh_max_vp_list'],
-        food_consumed=results_dict['pellets_consumed'],
-        successful_reaches=results_dict['successful_reaches'],
-        pellets_presented=results_dict['pellets_presented'],
-        total_reaches=results_dict['total_reaches'],
-    )
+    # rename:
+    results_dict["food_consumed"] = results_dict.pop("pellets_consumed")
+    # all others keys are same than IntersessionResponse fields
+    return IntersessionResponse(**results_dict)
