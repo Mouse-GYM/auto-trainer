@@ -372,14 +372,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def connect(self, cmd_queue: Queue):
         logger.notice("%s: connect with %s", self, cmd_queue)
 
-        self._last_motor_coordinates = \
-        self._last_requested_set_coordinates = \
-        self._motor_send_coordinates = _nans_offset3dTuple
-
         prev_device = self._device
         if prev_device is not None:
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
+
+        self._last_motor_coordinates = \
+        self._last_requested_set_coordinates = \
+        self._motor_send_coordinates = _nans_offset3dTuple
 
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
         # configured to generate messages as frequently as the real device.
