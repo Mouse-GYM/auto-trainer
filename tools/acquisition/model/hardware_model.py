@@ -10,6 +10,7 @@ from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device)
@@ -64,6 +65,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     ):
         super().__init__()
 
+        self._event_manager = EventManager.default()
         self._device_ack_timeout_delay: Optional[float] = None
         self._device: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
@@ -154,11 +156,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 iface = dev.device_interface
                 enabled = iface is not None and iface.is_open
         # could be in app_model or system_machine, in react property changed, but ok here too:
-        EventManager.default().post_event_content(ApiEventKind.detectorChanged, context={
-            "detector_id": ApiDetectorKind.deviceAckTimeOut,
-            "is_active": value,
-            "is_enabled": enabled,
-        })
+        post_api_detector_event_content(self._event_manager, ApiDetectorKind.deviceAckTimeOut, value, enabled)
 
     @property
     def send_x(self):

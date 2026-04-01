@@ -114,7 +114,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         super()._start()
         self._engaged_reasons.clear()
 
-    def post_alarm_event(self, detector_id, active, enabled):
+    def post_alarm_event(self, detector_id: int, active: bool, enabled: bool):
         self._event_manager.post_event_content(
             ApiEventKind.alarmChanged,
             context={
@@ -200,6 +200,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.DEVICE_COMM_ERROR_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.deviceCommunication, value, self._config.use_device_comm_error)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -212,6 +213,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.SYSTEM_MAINTENANCE_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.systemMaintenance, value, self._config.use_system_maintenance)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -224,6 +226,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.SYSTEM_FAULT_ENGAGED, value, prev)
+        self.post_alarm_event(ApiAlarmKind.systemFault, value, self._config.use_system_fault)
         self.check_state_if_not_detector_thread()
 
     #

@@ -5,6 +5,7 @@ import psutil
 from .detector import BaseDetector
 from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
+from ...api import ApiDetectorKind
 
 
 class SystemMaintenanceMonitor(BaseDetector):
@@ -45,6 +46,7 @@ class SystemMaintenanceMonitor(BaseDetector):
         prev, self._max_pellet_loaded_engaged = self._max_pellet_loaded_engaged, value
         self._on_property_changed(self.MAX_PELLET_LOADED_ENGAGED, value, prev)
         if value != prev:
+            self.post_detector_event(ApiDetectorKind.pelletRefillCountExceeded, value, self._config.use_max_pellet_loaded)
             self.check_state_if_not_detector_thread()
 
     @property
@@ -56,6 +58,8 @@ class SystemMaintenanceMonitor(BaseDetector):
         prev, self._max_consecutive_failed_load_engaged = self._max_consecutive_failed_load_engaged, value
         self._on_property_changed(self.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED, value, prev)
         if value != prev:
+            self.post_detector_event(ApiDetectorKind.consectivePelletLoadFailureExceeded, value,
+                                     self._config.use_max_consecutive_failed_load)
             self.check_state_if_not_detector_thread()
 
     def _check_state(self) -> Optional[float]:

@@ -48,6 +48,9 @@ class CameraBase:
 
     @width.setter
     def width(self, value: int) -> None:
+        if __debug__:
+            if not isinstance(value, int):
+                logger.warning("Received non-int type value for width: %s: %r", type(value), value)
         self._width = value
         logger.debug(f"<{self._name}> width: {self._width}")
 
@@ -57,6 +60,9 @@ class CameraBase:
 
     @height.setter
     def height(self, value: int) -> None:
+        if __debug__:
+            if not isinstance(value, int):
+                logger.warning("Received non-int type value for height: %s: %r", type(value), value)
         self._height = value
         logger.debug(f"<{self._name}> height: {self._height}")
 

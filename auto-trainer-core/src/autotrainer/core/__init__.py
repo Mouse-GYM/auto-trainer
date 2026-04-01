@@ -279,8 +279,6 @@ import autotrainer.core.diamond_triangle_config
 
 from .observable_object import ObservableObject, ObservableObjectProtocol
 
-from .event import ApiEventKind, EventManager, EventInfo, EventManagerPlugin
-
 from .frame_index import FrameIndexCategory
 
 from .fixed_array_multiqueue import FixedArrayMultiQueue
@@ -302,3 +300,8 @@ from .configuration import SystemConfiguration, BehaviorConfiguration, CameraCon
 from .message import MessageHandler, SystemMessageHandler
 from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
+
+from .event.api_event_kind import ApiEventKind
+from .event.event_info import EventInfo
+from .event.api_event_plugin import EventManagerPlugin
+from .event.event_manager import EventManager
