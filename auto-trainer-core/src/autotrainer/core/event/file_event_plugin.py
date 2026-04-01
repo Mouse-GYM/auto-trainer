@@ -36,15 +36,15 @@ class FileEventPlugin(EventManagerPlugin):
         if not self._write_active:
             logger.debug("write not active, skipping %s", info)
             return
+        file_timestamp = datetime.now()
+        needs_update = file_timestamp.hour != self._current_record_interval
+        if needs_update:
+            self._update_event_file()
         event_file = self._event_file
         if event_file is None:
             logger.verbose("event_file None, skipping %s", info)
             return
         output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}\n"
-        file_timestamp = datetime.now()
-        needs_update = file_timestamp.hour != self._current_record_interval
-        if needs_update:
-            self._update_event_file()
         event_file.write(output)
 
     def flush(self):
@@ -66,7 +66,6 @@ class FileEventPlugin(EventManagerPlugin):
         if self._project_info is not None:
             event_file_info = self._project_info.get_monitor_file(name="events", interval=ProjectInterval.HOUR,
                                                                   when=datetime.now())
-
             if event_file_info is None:
                 logger.error("unable to write to expected event file location")
                 return
