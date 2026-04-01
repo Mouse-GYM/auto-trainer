@@ -117,7 +117,8 @@ class PelletMachine(StateMachine):
             raise PelletDeviceCommandFailed
         self.post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
-    def _before_load_pellet(self):
+    def _before_load_pellet(self, *, use_any_cam: bool=False):
+        del use_any_cam  # only used for condition can_load_pellet
         logger.verbose("before_load_pellet")
         self._api_status_token = self._pellet_device.load_pellet()
         if self._api_status_token is None:
@@ -374,7 +375,7 @@ class PelletMachine(StateMachine):
             if self.can_load_pellet(use_any_cam=True):
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
-                self.load_pellet()
+                self.load_pellet(use_any_cam=True)
             else:
                 # current state is either retract or loading (loaded),
                 # even if pellet is not seen, send it to deliver,
@@ -476,10 +477,10 @@ class PelletMachine(StateMachine):
     def may_move_retract(self):
         """May move retract"""
 
-    def load_pellet(self):
+    def load_pellet(self, *, use_any_cam: bool=False):
         """Load pellet"""
 
-    def may_load_pellet(self):
+    def may_load_pellet(self, *, use_any_cam: bool=False):
         """May load pellet"""
 
     def force_load_pellet(self):
