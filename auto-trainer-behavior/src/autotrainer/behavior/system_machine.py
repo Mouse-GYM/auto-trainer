@@ -1056,6 +1056,8 @@ class SystemMachine(StateMachine):
         logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
         #
         algo = self._algorithm
+        algo.set_previous_intersession_analysis_rsp(prj, res)
+        #
         if res.food_consumed > 0:
             algo.increase_pellets_consumed(res.food_consumed)
         if res.successful_reaches > 0:

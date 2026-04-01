@@ -12,14 +12,14 @@ import time
 from datetime import datetime, date
 from functools import partial
 from pathlib import Path
-from typing import Optional, Tuple, ClassVar, Any, Dict, Deque
+from typing import Optional, Tuple, ClassVar, Any, Dict, Deque, List
 
 from typing import Callable
 
 from typing_extensions import Self
 
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
-    AnimalSubject, get_perf_now, calculate_std_dev_manual
+    AnimalSubject, get_perf_now, calculate_std_dev_manual, ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
@@ -41,6 +41,8 @@ from .intersession import IntersessionState
 
 from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
+from autotrainer.inference.analysis import IntersessionResponse
+
 
 logger = get_verbose_logger(__name__)
 
@@ -266,7 +268,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         # active/live context:
         self._algo_paused = False
-        self._algo_paused_perf_t = 0
+        self._algo_paused_perf_t = -math.inf
         self._is_in_session = False
         self._session_started_perf_c = -math.inf
         self._start_session_reason = "NA"
@@ -298,6 +300,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._reaches_total: int = 0
         self._successful_reaches_day: int = 0
         self._successful_reaches_total: int = 0
+
+        self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
 
         self._cover_servo_status = CoverServoStatus.OK
 
@@ -1419,6 +1423,17 @@ class BehaviorAlgorithm(ObservableObject):
                                ctx.distance_property_name, distance,
                                ctx.expected_distance, ctx.error_distance_threshold)
                 ctx.warned_bad_distance = True
+
+    @property
+    def trial_reaches(self) -> List[Dict]:
+        prev = self._previous_intersession_analysis_rsp
+        if prev is None:
+            return []
+        rsp = prev[1]
+        return rsp.reach_events
+
+    def set_previous_intersession_analysis_rsp(self, prj: ProjectInfo, res: IntersessionResponse):
+        self._previous_intersession_analysis_rsp = (prj, res)
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
