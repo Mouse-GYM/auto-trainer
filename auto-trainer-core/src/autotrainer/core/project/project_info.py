@@ -4,10 +4,12 @@ import ctypes
 import logging
 import multiprocessing as mp
 import os
+import os.path
 import sys
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Tuple, NamedTuple, Union, Optional, ClassVar
 
@@ -95,7 +97,7 @@ class _ProjectInfo:
 
     root: str = ""
     device_id: str = ""
-    _when: Union[mp.Value, RawValueHolder] = None
+    _when: Union[Synchronized[ctypes.c_double], RawValueHolder] = None
     when: ClassVar[datetime] = ValueHolderDescriptor(  # noqa
         convert_from=datetime.fromtimestamp,
         convert_to=lambda v: v.timestamp(),
@@ -103,7 +105,7 @@ class _ProjectInfo:
     ensure_exists: bool = False
     camera_1: str = ""
     camera_2: str = ""
-    _session: Union[mp.Value, RawValueHolder] = None
+    _session: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
 
 
@@ -124,21 +126,25 @@ class ProjectInfo(_ProjectInfo):
         mp_manager=None,
     ):
         super().__init__()
-        if when is not None:
-            when = RawValueHolder(when.timestamp())
+        if when is None:
+            _when = None
+        else:
+            _when = RawValueHolder(when.timestamp())
             if session is None:
                 session = 1
-        if session is not None:
-            session = RawValueHolder(session)
+        if session is None:
+            _session = None
+        else:
+            _session = RawValueHolder(session)
             if when is None:
                 raise ValueError("Cannot create ProjectInfo with session but without when")
         self.root = root
         self.device_id = device_id
-        self._when = when
+        self._when = _when
         self.ensure_exists = ensure_exists
         self.camera_1 = camera_1
         self.camera_2 = camera_2
-        self._session = session
+        self._session = _session
         if self._session is None and self._when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
             self._session = ctx.Value(ctypes.c_uint32, 1)
@@ -180,6 +186,7 @@ class ProjectInfo(_ProjectInfo):
             when = self.when
             if when is None:
                 when = _get_datetime_now()
+        assert when is not None
         return when
 
     def is_valid(self):
@@ -212,18 +219,15 @@ class ProjectInfo(_ProjectInfo):
         interval: ProjectInterval = ProjectInterval.HOUR,
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
-    ) -> Optional[IntervalSource]:
+    ) -> IntervalSource:
         when = self._get_when_or_now(when)
+        assert when is not None
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
         when_str = f"_{when.strftime(time_format)}"
         location, today = self.get_day_path(skip_ensure=skip_ensure, when=when)
-        if location is None:
-            return None
-
         s = f"_{name}" if name else ""
         d = f"_{self.device_id}" if self.device_id else ""
         prefix = f"{today}{d}{when_str}{s}"
-
         return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
     def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
@@ -248,14 +252,12 @@ class ProjectInfo(_ProjectInfo):
         session: int = -1,
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
-    ) -> Optional[ProjectPath]:
+    ) -> ProjectPath:
         if interval is None or interval == ProjectInterval.NONE:
             path = self.get_session_path(name, session=session, skip_ensure=skip_ensure, when=when)
         else:
             path = self.get_interval_path(name, interval=interval, skip_ensure=skip_ensure, when=when)
-
-        return None if path is None else ProjectPath(path.location, path.prefix,
-                                                     os.path.join(path.location, path.prefix))
+        return ProjectPath(path.location, path.prefix, os.path.join(path.location, path.prefix))
 
     def get_metadata_file(self, session: int = -1, when: Optional[datetime] = None) -> str:
         when = self._get_when_or_now(when)
@@ -272,10 +274,10 @@ class ProjectInfo(_ProjectInfo):
     def get_monitor_file(self, name: str = "monitor", ext: str = "csv",
                          interval: ProjectInterval = ProjectInterval.HOUR,
                          when: Optional[datetime] = None) -> Optional[IntervalFileInfo]:
-        path = self.get_interval_path(name, interval, when=when)
-        return None if path is None else IntervalFileInfo(path.location,
-                                                          os.path.join(path.location, f"{path.prefix}.{ext}"),
-                                                          path.interval)
+        iv_path = self.get_interval_path(name, interval, when=when)
+        return IntervalFileInfo(iv_path.location,
+                                os.path.join(iv_path.location, f"{iv_path.prefix}.{ext}"),
+                                iv_path.interval)
 
     def get_audio_spectrum_file(
         self,
@@ -283,11 +285,11 @@ class ProjectInfo(_ProjectInfo):
         ext: str = "csv",
         interval: ProjectInterval = ProjectInterval.HOUR,
         when: Optional[datetime] = None
-    ) -> Optional[IntervalFileInfo]:
-        path = self.get_interval_path(name, interval, when=when)
-        return None if path is None else IntervalFileInfo(path.location,
-                                                          os.path.join(path.location, f"{path.prefix}.{ext}"),
-                                                          path.interval)
+    ) -> IntervalFileInfo:
+        audio_path = self.get_interval_path(name, interval, when=when)
+        return IntervalFileInfo(audio_path.location,
+                                os.path.join(audio_path.location, f"{audio_path.prefix}.{ext}"),
+                                audio_path.interval)
 
     def get_webcam_presence_file(
         self,
@@ -295,11 +297,11 @@ class ProjectInfo(_ProjectInfo):
         ext: str = "csv",
         interval: ProjectInterval = ProjectInterval.HOUR,
         when: Optional[datetime] = None,
-    ) -> Optional[IntervalFileInfo]:
-        path = self.get_interval_path(name, interval, when=when)
-        return None if path is None else IntervalFileInfo(path.location,
-                                                          os.path.join(path.location, f"{path.prefix}.{ext}"),
-                                                          path.interval)
+    ) -> IntervalFileInfo:
+        web_path = self.get_interval_path(name, interval, when=when)
+        return IntervalFileInfo(web_path.location,
+                                os.path.join(web_path.location, f"{web_path.prefix}.{ext}"),
+                                web_path.interval)
 
     def get_video_path(
         self,
@@ -307,24 +309,22 @@ class ProjectInfo(_ProjectInfo):
         interval: ProjectInterval = ProjectInterval.NONE,
         session: int = -1,
         allow_overwrite: bool = False,
-    ) -> Union[Tuple[str, str, str], Tuple[None, None, None]]:
+    ) -> Tuple[str, str, str]:
         """Get the 3-tuple of video paths for given arguments"""
-        path = self.get_source_path(name, interval=interval, session=session)
-        if path is None:
-            return None, None, None
+        vid_path = self.get_source_path(name, interval=interval, session=session)
 
-        file_name = f"{path.full_path}.{video_write_ext}"
+        file_name = f"{vid_path.full_path}.{video_write_ext}"
         index = 0
 
         if not allow_overwrite:
             while os.path.exists(file_name):
                 index += 1
-                file_name = f"{path.full_path}_{index}.{video_write_ext}"
+                file_name = f"{vid_path.full_path}_{index}.{video_write_ext}"
 
         modifier = "" if index == 0 else "_" + str(index)
 
-        ts_file = f"{path.full_path}_timestamps{modifier}.txt"
-        frames_processed_indices_file = f"{path.full_path}_processed_frames.txt"
+        ts_file = f"{vid_path.full_path}_timestamps{modifier}.txt"
+        frames_processed_indices_file = f"{vid_path.full_path}_processed_frames.txt"
 
         return file_name, ts_file, frames_processed_indices_file
 
@@ -342,10 +342,9 @@ class ProjectInfo(_ProjectInfo):
         image_file_format_str = base.prefix + "_{when}" + ".png"
         return image_location, image_file_format_str
 
-    def get_reach_event_path(self):
+    def get_reach_event_path(self) -> Path:
         base = self.get_source_path("")
-        loc = os.path.join(base.location, f"{base.prefix}{REACH_EVENT_SUFFIX}")
-        return loc
+        return Path(base.location).joinpath(f"{base.prefix}{REACH_EVENT_SUFFIX}")
 
     def get_intersession_pose_path(
         self,
@@ -375,9 +374,11 @@ class ProjectInfo(_ProjectInfo):
         """Calculate the next session index & date and store it locally"""
         if when is None:
             when = _get_datetime_now()
+        assert when is not None
         prev_when = self.when
+        assert prev_when is not None
         location, _ = self.get_day_path(when=when)
-        logger.debug(f"calculating next session index in %s", location)
+        logger.debug("calculating next session index in %s", location)
         path = Path(location)
         existed = path.exists()
         was_dir = path.is_dir()
