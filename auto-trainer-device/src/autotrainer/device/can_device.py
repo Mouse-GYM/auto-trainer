@@ -651,6 +651,12 @@ class CanDevice(Device):
         """
         self._api = value
 
+    @property
+    def connected(self) -> bool:
+        iface = self._interface
+        thread = self._commands_handler_thread
+        return iface is not None and iface.is_open and thread is not None and thread.is_alive()
+
     def connect(self):
         # only start the command handler thread on connect,
         # which means we have already obtained the addr of desired devices.

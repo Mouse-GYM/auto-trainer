@@ -363,6 +363,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             can_dev.default_command_ack_timeout_duration = delay
             logger.notice("Using %s for device ack timeout delay", delay)
 
+    @property
+    def connected(self) -> bool:
+        dev = self._device
+        dev_dev = None if dev is None else dev.device
+        return dev_dev is not None and dev_dev.connected
+
     def connect(self, cmd_queue: Queue):
         logger.notice("%s: connect with %s", self, cmd_queue)
 

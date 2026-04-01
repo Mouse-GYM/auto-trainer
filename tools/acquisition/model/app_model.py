@@ -1443,12 +1443,15 @@ class AppModel(ObservableObject):
                 animal.is_pellet_dcs = True
                 self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         hardware = self._hardware
-        hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-        hardware.set_x(xyz.x)
-        hardware.set_y(xyz.y)
-        hardware.set_z(xyz.z)
-        pellet_m = self.behavior.system_machine.pellet
-        pellet_m.send_pellet(force=True)
+        if not hardware.connected:
+            logger.notice("Not setting animal base positions on hardware given not connected (yet?)")
+        else:
+            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+            hardware.set_x(xyz.x)
+            hardware.set_y(xyz.y)
+            hardware.set_z(xyz.z)
+            pellet_m = self.behavior.system_machine.pellet
+            pellet_m.send_pellet(force=True)
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         prefs = UserPreferences
