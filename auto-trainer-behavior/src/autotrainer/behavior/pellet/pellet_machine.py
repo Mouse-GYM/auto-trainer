@@ -184,39 +184,39 @@ class PelletMachine(StateMachine):
         algo_would_load = self._algorithm.would_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
         if can_use and algo_would_load:
             self._check_pellet_load_failed()
-        can = (
+        can = force or (
             can_use
             and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
-        ) or force
+        )
         if can != self._prev_can_load:
             self._prev_can_load = can
             self.post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
     def can_send_pellet(self, *, force: bool=False):
-        can = (
+        can = force or (
             self.can_use_pellet_command() and self._algorithm.can_send_pellet()
-        ) or force
+        )
         if can != self._prev_can_send:
             self._prev_can_send = can
             self.post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
     def can_cover_pellet(self, *, force: bool=False):
-        can = (
+        can = force or (
             self.can_use_pellet_command()
             and self._algorithm.can_cover_pellet()
-        ) or force
+        )
         if can != self._prev_can_cover:
             self._prev_can_cover = can
             self.post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
     def can_release_pellet(self, *, force: bool=False):
-        can = (
+        can = force or (
             self.can_use_pellet_command()
             and self._algorithm.can_release_pellet()
-        ) or force
+        )
         if can != self._prev_can_release:
             self._prev_can_release = can
             self.post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
