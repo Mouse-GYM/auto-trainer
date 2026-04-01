@@ -364,9 +364,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.notice("Using %s for device ack timeout delay", delay)
 
     def connect(self, cmd_queue: Queue):
+        logger.notice("%s: connect with %s", self, cmd_queue)
+
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
         self._motor_send_coordinates = _nans_offset3dTuple
+
+        prev_device = self._device
+        if prev_device is not None:
+            logger.warning("auto-disconnecting from device before (re-)connect")
+            self.disconnect()
 
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
         # configured to generate messages as frequently as the real device.
@@ -397,9 +404,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is not None:
             dev.request_disconnect()
             dev.join()
-            can_dev = dev.device
-            can_dev.property_changed -= self._can_device_property_changed
             self._device = None
+        if can_dev is not None:
+            # can_dev = dev.device
+            can_dev.property_changed -= self._can_device_property_changed
+            self._can_device = None
+
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 

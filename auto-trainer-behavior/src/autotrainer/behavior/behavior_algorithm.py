@@ -405,7 +405,7 @@ class BehaviorAlgorithm(ObservableObject):
                 with thread_lock:
                     func(*args) if kwargs is None else func(*args, **kwargs)
             except Exception as err:
-                logger.exception("Failed executing %s: %s", func, err)
+                logger.exception("Failed executing %s(%s, %s): %s", func, args, kwargs, err)
                 # NB: what to do else ?
                 # this is a pretty critical situation given the related function might be itself critical.
                 # TODO: maybe relay a flag/msg/error to the main thread for display purpose ?

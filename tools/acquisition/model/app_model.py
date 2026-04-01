@@ -938,6 +938,7 @@ class AppModel(ObservableObject):
                 return False
             self._acquisition_starting = True
 
+        algo = self._behavior.algorithm
         analysis = self._analysis
 
         # first:
@@ -948,8 +949,13 @@ class AppModel(ObservableObject):
         # also:
         self.project_info = self.make_project_info()
 
-        algo = self._behavior.algorithm
         algo.reload_diamond_triangle_config()
+
+        logger.debug("connecting hardware ...")
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+        logger.info("finished connecting hardware")
 
         self._behavior.on_prepare_capture()
 
@@ -1061,12 +1067,6 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
-
-        logger.debug("connecting hardware ...")
-        hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
-        hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
-        logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
             analysis.start()
