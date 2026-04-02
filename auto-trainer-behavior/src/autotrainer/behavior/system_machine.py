@@ -223,7 +223,7 @@ class SystemMachine(StateMachine):
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
         if self._analysis is not None:
-            self._evaluate_auto_clamp()
+            self._evaluate_auto_clamp(caller="after_enter_tunnel")
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
@@ -509,7 +509,7 @@ class SystemMachine(StateMachine):
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
             self._event_manager.post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
             if value:
-                self._evaluate_auto_clamp()
+                self._evaluate_auto_clamp(caller="headbar_pressure_on")
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_monitor_property_changed(self, name: str, value, _):
@@ -541,7 +541,7 @@ class SystemMachine(StateMachine):
                                                               context=self._state)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _evaluate_auto_clamp(self):
+    def _evaluate_auto_clamp(self, *, caller: str="NA"):
         algo = self._algorithm
         if algo.algo_paused:
             logger.debug("auto_clamp: algo-paused, skipping evaluate")
@@ -559,6 +559,12 @@ class SystemMachine(StateMachine):
         if not self._analysis.load_cell_monitor.is_engaged:
             logger.info("auto-clamp: load-cell not engaged (no action taken)")
             return
+        if not algo.is_in_session:
+            logger.info("auto-clamp: algo not in-session (no action taken)")
+            return
+        if self._intersession.state != IntersessionState.idle:
+            logger.info("auto-clamp: intersession not idle (no action taken)")
+            return
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
@@ -569,12 +575,12 @@ class SystemMachine(StateMachine):
         if remains > 0:
             logger.verbose("delaying evaluate auto-clamp in %.1fs due to recent disengage ; age=%.1fs",
                          remains, disengage_age)
-            timer = make_daemon_timer(remains, self._evaluate_auto_clamp)
+            timer = make_daemon_timer(remains, partial(self._evaluate_auto_clamp, caller="timer"))
             self._timer_auto_clamp_evaluate = timer
             timer.start()
             return
         intensity = cfg.auto_clamp_intensity
-        logger.info("auto-clamp setting position to %s", intensity)
+        logger.info("auto-clamp setting position to %s ; caller=%s", intensity, caller)
         self._auto_clamp_in_progress = True
         self._update_magnet_position(intensity)
         self._disengage_auto_clamp_load_count = 0

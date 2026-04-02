@@ -38,12 +38,14 @@ class _AutoClampTestCase(MockSystemMachine):
         assert self.update_magnet_mock.call_args_list == []
         algo.update_mouse_seen(True)  # to have intersession started
         with self.mock_intersession_analysis():
-            machine.exit_tunnel()
             assert self.update_magnet_mock.call_args_list == []
-            assert machine.state == SystemState.intersession
-            assert machine.intersession.state == IntersessionState.segmentation
             with caplog.at_level(logging.INFO):
                 pressure_mon.is_engaged = True
+            assert machine.state == SystemState.tunnel
+            assert machine.intersession.state == IntersessionState.idle
+            machine.exit_tunnel()
+            assert machine.state == SystemState.intersession
+            assert machine.intersession.state == IntersessionState.segmentation
 
 
 class TestDisabled(_AutoClampTestCase):
@@ -96,8 +98,11 @@ class TestEnabled(_AutoClampTestCase):
 
     def test_when_intersession_with_exit_tunnel(self, machine, caplog):
         super().test_when_intersession_with_exit_tunnel(machine, caplog)  # same
-        assert f"auto-clamp setting position to " in caplog.text
-        assert self.update_magnet_mock.call_args_list == [mock.call(self.algo.auto_clamp_intensity)]
+        assert "auto-clamp setting position to " in caplog.text
+        assert self.update_magnet_mock.call_args_list == [
+            mock.call(self.algo.auto_clamp_intensity),
+            mock.call(0),
+        ]
 
     @pytest.mark.parametrize("baseline_intensity", [10, 80])
     @pytest.mark.parametrize("no_activity_release_delay", [0, 60])
