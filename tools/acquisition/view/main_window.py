@@ -68,6 +68,10 @@ def _make_separator():
     return sep
 
 
+def _make_window_title(prefs, app_version):
+    return f"{prefs.serial_number} - Auto Trainer - Acquisition v{app_version}"
+
+
 class MainWindow(QMainWindow):
 
     training_mode_changed = Signal(TrainingMode)
@@ -91,9 +95,9 @@ class MainWindow(QMainWindow):
 
         self._app = app
         self._is_dev = is_dev
-        self._preferences = user_preferences
-        self._update_log_level(self._preferences.log_level)
-        self._title = f"Auto Trainer - Acquisition v{app_version}"
+        prefs = self._preferences = user_preferences
+        self._update_log_level(prefs.log_level)
+        self._title = _make_window_title(prefs, app_version)
         self._closing = False
         self._close_event = None
         self._start_capture_thread = None
@@ -111,7 +115,7 @@ class MainWindow(QMainWindow):
 
         self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
 
-        app_model = self._app_model = AppModel(self._preferences)
+        app_model = self._app_model = AppModel(prefs)
 
         try:
             self.setContentsMargins(0, 0, 0, 0)
@@ -1131,6 +1135,8 @@ class MainWindow(QMainWindow):
             self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
         elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
             self._set_reset_vat_text()
+        elif name == prefs.SERIAL_NUMBER:
+            self.setWindowTitle(_make_window_title(prefs, app_version))
 
     @invoke_method
     def _on_alarm_monitor_property_changed(self, name, value, _):
