@@ -13,7 +13,7 @@ import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union
+from typing import Optional, List, Dict, Callable, Any, Union, ClassVar
 
 import yaml
 
@@ -152,6 +152,8 @@ def training_mode_to_api_training_mode(mode: TrainingMode) -> ApiTrainingMode:
 
 
 class AppModel(ObservableObject):
+
+    status_file_path: ClassVar[Path] = Path("~/.config/Colorado/autotrainer_running_status.env")
 
     configuration_loaded_event: Callable[[SystemConfiguration], None]
     on_error: Callable[[str, str], None]
@@ -412,38 +414,46 @@ class AppModel(ObservableObject):
         return self._status
 
     @status.setter
-    def status(self, value: AppModelStatus):
+    def status(self, status: AppModelStatus):
         prev = self._status
-        if value == prev:
+        if status == prev:
             return
-        self.check_target_status_valid(value)
-        self._status = value
-        algo_status = app_status_to_behavior_algo_status(value)
+        self.check_target_status_valid(status)
+        self._status = status
+        algo_status = app_status_to_behavior_algo_status(status)
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
-        self.property_changed(self.Props.STATUS, value, prev)
-        is_from_start = value in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
+        self.property_changed(self.Props.STATUS, status, prev)
+        is_from_start = status in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
-            if value == AppModelStatus.ANIMAL_IN_DEVICE:
+            if status == AppModelStatus.ANIMAL_IN_DEVICE:
                 is_from_start = cam != self._top_camera
-            record = False
             # NB: using is_triggered=None to ensure same state is kept in process side,
             # see: VideoRecord._disable_record()
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continous mode and is_from_start is not True, or else it was already recording.
-        if value in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
+        if status in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
             self._analysis.stop()
         else:
             self._analysis.restart()
         # reload training plans:
         self.reload_training_plans()
-        if value == AppModelStatus.ANIMAL_IN_TRAINING:
+        if status == AppModelStatus.ANIMAL_IN_TRAINING:
             # NB: need to be after set of algo_status
-            self._behavior.system_machine.pellet.send_pellet()
+            # self._behavior.system_machine.pellet.send_pellet()
+            # send_pellet most likely not needed anymore. since pellet_machine takes care of it.
             self._hardware.open_tunnel_gate()
         else:
             self._hardware.close_tunnel_gate()
+        #
+        status_file_path = self.status_file_path.expanduser()
+        status_file_path.parent.mkdir(parents=True, exist_ok=True)
+        if status == AppModelStatus.IDLE:
+            status_file_path.unlink(missing_ok=True)
+        else:
+            with status_file_path.open("w") as fh:
+                print(f"status={status.value!r}", file=fh)
 
     def reload_calib(self, calib_dir: Optional[Path]):
         calib_src_dir = (
@@ -1106,6 +1116,9 @@ class AppModel(ObservableObject):
                 return
             self._acquisition_stopping = True
             before_status = self._status
+        # always remove status-file on stop:
+        status_file_path = self.status_file_path.expanduser()
+        status_file_path.unlink(missing_ok=True)
         try:
             self._capture_stop()
         finally:
