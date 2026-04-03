@@ -50,7 +50,7 @@ class TestBatchAnalysis(MockSystemMachine):
                 if idx >= max_batch_size:
                     for _ in range(max_batch_size):
                         stack.enter_context(self.mock_intersession_analysis())
-                pellet.force_load_pellet()
+                pellet.load_pellet(force=True)
                 if idx >= max_batch_size:
                     assert machine.state == SystemState.intersession
                     assert machine.intersession.state == IntersessionState.segmentation
@@ -73,7 +73,7 @@ class TestBatchAnalysis(MockSystemMachine):
         with self.mock_intersession_analysis():
             algo.update_mouse_seen(True)
             with caplog.at_level(logging.DEBUG):
-                pellet.force_load_pellet()
+                pellet.load_pellet(force=True)
             assert machine.state == SystemState.intersession
             assert machine.intersession.state == IntersessionState.segmentation
             algo.update_pellet_seen(True)
@@ -95,7 +95,7 @@ class TestBatchAnalysis(MockSystemMachine):
 
         for idx in range(sessions_count):
             algo.update_mouse_seen(True)
-            pellet.force_load_pellet()
+            pellet.load_pellet(force=True)
             algo.update_pellet_seen(True)
             self.mock_pellet_ack(until_none=True)
 
@@ -126,7 +126,7 @@ class TestBatchAnalysis(MockSystemMachine):
 
         self.start_session_in_tunnel()
         algo.update_mouse_seen(True)
-        pellet.force_load_pellet()
+        pellet.load_pellet(force=True)
         # don't ack load-pellet, but make exit tunnel now
         with self.mock_intersession_analysis():
             with caplog.at_level(logging.DEBUG):

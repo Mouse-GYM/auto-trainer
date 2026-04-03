@@ -363,7 +363,20 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             can_dev.default_command_ack_timeout_duration = delay
             logger.notice("Using %s for device ack timeout delay", delay)
 
+    @property
+    def connected(self) -> bool:
+        dev = self._device
+        dev_dev = None if dev is None else dev.device
+        return dev_dev is not None and dev_dev.connected
+
     def connect(self, cmd_queue: Queue):
+        logger.notice("%s: connect with %s", self, cmd_queue)
+
+        prev_device = self._device
+        if prev_device is not None:
+            logger.warning("auto-disconnecting from device before (re-)connect")
+            self.disconnect()
+
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
         self._motor_send_coordinates = _nans_offset3dTuple
@@ -397,9 +410,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is not None:
             dev.request_disconnect()
             dev.join()
-            can_dev = dev.device
-            can_dev.property_changed -= self._can_device_property_changed
             self._device = None
+        if can_dev is not None:
+            can_dev.property_changed -= self._can_device_property_changed
+            self._can_device = None
+
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
 

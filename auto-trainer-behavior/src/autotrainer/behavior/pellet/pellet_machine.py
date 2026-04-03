@@ -111,13 +111,14 @@ class PelletMachine(StateMachine):
 
     # transitions
 
-    def _before_move_home(self):
+    def _before_move_home(self, *, force: bool=False):
         self._api_status_token = self._pellet_device.send_home()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
         self.post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
 
-    def _before_load_pellet(self):
+    def _before_load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
+        del force, use_any_cam  # only used for condition can_load_pellet
         logger.verbose("before_load_pellet")
         self._api_status_token = self._pellet_device.load_pellet()
         if self._api_status_token is None:
@@ -128,7 +129,7 @@ class PelletMachine(StateMachine):
         self.post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
         self._load_retract_current_count += 1
 
-    def _before_send_pellet(self):
+    def _before_send_pellet(self, *, force: bool=False):
         # check for auto-home when load+retract counts >= threshold:
         tot_count = self._load_retract_current_count
         trigger_count = DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME
@@ -157,55 +158,66 @@ class PelletMachine(StateMachine):
         self.events.pellet_sending()
         self.post_event_content(BehaviorEventKind.pelletSendBegin, context=token)
 
-    def _before_cover_pellet(self):
+    def _before_cover_pellet(self, *, force: bool=False):
         self._api_status_token = self._pellet_device.cover_pellet()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
         self._covered_state = True
         self.post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
 
-    def _before_release_pellet(self):
+    def _before_release_pellet(self, *, force: bool=False):
         self._api_status_token = self._pellet_device.release_pellet()
         if self._api_status_token is None:
             raise PelletDeviceCommandFailed
         self._covered_state = False
         self.post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
 
-    def can_move_home(self):
-        can = self.can_use_pellet_command()
+    def can_move_home(self, *, force: bool=False):
+        can = force or self.can_use_pellet_command()
         if can != self._prev_can_home:
             self._prev_can_home = can
             self.post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
         return can
 
-    def can_load_pellet(self, *, use_any_cam: bool = False):
+    def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
         """Is more: *should* or *has to* load pellet"""
         can_use = self.can_use_pellet_command()
         algo_would_load = self._algorithm.would_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
         if can_use and algo_would_load:
             self._check_pellet_load_failed()
-        can = can_use and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
+        can = force or (
+            can_use
+            and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
+        )
         if can != self._prev_can_load:
             self._prev_can_load = can
             self.post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
-    def can_send_pellet(self):
-        can = self.can_use_pellet_command() and self._algorithm.can_send_pellet()
+    def can_send_pellet(self, *, force: bool=False):
+        can = force or (
+            self.can_use_pellet_command() and self._algorithm.can_send_pellet()
+        )
         if can != self._prev_can_send:
             self._prev_can_send = can
             self.post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
-    def can_cover_pellet(self):
-        can = self.can_use_pellet_command() and self._algorithm.can_cover_pellet()
+    def can_cover_pellet(self, *, force: bool=False):
+        can = force or (
+            self.can_use_pellet_command()
+            and self._algorithm.can_cover_pellet()
+        )
         if can != self._prev_can_cover:
             self._prev_can_cover = can
             self.post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
-    def can_release_pellet(self):
-        can = self.can_use_pellet_command() and self._algorithm.can_release_pellet()
+    def can_release_pellet(self, *, force: bool=False):
+        can = force or (
+            self.can_use_pellet_command()
+            and self._algorithm.can_release_pellet()
+        )
         if can != self._prev_can_release:
             self._prev_can_release = can
             self.post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
@@ -374,7 +386,7 @@ class PelletMachine(StateMachine):
             if self.can_load_pellet(use_any_cam=True):
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
-                self.load_pellet()
+                self.load_pellet(use_any_cam=True)
             else:
                 # current state is either retract or loading (loaded),
                 # even if pellet is not seen, send it to deliver,
@@ -464,7 +476,7 @@ class PelletMachine(StateMachine):
     def may_trigger(self):
         """"""
 
-    def move_home(self):
+    def move_home(self, *, force: bool=False):
         """Move home"""
 
     def may_move_home(self):
@@ -476,53 +488,29 @@ class PelletMachine(StateMachine):
     def may_move_retract(self):
         """May move retract"""
 
-    def load_pellet(self):
+    def load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
         """Load pellet"""
 
-    def may_load_pellet(self):
+    def may_load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
         """May load pellet"""
 
-    def force_load_pellet(self):
-        """Same than load but does not require can_load_pellet condition"""
-
-    def may_force_load_pellet(self):
-        """May force load pellet"""
-
-    def send_pellet(self):
+    def send_pellet(self, *, force: bool=False):
         """Send pellet to deliver position"""
-
-    def force_send_pellet(self):
-        """Force a send pellet to deliver position"""
 
     def may_send_pellet(self):
         """May Send pellet to deliver position"""
 
-    def may_force_send_pellet(self):
-        """May Force Send pellet to deliver position"""
-
-    def release_pellet(self):
+    def release_pellet(self, *, force: bool = False):
         """Release pellet cover"""
-
-    def force_release_pellet(self):
-        """Force release pellet"""
-
-    def may_force_release_pellet(self):
-        """May Force Release pellet to deliver position"""
 
     def may_release_pellet(self):
         """May Release pellet cover"""
 
-    def cover_pellet(self):
+    def cover_pellet(self, *, force: bool=False):
         """Cover pellet cover"""
-
-    def force_cover_pellet(self):
-        """Force cover pellet"""
 
     def may_cover_pellet(self):
         """May Cover pellet cover"""
-
-    def may_force_cover_pellet(self):
-        """May Force Cover pellet to deliver position"""
 
     def monitor_pellet(self):
         """Monitor pellet"""
@@ -559,18 +547,10 @@ class PelletMachine(StateMachine):
     transitions = transitions_allow_functions([
         dict(
             trigger=load_pellet,
-            source=[PelletState.loading, PelletState.monitoring, PelletState.covering, PelletState.retract],
-            dest=PelletState.loading,
-            before=_before_load_pellet,
-            conditions=can_load_pellet,
-        ),
-
-        dict(
-            trigger=force_load_pellet,
             source="*",
             dest=PelletState.loading,
             before=_before_load_pellet,
-            # conditions=can_load_pellet,  # contrary to load_pellet
+            conditions=can_load_pellet,
         ),
 
         dict(
@@ -582,14 +562,6 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
-            trigger=force_send_pellet,
-            source="*",
-            dest=PelletState.sending,
-            before=_before_send_pellet,
-            # conditions=can_send_pellet,  # contrary to send_pellet
-        ),
-
-        dict(
             trigger=cover_pellet,
             source="*",
             dest=PelletState.covering,
@@ -598,27 +570,11 @@ class PelletMachine(StateMachine):
         ),
 
         dict(
-            trigger=force_cover_pellet,
-            source="*",
-            dest=PelletState.covering,
-            before=_before_cover_pellet,
-            # conditions=can_cover_pellet,
-        ),
-
-        dict(
             trigger=release_pellet,
             source="*",
             dest=PelletState.releasing,
             before=_before_release_pellet,
             conditions=can_release_pellet,
-        ),
-
-        dict(
-            trigger=force_release_pellet,
-            source="*",
-            dest=PelletState.releasing,
-            before=_before_release_pellet,
-            # conditions=can_release_pellet,
         ),
 
         dict(

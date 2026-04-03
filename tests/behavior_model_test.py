@@ -2,6 +2,7 @@ from unittest import mock
 
 import pytest
 
+from autotrainer.behavior.pellet import PelletState
 from top_fixtures import MockSystemMachine
 
 
@@ -61,7 +62,9 @@ class TestEmergency(MockSystemMachine):
         pellet_dev.reset_mock()  # ensure clear
         #
         assert app_model.behavior.source_emergency is None
+        assert self.pellet_state_trans == []
         app_model.behavior.emergency_stop(source="testing")
+        assert self.pellet_state_trans == [PelletState.home]
         assert app_model.behavior.source_emergency == "testing"
         assert algo.algo_paused
         assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
@@ -69,12 +72,21 @@ class TestEmergency(MockSystemMachine):
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(0)]
         tunnel_dev.reset_mock()  # ensure clear
         pellet_dev.reset_mock()  # ensure clear
+        assert self.pellet_state_trans == [PelletState.home]
         app_model.behavior.emergency_resume(source="testing")
         assert app_model.behavior.source_emergency is None
         assert not algo.algo_paused
         assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
-        assert pellet_dev.send_pellet.call_args_list == [mock.call()]
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(algo.baseline_intensity)]
+        self.mock_pellet_ack()
+        self.mock_pose_response(pellet_seen=True)
+        assert self.pellet_state_trans == [
+            PelletState.home,
+            PelletState.covering,
+            PelletState.sending,
+            PelletState.monitoring,
+        ]
+        # assert pellet_m.send_pellet.call_args_list == [mock.call()]  # is now handled by pellet_machine
 
     def test_engage_many_times_keeps_last_reason(self, app_model):
         algo = app_model.behavior.algorithm
