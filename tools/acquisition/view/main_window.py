@@ -68,7 +68,7 @@ def _make_separator():
     return sep
 
 
-def _make_window_title(prefs, app_version):
+def _make_window_title(prefs):
     return f"{prefs.serial_number} - Auto Trainer - Acquisition v{app_version}"
 
 
@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         self._is_dev = is_dev
         prefs = self._preferences = user_preferences
         self._update_log_level(prefs.log_level)
-        self._title = _make_window_title(prefs, app_version)
+        self._title = _make_window_title(prefs)
         self._closing = False
         self._close_event = None
         self._start_capture_thread = None
@@ -1136,7 +1136,7 @@ class MainWindow(QMainWindow):
         elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
             self._set_reset_vat_text()
         elif name == prefs.SERIAL_NUMBER:
-            self._title = _make_window_title(prefs, app_version)
+            self._title = _make_window_title(prefs)
             self.setWindowTitle(self._title)
 
     @invoke_method
