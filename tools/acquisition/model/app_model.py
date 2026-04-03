@@ -961,12 +961,6 @@ class AppModel(ObservableObject):
 
         algo.reload_diamond_triangle_config()
 
-        logger.debug("connecting hardware ...")
-        hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
-        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
-        logger.info("finished connecting hardware")
-
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
@@ -1069,9 +1063,16 @@ class AppModel(ObservableObject):
             self.capture_stop(force=True)
             return False
 
+        # Connect "hardware" (motors/steppers/etc..) after cameras are setup/running,
+        # so that any movement pre-applied should be visible on camera(s).
+        logger.debug("connecting hardware ...")
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+        logger.info("finished connecting hardware")
+
         # once cameras successfully started:
         self._save_project_metadata(self._project_info)
-
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
