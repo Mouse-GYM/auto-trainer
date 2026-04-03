@@ -38,8 +38,9 @@ class DiamondTriangleOffsetConfig:
 
     # 3 coordinate systems,
     # but each has some axis direction difference (when one increases, the other decreases)
-    flips_inference_motor: ClassVar[Offset3DTuple] = Offset3DTuple(1, -1, 1)
-    flips_inference_diamond: ClassVar[Offset3DTuple] = Offset3DTuple(1, 1, -1)
+    flips_inference_motor: ClassVar[Offset3DTuple] = Offset3DTuple(1, -1, -1)
+    flips_inference_diamond: ClassVar[Offset3DTuple] = Offset3DTuple(1, 1, 1)
+    # we also want inference diamond flips equals (1, 1, 1), given inference == diamond
 
     # defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
     flips_motor_diamond: ClassVar[Offset3DTuple] = flips_inference_diamond * flips_inference_motor  # Offset3DTuple(1, -1, -1)
