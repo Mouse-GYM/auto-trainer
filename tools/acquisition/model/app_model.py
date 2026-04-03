@@ -948,6 +948,7 @@ class AppModel(ObservableObject):
                 return False
             self._acquisition_starting = True
 
+        algo = self._behavior.algorithm
         analysis = self._analysis
 
         # first:
@@ -958,8 +959,13 @@ class AppModel(ObservableObject):
         # also:
         self.project_info = self.make_project_info()
 
-        algo = self._behavior.algorithm
         algo.reload_diamond_triangle_config()
+
+        logger.debug("connecting hardware ...")
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+        logger.info("finished connecting hardware")
 
         self._behavior.on_prepare_capture()
 
@@ -1071,12 +1077,6 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
-
-        logger.debug("connecting hardware ...")
-        hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
-        hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # todo: should remove
-        logger.info("finished connecting hardware")
 
         if not algo.algo_paused:
             analysis.start()
@@ -1456,13 +1456,17 @@ class AppModel(ObservableObject):
                 animal.is_pellet_dcs = True
                 self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         hardware = self._hardware
-        hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
-        hardware.set_x(xyz.x)
-        hardware.set_y(xyz.y)
-        hardware.set_z(xyz.z)
-        pellet_m = self.behavior.system_machine.pellet
-        if algo.can_send_pellet():
-            pellet_m.force_send_pellet()
+        if not hardware.connected:
+            logger.notice("Not setting animal base positions on hardware given not connected (yet?)")
+        else:
+            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
+            hardware.set_x(xyz.x)
+            hardware.set_y(xyz.y)
+            hardware.set_z(xyz.z)
+            # don't :
+            #   pellet_m = self.behavior.system_machine.pellet
+            #   pellet_m.send_pellet(force=True)
+            # yet, it will be done by pellet-machine automatically if/when status goes to animal-in-training
 
     def _on_preferences_property_changed(self, name: str, new_value, old_value):
         prefs = UserPreferences

@@ -30,18 +30,21 @@ class Device(ObservableObject):
         self._tunnel_status_timeout_engaged = False
         self._pellet_status_timeout_engaged = False
 
+    @property
+    def connected(self) -> bool:
+        """Say if it's connected to device"""
+
     def connect(self):
-        pass
+        """Request connect to the device"""
 
     def disconnect(self):
-        pass
+        """Request disconnect from the device"""
 
     def notify_data(self, data: Any) -> None:
         """Notification for data received from the device
 
         :param data: one or more bytes received from the device to be handled/interpreted by this Device instance
         """
-        pass
 
     def notify_message(self, kind: int, data: object, context: object = None) -> None:
         """Notification for messages received from the client script or application
@@ -55,7 +58,6 @@ class Device(ObservableObject):
         :param data: Any additional data required for the message beyond the kind
         :param context: A value to be returned to caller upon completion of the message
         """
-        pass
 
     def _acknowledge_command(self, token: object):
         logger.verbose("sending command ack: %s", token)

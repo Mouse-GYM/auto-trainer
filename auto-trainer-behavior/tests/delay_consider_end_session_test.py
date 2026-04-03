@@ -16,7 +16,7 @@ class TestDelayConsiderEndSession(MockSystemMachine):
         algo.update_pellet_seen(True)
         self.start_session_in_tunnel()
         with self.patch_timer(f"{machine.__class__.__module__}._consider_end_session_timer") as m_timer:
-            machine.pellet.force_load_pellet()
+            machine.pellet.load_pellet(force=True)
         assert m_timer.call_args_list == []
         assert not algo.is_in_session
 
@@ -27,7 +27,7 @@ class TestDelayConsiderEndSession(MockSystemMachine):
         algo.update_pellet_seen(True)
         self.start_session_in_tunnel()
         with self.patch_timer(f"{machine.__class__.__module__}._consider_end_session_timer") as m_timer:
-            machine.pellet.force_load_pellet()
+            machine.pellet.load_pellet(force=True)
         assert algo.is_in_session
         assert m_timer.call_args_list == [mock.call(AlmostEqualFloat(delay), mock.ANY)]
         self.increment_perf_now(delay)
@@ -42,13 +42,13 @@ class TestDelayConsiderEndSession(MockSystemMachine):
         algo.update_pellet_seen(True)
         self.start_session_in_tunnel()
         with self.patch_timer(f"{machine.__class__.__module__}._consider_end_session_timer") as m_timer:
-            machine.pellet.force_load_pellet()
+            machine.pellet.load_pellet(force=True)
         assert m_timer.call_args_list == [mock.call(AlmostEqualFloat(delay), mock.ANY)]
         func = m_timer.call_args.args[1]
         self.increment_perf_now(delay)
         assert algo.is_in_session
         with self.patch_timer(f"{machine.__class__.__module__}._consider_end_session_timer") as m_timer2:
-            machine.pellet.force_load_pellet()
+            machine.pellet.load_pellet(force=True)
         assert m_timer2.call_args_list == []
         assert m_timer.return_value.cancel.call_args_list == []
         func()
