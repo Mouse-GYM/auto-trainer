@@ -1136,7 +1136,8 @@ class MainWindow(QMainWindow):
         elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
             self._set_reset_vat_text()
         elif name == prefs.SERIAL_NUMBER:
-            self.setWindowTitle(_make_window_title(prefs, app_version))
+            self._title = _make_window_title(prefs, app_version)
+            self.setWindowTitle(self._title)
 
     @invoke_method
     def _on_alarm_monitor_property_changed(self, name, value, _):
