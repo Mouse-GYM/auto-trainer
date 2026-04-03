@@ -1,5 +1,5 @@
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QSize, Qt, QKeyCombination
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMainWindow, QStatusBar, QWidget, QVBoxLayout, QApplication
 from autotrainer.pyside import Separator
 
@@ -63,12 +63,12 @@ class MainWindow(QMainWindow):
 
     def _configure_actions(self):
         self.quit_action = QAction("Quit")
-        self.quit_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_Q))
+        self.quit_action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Q))
         self.quit_action.triggered.connect(lambda: self._app.quit())
 
         self.view_diagnostics_action = QAction("Diagnostics", self)
         self.view_diagnostics_action.setToolTip("Show or hide diagnostics panel")
-        self.view_diagnostics_action.setShortcut(QKeySequence(Qt.CTRL | Qt.Key_D))
+        self.view_diagnostics_action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_D))
         self.view_diagnostics_action.setCheckable(True)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.triggered.connect(lambda: self._toggle_diagnostics_view())
