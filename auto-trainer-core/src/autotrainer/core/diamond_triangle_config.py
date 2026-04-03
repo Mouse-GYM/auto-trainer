@@ -39,10 +39,11 @@ class DiamondTriangleOffsetConfig:
     # 3 coordinate systems,
     # but each has some axis direction difference (when one increases, the other decreases)
     flips_inference_motor: ClassVar[Offset3DTuple] = Offset3DTuple(1, -1, 1)
-    flips_inference_diamond: ClassVar[Offset3DTuple] = Offset3DTuple(-1, -1, 1)
+    flips_inference_diamond: ClassVar[Offset3DTuple] = Offset3DTuple(1, 1, -1)
 
     # defining flips between motor and diamond with flips between motor and inference * flips between inference and diamond:
-    flips_motor_diamond: ClassVar[Offset3DTuple] = flips_inference_motor * flips_inference_diamond
+    flips_motor_diamond: ClassVar[Offset3DTuple] = flips_inference_diamond * flips_inference_motor  # Offset3DTuple(1, -1, -1)
+    # assert flips_inference_diamond * flips_inference_motor == flips_motor_diamond
 
     # custom init to ensure kwarg only :
     def __init__(
@@ -109,19 +110,14 @@ class DiamondTriangleOffsetConfig:
         relatively to the diamond-triangle known position & relative offset"""
         # only used by tests
         assert isinstance(inference_xyz, Offset3DTuple), inference_xyz
-        return (
-            self.flips_motor_diamond * (self.measured_offset
-                                        - self.flips_inference_diamond * inference_xyz)
-            + self.used_position
-        )
-
-    def inference_to_diamond(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
-        assert isinstance(inference_xyz, Offset3DTuple), inference_xyz
-        return self.flips_inference_diamond * inference_xyz
+        return self.flips_inference_motor * (
+            self.flips_inference_diamond * self.measured_offset - inference_xyz
+        ) + self.used_position
 
     def motor_to_inference(self, motor_xyz: Offset3DTuple) -> Offset3DTuple:
         # only used by tests
         assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
+        # return self.flips_inference_motor * (motor_xyz - self.used_position) - self.flips_inference_diamond * self.measured_offset
         return (
             self.flips_inference_diamond * self.measured_offset
             - self.flips_inference_motor * (motor_xyz - self.used_position)
@@ -131,17 +127,23 @@ class DiamondTriangleOffsetConfig:
         """Transform the motor coordinate to corresponding triangle coordinate in DCS"""
         assert isinstance(motor_xyz, Offset3DTuple), motor_xyz
         return (
-            self.measured_offset
-            - self.flips_motor_diamond * (motor_xyz - self.used_position)
+            self.flips_motor_diamond * (motor_xyz - self.used_position)
+            + self.measured_offset
         )
 
     def diamond_to_motor(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
         """Transform the triangle coordinate from DCS to corresponding motor coordinates"""
         assert isinstance(diamond_xyz, Offset3DTuple), diamond_xyz
-        return (
-            self.measured_offset - diamond_xyz
-        ) * self.flips_motor_diamond + self.used_position
+        return self.used_position + self.flips_motor_diamond * (
+            diamond_xyz - self.measured_offset
+        )
+
+    def inference_to_diamond(self, inference_xyz: Offset3DTuple) -> Offset3DTuple:
+        assert isinstance(inference_xyz, Offset3DTuple), inference_xyz
+        return self.motor_to_diamond(self.inference_to_motor(inference_xyz))
+        # return self.flips_inference_diamond * inference_xyz
 
     def diamond_to_inference(self, diamond_xyz: Offset3DTuple) -> Offset3DTuple:
         assert isinstance(diamond_xyz, Offset3DTuple), diamond_xyz
-        return self.flips_inference_diamond * diamond_xyz
+        return self.motor_to_inference(self.diamond_to_motor(diamond_xyz))
+        # return self.flips_inference_diamond * diamond_xyz
