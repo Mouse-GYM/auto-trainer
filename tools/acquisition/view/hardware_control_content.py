@@ -332,7 +332,7 @@ class HardwareControlContent(ContentWidget):
     def _update_title(self, value: str):
         if value:
             if value.find("emulator") != -1:
-                self._card_widget.header.setTitle(f"Hardware Control: Alogus Emulation")
+                self._card_widget.header.setTitle("Hardware Control: Alogus Emulation")
             else:
                 self._card_widget.header.setTitle(f"Hardware Control: {EnvironmentProvider.hardware_version()}")
         else:

@@ -961,12 +961,6 @@ class AppModel(ObservableObject):
 
         algo.reload_diamond_triangle_config()
 
-        logger.debug("connecting hardware ...")
-        hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
-        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
-        logger.info("finished connecting hardware")
-
         self._behavior.on_prepare_capture()
 
         self._inference_queue = None
@@ -1069,9 +1063,16 @@ class AppModel(ObservableObject):
             self.capture_stop(force=True)
             return False
 
+        # Connect "hardware" (motors/steppers/etc..) after cameras are setup/running,
+        # so that any movement pre-applied should be visible on camera(s).
+        logger.debug("connecting hardware ...")
+        hard = self._hardware
+        hard.connect(self._system_message_handler.input_queue)
+        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+        logger.info("finished connecting hardware")
+
         # once cameras successfully started:
         self._save_project_metadata(self._project_info)
-
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1506,15 +1507,15 @@ class AppModel(ObservableObject):
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
-        if animal is not None and name in {'set_x', 'set_y', 'set_z'}:
+        hard = self._hardware
+        if animal is not None and name in {hard.SET_X, hard.SET_Y, hard.SET_Z}:
             # only when manual:
             if self._training_mode != TrainingMode.MANUAL:
                 return
-            hardware = self._hardware
             coord = name[-1]
             coord_idx = "xyz".index(coord)
             # prevent NaN if hardware has not yet reported any send_x :
-            pos = hardware.last_set_position or Offset3DTuple.get_nan()
+            pos = hard.last_set_position or Offset3DTuple.get_nan()
             t = list(pos)
             t[coord_idx] = value
             if any((math.isnan(v) or v is None) for v in t):

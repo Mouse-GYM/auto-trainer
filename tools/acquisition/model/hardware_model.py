@@ -253,17 +253,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 )
                 raise ValueError(err_msg)
             new_value = prev_value + value
-        coord_char = "xyz"[coord_idx]
         if new_value < 0:
             value = 0 if absolute else -prev_value
             new_value = 0
             logger.verbose("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
-                         "XYZ"[coord_idx], value, absolute)
+                         coord.upper(), value, absolute)
         res = self._send_with_token(self._device, system_set_cmd,
                                      SystemDataArgsKwargs(value, relative=not absolute))
         if res is not None:
-            self._last_requested_set_coordinates = self._last_requested_set_coordinates.replace(**{coord_char: new_value})
-            self._on_property_changed(f"set_{coord_char}", new_value, prev_value)
+            self._last_requested_set_coordinates = self._last_requested_set_coordinates.replace(**{coord: new_value})
+            self._on_property_changed(f"set_{coord}", new_value, prev_value)
         return res
 
     def set_x(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:

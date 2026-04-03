@@ -15,6 +15,22 @@ def diamond_triangle_config():
     )
 
 
+def test_flips_as_expected(diamond_triangle_config):
+    dcs = diamond_triangle_config
+    assert dcs.flips_motor_diamond == (1, -1, -1)
+    # when motor increases/move starting from its home position:
+    # X -> DCS increases as well
+    # Y -> DCS decreases
+    # Z -> DCS decreases
+
+
+def test_flips_are_consistent(diamond_triangle_config):
+    # also:
+    dcs = diamond_triangle_config
+    assert dcs.flips_motor_diamond == dcs.flips_inference_motor * dcs.flips_inference_diamond
+    assert dcs.flips_inference_motor == dcs.flips_inference_diamond * dcs.flips_motor_diamond
+
+
 @pytest.mark.parametrize("motor_xyz", [
     (-3, -9, 7),
     (0, 0, 0),
@@ -49,11 +65,11 @@ def test_transform_coordinates(motor_xyz, used_pos, measured_off):
     assert cfg.motor_to_diamond(cfg.inference_to_motor(orig)) == cfg.inference_to_diamond(orig)
     assert cfg.motor_to_diamond(cfg.inference_to_motor(motor_xyz)) == cfg.inference_to_diamond(motor_xyz)
     assert cfg.motor_to_inference(cfg.inference_to_motor(motor_xyz)) == motor_xyz
-    assert cfg.inference_to_diamond(
+    assert (
         cfg.diamond_to_inference(cfg.measured_offset)
         - cfg.motor_to_inference(cfg.used_position)
     ) == (0, 0, 0)
     assert cfg.motor_to_diamond(cfg.used_position) == cfg.measured_offset
-    assert cfg.inference_to_diamond(cfg.motor_to_inference(cfg.used_position) - cfg.diamond_to_inference(cfg.measured_offset)) == (0, 0, 0)
+    assert cfg.motor_to_inference(cfg.used_position) - cfg.diamond_to_inference(cfg.measured_offset) == (0, 0, 0)
     assert cfg.diamond_to_motor(cfg.measured_offset) == cfg.used_position
     assert cfg.motor_to_diamond(cfg.used_position) == cfg.measured_offset
