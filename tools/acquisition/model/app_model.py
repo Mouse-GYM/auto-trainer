@@ -1506,15 +1506,15 @@ class AppModel(ObservableObject):
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
-        if animal is not None and name in {'set_x', 'set_y', 'set_z'}:
+        hard = self._hardware
+        if animal is not None and name in {hard.SET_X, hard.SET_Y, hard.SET_Z}:
             # only when manual:
             if self._training_mode != TrainingMode.MANUAL:
                 return
-            hardware = self._hardware
             coord = name[-1]
             coord_idx = "xyz".index(coord)
             # prevent NaN if hardware has not yet reported any send_x :
-            pos = hardware.last_set_position or Offset3DTuple.get_nan()
+            pos = hard.last_set_position or Offset3DTuple.get_nan()
             t = list(pos)
             t[coord_idx] = value
             if any((math.isnan(v) or v is None) for v in t):
