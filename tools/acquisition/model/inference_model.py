@@ -212,10 +212,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.info("But offline thread not running, continuing")
 
         logger.notice("performing segmentation on %s", configuration)
-        project_info = self._project.to_local_value()
-        # copy current one to have other attributes set ( root, device, etc.. )
-        project_info.when = configuration.session_when
-        project_info.session = configuration.session_index
+        # project_info = self._project.to_local_value()
+        # # copy current one to have other attributes set ( root, device, etc.. )
+        # project_info.when = configuration.session_when
+        # project_info.session = configuration.session_index
         self._intersession_block = IntersessionBlock(configuration=configuration)
         # self._send_message(InferenceCommandMessageKind.ProcessOffline, project_info)
         # Set pose_process prepared for processing offline for project info
@@ -232,10 +232,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         logger.info("performing detection analysis on %s", configuration)
         self._check_previous_offline_thread("perform_detection", self._offline_analysis_thread)
         intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
-        project = self._project.to_local_value()
         thread = self._offline_analysis_thread = Thread(
             target=self._intersession_process, name="intersession_process",
-            args=(project, intersession_detection,))
+            args=(intersession_detection,))
         thread.start()
         return configuration
 
@@ -528,19 +527,19 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def _intersession_process_execute(*args, **kwargs):
         return intersession_process(*args, **kwargs)
 
-    def _intersession_process(self, project: ProjectInfo, intersession_detection: IntersessionDetection):
+    def _intersession_process(self, intersession_detection: IntersessionDetection):
         det_cfg = intersession_detection.configuration
-        det_sess_when = (det_cfg.session_index, det_cfg.session_when)
-        prj_sess_when = (project.session, project.when)
-        if det_sess_when != prj_sess_when:
-            logger.critical("Detected mismatch project-session: %s vs %s", det_sess_when, prj_sess_when)
-            project.session = det_cfg.session_index
-            project.when = det_cfg.session_when
+        # det_sess_when = (det_cfg.session_index, det_cfg.session_when)
+        # prj_sess_when = (project.session, project.when)
+        # if det_sess_when != prj_sess_when:
+        #     logger.critical("Detected mismatch project-session: %s vs %s", det_sess_when, prj_sess_when)
+        #     project.session = det_cfg.session_index
+        #     project.when = det_cfg.session_when
 
         try:
             async_res = self._process_pool.apply_async(
                 self._intersession_process_execute,
-                args=(project,),
+                args=(det_cfg.project,),
                 kwds=dict(calib_dir=self._calib_dir),
             )
             result = async_res.get()
@@ -553,7 +552,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         if processed_ok:
             # assert isinstance(result, IntersessionResponse)
-            self.detection_result_ready(project, result)
+            self.detection_result_ready(det_cfg.project, result)
 
         intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
         self._intersession_detection = None
