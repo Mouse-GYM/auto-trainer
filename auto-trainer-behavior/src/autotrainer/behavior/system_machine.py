@@ -267,9 +267,8 @@ class SystemMachine(StateMachine):
                        reason, len(batch_list), algo.is_in_session)
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
-            cur_prj = batch_list[0]
-            intersession.project = cur_prj
-            inference.project = cur_prj
+            intersession.project = project_info
+            inference.project = project_info
             wait_stop_recorded = False
             # don't wait stop recorded if it's a batch list processing,
             # this is always ok since if current project info is/was single one in batch-list,
@@ -284,17 +283,16 @@ class SystemMachine(StateMachine):
                 algo.batch_analysis_starting(batch_len=len(batch_list))
         else:
             self._batch_project_sessions_finished = 0
-            cur_prj = self._project_info.to_local_value()
             wait_stop_recorded = True
 
         if self._pellet_machine.state == PelletState.monitoring:
             self._pellet_machine.move_retract()
 
-        logger.info("processing session project %s", cur_prj)
+        logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
         kind = InferenceCommandMessageKind.ProcessOffline
-        self._inference.send_message(kind, (cur_prj, wait_stop_recorded))
+        self._inference.send_message(kind, (project_info, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -392,7 +390,7 @@ class SystemMachine(StateMachine):
         if prj is None or cur_send_pos is None:
             logger.warning("project None or current send_pos None (DCS)")
         if prj is not None:
-            self._project_info.send_position = cur_send_pos
+            prj.send_position = cur_send_pos
         self._session_started_perf_c = get_perf_now()
         logger.verbose("session_capture_started: send_pos=%s prj.when=%s",
                        None if cur_send_pos is None else cur_send_pos.round(1),
@@ -470,12 +468,12 @@ class SystemMachine(StateMachine):
         #
         self._batch_project_sessions_finished = 0
         if cur_project is not None and (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
-            if len(cur_sessions_batch) == 1 and self._project_info == cur_sessions_batch[0]:
+            if len(cur_sessions_batch) == 1 and cur_project == cur_sessions_batch[0]:
                 logger.debug("only 1 session in batch, skipping batch")
                 # no need if it's the latest/current project-session-info already.
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
-            prj = cur_project.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+            prj = cur_project if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
             self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
