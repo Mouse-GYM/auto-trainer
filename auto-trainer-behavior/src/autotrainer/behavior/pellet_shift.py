@@ -179,7 +179,7 @@ class ShiftXYZHandler(ObservableObject):
             processed_shift = self._result_handler(trial_result)
             if processed_shift is not None and prev_y_limit is not None:
                 if processed_shift.y + send_pos.y < prev_y_limit:
-                    processed_shift = processed_shift.replace(y=send_pos.y - prev_y_limit)
+                    processed_shift = processed_shift.replace(y=prev_y_limit - send_pos.y)
                     logger.info("Processed shift-Y limited to %s", processed_shift.y)
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
