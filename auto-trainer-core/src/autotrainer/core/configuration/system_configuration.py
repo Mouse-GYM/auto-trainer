@@ -43,7 +43,8 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 30
+    version: int = 32
+
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)
@@ -114,7 +115,8 @@ class SystemConfiguration:
 
     def save_default(self, dir_path: Union[Path, str]):
         path = self.make_default_yaml_config_path(Path(dir_path))
-        self.save_file(path.with_suffix(""), as_yaml=True)
+        save_path: Path = path.with_suffix("")  # noqa
+        self.save_file(save_path, as_yaml=True)
 
     def dump_yaml(self) -> str:
         return yaml.dump(self, Dumper=SystemConfigurationDumper,
@@ -183,19 +185,17 @@ class SystemConfiguration:
         self.persistence = PersistenceConfiguration(**content.get("persistence", {}))
 
 
+#
+
 system_configuration_representer = make_camelize_representer("!SystemConfiguration")
 
-
-add_behavior_configuration_representers(SystemConfigurationDumper)
-
+SystemConfigurationDumper.add_representer(SystemConfiguration, system_configuration_representer)
 SystemConfigurationDumper.add_representer(CameraConfiguration, camera_configuration_representer)
 SystemConfigurationDumper.add_representer(HardwareConfiguration, hardware_configuration_representer)
 SystemConfigurationDumper.add_representer(InferenceConfiguration, inference_configuration_representer)
 SystemConfigurationDumper.add_representer(PersistenceConfiguration, persistence_configuration_representer)
+add_behavior_configuration_representers(SystemConfigurationDumper)
 
-SystemConfigurationDumper.add_representer(SystemConfiguration, system_configuration_representer)
-
-#
 
 system_configuration_constructor = make_decamelize_constructor(SystemConfiguration)
 

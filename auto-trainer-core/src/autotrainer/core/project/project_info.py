@@ -15,7 +15,12 @@ from typing import Tuple, NamedTuple, Union, Optional, ClassVar
 
 from typing_extensions import Self
 
-from autotrainer.core import ValueHolderDescriptor, RawValueHolder, get_verbose_logger
+from autotrainer.core import (
+    ValueHolderDescriptor,
+    RawValueHolder,
+    get_verbose_logger,
+    Offset3DTuple,
+)
 from autotrainer.core.multiproc import get_mp_ctx
 
 logger = get_verbose_logger(__name__)
@@ -107,6 +112,7 @@ class _ProjectInfo:
     camera_2: str = ""
     _session: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
+    send_position: Optional[Offset3DTuple] = None
 
 
 @dataclass
@@ -115,14 +121,14 @@ class ProjectInfo(_ProjectInfo):
     # custom/overloaded init to allow normal/exact same than previous argument names
     def __init__(
         self,
+        *,
         root: str=_ProjectInfo.root,
         device_id: str=_ProjectInfo.device_id,
-        when: Optional[datetime]=_ProjectInfo._when,
+        when: Optional[datetime]=None,
         ensure_exists: bool=_ProjectInfo.ensure_exists,
         camera_1: str=_ProjectInfo.camera_1,
         camera_2: str=_ProjectInfo.camera_2,
         session: Optional[int]=None,
-        *,
         mp_manager=None,
     ):
         super().__init__()

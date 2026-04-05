@@ -14,7 +14,7 @@ from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
 from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
-from . import IntersessionResponse
+from . import ReachEvent, IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 
@@ -66,4 +66,6 @@ def intersession_process(
     # rename:
     results_dict["food_consumed"] = results_dict.pop("pellets_consumed")
     # all others keys are same than IntersessionResponse fields
+    # convert to ReachEvent instances:
+    results_dict["reach_events"] = [ReachEvent(**d) for d in results_dict["reach_events"]]
     return IntersessionResponse(**results_dict)
