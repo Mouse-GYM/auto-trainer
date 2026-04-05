@@ -171,7 +171,10 @@ class SystemMachine(StateMachine):
         pellet_machine.events.pellet_sent += self._on_pellet_sent
         pellet_machine.events.load_failed += self._on_pellet_load_failed
 
-        intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
+        intersession_machine = self._intersession = IntersessionMachine(
+            algorithm=algo,
+            inference=inference,
+        )
         intersession_machine.events.on_analysis_ended += self._on_intersession_analysis_ended
         intersession_machine.events.state_changed += self._on_intersession_state_changed
 

@@ -31,9 +31,10 @@ class IntersessionMachine(StateMachine):
 
     def __init__(
         self,
+        *,
         algorithm: BehaviorAlgorithm,
+        inference: InferenceProtocol,
         project_info: ProjectInfo = None,
-        inference: InferenceProtocol = None,
     ):
 
         initial_state = IntersessionState.idle
@@ -70,12 +71,12 @@ class IntersessionMachine(StateMachine):
         self._segmentation_configuration = None
         self.state = IntersessionState.idle
 
-    def after_enter_segmentation(self, project_info: Optional[ProjectInfo]):
-        prj = project_info
+    def after_enter_segmentation(self, project_info: ProjectInfo):
         segment_config = SegmentationConfiguration(
             nonce=secrets.token_hex(),
-            session_index=prj.session,
-            session_when=prj.when,
+            session_index=project_info.session,
+            session_when=project_info.when,
+            project=project_info,
         )
         segment_config.complete = partial(self._segmentation_complete, segment_config=segment_config)
         self._segmentation_configuration = segment_config
@@ -94,13 +95,13 @@ class IntersessionMachine(StateMachine):
             nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
             session_when=segment_config.session_when,
+            project=segment_config.project,
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)
         if res is not None:
             self._detection_configuration = detection_config
-            self.post_event_content(BehaviorEventKind.intersessionDetectionBegin,
-                                                      context=segment_config.nonce)
+            self.post_event_content(BehaviorEventKind.intersessionDetectionBegin, context=segment_config.nonce)
 
     def after_end_analysis(self, success):
         self._segmentation_configuration = None
@@ -109,26 +110,21 @@ class IntersessionMachine(StateMachine):
         self._algorithm.end_session(result)
         self.events.on_analysis_ended(result)
 
-    def can_perform_segmentation(self, project_info: Optional[ProjectInfo] = None):
+    def can_perform_segmentation(self, project_info: ProjectInfo):
         p = project_info is not None
         i = self._inference is not None
-        s = self._segmentation_configuration is not None
-        self.post_event_content(
-            BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{not s}")
-        res = p and i and not s
+        s = self._segmentation_configuration is None
+        self.post_event_content(BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{s}")
+        res = p and i and s
         logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s",
                      res, p, i, s)
         return res
 
-    def can_perform_detection(self, segment_config: Optional[SegmentationConfiguration] = None):
-        prj = self._project_info
-        p = prj is not None
+    def can_perform_detection(self, segment_config: SegmentationConfiguration):
+        s = segment_config is not None  # always true
+        p = segment_config.project is not None  # always true
         i = self._inference is not None
         d = self._detection_configuration is None
-        s = segment_config is not None
-        # we could add this condition too:
-        #   assert prj.session.value == segment_config.session_index
-        # in the others conditions applied/checked here.
         self.post_event_content(BehaviorEventKind.intersessionDetectionCan,
                                                   context=f"{p}:{i}:{d}:{s}")
         can_do_detection = p and i and d and s
@@ -137,8 +133,6 @@ class IntersessionMachine(StateMachine):
         return can_do_detection
 
     def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
-        import traceback
-        # caller_stack = "".join(traceback.format_stack(limit=4))
         logger.verbose("segmentation_complete: nonce=%s success=%s config=%s",
                      nonce, success, segment_config)
         if segment_config.nonce != nonce:
@@ -189,13 +183,13 @@ class IntersessionMachine(StateMachine):
     def may_trigger(self):
         """Main trigger"""
 
-    def perform_segmentation(self, project_info: Optional[ProjectInfo]):
+    def perform_segmentation(self, project_info: ProjectInfo):
         """Perform segmentation"""
 
     def may_perform_segmentation(self):
         """Perform segmentation"""
 
-    def perform_detection(self, segment_config):
+    def perform_detection(self, segment_config: SegmentationConfiguration):
         """Perform detection"""
 
     def may_perform_detection(self):

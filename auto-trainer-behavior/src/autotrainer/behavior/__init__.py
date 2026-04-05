@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
+from autotrainer.core import ProjectInfo
+
+
 # keeping top level atm, given not quite sure where to put
 
 def _unconfigured_complete_action(once, success):
@@ -14,6 +17,7 @@ class SegmentationConfiguration:
     nonce: str
     session_index: int
     session_when: datetime
+    project: ProjectInfo
     complete: Callable[[str, bool], None] = _unconfigured_complete_action
 
 
@@ -22,6 +26,7 @@ class DetectionConfiguration:
     nonce: str
     session_index: int
     session_when: datetime
+    project: ProjectInfo
     complete: Callable[[str, bool], None] = _unconfigured_complete_action
 
 
