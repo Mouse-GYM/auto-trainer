@@ -71,7 +71,7 @@ def test_video_capture_model(camera_url_1: CaptureCameraAttrs, camera_url_2: Cap
 
     count = 0
 
-    project_info = ProjectInfo(output_location)
+    project_info = ProjectInfo(root=output_location)
 
     while count < iterations:
         logger.info(f"video capture process starting (iteration {count + 1})")

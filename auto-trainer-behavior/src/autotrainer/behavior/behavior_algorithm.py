@@ -24,7 +24,7 @@ from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, ShiftXYZHandlerConfig, \
+    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, \
     PelletUncoverConfiguration
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -35,7 +35,6 @@ from autotrainer.video import CaptureProcessStatus
 from . import CaptureAnalysisResult, RecordingEndingReason
 
 from .pellet import PelletState
-from .pellet_shift import ShiftXYZBufferHandler, ShiftXYZHandler
 from .system_machine_state import SystemState
 from .intersession import IntersessionState
 
@@ -98,6 +97,8 @@ class BehaviorAlgoProps(str, enum.Enum):
     HEAD_FIXATION_ENABLED = 'head_fixation_enabled'  # this is head-clamp
 
     # runtime context:
+    PELLET_SHIFT_Y_LIMIT = 'pellet_shift_y_limit'
+
     DAY_PELLET_COUNT = 'day_pellet_count'  # consumed
     TOTAL_PELLET_COUNT = 'total_pellet_count'  # consumed
     DAY_PELLET_PRESENTED = 'day_pellet_presented'
@@ -237,6 +238,7 @@ class BehaviorAlgorithm(ObservableObject):
     def __init__(
         self,
         *,
+        project_info: Optional[ProjectInfo] = None,
         diamond_triangle_offset_config_path: Optional[Path] = None,
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
     ):
@@ -245,7 +247,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
-        self._project_info = None
+        self._project_info = project_info
         self._status = BehaviorAlgoStatus.IDLE
 
         self._active_config = BehaviorConfiguration()
@@ -288,6 +290,8 @@ class BehaviorAlgorithm(ObservableObject):
         self._last_capture_status_change_perf_c = -math.inf
 
         # self.max_pellets_per_headfix_session: int = 10  # unused
+
+        self._pellet_shift_y_limit: Optional[float] = None
 
         self._session_pellet_loaded_count = 0  # loaded
 
@@ -337,7 +341,6 @@ class BehaviorAlgorithm(ObservableObject):
         self._today = None  # only used in check_date, unused, atm
         # self._start_day()
         #
-        self._shift_xyz_handler = ShiftXYZHandler()
 
     @classmethod
     def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
@@ -585,6 +588,15 @@ class BehaviorAlgorithm(ObservableObject):
     @property
     def uncover_context(self) -> PelletUncoverContext:
         return self._uncover_ctx
+
+    @property
+    def pellet_shift_y_limit(self) -> Optional[float]:
+        return self._pellet_shift_y_limit
+
+    @pellet_shift_y_limit.setter
+    def pellet_shift_y_limit(self, value: Optional[float]):
+        prev, self._pellet_shift_y_limit = self._pellet_shift_y_limit, value
+        self._on_property_changed(BehaviorAlgoProps.PELLET_SHIFT_Y_LIMIT, value, prev)
 
     @property
     def pellet_uncover_y_dcs(self) -> float:
@@ -1001,7 +1013,7 @@ class BehaviorAlgorithm(ObservableObject):
         return self._diamond_triangle_drift
 
     @property
-    def diamond_triangle_offset_config_path(self) -> Path:
+    def diamond_triangle_offset_config_path(self) -> Optional[Path]:
         return self._diamond_triangle_offset_config_path
 
     #
@@ -1023,10 +1035,6 @@ class BehaviorAlgorithm(ObservableObject):
         cfg = self._active_config.pellet_delivery
         prev, cfg.auto_correct_motors_drift = cfg.auto_correct_motors_drift, value
         self._on_property_changed(BehaviorAlgoProps.AUTO_CORRECT_MOTOR_DRIFT, value, prev)
-
-    @property
-    def shift_xyz_handler(self) -> ShiftXYZHandler:
-        return self._shift_xyz_handler
 
     @property
     def any_cams_scene_parts_presence_context(self) -> ScenePartsPresenceContext:
@@ -1295,14 +1303,6 @@ class BehaviorAlgorithm(ObservableObject):
             logger.notice("Resetting config to previous loaded")
             self.load_configuration(prev)
 
-    def _load_shift_xyz_handler_config(self, cfg: ShiftXYZHandlerConfig):
-        sel = cfg.selected
-        if sel == "ShiftXYZBufferHandler":
-            handler = ShiftXYZBufferHandler(config=cfg.buffer)
-        else:
-            raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
-        self._shift_xyz_handler.set_handler(handler)
-
     def load_configuration(self, config: BehaviorConfiguration):
         with self._thread_lock:  # not sure really needed
             # in case of need bigger:
@@ -1313,7 +1313,6 @@ class BehaviorAlgorithm(ObservableObject):
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
         self.reload_diamond_triangle_config()
-        self._load_shift_xyz_handler_config(config.shift_xyz_handler)
         self._active_config = config  # set it as new active one only at the end,
         #   so that possible on_property_changed event can be relayed if some changed.
         # and/but keep separate copy for eventual reset_config():
@@ -1438,6 +1437,7 @@ class BehaviorAlgorithm(ObservableObject):
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
         if animal is None:
+            self.pellet_shift_y_limit = None
             self.pellets_presented_day = \
             self.pellet_reaches_day = \
             self.pellet_consumed_day = \
@@ -1447,6 +1447,7 @@ class BehaviorAlgorithm(ObservableObject):
             self.pellet_consumed_total = \
             self.successful_reaches_total = 0
             return
+        self.pellet_shift_y_limit = animal.target_y_limit
         day_counts = animal.pellet_counts_day
         self.pellets_presented_day = day_counts.presented
         self.pellet_consumed_day = day_counts.consumed

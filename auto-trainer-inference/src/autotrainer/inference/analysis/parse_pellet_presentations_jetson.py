@@ -65,6 +65,7 @@ def segment_reaches(
         'pellets_consumed': 0,
         'successful_reaches': 0,
         'rh_max_vp_list': [],
+        'reach_events': [],
     }
     if df_3d is None:
         return results_dict
@@ -375,6 +376,7 @@ def segment_reaches_f2(
                                 "init": frame,
                                 "max": -1,
                                 "end": -1,
+                                "method": "",
                                 "outcome": "",
                                 "delay_since_presented": delay_since_presented,
                             }

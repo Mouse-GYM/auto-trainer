@@ -6,12 +6,23 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autotrainer.core import SystemConfiguration, CameraId, HardwareConfiguration, InferenceConfiguration, \
-    PersistenceConfiguration, CameraConfiguration
+from autotrainer.core import (
+    SystemConfiguration,
+    CameraId,
+    HardwareConfiguration,
+    InferenceConfiguration,
+    PersistenceConfiguration,
+    CameraConfiguration,
+    Offset3DTuple,
+)
 from autotrainer.core.analysis import HeadbarPressureConfiguration
 from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
-from autotrainer.core.configuration import SystemConfigurationSafeLoader
+from autotrainer.core.configuration import (
+    SystemConfigurationSafeLoader,
+    SystemConfigurationDumper,
+    SystemConfigurationLoader,
+)
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
 from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
@@ -288,3 +299,11 @@ def test_save_file_without_specify_save_type_fails():
     cfg = SystemConfiguration()
     with pytest.raises(ValueError, match="Missing one of as_json or as_yaml"):
         cfg.save_file("foobar.baz")
+
+
+def test_offset3d_yaml():
+    o = Offset3DTuple(1, 2, 3.5)
+    data = yaml.dump(o, Dumper=SystemConfigurationDumper)
+    o2 = yaml.load(data, Loader=SystemConfigurationLoader)
+    assert isinstance(o2, Offset3DTuple)
+    assert o2 == o

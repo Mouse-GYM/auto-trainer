@@ -4,7 +4,7 @@ import threading
 import time
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional, Tuple, Dict, Union
+from typing import Optional, Tuple, Dict, Union, List
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
@@ -98,6 +98,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_ack_timeout_engaged = False
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
+
+    @property
+    def pending_tokens(self) -> List[str]:
+        return list(self._pending_tokens)
 
     def _check_dcs_cfg(self, *, return_none: bool=False):
         cfg = self._dcs_config
@@ -557,12 +561,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
         while True:
+            with self._lock:
+                if token not in self._pending_tokens:
+                    logger.debug("Got ack for token=%s ; delay=%.6f",
+                                 token, time.perf_counter() - p_start)
+                    return
             p_now = time.perf_counter()
             if p_now > p_timeout:
                 break
-            with self._lock:
-                if token not in self._pending_tokens:
-                    logger.debug("Got ack for token=%s ; delay=%.6f", token, p_now - p_start)
-                    return
             time.sleep(0.0025)  # 2.5 ms
         raise RuntimeError(f"timeout waiting ack of pending token={token}")

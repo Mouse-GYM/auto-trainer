@@ -4,9 +4,13 @@ import math
 import statistics
 from typing import Callable, Optional, List, Union
 
-from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger
-from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.behavior import BehaviorAlgorithm, PelletDeviceProtocol
+from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo
+from autotrainer.core.configuration.behavior_configuration import (
+    ShiftXYZBufferHandlerConfig,
+    ShiftXYZHandlerConfig,
+)
+
 from autotrainer.inference.analysis import IntersessionResponse
 
 
@@ -63,9 +67,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
         else:
             mean_off, stdev_off = calculate_std_dev_manual(rh_list, reduce_method=statistics.median)
         #
-        target = Offset3DTuple(cfg.target.x, cfg.target.y, cfg.target.z)
-        #
-        off_x, off_y, off_z = mean_off - target
+        off_x, off_y, off_z = mean_off - cfg.target
         # assert isinstance(res_off, Offset3DTuple)
         #
         shift_x = off_x if abs(off_x) > 0.5 else 0
@@ -85,13 +87,26 @@ class ShiftXYZHandler(ObservableObject):
     LAST_SHIFT_XYZ = "last_shift_xyz"
     LAST_PROCESSED_SHIFT_XYZ = "last_processed_shift_xyz"
 
-    def __init__(self):
+    def __init__(self, *, pellet_dev: PelletDeviceProtocol, algo: BehaviorAlgorithm):
         super().__init__()
+        self._pellet_dev = pellet_dev
+        self._algo = algo
+        self._config = algo.active_config.shift_xyz_handler
+        self.set_config(algo.active_config.shift_xyz_handler)
         default_handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
         self._result_handler: ShiftXYZBaseHandler = default_handler
         self._processed_shift_handler: ProcessedShiftXYZCallbackHandlerT = None
-        self._last_shift_xyz: Optional[Offset3DTuple] = None
-        self._last_processed_shift_xyz: Optional[Offset3DTuple] = None
+        self._last_shift_xyz = Offset3DTuple.get_nan()
+        self._last_processed_shift_xyz = Offset3DTuple.get_nan()
+
+    def set_config(self, config: ShiftXYZHandlerConfig):
+        sel = config.selected
+        if sel == "ShiftXYZBufferHandler":
+            handler = ShiftXYZBufferHandler(config=config.buffer)
+        else:
+            raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
+        self._config = config
+        self.set_handler(handler)
 
     def reset(self):
         self._result_handler.reset()
@@ -132,10 +147,40 @@ class ShiftXYZHandler(ObservableObject):
     def set_processed_handler(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._processed_shift_handler = func
 
-    def put_intersession_response(self, trial_result: IntersessionResponse):
-        trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list)
+    def put_intersession_response(self, project: ProjectInfo, trial_result: IntersessionResponse):
+        algo = self._algo
+        cfg = algo.active_config.shift_xyz_handler
+        prev_y_limit = algo.pellet_shift_y_limit
+        send_pos = project.send_position
+        if send_pos is None:
+            logger.warning("skipping trial result given no send_pos ; project=%s", project)
+            return
+        tongue_eaten = False
+        for reach in trial_result.reach_events:
+            if reach.outcome == "eaten" and reach.method == "tongue":
+                tongue_eaten = True
+                break
+        if not tongue_eaten:
+            trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list)
+        else:
+            trial_shift = cfg.tongue_eaten_shift
+            logger.verbose("checking new tongue-eaten against previous: cur=%s prev=%s",
+                           send_pos.y, prev_y_limit)
+            if prev_y_limit is None:
+                algo.pellet_shift_y_limit = send_pos.y + trial_shift.y
+            else:
+                if send_pos.y > prev_y_limit:
+                    algo.pellet_shift_y_limit = send_pos.y
         self.last_shift_xyz = trial_shift
-        processed_shift = self._result_handler(trial_result)
+        if tongue_eaten:
+            processed_shift = trial_shift
+            self._result_handler.reset()
+        else:
+            processed_shift = self._result_handler(trial_result)
+            if processed_shift is not None and prev_y_limit is not None:
+                if processed_shift.y + send_pos.y < prev_y_limit:
+                    processed_shift = processed_shift.replace(y=send_pos.y - prev_y_limit)
+                    logger.info("Processed shift-Y limited to %s", processed_shift.y)
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
             func = self._processed_shift_handler

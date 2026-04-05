@@ -10,15 +10,15 @@ from tempfile import NamedTemporaryFile
 from typing import Optional, Dict, Any, List
 from typing_extensions import Self
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, get_verbose_logger
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 _date_format = "%Y%m%d"
 
 
-def _load_old_format(data: Dict[str, Any]):
+def _load_old_format(data: Dict[str, Any]) -> "AnimalSubject":
     kw = {}
     if "name" in data:
         kw['name'] = data["name"]
@@ -72,6 +72,8 @@ class AnimalPelletCounts:
 class AnimalSubject:
     """A subject in an animal experiment."""
 
+    version: int = 1
+
     name: str = ""
     id: str = None   # handled in post_init
 
@@ -88,6 +90,8 @@ class AnimalSubject:
     pellet_counts_day: AnimalPelletCounts = dataclasses.field(default_factory=AnimalPelletCounts)
     pellet_counts_total: AnimalPelletCounts = dataclasses.field(default_factory=AnimalPelletCounts)
 
+    target_y_limit: Optional[float] = None  # in DCS
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
@@ -99,10 +103,19 @@ class AnimalSubject:
 
     @classmethod
     def from_file(cls, file_path: Path) -> Optional[Self]:
-        animal = AnimalSubject()
+        animal = cls()
         with file_path.open("r") as file:
             try:
                 data = json.load(file)
+                if not isinstance(data, dict):
+                    if not data:
+                        # assuming empty file
+                        return cls()
+                    raise ValueError(f"Invalid file format in {file_path} ; not a dict: %s", type(data))
+                file_version = data.get("version", None)
+                if file_version is None or file_version != AnimalSubject.version:
+                    logger.notice("Loaded animal version %s vs current Animal version %s",
+                                   file_version, AnimalSubject.version)
                 if "id" not in data:
                     # old format
                     animal = _load_old_format(data)
@@ -129,6 +142,7 @@ class AnimalSubject:
                         name=data.pop('name'),
                         baseline_magnet_intensity=baseline_intensity,
                         is_pellet_dcs=pellet_dcs is not None,
+                        target_y_limit=data.pop('targetYLimit', None),
                         pellet_x=pellet_x,
                         pellet_y=pellet_y,
                         pellet_z=pellet_z,
@@ -162,6 +176,7 @@ class AnimalSubject:
             'z': self.pellet_z,
         }
         data = {
+            "version": self.version,
             "id": self.id,
             "name": self.name,
             "reach": reach,
@@ -169,6 +184,7 @@ class AnimalSubject:
                 'currentProtocol': self.training.current_protocol,
                 'protocols': self.training.protocols,
             },
+            "targetYLimit": self.target_y_limit,
             "pelletCountsDayDate": self.pellet_counts_day_date.strftime(_date_format),
             "pelletCountsDay": dataclasses.asdict(self.pellet_counts_day),
             "pelletCountsTotal": dataclasses.asdict(self.pellet_counts_total),

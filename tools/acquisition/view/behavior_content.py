@@ -226,7 +226,7 @@ class BehaviorContent(ContentWidget):
         #
 
         inference_model.property_changed += self._inference_model_property_changed
-        algo.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
+        system_machine.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
 
         system_machine.events.state_changed += lambda old, new: self._system_machine_state_label.setText(new)
         pellet_machine.events.state_changed += lambda old, new: self._pellet_machine_state_label.setText(new)

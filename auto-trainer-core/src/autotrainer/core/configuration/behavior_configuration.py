@@ -32,10 +32,19 @@ class ShiftXYZTarget:
     z: float = 1
 
 
+def default_shift_xyz_target() -> Offset3DTuple:
+    return Offset3DTuple(**dataclasses.asdict(ShiftXYZTarget()))
+
+
+def default_tongue_eaten_shift() -> Offset3DTuple:
+    return Offset3DTuple(0, 0.5, 0)
+
+
 @dataclasses.dataclass
 class _ShiftXYZBufferHandlerConfig:
+
     minimum_reach_fail: int = 10  # minimum nbr of failed reach, to make the mean/an entire processing of them
-    target: ShiftXYZTarget = field(default_factory=ShiftXYZTarget)
+    target: Offset3DTuple = field(default_factory=default_shift_xyz_target)
 
 
 @dataclasses.dataclass
@@ -49,6 +58,8 @@ class ShiftXYZBufferHandlerConfig(_ShiftXYZBufferHandlerConfig):
 
 @dataclasses.dataclass
 class ShiftXYZHandlerConfig:
+    tongue_eaten_shift: Offset3DTuple = field(default_factory=default_tongue_eaten_shift)
+
     selected: str = "ShiftXYZBufferHandler"
     buffer: ShiftXYZBufferHandlerConfig = field(default_factory=ShiftXYZBufferHandlerConfig)
 
@@ -269,7 +280,7 @@ _cls_2_tag = {
     BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
     AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
     HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",  # missed Configuration suffix
-    ShiftXYZTarget: "ShiftXYZTarget",
+    # ShiftXYZTarget: "ShiftXYZTarget",
     ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
     SystemMaintenanceConfig: "SystemMaintenanceConfig",
@@ -283,6 +294,11 @@ def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
 
     for cls, tag in _cls_2_tag.items():
         add(cls, tag)
+
+    from autotrainer.core.configuration import repr_offset3d_tuple
+
+    dumper.add_representer(ShiftXYZTarget, repr_offset3d_tuple)
+    # changed to use Offset3dTuple
 
 
 def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):

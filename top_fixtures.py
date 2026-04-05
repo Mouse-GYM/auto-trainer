@@ -258,7 +258,8 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     assert BehaviorAlgorithm._no_handler_thread is True
 
     del mock_get_perf_now  # not needed here, only used for side effect
-
+    #
+    inference.project = project_info
     #
     machine = SystemMachine(
         tunnel_device=tunnel_device,
@@ -287,6 +288,7 @@ class MockSystemMachine:
 
     def _init(self, machine: SystemMachine):
         self._machine: SystemMachine = machine
+        self.project = machine.project
         self._load_cell = machine._analysis.load_cell_monitor  # noqa
         # register state_changed (and system_state_changed for algo at end) transition recorder,
         # so that can be used to ensure/assert that the given states have passed through all the desired values,
@@ -398,7 +400,7 @@ class MockSystemMachine:
                 self.mock_complete_detection(detection_ok)
             if detection_ok:
                 logger.info("sending detection_result_ready")
-                self.inference.detection_result_ready(self.inference.project, results)
+                self.inference.detection_result_ready(self.project, results)
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):

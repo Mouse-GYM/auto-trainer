@@ -20,7 +20,10 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.core.configuration.behavior_configuration import HeadClampReleaseMode
+from autotrainer.core.configuration.behavior_configuration import (
+    HeadClampReleaseMode,
+    ShiftXYZHandlerConfig,
+)
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind, InferenceMonitorDataMsg
 from autotrainer.inference.analysis import IntersessionResponse
@@ -32,6 +35,7 @@ from .intersession import IntersessionMachine, IntersessionState
 from .pellet import PelletState
 from .pellet.pellet_machine import PelletMachine
 from .pellet_device_protocol import PelletDeviceProtocol
+from .pellet_shift import ShiftXYZHandler, ShiftXYZBufferHandler
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
@@ -114,18 +118,25 @@ class SystemMachine(StateMachine):
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
 
-        self._algorithm: BehaviorAlgorithm = BehaviorAlgorithm(
+        self._algorithm = BehaviorAlgorithm(
+            project_info=project_info,
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
         algo = self._algorithm
         del algorithm  # using algo
-        algo.project = project_info
+
         algo.session_starting += self._on_session_capture_started
         algo.session_capture_ending += self._on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
+
+        shift_xyz_handler = self._shift_xyz_handler = ShiftXYZHandler(
+            algo=algo,
+            pellet_dev=pellet_device,
+        )
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
-        algo.shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
+        shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
+        #
 
         def sync_algo_system_state(_, new_state):
             self._algorithm.system_state = new_state
@@ -163,9 +174,6 @@ class SystemMachine(StateMachine):
         intersession_machine = self._intersession = IntersessionMachine(algo, self._project_info, inference)
         intersession_machine.events.on_analysis_ended += self._on_intersession_analysis_ended
         intersession_machine.events.state_changed += self._on_intersession_state_changed
-
-    def _on_intersession_state_changed(self, old, new):
-        self._algorithm.intersession_state = new
 
     def cancel_timers(self):
         for timer in (
@@ -210,6 +218,10 @@ class SystemMachine(StateMachine):
         self._event_manager.project = value
         self._algorithm.project = value
         self._intersession.project = value
+
+    @property
+    def shift_xyz_handler(self) -> ShiftXYZHandler:
+        return self._shift_xyz_handler
 
     def before_enter_tunnel(self, *, reason: str = "NA"):
         pellet_state = self._pellet_machine.state
@@ -375,12 +387,22 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_session_capture_started(self):
+        cur_send_pos = self._pellet_device.last_dcs_position
+        prj = self._project_info
+        if prj is None or cur_send_pos is None:
+            logger.warning("project None or current send_pos None (DCS)")
+        if prj is not None:
+            self._project_info.send_position = cur_send_pos
         self._session_started_perf_c = get_perf_now()
+        logger.verbose("session_capture_started: send_pos=%s prj.when=%s",
+                       None if cur_send_pos is None else cur_send_pos.round(1),
+                       None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
         #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
-        self._inference.project = self._project_info
-        self._intersession.project = self._project_info  # same for intersession
+        if prj is not None:
+            self._inference.project = prj
+            self._intersession.project = prj  # same for intersession
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -391,7 +413,7 @@ class SystemMachine(StateMachine):
             self._tunnel_device.tare_load_cell()
         p_now = get_perf_now()
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
-        cur_project = self.project
+        cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
         algo = self.algorithm
@@ -407,6 +429,7 @@ class SystemMachine(StateMachine):
         batch_sess_cfg = algo.batch_session_recording_config
         load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
         if can_perform_analysis:
+            assert cur_project is not None
             if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
                 # > 0:  in case it's disabled while there is some session(s) currently batched
                 cur_sessions_batch.append(cur_project)
@@ -424,6 +447,7 @@ class SystemMachine(StateMachine):
             can_batch_session = (
                 load_cell_engaged
                 and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
+                and cur_project is not None
             )
         #
         logger.notice(
@@ -445,13 +469,13 @@ class SystemMachine(StateMachine):
                 self._clean_raw_data(cur_project)
         #
         self._batch_project_sessions_finished = 0
-        if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
+        if cur_project is not None and (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
             if len(cur_sessions_batch) == 1 and self._project_info == cur_sessions_batch[0]:
                 logger.debug("only 1 session in batch, skipping batch")
                 # no need if it's the latest/current project-session-info already.
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
-            prj = self._project_info.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+            prj = cur_project.to_local_value() if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
             self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
@@ -1057,9 +1081,14 @@ class SystemMachine(StateMachine):
         else:
             algo.end_capture_session(reason=reason)
 
+    def _on_intersession_state_changed(self, old, new):
+        self._algorithm.intersession_state = new
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_detection_result_ready(self, prj: ProjectInfo, res: IntersessionResponse):
         logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
+        #
+        self._shift_xyz_handler.put_intersession_response(prj, res)
         #
         algo = self._algorithm
         algo.set_previous_intersession_analysis_rsp(prj, res)
@@ -1074,7 +1103,6 @@ class SystemMachine(StateMachine):
         if res.total_reaches > 0:
             algo.increase_pellet_total_reaches(res.total_reaches)
         #
-        algo.shift_xyz_handler.put_intersession_response(res)
 
     def _handle_processed_shift_xyz(self, shift_xyz: Offset3DTuple):
         logger.success("Received processed shift xyz: %s", shift_xyz.round(1))

@@ -103,7 +103,7 @@ class BaseTrainingPlan(MockSystemMachine):
         app_model.training_plan = plan
 
         app_model.training_mode = TrainingMode.AUTOMATIC
-        app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING)
+        app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING, wait_connected=False)
 
         algo.pellet_delivery_enabled = True
 

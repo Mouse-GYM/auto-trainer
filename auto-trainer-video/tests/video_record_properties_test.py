@@ -7,7 +7,7 @@ def test_should_record_mode_none():
     assert properties.should_record(False) is False
     assert properties.should_record(True) is False
 
-    project_info = ProjectInfo("local")
+    project_info = ProjectInfo(root="local")
 
     properties = VideoRecordProperties(project_info)
     assert properties.should_record(False) is False
@@ -31,7 +31,7 @@ def test_should_record_mode_none():
 
 
 def test_should_record_continuous():
-    project_info = ProjectInfo("local")
+    project_info = ProjectInfo(root="local")
 
     properties = VideoRecordProperties(project_info, record_mode=VideoRecordMode.CONTINUOUS)
     assert properties.should_record(False) is False
@@ -57,7 +57,7 @@ def test_should_record_continuous():
 
 
 def test_should_record_trigger():
-    project_info = ProjectInfo("local")
+    project_info = ProjectInfo(root="local")
 
     properties = VideoRecordProperties(project_info, record_mode=VideoRecordMode.TRIGGER)
     assert properties.should_record(False) is False
