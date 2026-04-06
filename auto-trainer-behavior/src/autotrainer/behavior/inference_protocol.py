@@ -62,10 +62,6 @@ class _InferenceProtocol(Protocol):
     def put_to_data_handler(self, msg: InferenceMonitorDataMsg):
         """Put msg to data handler process"""
 
-    @property
-    def stop_recorded_event(self) -> synchronize.Event:
-        """The multiprocess event associated with h5 live files, must be set for readers"""
-
 
 class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtocol):
 

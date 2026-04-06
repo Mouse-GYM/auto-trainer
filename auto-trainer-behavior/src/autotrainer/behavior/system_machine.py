@@ -390,7 +390,7 @@ class SystemMachine(StateMachine):
         if prj is None or dcs_send_pos is None:
             logger.warning("project None or current send_pos None (DCS)")
         self._session_started_perf_c = get_perf_now()
-        logger.verbose("session_capture_started: send_pos=%s prj.when=%s",
+        logger.info("session_capture_started: send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.

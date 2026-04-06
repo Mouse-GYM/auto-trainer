@@ -1,5 +1,5 @@
 import importlib
-import multiprocessing
+import multiprocessing.pool
 import os
 import queue
 import signal
@@ -12,25 +12,19 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
 
-import cv2
-import h5py
-import numpy
-import numpy as np
-
-from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
+from autotrainer.core.project import ProjectDependentProtocol
+from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, clear_queue, \
+    InferenceConfiguration, Offset3DTuple
+from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
+from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
     InferenceProtocol, IntersessionBlock, IntersessionDetection
-from autotrainer.core.frame_index import FrameIndexCategory
-from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus, InferenceMonitorDataMsg
-from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-from autotrainer.inference.analysis import intersession_process
+from autotrainer.inference.analysis import intersession_process, IntersessionResponse
 
-from autotrainer.core.project import ProjectDependentProtocol
 
 logger = get_verbose_logger(__name__)
 
@@ -97,11 +91,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 for hand_part in AllHandsParts
             },
         }
-        self._process_pool: Optional[multiprocessing.Pool] = None
-
-    @property
-    def stop_recorded_event(self) -> synchronize.Event:
-        return self._data_monitor_proc.stop_recorded
+        self._process_pool: Optional[multiprocessing.pool.Pool] = None
 
     @property
     def project(self) -> ProjectInfo:
@@ -551,6 +541,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             processed_ok = True
 
         if processed_ok:
+            result: IntersessionResponse
             # assert isinstance(result, IntersessionResponse)
             self.detection_result_ready(det_cfg.project, result)
 
