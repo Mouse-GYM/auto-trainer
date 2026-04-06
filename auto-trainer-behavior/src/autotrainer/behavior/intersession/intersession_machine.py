@@ -72,6 +72,7 @@ class IntersessionMachine(StateMachine):
         self.state = IntersessionState.idle
 
     def after_enter_segmentation(self, project_info: ProjectInfo):
+        logger.success("entering segmentation with %s", project_info)
         segment_config = SegmentationConfiguration(
             nonce=secrets.token_hex(),
             session_index=project_info.session,
