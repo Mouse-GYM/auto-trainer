@@ -218,6 +218,7 @@ class SystemMachine(StateMachine):
         self._event_manager.project = value
         self._algorithm.project = value
         self._intersession.project = value
+        self._inference.project = value
 
     @property
     def shift_xyz_handler(self) -> ShiftXYZHandler:
@@ -267,6 +268,7 @@ class SystemMachine(StateMachine):
                        reason, len(batch_list), algo.is_in_session)
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
+            logger.verbose("setting project_info to intersession and inference")
             intersession.project = project_info
             inference.project = project_info
             wait_stop_recorded = False
