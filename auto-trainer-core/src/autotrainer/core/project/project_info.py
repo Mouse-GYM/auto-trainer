@@ -113,6 +113,7 @@ class _ProjectInfo:
     _session: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
+    dcs_send_position: Optional[Offset3DTuple] = None
 
 
 @dataclass

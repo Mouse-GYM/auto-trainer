@@ -130,10 +130,7 @@ class SystemMachine(StateMachine):
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
 
-        shift_xyz_handler = self._shift_xyz_handler = ShiftXYZHandler(
-            algo=algo,
-            pellet_dev=pellet_device,
-        )
+        shift_xyz_handler = self._shift_xyz_handler = ShiftXYZHandler(algo=algo)
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
         #
@@ -388,20 +385,19 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_session_capture_started(self):
-        cur_send_pos = self._pellet_device.last_dcs_position
+        dcs_send_pos = self._pellet_device.last_dcs_set_position
         prj = self._project_info
-        if prj is None or cur_send_pos is None:
+        if prj is None or dcs_send_pos is None:
             logger.warning("project None or current send_pos None (DCS)")
-        if prj is not None:
-            prj.send_position = cur_send_pos
         self._session_started_perf_c = get_perf_now()
         logger.verbose("session_capture_started: send_pos=%s prj.when=%s",
-                       None if cur_send_pos is None else cur_send_pos.round(1),
-                       None if prj is None else prj.when)
+                       dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
         #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
         if prj is not None:
+            prj.send_position = self._pellet_device.last_set_position
+            prj.dcs_send_pos = dcs_send_pos
             self._inference.project = prj
             self._intersession.project = prj  # same for intersession
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
