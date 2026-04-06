@@ -398,6 +398,7 @@ class SystemMachine(StateMachine):
         if prj is not None:
             prj.send_position = self._pellet_device.last_set_position
             prj.dcs_send_pos = dcs_send_pos
+            logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
             self._inference.project = prj
             self._intersession.project = prj  # same for intersession
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
