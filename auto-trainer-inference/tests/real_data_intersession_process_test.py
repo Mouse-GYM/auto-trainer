@@ -86,20 +86,34 @@ def test_fp_and_xp_not_same(project_info, caplog):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
-def test_index_error(project_info, caplog):
-    # >           dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
-    # E           IndexError: index 378 is out of bounds for axis 0 with size 378
+def test_agx001_20250806_59(project_info, caplog):
     project_info.session = 59
     project_info.root = this_dir.joinpath("index_error").as_posix()
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 8, 6)
     caplog.set_level(verboselogs.VERBOSE)
-    with pytest.raises(IndexError, match="index 378 is out of bounds for axis 0"):
-        intersession_process(
-            project_info,
-            calib_dir=calib_dir,
-        )
-    # TODO: fix underlying issue
+    # with pytest.raises(ValueError, match="fp and xp are not of the same length"):
+    res = intersession_process(
+        project_info,
+        calib_dir=calib_dir,
+    )
+    assert res == IntersessionResponse(
+        rh_max_vp_list=[(0.5520302810091309, -3.726691745711479, 1.279046251520091)],
+        reach_events=[
+            ReachEvent(
+                init=112,
+                end=141,
+                max=129,
+                method="",
+                outcome="dropped",
+                delay_since_presented=0.7466666666666667,
+            )
+        ],
+        food_consumed=0,
+        successful_reaches=0,
+        pellets_presented=1,
+        total_reaches=1,
+    )
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(
