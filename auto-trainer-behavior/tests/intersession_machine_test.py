@@ -21,14 +21,16 @@ def test_intersession(
 ):
     intersession = machine.intersession
 
-    assert intersession.project is not None
+    project = machine.project
+    assert project is not None
     assert intersession.state == IntersessionState.idle
 
     with pytest.raises(MachineError):
         seg_cfg = SegmentationConfiguration(
             nonce="foobar",
-            session_index=42,
-            session_when=datetime.datetime.now(),
+            session_index=project.session,
+            session_when=project.when,
+            project=project,
             complete=lambda n, s: 1 / 0,  # noqa
         )
         intersession.perform_detection(seg_cfg)
@@ -36,7 +38,7 @@ def test_intersession(
     machine.state = SystemState.intersession
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
-        intersession.perform_segmentation(intersession.project)
+        intersession.perform_segmentation(project)
 
     segment_cfg = intersession._segmentation_configuration
 

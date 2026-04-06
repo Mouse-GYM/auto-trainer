@@ -87,9 +87,8 @@ class ShiftXYZHandler(ObservableObject):
     LAST_SHIFT_XYZ = "last_shift_xyz"
     LAST_PROCESSED_SHIFT_XYZ = "last_processed_shift_xyz"
 
-    def __init__(self, *, pellet_dev: PelletDeviceProtocol, algo: BehaviorAlgorithm):
+    def __init__(self, *, algo: BehaviorAlgorithm):
         super().__init__()
-        self._pellet_dev = pellet_dev
         self._algo = algo
         self._config = algo.active_config.shift_xyz_handler
         self.set_config(algo.active_config.shift_xyz_handler)
@@ -151,9 +150,9 @@ class ShiftXYZHandler(ObservableObject):
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
         prev_y_limit = algo.pellet_shift_y_limit
-        send_pos = project.send_position
+        send_pos = project.dcs_send_position
         if send_pos is None:
-            logger.warning("skipping trial result given no send_pos ; project=%s", project)
+            logger.warning("skipping trial result given no dcs_send_pos ; project=%s", project)
             return
         tongue_eaten = False
         for reach in trial_result.reach_events:
