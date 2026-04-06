@@ -273,8 +273,15 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
 
         # # In cases where there are more timestamps than frames
-        if len(df) != dropped_frame_vector:
-            dropped_frame_vector = dropped_frame_vector[:len(df)]
+        if len(df) != len(dropped_frame_vector):
+            logger.verbose("len(df)=%s vs len(dropped_frame_vector)=%s ; cutting to shortest")
+            if len(df) > len(dropped_frame_vector):
+                n = len(dropped_frame_vector)
+                df = df[:n]
+                newdf = newdf[:n]
+                newdf_interpolated = newdf_interpolated[:n]
+            else:
+                dropped_frame_vector = dropped_frame_vector[:len(df)]
 
         # Extend and interpolate the tracking data
         newdf_filled = extend_and_interpolate_tracking_data(
