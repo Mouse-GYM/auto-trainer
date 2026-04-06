@@ -122,7 +122,7 @@ class SystemMachine(StateMachine):
         algo.session_starting += self._on_session_capture_started
         algo.session_capture_ending += self._on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
-        algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
+        algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         algo.shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
 
@@ -597,7 +597,7 @@ class SystemMachine(StateMachine):
             new_timer.start()
         self._event_manager.post_event_content(BehaviorEventKind.headFixationEnabled)
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_tare_requested(self):
         if not self._analysis.load_cell_monitor.is_engaged:
             self._tunnel_device.tare_load_cell()

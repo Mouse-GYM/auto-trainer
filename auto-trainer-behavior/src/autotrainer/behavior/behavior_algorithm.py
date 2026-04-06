@@ -416,7 +416,8 @@ class BehaviorAlgorithm(ObservableObject):
         logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
-    def relay_transitions(cls: "BehaviorAlgorithm", machine_transitions: Any):
+    def relay_transitions(cls: "BehaviorAlgorithm", machine_transitions: Any,
+                          *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
         for trans in machine_transitions.transitions:
             trig = trans['trigger']
@@ -424,7 +425,7 @@ class BehaviorAlgorithm(ObservableObject):
                 if callable(trig):
                     trig = trig.__name__
                 meth = getattr(machine_transitions, trig)
-                wrapped = cls.relay_func(meth)
+                wrapped = cls.relay_func(meth, wait=wait)
                 logger.spam("relaying transition %s -> %s", trig, wrapped)
                 setattr(machine_transitions, trig, wrapped)
 
@@ -432,7 +433,7 @@ class BehaviorAlgorithm(ObservableObject):
     def put_func_call(
         cls: "BehaviorAlgorithm",
         func: Callable,
-        args: Tuple[Any] = (),
+        args: Tuple[Any, ...] = (),
         kwargs: Optional[Dict]=None,
         *,
         wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE,
@@ -445,7 +446,7 @@ class BehaviorAlgorithm(ObservableObject):
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             func(*args) if kwargs is None else func(*args, **kwargs)
         else:
-            t_local_sync = getattr(cls._thread_locals, "sync_call_mode", None)
+            t_local_sync: Optional[bool] = getattr(cls._thread_locals, "sync_call_mode", None)
             if t_local_sync is not None:
                 wait = t_local_sync
             # logger.debug("%s: relaying to system msg handler thread", func)
