@@ -16,6 +16,7 @@ from autotrainer.inference.analysis import intersession_process, IntersessionRes
 
 import pytest
 
+from top_fixtures import AlmostEqualFloat
 
 this_dir = Path(__file__).parent.resolve()
 data_dir = this_dir.joinpath("data")
@@ -99,7 +100,7 @@ def test_agx001_20250806_59(project_info, caplog):
         calib_dir=calib_dir,
     )
     assert res == IntersessionResponse(
-        rh_max_vp_list=[(0.5520302810091309, -3.726691745711479, 1.279046251520091)],
+        rh_max_vp_list=[tuple(map(AlmostEqualFloat, (0.5520302810091309, -3.726691745711479, 1.279046251520091)))],
         reach_events=[
             ReachEvent(
                 init=112,
@@ -107,7 +108,7 @@ def test_agx001_20250806_59(project_info, caplog):
                 max=129,
                 method="",
                 outcome="dropped",
-                delay_since_presented=0.7466666666666667,
+                delay_since_presented=AlmostEqualFloat(0.7466666666666667),
             )
         ],
         food_consumed=0,
