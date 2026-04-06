@@ -92,7 +92,8 @@ def test_agx001_20250806_59(project_info, caplog):
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 8, 6)
     caplog.set_level(verboselogs.VERBOSE)
-    # with pytest.raises(ValueError, match="fp and xp are not of the same length"):
+    # with pytest.raises(IndexError, match="fp and xp are not of the same length"):
+    # previously was raising an index error, but is now fixed.
     res = intersession_process(
         project_info,
         calib_dir=calib_dir,
