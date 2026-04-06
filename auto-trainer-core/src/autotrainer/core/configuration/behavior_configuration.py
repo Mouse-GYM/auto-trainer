@@ -280,7 +280,7 @@ _cls_2_tag = {
     BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
     AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
     HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",  # missed Configuration suffix
-    # ShiftXYZTarget: "ShiftXYZTarget",
+    # ShiftXYZTarget: "ShiftXYZTarget",  # replaced by Offset3dTuple.
     ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
     SystemMaintenanceConfig: "SystemMaintenanceConfig",
