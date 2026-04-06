@@ -104,6 +104,7 @@ def identify_dropped_frames(timestamp_file, frame_rate):
             missed_count = int(round(interval / expected_interval)) - 1
             dropped_frame_vector[current_frame:current_frame + missed_count] = 1  # Mark missed frames
             current_frame += missed_count
+            logger.warning("identified drop frame: i=%s iv=%s", i, interval)
 
     # Mark the last frame as successful
     if current_frame < len(dropped_frame_vector):
@@ -271,7 +272,8 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
 
         # # In cases where there are more timestamps than frames
-        # dropped_frame_vector = dropped_frame_vector[:len(df)]
+        if len(df) != dropped_frame_vector:
+            dropped_frame_vector = dropped_frame_vector[:len(df)]
 
         # Extend and interpolate the tracking data
         newdf_filled = extend_and_interpolate_tracking_data(
