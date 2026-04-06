@@ -36,6 +36,11 @@ _local_do_debug = False
 
 class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
+    IS_ENABLED = "is_enabled"
+    IS_PREDICT_ENABLED = "is_predict_enabled"
+    MODEL_LOCATION = "model_location"
+    INTERSESSION_WAIT_TIME = "intersession_wait_time"
+
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
         *,
@@ -125,7 +130,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @is_enabled.setter
     def is_enabled(self, value: bool):
         prev, self._is_enabled = self._is_enabled, value
-        self._on_property_changed("is_enabled", value, prev)
+        self._on_property_changed(self.IS_ENABLED, value, prev)
 
     @property
     def is_predict_enabled(self) -> bool:
@@ -134,7 +139,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @is_predict_enabled.setter
     def is_predict_enabled(self, value: bool):
         prev, self._is_predict_enabled = self._is_predict_enabled, value
-        self._on_property_changed("is_predict_enabled", value, prev)
+        self._on_property_changed(self.IS_PREDICT_ENABLED, value, prev)
 
     @property
     def model_location(self) -> str:
@@ -143,7 +148,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @model_location.setter
     def model_location(self, value: str):
         prev, self._model_location = self._model_location, value
-        self._on_property_changed("model_location", value, prev)
+        self._on_property_changed(self.MODEL_LOCATION, value, prev)
 
     @property
     def intersession_wait_time(self) -> float:
@@ -152,7 +157,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @intersession_wait_time.setter
     def intersession_wait_time(self, value: float):
         prev, self._intersession_wait_time = self._intersession_wait_time, value
-        self._on_property_changed("intersession_wait_time", value, prev)
+        self._on_property_changed(self.INTERSESSION_WAIT_TIME, value, prev)
 
     @property
     def status(self) -> InferenceStatus:
