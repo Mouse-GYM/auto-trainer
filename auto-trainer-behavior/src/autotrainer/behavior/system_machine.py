@@ -390,16 +390,16 @@ class SystemMachine(StateMachine):
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         prj = self._project_info
         if prj is None or dcs_send_pos is None:
-            logger.warning("project None or current send_pos None (DCS)")
+            logger.warning("project None or current dcs_send_pos None (DCS)")
         self._session_started_perf_c = get_perf_now()
-        logger.info("session_capture_started: send_pos=%s prj.when=%s",
+        logger.info("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
         #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
         if prj is not None:
             prj.send_position = self._pellet_device.last_set_position
-            prj.dcs_send_pos = dcs_send_pos
+            prj.dcs_send_position = dcs_send_pos
             logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
             self._inference.project = prj
             self._intersession.project = prj  # same for intersession
