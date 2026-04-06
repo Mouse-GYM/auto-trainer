@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ctypes
+import dataclasses
 import logging
+import multiprocessing
 import multiprocessing as mp
 import os
 import os.path
@@ -123,14 +125,16 @@ class ProjectInfo(_ProjectInfo):
     def __init__(
         self,
         *,
-        root: str=_ProjectInfo.root,
-        device_id: str=_ProjectInfo.device_id,
-        when: Optional[datetime]=None,
-        ensure_exists: bool=_ProjectInfo.ensure_exists,
-        camera_1: str=_ProjectInfo.camera_1,
-        camera_2: str=_ProjectInfo.camera_2,
-        session: Optional[int]=None,
-        mp_manager=None,
+        root: str = _ProjectInfo.root,
+        device_id: str = _ProjectInfo.device_id,
+        when: Optional[datetime] = None,
+        ensure_exists: bool = _ProjectInfo.ensure_exists,
+        camera_1: str = _ProjectInfo.camera_1,
+        camera_2: str = _ProjectInfo.camera_2,
+        session: Optional[int] = None,
+        send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
+        dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
+        mp_manager: Optional[multiprocessing.Manager]=None,
     ):
         super().__init__()
         if when is None:
@@ -151,6 +155,8 @@ class ProjectInfo(_ProjectInfo):
         self.ensure_exists = ensure_exists
         self.camera_1 = camera_1
         self.camera_2 = camera_2
+        self.send_position = send_position
+        self.dcs_send_position = dcs_send_position
         self._session = _session
         if self._session is None and self._when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
@@ -217,8 +223,8 @@ class ProjectInfo(_ProjectInfo):
     def get_interval(self, interval: ProjectInterval = ProjectInterval.NONE, when: Optional[datetime] = None) -> int:
         if interval == ProjectInterval.NONE:
             return -1
-        when = self._get_when_or_now(when)
-        return when.hour if interval == ProjectInterval.HOUR else when.minute
+        r_when = self._get_when_or_now(when)
+        return r_when.hour if interval == ProjectInterval.HOUR else r_when.minute
 
     def get_interval_path(
         self,
@@ -227,15 +233,14 @@ class ProjectInfo(_ProjectInfo):
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
     ) -> IntervalSource:
-        when = self._get_when_or_now(when)
-        assert when is not None
+        r_when = self._get_when_or_now(when)
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
-        when_str = f"_{when.strftime(time_format)}"
-        location, today = self.get_day_path(skip_ensure=skip_ensure, when=when)
+        when_str = f"_{r_when.strftime(time_format)}"
+        location, today = self.get_day_path(skip_ensure=skip_ensure, when=r_when)
         s = f"_{name}" if name else ""
         d = f"_{self.device_id}" if self.device_id else ""
         prefix = f"{today}{d}{when_str}{s}"
-        return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
+        return IntervalSource(location, prefix, r_when.hour if interval == ProjectInterval.HOUR else r_when.minute)
 
     def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
                          when: Optional[datetime] = None) -> SessionSource:
@@ -267,11 +272,10 @@ class ProjectInfo(_ProjectInfo):
         return ProjectPath(path.location, path.prefix, os.path.join(path.location, path.prefix))
 
     def get_metadata_file(self, session: int = -1, when: Optional[datetime] = None) -> str:
-        when = self._get_when_or_now(when)
-        timestamp = when.strftime(TIME_FORMAT)
-
+        r_when = self._get_when_or_now(when)
+        timestamp = r_when.strftime(TIME_FORMAT)
         if session is None:
-            location, prefix = self.get_day_path(when=when)
+            location, prefix = self.get_day_path(when=r_when)
             d = f"_{self.device_id}" if self.device_id else ""
             return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata")
         else:
@@ -465,14 +469,11 @@ class ProjectInfo(_ProjectInfo):
          in the background by any other process attached to the shared values.
         """
         with self:
-            sess_idx, when = self.session, self.when
-        return self.__class__(
-            root=self.root,
-            device_id=self.device_id,
-            ensure_exists=self.ensure_exists,
-            camera_1=self.camera_1,
-            camera_2=self.camera_2,
-            # see ProjectInfo.__init__ :
-            session=sess_idx,
-            when=when,
-        )
+            dct = {
+                field_name: getattr(self, field_name)
+                for field_name, field in
+                ((field.name.lstrip("_"), field)
+                for field in dataclasses.fields(self)
+                )
+            }
+        return self.__class__(**dct)
