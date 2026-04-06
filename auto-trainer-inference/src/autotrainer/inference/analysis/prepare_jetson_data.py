@@ -69,9 +69,11 @@ def identify_dropped_frames(timestamp_file, frame_rate):
         np.ndarray: A binary vector with 0 for successful frames and 1 for dropped frames.
     """
     # Load timestamps from the file
-    timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'other_column', 'frame_when'])
-    timestamps_ns = timestamps_df['timestamp'].values  # Extract timestamp column
-    timestamps_s = timestamps_ns / 1e9  # Convert nanoseconds to seconds
+    timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c'])
+    # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
+    # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
+    timestamps_s = timestamps_df['frame_perf_c'].values  # Extract desired column
+    timestamps_ns = timestamps_s * 1e9  # Convert seconds to nanoseconds
 
     # Calculate inter-frame intervals
     intervals = np.diff(timestamps_s)
@@ -83,8 +85,8 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     expected_frame_count = 1 + round((timestamps_ns[-1] - timestamps_ns[0]) * frame_rate / 1e9)
     if expected_frame_count != len(timestamps_df):
         logger.warning(
-            "Correcting expected_frame_count from %s to %s ; file=%s ; timmestamps=%s frame_rate=%s",
-            expected_frame_count, len(timestamps_df), timestamp_file, timestamps_s, frame_rate)
+            "Correcting expected_frame_count from %s to %s ; file=%s ; timestamps: min=%s max=%s frame_rate=%s",
+            expected_frame_count, len(timestamps_df), timestamp_file, timestamps_s.min(), timestamps_s.max(), frame_rate)
         expected_frame_count = len(timestamps_df)
 
     dropped_frame_vector = np.zeros(expected_frame_count, dtype=int)
