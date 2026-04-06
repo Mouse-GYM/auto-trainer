@@ -519,13 +519,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def _intersession_process(self, intersession_detection: IntersessionDetection):
         det_cfg = intersession_detection.configuration
-        # det_sess_when = (det_cfg.session_index, det_cfg.session_when)
-        # prj_sess_when = (project.session, project.when)
-        # if det_sess_when != prj_sess_when:
-        #     logger.critical("Detected mismatch project-session: %s vs %s", det_sess_when, prj_sess_when)
-        #     project.session = det_cfg.session_index
-        #     project.when = det_cfg.session_when
-
         try:
             async_res = self._process_pool.apply_async(
                 self._intersession_process_execute,
