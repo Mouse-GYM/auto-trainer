@@ -171,7 +171,10 @@ class ProjectInfo(_ProjectInfo):
                                    )
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r})"
+        return (
+            f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
+            f"send_pos={self.send_position}, dcs_send_pos={self.dcs_send_position})"
+        )
 
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
