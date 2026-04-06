@@ -3,7 +3,7 @@ from __future__ import annotations
 import ctypes
 import dataclasses
 import logging
-import multiprocessing
+import multiprocessing.managers
 import multiprocessing as mp
 import os
 import os.path
@@ -134,7 +134,7 @@ class ProjectInfo(_ProjectInfo):
         session: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
-        mp_manager: Optional[multiprocessing.Manager]=None,
+        mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
         super().__init__()
         if when is None:

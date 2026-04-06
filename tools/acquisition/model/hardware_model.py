@@ -134,7 +134,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
-        value = self._motor_send_coordinates
+        value = self._last_requested_set_coordinates
         if any(map(math.isnan, value)):
             return None
         cfg = self._check_dcs_cfg(return_none=True)
