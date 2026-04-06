@@ -95,7 +95,7 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     current_frame = 0
     for i, interval in enumerate(intervals):
         # not sure:
-        if current_frame >= len(dropped_frame_vector) - 1:
+        if current_frame > len(dropped_frame_vector) - 1:
             logger.verbose("breaking dropped_frame_vector loop")
             break
         dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
@@ -114,37 +114,33 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     return dropped_frame_vector
 
 
-def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
+def extend_and_interpolate_tracking_data(tracking_data, valid_frames):
     """
     Extends and interpolates x/y tracking data for each bodypart to handle dropped frames.
 
     Parameters:
         tracking_data (pd.DataFrame): MultiIndex DataFrame with bodyparts and 'x'/'y' values.
-        dropped_frame_vector (np.ndarray): Binary vector where 0 represents valid frames and 1 represents dropped
+        valid_frames (np.ndarray): Index of valid frames
         frames.
 
     Returns:
         pd.DataFrame: Extended and interpolated tracking data with corrected lengths.
     """
     # Create a DataFrame to hold the full timeline based on the dropped_frame_vector
-    total_frames = len(dropped_frame_vector)
+    total_frames = valid_frames[-1] + 1
     full_index = np.arange(total_frames)
 
     # Initialize the result DataFrame
     extended_data = pd.DataFrame(index=full_index, columns=tracking_data.columns)
 
-    logger.verbose("Doing bodypart loop: total_frames=%s full_index=%s extended_data=%s dropped=%s",
-                   total_frames, len(full_index), len(extended_data), len(dropped_frame_vector))
+    logger.verbose("Doing bodypart loop: total_frames=%s full_index=%s extended_data=%s valid=%s",
+                   total_frames, len(full_index), len(extended_data), len(valid_frames))
     # Iterate over each bodypart and interpolate
     for bodypart in tracking_data.columns.levels[0]:  # Iterate through the top-level (bodyparts)
         for coord in ['x', 'y']:  # Iterate through subcategories 'x' and 'y'
             # Extract original tracking data for the current bodypart and coordinate
             original_data = tracking_data[(bodypart, coord)].values
-
-            # Identify valid frames in the dropped_frame_vector
-            valid_frames = np.where(dropped_frame_vector == 0)[0]
-            if len(valid_frames) != total_frames:
-                logger.warning("valid_frames=%s vs total_frames=%s", len(valid_frames), total_frames)
+            original_data = original_data[valid_frames]
 
             # Fill the extended DataFrame with interpolated values
             try:
@@ -161,6 +157,7 @@ def extend_and_interpolate_tracking_data(tracking_data, dropped_frame_vector):
 
         # Handle 'p' (confidence) separately
         original_confidence = tracking_data[(bodypart, 'likelihood')].values
+        original_confidence = original_confidence[valid_frames]
 
         # Initialize 'p' with -1 for dropped frames
         confidence_values = np.full(total_frames, -1, dtype=float)
@@ -284,14 +281,24 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
                 dropped_frame_vector = dropped_frame_vector[:len(df)]
 
         # Extend and interpolate the tracking data
+        # Identify valid frames in the dropped_frame_vector
+        valid_frames = np.where(dropped_frame_vector == 0)[0]
+
+        if len(dataframe_RL) > 0 and len(valid_frames) != len(dataframe_RL[0]):
+            logger.warning("detected valid frames != other: %s vs %s", len(valid_frames), len(dataframe_RL[0]))
+            if len(valid_frames) > len(dataframe_RL[0]):
+                newdf_interpolated = newdf_interpolated[:len(valid_frames)]
+
         newdf_filled = extend_and_interpolate_tracking_data(
             newdf_interpolated.copy().astype(float),
-            dropped_frame_vector)
+            valid_frames)
 
         # Apply Butterworth filter to r_cam_df and l_cam_df with a cutoff frequency of 0.1 (adjust as needed)
         newdf_filtered = apply_butterworth_filter(newdf_filled.copy(), frame_rate=frame_rate)
-
-        dataframe_RL.append(newdf_filtered.astype(float))
+        newdf_filtered = newdf_filtered.astype(float)
+        if len(dataframe_RL) > 0:
+            newdf_filtered = newdf_filtered[:len(dataframe_RL[-1])]
+        dataframe_RL.append(newdf_filtered)
 
     # Determine the maximum length
     max_len = max(len(dataframe_RL[0]), len(dataframe_RL[1]))
