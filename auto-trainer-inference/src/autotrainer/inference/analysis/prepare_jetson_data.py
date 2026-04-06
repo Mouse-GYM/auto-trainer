@@ -72,8 +72,8 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c'])
     # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
     # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
-    timestamps_s = timestamps_df['frame_perf_c'].values  # Extract desired column
-    timestamps_ns = timestamps_s * 1e9  # Convert seconds to nanoseconds
+    timestamps_ns = timestamps_df['frame_when_ns'].values  # Extract desired column
+    timestamps_s = timestamps_ns / 1e9  # Convert seconds <-> nanoseconds
 
     # Calculate inter-frame intervals
     intervals = np.diff(timestamps_s)
@@ -95,8 +95,9 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     current_frame = 0
     for i, interval in enumerate(intervals):
         # not sure:
-        # if current_frame >= len(dropped_frame_vector) - 1:
-        #     break
+        if current_frame >= len(dropped_frame_vector) - 1:
+            logger.verbose("breaking dropped_frame_vector loop")
+            break
         dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
         current_frame += 1
         if interval > 1.5 * expected_interval:  # Dropped frame threshold
