@@ -195,20 +195,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             return self._perform_segmentation(configuration)
 
     def _perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
-        # self._check_previous_offline_thread("perform_segmentation", self._offline_segmentation_thread)
         if self._intersession_block is not None:
             logger.warning("_intersession_block not None, segmentation already started. block=%s segment_cfg=%s",
                            self._intersession_block, configuration)
             logger.info("But offline thread not running, continuing")
 
         logger.notice("performing segmentation on %s", configuration)
-        # project_info = self._project.to_local_value()
-        # # copy current one to have other attributes set ( root, device, etc.. )
-        # project_info.when = configuration.session_when
-        # project_info.session = configuration.session_index
         self._intersession_block = IntersessionBlock(configuration=configuration)
-        # self._send_message(InferenceCommandMessageKind.ProcessOffline, project_info)
-        # Set pose_process prepared for processing offline for project info
         return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:
