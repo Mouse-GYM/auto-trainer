@@ -520,10 +520,11 @@ def segment_reaches_f2(
     for r in reach_events:
         if r['outcome'] in {'missed', 'dropped'}:
             fail_ct += 1
+            r_max = r['max']
             o = Offset3DTuple(
-                r_hand_data['x'][r['max']] - pellet_home[0],
-                r_hand_data['y'][r['max']] - pellet_home[1],
-                r_hand_data['z'][r['max']] - pellet_home[2],
+                r_hand_data['x'][r_max] - pellet_home[0],
+                r_hand_data['y'][r_max] - pellet_home[1],
+                r_hand_data['z'][r_max] - pellet_home[2],
             )
             rh_max_vp_list.append(o)
 
