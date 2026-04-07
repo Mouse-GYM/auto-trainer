@@ -190,7 +190,7 @@ class ShiftXYZHandler(ObservableObject):
             self._result_handler.reset()
             trial_shift = cfg.tongue_eaten_shift
             processed_shift = trial_shift
-            logger.verbose("checking new tongue-eaten against previous: send_pose_y=%s prev_y_limit=%s",
+            logger.verbose("checking new tongue-eaten against previous: send_pos_y=%s prev_y_limit=%s",
                            send_pos.y, prev_y_limit)
             new_y_limit = None
             if prev_y_limit is None:
