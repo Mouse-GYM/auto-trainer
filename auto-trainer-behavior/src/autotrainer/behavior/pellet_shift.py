@@ -37,7 +37,8 @@ class ShiftXYZBaseHandler(abc.ABC):
         """Process/accumulate one intersession response,
         return None if the response does not generate yet a full shift XYZ result"""
 
-    def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple]) -> Offset3DTuple:
+    def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple],
+                                *, reduce_method=statistics.mean) -> Offset3DTuple:
         """Compute the full shift from an entire RH max vp list"""
 
 
@@ -60,11 +61,16 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
         cfg = self._config
         if len(current_buffer) < cfg.minimum_reach_fail:
             return None
-        shift = self.make_shift_from_rh_list(current_buffer)
+        shift = self.make_shift_from_rh_list(current_buffer, reduce_method=reduce_method)
         current_buffer.clear()
         return shift
 
-    def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple]) -> Offset3DTuple:
+    def make_shift_from_rh_list(
+        self,
+        rh_list: List[Offset3DTuple],
+        *,
+        reduce_method: Callable = statistics.mean,
+    ) -> Offset3DTuple:
         if len(rh_list) == 0:
             return Offset3DTuple.get_nan()
         cfg = self._config
@@ -72,7 +78,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
             mean_off = rh_list[0]
             stdev_off = Offset3DTuple.get_zero()
         else:
-            mean_off, stdev_off = calculate_std_dev_manual(rh_list, reduce_method=statistics.median)
+            mean_off, stdev_off = calculate_std_dev_manual(rh_list, reduce_method=reduce_method)
         #
         off_x, off_y, off_z = mean_off - cfg.target
         # assert isinstance(res_off, Offset3DTuple)
@@ -154,6 +160,7 @@ class ShiftXYZHandler(ObservableObject):
         self._processed_shift_handler = func
 
     def put_intersession_response(self, project: ProjectInfo, trial_result: IntersessionResponse):
+        reduce_method = statistics.mean
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
         prev_y_limit = algo.pellet_shift_y_limit
@@ -168,8 +175,9 @@ class ShiftXYZHandler(ObservableObject):
                 break
         if not tongue_eaten:
             # "normal" case
-            trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list)
-            processed_shift = self._result_handler(trial_result)
+            trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list,
+                                                                       reduce_method=reduce_method)
+            processed_shift = self._result_handler(trial_result, reduce_method=reduce_method)
             if processed_shift is not None and prev_y_limit is not None:
                 if processed_shift.y + send_pos.y < prev_y_limit:
                     processed_shift = processed_shift.replace(
