@@ -963,7 +963,7 @@ class AppModel(ObservableObject):
         # and left behind their context.
 
         # also:
-        self.project_info = self.make_project_info()
+        self.project = self.make_project_info()  # NB: must be done before all below.
 
         algo.reload_diamond_triangle_config()
 
