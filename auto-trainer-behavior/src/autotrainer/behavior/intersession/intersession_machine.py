@@ -34,7 +34,6 @@ class IntersessionMachine(StateMachine):
         *,
         algorithm: BehaviorAlgorithm,
         inference: InferenceProtocol,
-        project_info: ProjectInfo = None,
     ):
 
         initial_state = IntersessionState.idle
@@ -47,7 +46,6 @@ class IntersessionMachine(StateMachine):
 
         algorithm.relay_transitions(self)  # NB: must be done AFTER creation of previous machine instance
 
-        self._project_info = project_info
         self._algorithm = algorithm
         self._inference = inference
         self._segmentation_configuration: Optional[SegmentationConfiguration] = None
@@ -56,15 +54,6 @@ class IntersessionMachine(StateMachine):
     @property
     def events(self) -> IntersessionMachineEvents:  # to have correct type hint as well
         return self._events
-
-    @property
-    def project(self):
-        return self._project_info
-
-    @project.setter
-    def project(self, project: ProjectInfo):
-        logger.verbose("project -> %s", project)
-        self._project_info = project
 
     def reset_to_idle(self):
         self._detection_configuration = None
@@ -105,6 +94,16 @@ class IntersessionMachine(StateMachine):
             self.post_event_content(BehaviorEventKind.intersessionDetectionBegin, context=segment_config.nonce)
 
     def after_end_analysis(self, success):
+        seg_cfg = self._segmentation_configuration
+        det_cfg = self._detection_configuration
+        if det_cfg is not None:
+            project = det_cfg.project
+        elif seg_cfg is not None:
+            project = seg_cfg.project
+        else:
+            logger.warning("Unexpected end_analysis while no segmentation or detection configuration")
+            project = None
+        logger.info("end_analysis(success=%s) of %s", success, project)
         self._segmentation_configuration = None
         self._detection_configuration = None
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED

@@ -2,7 +2,7 @@ import abc
 import os
 import math
 import statistics
-from typing import Callable, Optional, List, Union
+from typing import Callable, Optional, List, Union, Protocol
 
 from autotrainer.behavior import BehaviorAlgorithm, PelletDeviceProtocol
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo
@@ -16,7 +16,14 @@ from autotrainer.inference.analysis import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 
-ProcessedShiftXYZCallbackHandlerT = Optional[Callable[[Offset3DTuple], None]]
+
+class ProcessedShiftXYZCallbackHandler(Protocol):
+
+    def __call__(self, project: ProjectInfo, shift: Offset3DTuple) -> None:
+        """Signature of ProcessedShiftXYZCallbackHandler"""
+
+
+ProcessedShiftXYZCallbackHandlerT = Optional[ProcessedShiftXYZCallbackHandler]
 
 
 class ShiftXYZBaseHandler(abc.ABC):
@@ -160,31 +167,38 @@ class ShiftXYZHandler(ObservableObject):
                 tongue_eaten = True
                 break
         if not tongue_eaten:
+            # "normal" case
             trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list)
-        else:
-            trial_shift = cfg.tongue_eaten_shift
-            logger.verbose("checking new tongue-eaten against previous: cur=%s prev=%s",
-                           send_pos.y, prev_y_limit)
-            if prev_y_limit is None:
-                algo.pellet_shift_y_limit = send_pos.y + trial_shift.y
-            else:
-                if send_pos.y > prev_y_limit:
-                    algo.pellet_shift_y_limit = send_pos.y
-        self.last_shift_xyz = trial_shift
-        if tongue_eaten:
-            processed_shift = trial_shift
-            self._result_handler.reset()
-        else:
             processed_shift = self._result_handler(trial_result)
             if processed_shift is not None and prev_y_limit is not None:
                 if processed_shift.y + send_pos.y < prev_y_limit:
-                    processed_shift = processed_shift.replace(y=prev_y_limit - send_pos.y)
+                    processed_shift = processed_shift.replace(
+                        y=prev_y_limit - send_pos.y
+                    )
                     logger.info("Processed shift-Y limited to %s", processed_shift.y)
+        else:
+            # tongue eaten
+            self._result_handler.reset()
+            trial_shift = cfg.tongue_eaten_shift
+            processed_shift = trial_shift
+            logger.verbose("checking new tongue-eaten against previous: send_pose_y=%s prev_y_limit=%s",
+                           send_pos.y, prev_y_limit)
+            new_y_limit = None
+            if prev_y_limit is None:
+                new_y_limit = send_pos.y + trial_shift.y
+            else:
+                if send_pos.y > prev_y_limit:
+                    new_y_limit = send_pos.y
+            if new_y_limit is not None:
+                logger.notice("Setting new pellet_shift_y_limit: %s", algo.pellet_shift_y_limit)
+                algo.pellet_shift_y_limit = new_y_limit
+        #
+        self.last_shift_xyz = trial_shift
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
             func = self._processed_shift_handler
             if func is None:
                 logger.debug("handle_processed_shift_func undefined")
             else:
-                func(processed_shift)  # noqa
-                # not sure why need noqa otherwise PyCharm think it's None, despite the previous if :/
+                func: ProcessedShiftXYZCallbackHandler
+                func(project, processed_shift)
