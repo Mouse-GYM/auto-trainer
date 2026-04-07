@@ -4,11 +4,12 @@ import threading
 import time
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional, Tuple, Dict, Union
+from typing import Optional, Tuple, Dict, Union, List
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
-                              get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration)
+                              get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration,
+                              get_perf_now)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
@@ -65,6 +66,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     ):
         super().__init__()
 
+        self._lock = threading.RLock()  # **required** re-entrant lock !!
+
         self._event_manager = EventManager.default()
         self._device_ack_timeout_delay: Optional[float] = None
         self._device: Optional[DeviceConnectionProtocol] = None
@@ -96,8 +99,38 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._slide_door_open: bool = False
 
         self._device_ack_timeout_engaged = False
+        self._disconnect_event = threading.Event()
+        self._check_timedout_commands_thread: Optional[threading.Thread] = None
 
-        self._lock = threading.RLock()  # **required** re-entrant lock !!
+    def _check_timedout_commands_handler(self):
+        while True:
+            if self._disconnect_event.wait(1):
+                break
+            dev = self._device
+            if dev is None or not dev.device.connected:
+                logger.verbose("device not connected, exiting check loop")
+                break
+            perf_now = get_perf_now()
+            expired_tokens = set()
+            with self._lock:
+                for pending_token, (
+                    pending_cmd,
+                    pending_t_perf,
+                ) in self._pending_tokens.items():
+                    age_second = perf_now - pending_t_perf
+                    if age_second > 30:
+                        logger.warning(
+                            "Giving up on pending cmd %s for too long ; token=%s age=%s seconds",
+                            pending_cmd,
+                            pending_token,
+                            age_second,
+                        )
+                        expired_tokens.add(pending_token)
+                for expired in expired_tokens:
+                    self._pending_tokens.pop(expired, None)
+                after_commands = list(self._pending_tokens.values())
+            if len(expired_tokens) > 0:
+                self._refresh_cmd_in_progress(after_commands)
 
     def _check_dcs_cfg(self, *, return_none: bool=False):
         cfg = self._dcs_config
@@ -370,6 +403,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def connect(self, cmd_queue: Queue):
         logger.notice("%s: connect with %s", self, cmd_queue)
+        self._disconnect_event.clear()
 
         prev_device = self._device
         if prev_device is not None:
@@ -402,8 +436,18 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self.send_home()
 
+        prev_thread = self._check_timedout_commands_thread
+        if prev_thread is None or not prev_thread.is_alive():
+            thread = self._check_timedout_commands_thread = threading.Thread(
+                target=self._check_timedout_commands_handler,
+                daemon=True,
+                name="check-timedout-commands",
+            )
+            thread.start()
+
     def disconnect(self):
         logger.verbose("disconnecting ..")
+        self._disconnect_event.set()
         can_dev = self._can_device
         dev = self._device
         if dev is not None:
@@ -413,9 +457,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if can_dev is not None:
             can_dev.property_changed -= self._can_device_property_changed
             self._can_device = None
-
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
+        prev_thread = self._check_timedout_commands_thread
+        if prev_thread is not None:
+            logger.debug("joining checktimedout commands thread")
+            prev_thread.join()
 
     def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
@@ -490,22 +537,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             # and we don't want to try to send 2 messages at the same time,
             # or the pending command token might be overwritten.
             tok = self.__send_with_token(device, cmd, data)
+            commands_tuple = list(self._pending_tokens.values())
         if tok is not None:
-            self.property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, cmd.name, None)
+            self._refresh_cmd_in_progress(commands_tuple)
         return tok
 
     def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
-        perf_now = time.perf_counter()
-        expired_tokens = set()
-        for pending_token, (pending_cmd, pending_t_perf) in self._pending_tokens.items():
-            age_second = perf_now - pending_t_perf
-            if age_second > 30:
-                logger.warning("Giving up on pending cmd %s for too long ; token=%s age=%s seconds",
-                               pending_cmd, pending_token, age_second)
-                expired_tokens.add(pending_token)
-        for expired in expired_tokens:
-            self._pending_tokens.pop(expired, None)
         token = uuid4()
+        perf_now = get_perf_now()
         logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(self._pending_tokens))
         if self._send_command(device, cmd, data, token):
             self._pending_tokens[token] = (cmd, perf_now)
@@ -541,16 +580,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
                 dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 
+    def _refresh_cmd_in_progress(self, commands_tuple: List[Tuple[SystemCommandKind, float]]):
+        if len(commands_tuple) == 0:
+            self.property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, None, True)
+        else:
+            # NB: sort on cmd perf_counter:
+            list_after = (cmd.name for cmd, _ in sorted(commands_tuple, key=lambda t: t[1]))
+            self.property_changed(
+                HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
+            )
+
     def _ack_received(self, token: UUID):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
-            len_after = len(self._pending_tokens)
+            commands_in_prog = list(self._pending_tokens.values())
         if popped is None:
             logger.warning("Received unexpected ack token: %s", token)
         else:
-            if len_after == 0:
-                cmd, _ = popped
-                self.property_changed(HardwareModel.PENDING_COMMAND_PROPERTY, None, cmd)
+            self._refresh_cmd_in_progress(commands_in_prog)
 
     def wait_pending_command_acked(self, token, *, timeout: float = 3):
         p_start = time.perf_counter()
