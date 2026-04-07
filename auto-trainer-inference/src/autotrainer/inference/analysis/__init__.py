@@ -10,8 +10,8 @@ class ReachEvent:
     init: int  # frame index
     end: int  # frame index
     max: int  # frame index
-    method: str
-    outcome: str
+    method: str  # none, right_hand, left_hand, tongue
+    outcome: str  # none, stalled, missed, dropped, grabbed, eaten
     delay_since_presented: float = 0
 
 
