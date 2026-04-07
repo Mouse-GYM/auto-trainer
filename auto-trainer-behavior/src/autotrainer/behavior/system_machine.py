@@ -1075,6 +1075,7 @@ class SystemMachine(StateMachine):
             # in case timer delay is greater than load duration and that many load-pellet happens due
             # to missed load.
             if prev_timer.finished.is_set():
+                logger.verbose("creating timer for consider_end_session within %.1f", delay)
                 timer = self._timer_consider_end_session = _consider_end_session_timer(
                     delay, lambda: algo.end_capture_session(reason=reason))
                 timer.start()
