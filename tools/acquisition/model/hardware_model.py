@@ -426,10 +426,22 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self.device_ack_timeout_engaged = value
             is_dev_comm_err_possible = True
         elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
+            post_api_detector_event_content(
+                self._event_manager,
+                ApiDetectorKind.pelletStatusMessageInterruption,
+                value,
+                True,
+            )
             self._device_pellet_status_timeout_engaged = value
             self.property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev_value)
             is_dev_comm_err_possible = True
         elif name == props.TUNNEL_STATUS_TIMEOUT_ENGAGED:
+            post_api_detector_event_content(
+                self._event_manager,
+                ApiDetectorKind.tunnelStatusMessageInterruption,
+                value,
+                True,
+            )
             self._device_tunnel_status_timeout_engaged = value
             self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
             is_dev_comm_err_possible = True
