@@ -5,7 +5,8 @@ import statistics
 from typing import Callable, Optional, List, Union, Protocol
 
 from autotrainer.behavior import BehaviorAlgorithm, PelletDeviceProtocol
-from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo
+from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo, \
+    mean_method
 from autotrainer.core.configuration.behavior_configuration import (
     ShiftXYZBufferHandlerConfig,
     ShiftXYZHandlerConfig,
@@ -32,13 +33,13 @@ class ShiftXYZBaseHandler(abc.ABC):
         """Ensure cleared state"""
 
     def __call__(
-        self, rsp: IntersessionResponse, *, reduce_method=statistics.median
+        self, rsp: IntersessionResponse, *, reduce_method=mean_method,
     ) -> Optional[Offset3DTuple]:
         """Process/accumulate one intersession response,
         return None if the response does not generate yet a full shift XYZ result"""
 
     def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple],
-                                *, reduce_method=statistics.mean) -> Offset3DTuple:
+                                *, reduce_method=mean_method) -> Offset3DTuple:
         """Compute the full shift from an entire RH max vp list"""
 
 
@@ -55,7 +56,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
     def reset(self):
         self._failed_reaches_buffer.clear()
 
-    def __call__(self, rsp: IntersessionResponse, *, reduce_method=statistics.median):
+    def __call__(self, rsp: IntersessionResponse, *, reduce_method=mean_method):
         current_buffer = self._failed_reaches_buffer
         current_buffer.extend(rsp.rh_max_vp_list)
         cfg = self._config
@@ -69,7 +70,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
         self,
         rh_list: List[Offset3DTuple],
         *,
-        reduce_method: Callable = statistics.mean,
+        reduce_method=mean_method,
     ) -> Offset3DTuple:
         if len(rh_list) == 0:
             return Offset3DTuple.get_nan()
@@ -160,7 +161,7 @@ class ShiftXYZHandler(ObservableObject):
         self._processed_shift_handler = func
 
     def put_intersession_response(self, project: ProjectInfo, trial_result: IntersessionResponse):
-        reduce_method = statistics.mean
+        reduce_method = mean_method
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
         prev_y_limit = algo.pellet_shift_y_limit

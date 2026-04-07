@@ -40,7 +40,8 @@ class RawValueHolder:
     value: Any
 
 
-_no_convert = lambda v: v
+def _no_convert(v):
+    return v
 
 
 class ValueHolderDescriptor:
@@ -104,6 +105,9 @@ class Offset3DTuple(_Offset3DTuple):
         x, y, z = args[0]
     Otherwise the construction fails (with anything else in args[0] when len(args) == 1)
     """
+    x: float
+    y: float
+    z: float
 
     def __new__(cls, *args, **kwargs):
         if len(args) == 1:
@@ -138,8 +142,15 @@ class Offset3DTuple(_Offset3DTuple):
         x, y, z = self
         return f"({x:.0{n_digits}f}, {y:.0{n_digits}f}, {z:.0{n_digits}f})"
 
-    def round(self, n: int=2):
+    def round(self, n: int=2) -> Self:
         return self.__class__(*(round(v, n) for v in self))
+
+    # tried to use with statistics.mean, but at some point with it there is a sorting applied on the list (of offsets),
+    # and a smaller-than (<) operator check against a start value of 0 .. and we don't handle that with Offset3DTuple.
+    # def as_integer_ratio(self) -> Tuple[Self, Self]:
+    #     # use float(v) to ensure float, and allow use of as_integer_ration, if integer is in any of x/y/z.
+    #     xo, yo, zo = map(lambda v: float(v).as_integer_ratio(), self)
+    #     return self.__class__(xo[0], yo[0], zo[0]), self.__class__(xo[1], yo[1], zo[1])
 
     def __pow__(self, other, modulo=None) -> Self:
         if modulo is None:
