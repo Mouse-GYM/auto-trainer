@@ -49,6 +49,8 @@ class SensorAnalysis(ObservableObject):
         self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
 
+        self._filter_invalid_weight_started = False
+
         # The "monitor" CSV file with the bulk of the sensor data.
         self._record_file = None
         self._current_record_interval = -1
@@ -217,7 +219,7 @@ class SensorAnalysis(ObservableObject):
     ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
         # logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
-        weight_vals: List[float] = []
+
         switch_vals: List[float] = []
         pressure_vals: List[float] = []
         temperature_vals: List[float] = []
@@ -225,18 +227,16 @@ class SensorAnalysis(ObservableObject):
 
         if self._record_file is not None:
             now = datetime.now()
-
             needs_update = now.hour != self._current_record_interval \
                 if self._interval == ProjectInterval.HOUR \
                 else now.minute != self._current_record_interval
-
             if needs_update:
                 self._update_record_file()
 
         load_cell_mon = self._load_cell_monitor
 
         for m in measurements:
-            weight_vals.append(m.weight)
+            # NB: save all measurements to file
             switch_vals.append(m.switch)
             pressure_vals.append(m.pressure)
             temperature_vals.append(m.temperature)
@@ -253,19 +253,33 @@ class SensorAnalysis(ObservableObject):
                         logger.exception("<sensor-analysis>: unable to write: %s", err)
                         self._had_write_error = True
 
-        first_measure = measurements[0]
-        # Load cell monitor.
-        # self._load_cell_monitor.update(numpy.mean(weights), first_measure.when, first_measure.timestamp)
+        # Load cell monitor. and Auto-Tare monitor
+        weight_vals: List[float] = []
+        load_cell_cfg = load_cell_mon.config
         for m in measurements:
-            self._load_cell_monitor.update(m.weight, m.when, m.timestamp)
+            value = m.weight
+            if not (load_cell_cfg.weight_min_filter < value < load_cell_cfg.weight_max_filter):
+                if not self._filter_invalid_weight_started:
+                    self._filter_invalid_weight_started = True
+                    logger.verbose(
+                        "starting filter value outside accepted range: %s", value
+                    )
+                continue
+            if self._filter_invalid_weight_started:
+                logger.verbose("finished filter value outside accepted range: %s", value)
+                self._filter_invalid_weight_started = False
+            #
+            weight_vals.append(value)
+            self._load_cell_monitor.update(value, m.when, m.timestamp)
+        # (Auto-)tare detection.
+        self._tare_detector.update(weight_vals)
 
         # Headbar analog pressure monitor.
+        first_measure = measurements[0]
         self._headbar_pressure_monitor.update(pressure_vals, first_measure.when, first_measure.timestamp)
 
         # Headbar digital switch - no real implementation at this time.
         self._is_headbar_switch_engaged = numpy.mean(switch_vals) > 0.5
-        # (Auto-)tare detection.
-        self._tare_detector.update(weight_vals)
 
         # Performance monitoring.
         self._perf_monitor.add_cycles(len(measurements))
