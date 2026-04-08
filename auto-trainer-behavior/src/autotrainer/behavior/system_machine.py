@@ -132,6 +132,7 @@ class SystemMachine(StateMachine):
         algo.relay_transitions(self)  # NB: must be done AFTER creation of previous `self.machine` instance
 
         shift_xyz_handler = self._shift_xyz_handler = ShiftXYZHandler(algo=algo)
+        shift_xyz_handler.set_config(algo.active_config.shift_xyz_handler)
         # NB: could use the shift_xyz_handler.property_changed callback handler with LAST_PROCESSED_SHIFT_XYZ name too:
         shift_xyz_handler.set_processed_handler(self._handle_processed_shift_xyz)
         #
@@ -1122,19 +1123,21 @@ class SystemMachine(StateMachine):
         cfg = algo.diamond_triangle_config
         if cfg is None:
             cfg = DiamondTriangleOffsetConfig
+        logger.notice("applying pellet send_position shift: %s", shift.round(1))
         # NB: dev.set_x/y/z is in motor coordinate system,
         # but we want the shifts to be in inference system :
         for idx, (val, meth, kind) in enumerate((
             (shift[0], dev.set_x, BehaviorEventKind.intersessionShiftX),
             (shift[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
-            (shift[2], dev.set_z, BehaviorEventKind.intersessionShiftZ)),
-        ):
+            (shift[2], dev.set_z, BehaviorEventKind.intersessionShiftZ),
+        )):
             if val != 0:
-                val *= cfg.flips_motor_diamond[idx]
                 logger.debug("applying %s with shift: %.1f", kind, val)
+                val *= cfg.flips_motor_diamond[idx]
                 token = meth(val, absolute=False, sender="processed_shift_xyz")
                 if token is None:
                     logger.error("Could not apply %s ; command not successfully sent", kind)
+                    # TODO: what todo ?
                 self._event_manager.post_event_content(kind, context=val)
             else:
                 logger.debug("%s == 0 ; skip", kind)

@@ -2,7 +2,7 @@ import abc
 import os
 import math
 import statistics
-from typing import Callable, Optional, List, Union, Protocol
+from typing import Callable, Optional, List, Union, Protocol, Any
 
 from autotrainer.behavior import BehaviorAlgorithm, PelletDeviceProtocol
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo, \
@@ -29,18 +29,25 @@ ProcessedShiftXYZCallbackHandlerT = Optional[ProcessedShiftXYZCallbackHandler]
 
 class ShiftXYZBaseHandler(abc.ABC):
 
+    @abc.abstractmethod
     def reset(self):
         """Ensure cleared state"""
 
+    @abc.abstractmethod
     def __call__(
         self, rsp: IntersessionResponse, *, reduce_method=mean_method,
     ) -> Optional[Offset3DTuple]:
         """Process/accumulate one intersession response,
         return None if the response does not generate yet a full shift XYZ result"""
 
+    @abc.abstractmethod
     def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple],
                                 *, reduce_method=mean_method) -> Offset3DTuple:
         """Compute the full shift from an entire RH max vp list"""
+
+    @abc.abstractmethod
+    def get_context(self) -> Any:
+        """Return the associated context with this handler"""
 
 
 class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
@@ -94,6 +101,9 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
             final_shift.round(1), [o.round(1) for o in rh_list], stdev_off.round(1))
         #
         return final_shift
+
+    def get_context(self) -> Any:
+        return dict(failed_reaches_buffer=self._failed_reaches_buffer)
 
 
 class ShiftXYZHandler(ObservableObject):
