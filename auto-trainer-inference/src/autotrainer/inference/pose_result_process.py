@@ -208,6 +208,29 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
     ):
         logger.notice("Processing intersession offline post-process on %s", project_info)
+        try:
+            shape = self._intersession_offline_process2(
+                project_info, perf_c_start_offline, pose_algo, range_cams,
+                ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
+            )
+            success = True
+        except Exception as err:
+            logger.exception("Error during intersession_inference: %s", err)
+            success = False
+            shape = None
+        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, shape=shape)
+
+    def _intersession_offline_process2(
+        self,
+        project_info: ProjectInfo,
+        perf_c_start_offline,
+        pose_algo,
+        range_cams,
+        ib_pose_data_list,
+        ib_pose_data_dict,
+        cams_read_h5_idx,
+        cams_read_h5_dss,
+    ):
         fill_live_end = True
         for cdx, pdl, cur_h5_idx, cur_h5_dss in zip(
             range_cams, ib_pose_data_list, cams_read_h5_idx, cams_read_h5_dss
@@ -223,61 +246,56 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 skipped += 1
             logger.debug("cam-%s: read %s final entries from h5 live file",
                          cdx, skipped)
-        try:
-            # if _local_do_debug:
-            #     diffs = [
-            #         set(range(len(ib_pose_data_dict[cdx]))) - set(ib_pose_data_dict[cdx])
-            #         for cdx in range(self._camera_count)
-            #     ]
-            #     if any(diffs):
-            #         logger.warning("seen missing frame indices: %s", diffs)
-            #     for cdx, p in enumerate(pose_paths):
-            #         with open(str(p) + ".idx_monitor_data_q.txt", "w") as fh:
-            #             fh.write("\n".join(chain(map(str, sorted(ib_pose_data_dict[cdx])), [''])))
 
-            min_nbr_pd = min(map(len, ib_pose_data_list))
+        # if _local_do_debug:
+        #     diffs = [
+        #         set(range(len(ib_pose_data_dict[cdx]))) - set(ib_pose_data_dict[cdx])
+        #         for cdx in range(self._camera_count)
+        #     ]
+        #     if any(diffs):
+        #         logger.warning("seen missing frame indices: %s", diffs)
+        #     for cdx, p in enumerate(pose_paths):
+        #         with open(str(p) + ".idx_monitor_data_q.txt", "w") as fh:
+        #             fh.write("\n".join(chain(map(str, sorted(ib_pose_data_dict[cdx])), [''])))
 
-            # current analysis code also require exact same frame number in all cameras,
-            # let's trim what's necessary:
-            for cam in self._cams:
-                paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
-                ts_file = paths[1]
-                lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
-                # not the best way to do this,
-                # maybe inspecting the video file for total frames is faster.
-                # we must also have the info somewhere in active memory during this run/session
-                if len(lines) > min_nbr_pd:
-                    logger.warning("%s: trimming raw data to %s entries", cam, min_nbr_pd)
-                    _shorten_text_file(lines, ts_file, min_nbr_pd)
-                    # normally not necessary:
-                    # _short_vid_file(paths[0], min_nbr_pd)
-                    # _shorten_text_file(paths[2], min_nbr_pd)
+        min_nbr_pd = min(map(len, ib_pose_data_list))
 
-            ib_pose_data = numpy.empty((0, pose_algo.part_count * 3), dtype=numpy.float32)
-            final_pose_data = numpy.vstack(
-                list(chain(
-                    [ib_pose_data],  # supposed the empty init array
-                    (
-                        pdl[ix]
-                        for ix in range(min_nbr_pd)
-                        for pdl in ib_pose_data_list
-                    )
-                ))
-            )
-            logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
-                          " now calling intersession_inference()",
-                          min_nbr_pd, 2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline), final_pose_data.shape[0])
+        # current analysis code also require exact same frame number in all cameras,
+        # let's trim what's necessary:
+        for cam in self._cams:
+            paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
+            ts_file = paths[1]
+            lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
+            # not the best way to do this,
+            # maybe inspecting the video file for total frames is faster.
+            # we must also have the info somewhere in active memory during this run/session
+            if len(lines) > min_nbr_pd:
+                logger.warning("%s: trimming raw data to %s entries", cam, min_nbr_pd)
+                _shorten_text_file(lines, ts_file, min_nbr_pd)
+                # normally not necessary:
+                # _short_vid_file(paths[0], min_nbr_pd)
+                # _shorten_text_file(paths[2], min_nbr_pd)
 
-            intersession_inference(final_pose_data, self._pose_algo.part_names,
-                                   project_info)
-            success = True
-            logger.success("fully processed session-%s inference with %s total pose responses",
-                           project_info.session, final_pose_data.shape[0])
-        except Exception as err:
-            logger.exception("Error during intersession_inference: %s", err)
-            success = False
+        ib_pose_data = numpy.empty((0, pose_algo.part_count * 3), dtype=numpy.float32)
+        final_pose_data = numpy.vstack(
+            list(chain(
+                [ib_pose_data],  # supposed the empty init array
+                (
+                    pdl[ix]
+                    for ix in range(min_nbr_pd)
+                    for pdl in ib_pose_data_list
+                )
+            ))
+        )
+        logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
+                      " now calling intersession_inference()",
+                      min_nbr_pd, 2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline), final_pose_data.shape[0])
 
-        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success)
+        intersession_inference(final_pose_data, self._pose_algo.part_names,
+                               project_info)
+        logger.success("fully processed session-%s inference with %s total pose responses",
+                       project_info.session, final_pose_data.shape[0])
+        return final_pose_data.shape
 
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
