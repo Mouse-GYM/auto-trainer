@@ -20,6 +20,7 @@ import yaml
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
     ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -1070,6 +1071,8 @@ class AppModel(ObservableObject):
         hard.connect(self._system_message_handler.input_queue)
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         logger.info("finished connecting hardware")
+        # NB: hardware.connect calls send_home on pellet-dev, but don't set it on machine, so:
+        self._behavior.system_machine.pellet.state = PelletState.home
 
         # once cameras successfully started:
         self._save_project_metadata(self._project_info)
