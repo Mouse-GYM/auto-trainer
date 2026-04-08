@@ -1090,7 +1090,13 @@ class SystemMachine(StateMachine):
     def _on_detection_result_ready(self, prj: ProjectInfo, res: IntersessionResponse):
         logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
         #
-        self._shift_xyz_handler.put_intersession_response(prj, res)
+        if len(self._batch_project_sessions_list) > 0:
+            is_batch = True
+            is_last = prj == self._batch_project_sessions_list[-1]
+        else:
+            is_batch = False
+            is_last = True
+        self._shift_xyz_handler.put_intersession_response(prj, res, is_batch=is_batch, is_last=is_last)
         #
         algo = self._algorithm
         algo.set_previous_intersession_analysis_rsp(prj, res)

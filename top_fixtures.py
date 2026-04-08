@@ -387,6 +387,7 @@ class MockSystemMachine:
         """Allow fake fully 1 intersession/trial analysis (segmentation+detection)"""
         if results is None:
             results = IntersessionResponse()
+        results: IntersessionResponse
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
             logger.info("prepared stack for mock_perform_segmentation")

@@ -115,14 +115,16 @@ class ShiftXYZHandler(ObservableObject):
         super().__init__()
         self._algo = algo
         self._config = algo.active_config.shift_xyz_handler
-        self.set_config(algo.active_config.shift_xyz_handler)
-        default_handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
-        self._result_handler: ShiftXYZBaseHandler = default_handler
         self._processed_shift_handler: ProcessedShiftXYZCallbackHandlerT = None
         self._last_shift_xyz = Offset3DTuple.get_nan()
         self._last_processed_shift_xyz = Offset3DTuple.get_nan()
+        self._batch_has_tongue_eaten = False
+        self._new_shift_y_limit: Optional[float] = None
+        self._result_handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
+        # set config again, to ensure result_handler will be correct one
+        self.set_config(algo.active_config.shift_xyz_handler)
 
-    def set_config(self, config: ShiftXYZHandlerConfig):
+    def set_config(self, config: ShiftXYZHandlerConfig) -> ShiftXYZBaseHandler:
         sel = config.selected
         if sel == "ShiftXYZBufferHandler":
             handler = ShiftXYZBufferHandler(config=config.buffer)
@@ -130,9 +132,13 @@ class ShiftXYZHandler(ObservableObject):
             raise ValueError(f"Unknown/unhandled shift-xyz handler {sel}")
         self._config = config
         self.set_handler(handler)
+        self.reset()
+        return handler
 
     def reset(self):
         self._result_handler.reset()
+        self._batch_has_tongue_eaten = False
+        self._new_shift_y_limit = None
         self.last_processed_shift_xyz = self.last_shift_xyz = Offset3DTuple.get_nan()
 
     @property
@@ -161,7 +167,7 @@ class ShiftXYZHandler(ObservableObject):
     #
 
     @property
-    def handler(self) -> Optional[ShiftXYZBaseHandler]:
+    def handler(self) -> ShiftXYZBaseHandler:
         return self._result_handler
 
     def set_handler(self, handler: ShiftXYZBaseHandler):
@@ -170,11 +176,19 @@ class ShiftXYZHandler(ObservableObject):
     def set_processed_handler(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._processed_shift_handler = func
 
-    def put_intersession_response(self, project: ProjectInfo, trial_result: IntersessionResponse):
+    def put_intersession_response(
+        self, project: ProjectInfo, trial_result: IntersessionResponse, *,
+        is_batch: bool,
+        is_last: bool,
+    ):
         reduce_method = mean_method
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
-        prev_y_limit = algo.pellet_shift_y_limit
+        if self._new_shift_y_limit is None:
+            prev_y_limit = algo.pellet_shift_y_limit
+        else:
+            prev_y_limit = self._new_shift_y_limit
+
         send_pos = project.dcs_send_position
         if send_pos is None:
             logger.warning("skipping trial result given no dcs_send_pos ; project=%s", project)
@@ -183,8 +197,10 @@ class ShiftXYZHandler(ObservableObject):
         for reach in trial_result.reach_events:
             if reach.outcome == "eaten" and reach.method == "tongue":
                 tongue_eaten = True
+                if is_batch:
+                    self._batch_has_tongue_eaten = True
                 break
-        if not tongue_eaten:
+        if not tongue_eaten and not self._batch_has_tongue_eaten:
             # "normal" case
             trial_shift = self._result_handler.make_shift_from_rh_list(trial_result.rh_max_vp_list,
                                                                        reduce_method=reduce_method)
@@ -195,9 +211,8 @@ class ShiftXYZHandler(ObservableObject):
                         y=prev_y_limit - send_pos.y
                     )
                     logger.info("Processed shift-Y limited to %s", processed_shift.y)
-        else:
-            # tongue eaten
-            self._result_handler.reset()
+        elif tongue_eaten:
+            self._result_handler.reset()  # always
             trial_shift = cfg.tongue_eaten_shift
             processed_shift = trial_shift
             logger.verbose("checking new tongue-eaten against previous: send_pos_y=%s prev_y_limit=%s",
@@ -209,10 +224,22 @@ class ShiftXYZHandler(ObservableObject):
                 if send_pos.y > prev_y_limit:
                     new_y_limit = send_pos.y
             if new_y_limit is not None:
-                logger.notice("Setting new pellet_shift_y_limit: %s", algo.pellet_shift_y_limit)
-                algo.pellet_shift_y_limit = new_y_limit
+                self._new_shift_y_limit = new_y_limit
+        else:
+            trial_shift = processed_shift = None
         #
-        self.last_shift_xyz = trial_shift
+        if is_last:
+            if self._batch_has_tongue_eaten:
+                self._result_handler.reset()  # always at end of batch
+                self._batch_has_tongue_eaten = False
+            new_y_limit = self._new_shift_y_limit
+            if new_y_limit is not None:
+                logger.notice("Setting new pellet_shift_y_limit: %s", new_y_limit)
+                algo.pellet_shift_y_limit = new_y_limit
+                self._new_shift_y_limit = None
+        #
+        if trial_shift is not None:
+            self.last_shift_xyz = trial_shift
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
             func = self._processed_shift_handler
