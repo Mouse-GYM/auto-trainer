@@ -13,23 +13,18 @@ In either case, the YAML base key for contents is either "magnet" or "pellet".
 * "magnet" - for magnet head servo
 """
 import copy
-import dataclasses
-import logging
-import typing
-
 import yaml
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple, Union, Dict, Optional
 
 from typing_extensions import Self
 
 from autotrainer.core import MotorConfigurations
-
-from .device_interface import ServoConfig, StepperConfig, Motor
 from autotrainer.core.logging import get_verbose_logger
 
-logger = get_verbose_logger(__name__)
+from .device_interface import ServoConfig, StepperConfig, Motor
 
+logger = get_verbose_logger(__name__)
 
 
 DEFAULT_TUNNEL_FAN_CONFIG = ServoConfig.from_dict(dict(
@@ -129,60 +124,60 @@ class MotorConfigurationFile(MotorConfigurations):
             yaml_dict (dict): Dictionary of data
         """
         items_loaded = []
-        pellet_dct = yaml_dict.get("pellet", None)
+        pellet_dct: Optional[Dict] = yaml_dict.get("pellet", None)
         if pellet_dct is not None:
-            load_dct = pellet_dct.get("load")
+            load_dct: Optional[Dict] = pellet_dct.get("load")
             if load_dct is not None:
                 self._load_config = ServoConfig.from_dict(load_dct)
                 self._load_config.motor = Motor.PELLET_LOAD_SERVO
                 logger.info("load configuration: %s", self._load_config)
                 items_loaded.append("pellet-load")
 
-            barrier_dct = pellet_dct.get("barrier")
+            barrier_dct: Optional[Dict] = pellet_dct.get("barrier")
             if barrier_dct:
                 self._cover_config = ServoConfig.from_dict(barrier_dct)
                 self._cover_config.motor = Motor.PELLET_COVER_SERVO
                 logger.info("barrier configuration: %s", self._cover_config)
                 items_loaded.append("pellet-barrier")
 
-            x_dct = pellet_dct.get("x")
+            x_dct: Optional[Dict] = pellet_dct.get("x")
             if x_dct is not None:
                 self._x_config = StepperConfig.from_dict(x_dct)
                 self._x_config.motor = Motor.PELLET_X_MOTOR
                 logger.info("X stepper configuration: %s", self._x_config)
                 items_loaded.append("pellet-x")
             #
-            y_dct = pellet_dct.get("y")
+            y_dct: Optional[Dict] = pellet_dct.get("y")
             if y_dct is not None:
                 self._y_config = StepperConfig.from_dict(y_dct)
                 self._y_config.motor = Motor.PELLET_Y_MOTOR
                 logger.info("Y stepper configuration: %s", self._y_config)
                 items_loaded.append("pellet-y")
             #
-            z_dct = pellet_dct.get("z")
+            z_dct: Optional[Dict] = pellet_dct.get("z")
             if z_dct is not None:
                 self._z_config = StepperConfig.from_dict(z_dct)
                 self._z_config.motor = Motor.PELLET_Z_MOTOR
                 logger.info("Z stepper configuration: %s", self._z_config)
                 items_loaded.append("pellet-z")
             #
-            fan_dct = pellet_dct.get("tunnel_fan", None)
+            fan_dct: Optional[Dict] = pellet_dct.get("tunnel_fan", None)
             if fan_dct is not None:
                 self._tunnel_fan_config = ServoConfig.from_dict(fan_dct)
                 self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
                 logger.info("Fan stepper config: %s", self._tunnel_fan_config)
                 items_loaded.append("tunnel-fan")
 
-        tunnel_dct = yaml_dict.get("tunnel")
+        tunnel_dct: Optional[Dict] = yaml_dict.get("tunnel")
         if tunnel_dct is not None:
-            magnet_dct = tunnel_dct.get("magnet", None)
+            magnet_dct: Optional[Dict] = tunnel_dct.get("magnet", None)
             if magnet_dct is not None:
                 self._magnet_config = ServoConfig.from_dict(magnet_dct)
                 self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
                 logger.info("Magnet stepper configuration: %s", self._magnet_config)
                 items_loaded.append("tunnel-magnet")
 
-            gate_dct = tunnel_dct.get("gate", None)
+            gate_dct: Optional[Dict] = tunnel_dct.get("gate", None)
             if gate_dct is not None:
                 self._gate_config = ServoConfig.from_dict(gate_dct)
                 self._gate_config.motor = Motor.TUNNEL_GATE_SERVO

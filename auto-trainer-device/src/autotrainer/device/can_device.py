@@ -206,6 +206,7 @@ class CanDevice(Device):
 
         self._init_handlers()
 
+        self._prev_command_timeout: float = self.default_command_ack_timeout_duration
         self._prev_command: Optional[Tuple[object, Any, type(None)]] = None
         self._prev_command_is_relative = False
 
@@ -476,14 +477,23 @@ class CanDevice(Device):
         pending_uuid = None
         repeated_command_count = 0
         uuid_ack_timeout_engaged = False
+
+        def perform_next_compound():
+            for _ in range(self.default_command_write_failed_repeat_count):
+                success = self._perform_next_compound_step()
+                if success:
+                    break
+            if not success:
+                raise RuntimeError("too many failure trying _perform_next_compound_step")
+
         while True:
             if has_read_from_queue:
                 q.task_done()
+                has_read_from_queue = False
             try:
                 raw = q.get(timeout=0.005)
             except queue.Empty:
                 raw = None, None, None
-                has_read_from_queue = False
             else:
                 has_read_from_queue = True
             if raw is None:
@@ -511,7 +521,7 @@ class CanDevice(Device):
             )
             #
             if pending_uuid is not None and kind is not _uuid_ack:
-                if time.perf_counter() - t_perf_last_command_with_uuid < self.default_command_ack_timeout_duration:
+                if get_perf_now() - t_perf_last_command_with_uuid < self._prev_command_timeout:
                     # continue poll input queue for uuid ack
                     continue
                 if not uuid_ack_timeout_engaged:
@@ -525,11 +535,12 @@ class CanDevice(Device):
                     raise RuntimeError(f"Reached default_command_ack_timeout_repeat_count {repeated_command_count}")
                 assert self._prev_command is not None
                 if self._prev_command_is_relative:
+                    # TODO: should/could simply continue, probably
                     raise RuntimeError(f"Command {self._prev_command} uuid ack timed out ; refusing retry given relative.")
                 cur_commands.insert(0, self._prev_command)
                 self._prev_command = None
                 retrying = True
-                time.sleep(0.1)  # do not retry eventually too fast to allow eventually reader thread
+                time.sleep(0.05)  # do not retry eventually too fast to allow eventually reader thread
             else:
                 retrying = False
             #
@@ -548,25 +559,16 @@ class CanDevice(Device):
                 self._compound_movement.insert(0, data)
                 kind = _next_compound
             if kind is _next_compound:
-                for _ in range(self.default_command_write_failed_repeat_count):
-                    success = self._perform_next_compound_step()
-                    if success:
-                        break
-                if not success:
-                    raise RuntimeError("too many failure trying _perform_next_compound_step")
+                perform_next_compound()
             elif kind is _uuid_ack:
                 pending_uuid = None
                 if uuid_ack_timeout_engaged:
                     uuid_ack_timeout_engaged = False
                     self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, False, True)
+                self._prev_command_timeout = self.default_command_ack_timeout_duration
                 repeated_command_count = 0
                 logger.debug("executing ack perform next compound")
-                for _ in range(self.default_command_write_failed_repeat_count):
-                    success = self._perform_next_compound_step()
-                    if success:
-                        break
-                if not success:
-                    raise RuntimeError("too many failure trying _perform_next_compound_step")
+                perform_next_compound()
             else:
                 if kind is _retry_full:
                     kind, data, ctx = data
@@ -598,7 +600,7 @@ class CanDevice(Device):
             if after_uuid != before_uuid:
                 #
                 # prev_commands_with_uuid_timeout_state.append(0)
-                t_perf_last_command_with_uuid = time.perf_counter()
+                t_perf_last_command_with_uuid = get_perf_now()
                 # for now we have this rule:
                 if after_uuid != before_uuid + 1 and (before_uuid != 255 or after_uuid != 1):
                     # but this can eventually happens if/when we retry several time the same (write-) command
@@ -661,6 +663,7 @@ class CanDevice(Device):
         # only start the command handler thread on connect,
         # which means we have already obtained the addr of desired devices.
         self._want_exit.clear()
+        self._prev_command_timeout = self.default_command_ack_timeout_duration
         if self._commands_handler_thread is not None and self._commands_handler_thread.is_alive():
             logger.verbose("CAN command Handler thread already alive")
         else:
@@ -865,6 +868,9 @@ class CanDevice(Device):
         else:
             want_detach = cfg.detach
         step = {}
+        uuid_ack_timeout = None if cfg is None else cfg.get("uuid_ack_timeout")
+        if uuid_ack_timeout is not None:
+            step["uuid_ack_timeout"] = uuid_ack_timeout
         if want_detach:
             return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
         return step, [step]
@@ -1040,6 +1046,9 @@ class CanDevice(Device):
             compound_movements.pop(0)  # remove the one that was just requested successfully
             self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
             logger.debug("executed %s write command", step)
+            cmd_ack_timeout = step.get("uuid_ack_timeout")
+            if cmd_ack_timeout is not None:
+                self._prev_command_timeout = cmd_ack_timeout
         else:
             logger.error("%s write command failed", step)
 
