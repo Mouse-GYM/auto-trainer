@@ -98,7 +98,7 @@ class PelletMachine(StateMachine):
         )
 
         # NB: must be done AFTER creation of previous `self.machine` instance
-        algorithm.relay_transitions(self)
+        algorithm.relay_transitions(self, wait=False)
 
     @property
     def events(self) -> PelletMachineEvents:
@@ -303,7 +303,7 @@ class PelletMachine(StateMachine):
             logger.info("Notifying pellet load failed, consecutive=%s", self._consecutive_failed_load)
             self.events.load_failed(consecutive=self._consecutive_failed_load)
 
-    @BehaviorAlgorithm.relay_func
+    @BehaviorAlgorithm.relay_func(wait=False)
     def environment_changed(
         self,
         pellet_seen: bool = True,

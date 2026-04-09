@@ -430,10 +430,22 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self.device_ack_timeout_engaged = value
             is_dev_comm_err_possible = True
         elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
+            post_api_detector_event_content(
+                self._event_manager,
+                ApiDetectorKind.pelletStatusMessageInterruption,
+                value,
+                True,
+            )
             self._device_pellet_status_timeout_engaged = value
             self.property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev_value)
             is_dev_comm_err_possible = True
         elif name == props.TUNNEL_STATUS_TIMEOUT_ENGAGED:
+            post_api_detector_event_content(
+                self._event_manager,
+                ApiDetectorKind.tunnelStatusMessageInterruption,
+                value,
+                True,
+            )
             self._device_tunnel_status_timeout_engaged = value
             self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
             is_dev_comm_err_possible = True
@@ -448,32 +460,39 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             alarm_mon.device_comm_error_engaged = engaged
 
     def _message_handler_property_changed(self, name: str, value, old_value):
-        if name == MessageHandler.HEAD_MAGNET_INTENSITY_PROPERTY:
+        props = MessageHandler
+        if name == props.HEAD_MAGNET_INTENSITY_PROPERTY:
             prev, self._head_magnet_position = self._head_magnet_position, value
             self._on_property_changed(self.HEAD_MAGNET_INTENSITY, value, prev)
-        elif name == MessageHandler.STEPPER_X_PROPERTY:
+
+        elif name == props.STEPPER_X_PROPERTY:
             prev = self._last_motor_coordinates
             new = prev.replace(x=value.position)
             self._last_motor_coordinates = new
             self.send_x = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
-        elif name == MessageHandler.STEPPER_Y_PROPERTY:
+
+        elif name == props.STEPPER_Y_PROPERTY:
             prev = self._last_motor_coordinates
             new = prev.replace(y=value.position)
             self._last_motor_coordinates = new
             self.send_y = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
-        elif name == MessageHandler.STEPPER_Z_PROPERTY:
+
+        elif name == props.STEPPER_Z_PROPERTY:
             prev = self._last_motor_coordinates
             new = prev.replace(z=value.position)
             self._last_motor_coordinates = new
             self.send_z = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
-        elif name == MessageHandler.FRONT_DOOR_PROPERTY:
+
+        elif name == props.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
-        elif name == MessageHandler.DRAWER_DOOR_PROPERTY:
+
+        elif name == props.DRAWER_DOOR_PROPERTY:
             self.slide_door_open = value
-        elif name == MessageHandler.FIRMWARE_VERSION_PROPERTY and value is not None:
+
+        elif name == props.FIRMWARE_VERSION_PROPERTY and value is not None:
             version = str(value).lower()
             if version.find("module") != -1:
                 version = version.replace("module", "").strip()
