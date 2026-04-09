@@ -106,8 +106,8 @@ def test_agx001_20250806_59(project_info, caplog):
                 init=112,
                 end=141,
                 max=129,
-                method="",
-                outcome="dropped",
+                method='right_hand',
+                outcome='dropped',
                 delay_since_presented=AlmostEqualFloat(0.7466666666666667),
             )
         ],
@@ -128,7 +128,7 @@ agx001_20251015_15_expected_result = IntersessionResponse(
             init=104,
             max=147,
             outcome='dropped',
-            method="",
+            method='right_hand',
         ),
     ]
 )
@@ -168,7 +168,7 @@ agx001_20260205_11_expected_result = IntersessionResponse(
         end=33,
         init=0,
         max=17,
-        method="",
+        method='right_hand',
         outcome='dropped')],
 )
 

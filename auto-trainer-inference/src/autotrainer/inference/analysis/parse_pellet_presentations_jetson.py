@@ -331,12 +331,16 @@ def segment_reaches_f2(
     reach_events = []
     dist_list = []
     max_frm = 0
-    
+
     for frmindex, start_frame in enumerate(frames_on_found):
-        
+
+        # NB: pellet_events is same size/length than frames_on_found, actually both could be merged.
+        # also use directly pellet_event instead of find_last_placement(..) below.
+        pellet_event = pellet_events[frmindex]
+
         search_status = 1
         food_was_dropped = False
-        frame = start_frame-20 # in case reach begins prior to pellet placement
+        frame = start_frame - 20 # in case reach begins prior to pellet placement
         pellet_detected = False
         while frame < frm_ct - batch_frm:             # test if we reached the next pellet placement 
             if frmindex < len(frames_on_found)-1 and frame >= frames_on_found[frmindex+1]: 
@@ -373,11 +377,11 @@ def segment_reaches_f2(
                             # and then doing:
                             #   delay_since_presented = A - B
                             reach_dict = {
-                                "init": frame,
-                                "max": -1,
-                                "end": -1,
-                                "method": "",
-                                "outcome": "",
+                                "init": frame,  # ~= pellet_event['init'] probably
+                                "max": -1,  # possibly pellet_event['lost'] ?
+                                "end": -1,  # possibly pellet_event['lost'] ?
+                                "method": pellet_event['method'],
+                                "outcome": pellet_event['outcome'],
                                 "delay_since_presented": delay_since_presented,
                             }
                             search_status = 2
@@ -456,8 +460,9 @@ def segment_reaches_f2(
                         # reach_events.append(('reachEnd_dropped', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
                         reach_dict['outcome'] = 'dropped'
-                        lp = find_last_placement(frame+2, pellet_events)
-                        pellet_events[lp]['outcome'] = 'dropped'
+                        # lp = find_last_placement(frame+2, pellet_events)
+                        # pellet_events[lp]['outcome'] = 'dropped'
+                        pellet_event["outcome"] = "dropped"
                         keep_looking = False
                     elif pellet_detected and pTest:
                         if debug >= 2:
