@@ -400,8 +400,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._send_command(device_conn, SystemCommandKind.STREAM_START)
         self._send_command(device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
 
-        self.send_home()
-
     def disconnect(self):
         logger.verbose("disconnecting ..")
         can_dev = self._can_device
