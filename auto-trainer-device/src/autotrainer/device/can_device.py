@@ -478,6 +478,7 @@ class CanDevice(Device):
         uuid_ack_timeout_engaged = False
 
         def perform_next_compound():
+            self._prev_command_timeout = self.default_command_ack_timeout_duration
             for _ in range(self.default_command_write_failed_repeat_count):
                 success = self._perform_next_compound_step()
                 if success:
@@ -564,7 +565,6 @@ class CanDevice(Device):
                 if uuid_ack_timeout_engaged:
                     uuid_ack_timeout_engaged = False
                     self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, False, True)
-                self._prev_command_timeout = self.default_command_ack_timeout_duration
                 repeated_command_count = 0
                 logger.debug("executing ack perform next compound")
                 perform_next_compound()
