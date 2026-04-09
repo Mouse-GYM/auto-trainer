@@ -1,33 +1,30 @@
-import importlib
 import multiprocessing.pool
 import os
 import queue
 import signal
 import threading
 import time
-from functools import partial
-from itertools import chain
-from multiprocessing import synchronize
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
 
+from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
+    InferenceConfiguration, Offset3DTuple, ApiEventKind
 from autotrainer.core.project import ProjectDependentProtocol
-from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, clear_queue, \
-    InferenceConfiguration, Offset3DTuple
 from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
-from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
-    InferenceProtocol, IntersessionBlock, IntersessionDetection
+
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus, InferenceMonitorDataMsg
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from autotrainer.inference.analysis import intersession_process, IntersessionResponse
 
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
+    InferenceProtocol, IntersessionBlock, IntersessionDetection
+
 
 logger = get_verbose_logger(__name__)
-
 
 # even better is to use __debug__ and use "python -O ..."
 # see https://docs.python.org/3/using/cmdline.html#cmdoption-O
@@ -50,6 +47,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         super().__init__()
 
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
+        self._event_manager = EventManager.default()
         self._mp_manager = mp_manager
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
         self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
@@ -435,6 +433,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)
         self.segmentation_finished(prj, success)
 
+    def _cb_on_intersession_segmentation_finished(self, project, success, *, shape=None):
+        if success:
+            self._event_manager.post_event_content(ApiEventKind.intersessionSegmentationSave, context=f"{shape}")
+        else:
+            self._event_manager.post_event_content(ApiEventKind.intersessionSegmentationSaveError)
+        self._handle_segmentation_finished(project, success)
+
     def _handle_monitor_data_proc_msg(self, msg, ctx):
         args, kwargs = ctx
         if msg is InferenceMonitorDataMsg.POSE_RESULT_READY:
@@ -457,9 +462,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 logger.exception("pose_response_ready event callback failed: %s", err)
 
         elif msg is InferenceMonitorDataMsg.INTERSESSION_SEGMENTATION_FINISHED:
-            prj, success = args[:2]
-            logger.notice("Received %s. success=%s prj=%s", msg, success, prj)
-            self._handle_segmentation_finished(prj, success)
+            self._cb_on_intersession_segmentation_finished(*args, **kwargs)
         else:
             logger.warning("unknown monitor proc data: %s - ctx=%s", msg, ctx)
 
