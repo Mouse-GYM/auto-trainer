@@ -181,9 +181,10 @@ class ShiftXYZHandler(ObservableObject):
         project: ProjectInfo,
         trial_result: IntersessionResponse,
         *,
-        is_last: bool = True,
         is_batch: bool = False,
-        reduce_method = mean_method,
+        is_first: bool = True,
+        is_last: bool = True,
+        reduce_method=mean_method,
     ):
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
@@ -191,6 +192,13 @@ class ShiftXYZHandler(ObservableObject):
             prev_y_limit = algo.pellet_shift_y_limit
         else:
             prev_y_limit = self._new_shift_y_limit
+
+        if is_batch:
+            if is_first:
+                logger.info("Received first (batch) trial")
+                self._batch_has_tongue_eaten = False
+            if is_last:
+                logger.info("Received last batch trial")
 
         send_pos = project.dcs_send_position
         if send_pos is None:

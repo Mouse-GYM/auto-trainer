@@ -89,6 +89,7 @@ class SystemMachine(StateMachine):
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
         self._batch_project_sessions_finished: int = 0
+        self._batch_current_trial_index: int = 0  # 0 -> #trials-in-batch - 1
         self._batch_failed_count: int = 0
         self._batch_sessions_total_duration: float = 0
         #
@@ -277,6 +278,7 @@ class SystemMachine(StateMachine):
 
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
+                self._batch_current_trial_index = 0
                 self._batch_failed_count = 0
                 self._batch_project_sessions_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
@@ -492,6 +494,7 @@ class SystemMachine(StateMachine):
                 self._batch_failed_count += 1
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
                 # continue remaining session(s) in batch in all cases
+                self._batch_current_trial_index += 1
                 self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
             shift_xyz = self._next_shift_xyz_to_apply
@@ -1091,11 +1094,14 @@ class SystemMachine(StateMachine):
         #
         if len(self._batch_project_sessions_list) > 0:
             is_batch = True
+            is_first = self._batch_current_trial_index == 0
             is_last = prj == self._batch_project_sessions_list[-1]
         else:
             is_batch = False
-            is_last = True
-        self._shift_xyz_handler.put_intersession_response(prj, res, is_batch=is_batch, is_last=is_last)
+            is_first = is_last = True
+        #
+        self._shift_xyz_handler.put_intersession_response(prj, res,
+                                                          is_first=is_first, is_last=is_last, is_batch=is_batch)
         #
         algo = self._algorithm
         algo.set_previous_intersession_analysis_rsp(prj, res)
