@@ -50,9 +50,11 @@ class TestShiftXYZ(MockSystemMachine):
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         cfg = algo.active_config
+        other_events = list(filter(lambda r: r.method not in {'right_hand', 'left_hand'}, reach_events))
         rsp = IntersessionResponse(
             reach_events=reach_events,
             rh_max_vp_list=rh_max_vp_list,
+            other_events=other_events,
         )
         stack.enter_context(self.mock_intersession_analysis(results=rsp))
         self.mock_pose_response(pellet_seen=False)
