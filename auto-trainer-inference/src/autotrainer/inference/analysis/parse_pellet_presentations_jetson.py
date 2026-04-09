@@ -66,6 +66,7 @@ def segment_reaches(
         'successful_reaches': 0,
         'rh_max_vp_list': [],
         'reach_events': [],
+        'other_events': [],
     }
     if df_3d is None:
         return results_dict
@@ -189,7 +190,10 @@ def segment_reaches(
     results_dict['successful_reaches'] = successful_reaches
     results_dict['rh_max_vp_list'] = rh_max_vp_list
     results_dict['reach_events'] = reach_events
-
+    other_events = results_dict['other_events'] = []
+    for pellet_event in pellet_events[:-1]:
+        if pellet_event['method'] not in {'right_hand', 'left_hand'}:
+            other_events.append(pellet_event)
     return results_dict
 
 
@@ -492,7 +496,7 @@ def segment_reaches_f2(
                     testZ = dist_hvpp_R[max_query] > min_dist_from_pellet
                     if not (testX or testY or testZ):
                         reach_events.append(reach_dict)
-                        
+
                 if not keep_looking:
                     break
             frame += 1

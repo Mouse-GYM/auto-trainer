@@ -29,6 +29,7 @@ def intersession_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
+    frame_rate: int = 150,  # TODO: pass from video camera settings/parameters
     debug_level: int = _segment_reach_debug,
 ) -> IntersessionResponse:
     """
@@ -60,7 +61,7 @@ def intersession_process(
         df_lr=df_lr,
         df_3d=centered_df_3d,
         debug=debug_level,
-        frame_rate=150,  # TODO: pass from video camera settings/parameters
+        frame_rate=frame_rate,
     )
     logger.verbose("process intersession pose data complete %s", results_dict)
     # rename:
@@ -68,4 +69,15 @@ def intersession_process(
     # all others keys are same than IntersessionResponse fields
     # convert to ReachEvent instances:
     results_dict["reach_events"] = [ReachEvent(**d) for d in results_dict["reach_events"]]
+    results_dict["other_events"] = [
+        # other events are pellet_events not associated with reach (by hand)
+        ReachEvent(
+            init=d['placed'],
+            end=d['lost'],
+            max=-1,
+            method=d['method'],
+            outcome=d['outcome'],
+            delay_since_presented=d['placed'] / frame_rate,
+        ) for d in results_dict["other_events"]
+    ]
     return IntersessionResponse(**results_dict)

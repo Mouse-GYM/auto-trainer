@@ -81,9 +81,15 @@ def test_fp_and_xp_not_same(project_info, caplog):
     )
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
-    assert res.food_consumed == 0
     assert res.pellets_presented == 1
+    assert res.food_consumed == 0
     assert res.successful_reaches == 0
+    assert res.total_reaches == 0
+    assert len(res.reach_events) == len(res.rh_max_vp_list) == 0
+    assert len(res.other_events) == 1
+    event = res.other_events[0]
+    assert event.method == 'other'
+    assert event.outcome == 'dropped'
 
 
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")

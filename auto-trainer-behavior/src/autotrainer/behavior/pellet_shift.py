@@ -177,11 +177,14 @@ class ShiftXYZHandler(ObservableObject):
         self._processed_shift_handler = func
 
     def put_intersession_response(
-        self, project: ProjectInfo, trial_result: IntersessionResponse, *,
-        is_batch: bool,
-        is_last: bool,
+        self,
+        project: ProjectInfo,
+        trial_result: IntersessionResponse,
+        *,
+        is_last: bool = True,
+        is_batch: bool = False,
+        reduce_method = mean_method,
     ):
-        reduce_method = mean_method
         algo = self._algo
         cfg = algo.active_config.shift_xyz_handler
         if self._new_shift_y_limit is None:
@@ -194,8 +197,8 @@ class ShiftXYZHandler(ObservableObject):
             logger.warning("skipping trial result given no dcs_send_pos ; project=%s", project)
             return
         tongue_eaten = False
-        for reach in trial_result.reach_events:
-            if reach.outcome == "eaten" and reach.method == "tongue":
+        for evt in trial_result.other_events:
+            if evt.outcome == "eaten" and evt.method == "tongue":
                 tongue_eaten = True
                 if is_batch:
                     self._batch_has_tongue_eaten = True
