@@ -255,9 +255,11 @@ class SensorAnalysis(ObservableObject):
 
         # Load cell monitor. and Auto-Tare monitor
         weight_vals: List[float] = []
+        filtered_weight_vals: List[float] = []
         load_cell_cfg = load_cell_mon.config
         for m in measurements:
             value = m.weight
+            weight_vals.append(value)
             if not (load_cell_cfg.weight_min_filter < value < load_cell_cfg.weight_max_filter):
                 if not self._filter_invalid_weight_started:
                     self._filter_invalid_weight_started = True
@@ -269,10 +271,10 @@ class SensorAnalysis(ObservableObject):
                 logger.verbose("finished filter value outside accepted range: %s", value)
                 self._filter_invalid_weight_started = False
             #
-            weight_vals.append(value)
+            filtered_weight_vals.append(value)
             self._load_cell_monitor.update(value, m.when, m.timestamp)
         # (Auto-)tare detection.
-        self._tare_detector.update(weight_vals)
+        self._tare_detector.update(filtered_weight_vals)
 
         # Headbar analog pressure monitor.
         first_measure = measurements[0]
