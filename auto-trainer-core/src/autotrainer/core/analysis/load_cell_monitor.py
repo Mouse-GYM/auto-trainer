@@ -85,15 +85,12 @@ class LoadCellMonitor(BaseDetector):
         config: Optional[LoadCellConfiguration] = None
     ):
         super().__init__()
-        if config is None:
-            config = LoadCellConfiguration()
-        self._config = config
+        self._config = LoadCellConfiguration() if config is None else config
         self._cur_idx = 0
         self._p_start_active = None  # get_perf_now()
         self._p_start_inactive = None  # get_perf_now()
         self._cur_ptp_count = 0
         self._p_last_ptp_check = 0
-        self._filtering_out_started = False
         self._active_debounce = no_op_timer
         self._inactive_debounce = no_op_timer
         self._index = 0  # used to pass with event when engaged is changed
@@ -275,14 +272,6 @@ class LoadCellMonitor(BaseDetector):
         index: nanosecond perf counter
         """
         cfg = self._config
-        if not (cfg.weight_min_filter < value < cfg.weight_max_filter):
-            if not self._filtering_out_started:
-                self._filtering_out_started = True
-                logger.notice("starting filter value outside accepted range: %s", value)
-            return
-        if self._filtering_out_started:
-            logger.notice("finished filter value outside accepted range: %s", value)
-            self._filtering_out_started = False
         if self._force_engaged:
             # debug code
             value = self._config.weight_active_threshold + 0.1

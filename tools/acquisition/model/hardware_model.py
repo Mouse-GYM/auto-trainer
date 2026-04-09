@@ -438,8 +438,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._send_command(device_conn, SystemCommandKind.STREAM_START)
         self._send_command(device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
 
-        self.send_home()
-
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():
             thread = self._check_timedout_commands_thread = threading.Thread(

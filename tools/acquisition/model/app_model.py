@@ -20,6 +20,7 @@ import yaml
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
     ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -663,7 +664,7 @@ class AppModel(ObservableObject):
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
-                self._set_animal_base_positions_and_send_to_deliver(animal)
+                self._set_animal_base_positions(animal)
             else:
                 self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
@@ -1098,6 +1099,8 @@ class AppModel(ObservableObject):
                     return False
                 time.sleep(0.05)
         logger.info("finished connecting hardware")
+        # we always be/go at home on acquisition start, so:
+        self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
         self._save_project_metadata(self._project_info)
@@ -1122,13 +1125,13 @@ class AppModel(ObservableObject):
         else:
             self.training_plan = plan
 
+        if animal is not None:
+            self._set_animal_base_positions(animal)
+
         self._acquisition_started = True
         self.status = target_status
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
         self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
-
-        if animal is not None:
-            self._set_animal_base_positions_and_send_to_deliver(animal)
 
         self.check_max_pellet_loaded()
 
@@ -1457,7 +1460,7 @@ class AppModel(ObservableObject):
             parts.append(f"Intersession: {cur_inter_state}")
         self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
 
-    def _set_animal_base_positions_and_send_to_deliver(self, animal: AnimalSubject):
+    def _set_animal_base_positions(self, animal: AnimalSubject):
         xyz = Offset3DTuple(animal.pellet_x, animal.pellet_y, animal.pellet_z)
         logger.verbose("Setting animal base positions and sending to %s is_pellet_dcs=%s",
                        xyz.humanize(n_digits=1), animal.is_pellet_dcs)

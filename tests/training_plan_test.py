@@ -104,6 +104,9 @@ class BaseTrainingPlan(MockSystemMachine):
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING, wait_connected=False)
+        # force pellet machine state to monitoring:
+        app_model.behavior.system_machine.pellet.state = PelletState.monitoring
+        # AFTER capture_start
 
         algo.pellet_delivery_enabled = True
 
