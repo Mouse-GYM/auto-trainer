@@ -205,6 +205,7 @@ class StepperConfig(MotorSource):
     _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
     _homing_velocity: float = 60  # mm/sec
+    uuid_ack_timeout: Optional[float] = None
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -222,7 +223,7 @@ class StepperConfig(MotorSource):
             config.homing_velocity = data["home_vel"]
         if "flip_limit_orientation" in data:
             config.flip_limit_orientation = data["flip_limit_orientation"] == 1
-
+        config.uuid_ack_timeout = data.get("uuid_ack_timeout")
         return config
 
     @property

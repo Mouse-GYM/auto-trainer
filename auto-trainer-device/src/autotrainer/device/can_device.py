@@ -867,7 +867,7 @@ class CanDevice(Device):
         else:
             want_detach = cfg.detach
         step = {}
-        uuid_ack_timeout = None if cfg is None else cfg.get("uuid_ack_timeout")
+        uuid_ack_timeout = None if cfg is None else cfg.uuid_ack_timeout
         if uuid_ack_timeout is not None:
             step["uuid_ack_timeout"] = uuid_ack_timeout
         if want_detach:
