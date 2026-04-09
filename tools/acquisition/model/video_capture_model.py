@@ -373,7 +373,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
         # NB: clearing video cmd queue having waited & joined the capture process is best.
         video_cmd_q = self._video_command_queue
-        self._video_command_queue = None  # set to None before clearing queue
         clear_queue(video_cmd_q, name="video_cmd_queue")
 
         self._video_image_queue = None
