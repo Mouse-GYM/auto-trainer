@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import math
 from datetime import datetime
 from typing import Optional, List, Tuple, IO
 
@@ -261,6 +262,7 @@ class SensorAnalysis(ObservableObject):
             value = m.weight
             weight_vals.append(value)
             if not (load_cell_cfg.weight_min_filter < value < load_cell_cfg.weight_max_filter):
+                filtered_weight_vals.append(math.nan)
                 if not self._filter_invalid_weight_started:
                     self._filter_invalid_weight_started = True
                     logger.verbose(

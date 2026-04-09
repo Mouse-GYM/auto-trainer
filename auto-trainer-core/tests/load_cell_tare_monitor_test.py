@@ -1,3 +1,5 @@
+import math
+
 import numpy
 import pytest
 
@@ -32,3 +34,14 @@ def test_baseline_depends_on_cb_return(threshold, range_threshold, sample_rate, 
     values += 0.00001
     monitor.update(list(values))
     assert monitor.baseline == 0
+
+
+def test_low_variance_with_nans():
+    monitor = LoadCellTareMonitor()
+    values = numpy.asarray([monitor.threshold + 0.01] * int(monitor.sample_rate * monitor.duration))
+    values[0] = 1.5 * monitor.range_threshold
+    values[1] = math.nan
+    values[-3] = math.nan
+    values[-1] = monitor.range_threshold + 5
+    monitor.update(list(values))
+    assert not monitor.context.low_variance_engaged
