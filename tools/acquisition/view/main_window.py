@@ -27,13 +27,16 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.event.api_event_kind import ApiEventKind
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 from autotrainer.inference import InferenceStatus, PoseResponse
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 
 from autotrainer.behavior import TrainingMode
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+from autotrainer.behavior.pellet import PelletState
+
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan, PlanInfo
@@ -1227,6 +1230,47 @@ class MainWindow(QMainWindow):
             logger.verbose("Restoring intersession segmentation and detection to real procedures")
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
+
+    def _simulate_sessions(self, *, n_sessions: int=1, n_trials: int = 1, sess_sleep: float=8):
+        app = self._app_model
+        pellet_m = app.behavior.system_machine.pellet
+        algo = app.behavior.algorithm
+        infe = app.inference
+        for sess_idx in range(n_sessions):
+            if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                return
+            logger.notice("starting new simulate session")
+            self.load_cell_trigger_action.trigger()
+            time.sleep(1.5)
+            for idx in range(n_trials):
+                if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                    return
+                time.sleep(1.5)
+                self.mouse_near_pellet_action.toggle()
+                self.mouse_near_pellet_action.trigger()
+                time.sleep(1.5)
+                self.mouse_seen_action.toggle()
+                self.mouse_seen_action.trigger()
+                time.sleep(3)
+                pellet_m.load_pellet(force=True)
+                time.sleep(1)
+                while pellet_m.state != PelletState.monitoring:
+                    logger.verbose("waiting pellet monitoring")
+                    time.sleep(1.5)
+                    if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                        return
+                time.sleep(2.5)
+            #
+            self.load_cell_trigger_action.trigger()
+            time.sleep(3.5)
+            if infe.status != InferenceStatus.intersession:
+                logger.error("unexpected infe state: %s", infe.status)
+                return
+            while infe.status != InferenceStatus.live:
+                time.sleep(1)
+                if infe.status == InferenceStatus.stopped:
+                    return
+            time.sleep(sess_sleep)
 
     def notes_changed(self, value: str):
         self._app_model.notes = value
