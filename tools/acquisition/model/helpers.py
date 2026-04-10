@@ -4,7 +4,7 @@ from typing import Optional
 
 from autotrainer.core import get_verbose_logger
 from autotrainer.core.configuration import SystemConfiguration
-from autotrainer.core.user_preferences import get_default_configuration_location, UserPreferences
+from tools.acquisition.model.user_preferences import get_default_configuration_location, UserPreferences
 
 logger = get_verbose_logger(__name__)
 

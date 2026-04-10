@@ -41,8 +41,8 @@ def run_acquisition(
     from PySide6.QtWidgets import QApplication
 
     from autotrainer.model import EnvironmentProvider
-    from autotrainer.core.user_preferences import UserPreferences
 
+    from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.args import AutoTrainerParsedArgs
     from tools.acquisition.view.main_window import MainWindow
 

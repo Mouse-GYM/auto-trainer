@@ -39,7 +39,6 @@ from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTime
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
-from autotrainer.core.configuration.helpers import get_config_location
 
 from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
 from autotrainer.inference.analysis import IntersessionResponse
@@ -62,14 +61,14 @@ from autotrainer.api import (
     ApiTopic,
     ApiEventKind,
 )
-from tools.acquisition.model.app_model_status import AppModelStatus
 
+from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.autotrainer_version import __version__ as app_version
+from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.model.training_plan import load_training_plans, get_plan_id
-from tools.acquisition.model.user_preferences import UserPreferences, get_default_configuration_location
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)

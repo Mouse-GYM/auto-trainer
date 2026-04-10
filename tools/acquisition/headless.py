@@ -11,8 +11,8 @@ def _exec_main(args):
 
     from autotrainer.core.logging import get_verbose_logger, get_console_handler
     from autotrainer.core.event import try_register_api_event_plugin
-    from autotrainer.core.user_preferences import UserPreferences
-    from autotrainer.core.configuration.helpers import get_config_location
+    from tools.acquisition.model.user_preferences import UserPreferences
+    from tools.acquisition.model.helpers import get_config_location
 
     from tools.acquisition.model.app_model import AppModel
 
