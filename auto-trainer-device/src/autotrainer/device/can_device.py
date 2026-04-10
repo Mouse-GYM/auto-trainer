@@ -268,7 +268,7 @@ class CanDevice(Device):
                 logger.warning("set_release_pellet_proc: empty proc: %s", proc)
             return True
 
-        def apply_set_or_move(func, motor=None, *args, **kwargs):
+        def apply_set_or_move(func, motor, *args, **kwargs):
             has_relative = "relative" in kwargs
             is_relative = has_relative and kwargs["relative"]
             if motor is not None:
@@ -293,11 +293,11 @@ class CanDevice(Device):
 
             SystemCommandKind.MOVE_GATE_SERVO: partial(handle_servo_move, Motor.TUNNEL_GATE_SERVO),
 
-            SystemCommandKind.SET_X: partial(apply_set_or_move, self._interface.set_motor_x),
+            SystemCommandKind.SET_X: partial(apply_set_or_move, self._interface.set_motor_x, None),
 
-            SystemCommandKind.SET_Y: partial(apply_set_or_move, self._interface.set_motor_y),
+            SystemCommandKind.SET_Y: partial(apply_set_or_move, self._interface.set_motor_y, None),
 
-            SystemCommandKind.SET_Z: partial(apply_set_or_move, self._interface.set_motor_z),
+            SystemCommandKind.SET_Z: partial(apply_set_or_move, self._interface.set_motor_z, None),
 
             SystemCommandKind.MOVE_X: partial(apply_set_or_move, self._interface.move_motor_x,
                                               Motor.PELLET_X_MOTOR),
