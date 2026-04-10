@@ -40,8 +40,7 @@ from .intersession import IntersessionState
 
 from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
-from autotrainer.inference.analysis import IntersessionResponse
-
+from autotrainer.inference.analysis import IntersessionResponse, ReachEvent
 
 logger = get_verbose_logger(__name__)
 
@@ -1425,7 +1424,7 @@ class BehaviorAlgorithm(ObservableObject):
                 ctx.warned_bad_distance = True
 
     @property
-    def trial_reaches(self) -> List[Dict]:
+    def trial_reaches(self) -> List[ReachEvent]:
         prev = self._previous_intersession_analysis_rsp
         if prev is None:
             return []
