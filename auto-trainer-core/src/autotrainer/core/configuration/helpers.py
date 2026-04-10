@@ -15,7 +15,7 @@ def get_config_location(preferences: UserPreferences, location: Optional[str] = 
         path = Path(preferences.configuration_location)
         logger.info(
             "did not receive explicit configuration file, trying default p_location=%s",
-            location,
+            path,
         )
         default_path = SystemConfiguration.make_default_yaml_config_path(path)
         if default_path.is_file():
