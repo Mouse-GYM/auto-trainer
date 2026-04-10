@@ -397,7 +397,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             else:
                 delay = max(CanDevice.default_command_ack_timeout_duration, delay)
             can_dev.default_command_ack_timeout_duration = delay
-            logger.notice("Using %s for device ack timeout delay", delay)
+            logger.notice("Using %s for default device ack timeout delay", delay)
 
     @property
     def connected(self) -> bool:

@@ -530,6 +530,10 @@ class CanDevice(Device):
             )
             #
             if pending_uuid is not None and kind is not _uuid_ack:
+                if self._prev_command_timeout <= 0:
+                    logger.warning("correcting invalid command uuid-ack timeout value: %s",
+                                   self._prev_command_timeout)
+                    self._prev_command_timeout = self.default_command_ack_timeout_duration
                 if get_perf_now() - t_perf_last_command_with_uuid < self._prev_command_timeout:
                     # continue poll input queue for uuid ack
                     continue
