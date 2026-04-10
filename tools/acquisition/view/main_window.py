@@ -82,7 +82,8 @@ class MainWindow(QMainWindow):
         self,
         app: QApplication,
         user_preferences: UserPreferences,
-        configuration: str = None,
+        config_file: Optional[Path],
+        *,
         is_dev: bool = False,
     ):
         super().__init__(None)
@@ -137,7 +138,6 @@ class MainWindow(QMainWindow):
         app_model.on_error += self._show_message
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
 
-        config_file = app_model.get_config_location(configuration)
         try:
             app_model.load_configuration(config_file)
         except Exception as err:

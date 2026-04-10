@@ -2,6 +2,9 @@ import logging
 import os
 import signal
 import sys
+import time
+from pathlib import Path
+from typing import Optional
 
 from PySide6 import QtGui
 
@@ -11,7 +14,6 @@ from autotrainer.core.logging import (get_verbose_logger, get_console_handler, s
 from autotrainer.pyside import CardHeader
 
 from autotrainer.behavior import BehaviorAlgorithm
-from tools.acquisition.model.app_model_status import AppModelStatus
 
 logger = get_verbose_logger(__name__)
 
@@ -21,10 +23,10 @@ CardHeader.DEFAULT_BACKGROUND_COLOR = "#cfb87c"
 CardHeader.DEFAULT_TITLE_COLOR = "black"
 
 
-def verify_configuration(configuration: str):
+def verify_configuration(configuration: Optional[Path]):
     from PySide6.QtWidgets import QMessageBox
 
-    if configuration and not os.path.exists(configuration):
+    if configuration is not None and not configuration.exists():
         # noinspection PyTypeChecker
         result = QMessageBox.warning(None, "Configuration File not Found", missing_file.format(configuration),
                                      QMessageBox.StandardButton.Ok, QMessageBox.StandardButton.Close)
@@ -34,29 +36,27 @@ def verify_configuration(configuration: str):
 
 
 def run_acquisition(
-    configuration: str = None,
-    is_dev: bool = False,
-    allow_can_emulation: bool = False,
-    *,
-    target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+    args,  # see tools.acquisition.args
 ) -> int:
     from PySide6.QtWidgets import QApplication
 
     from autotrainer.model import EnvironmentProvider
+    from autotrainer.core.user_preferences import UserPreferences
 
+    from tools.acquisition.args import AutoTrainerParsedArgs
     from tools.acquisition.view.main_window import MainWindow
-    from tools.acquisition.model.user_preferences import UserPreferences
+
+    args: AutoTrainerParsedArgs
 
     app = QApplication(sys.argv)
-
     app.setStyle("Fusion")
 
-    if not verify_configuration(configuration):
+    if not verify_configuration(args.configuration):
         return -1
 
-    EnvironmentProvider.enable_can_emulation(allow_can_emulation)
+    EnvironmentProvider.enable_can_emulation(args.allow_can_emulation)
 
-    preferences = UserPreferences()
+    preferences = UserPreferences(settings_file_path=args.preferences_file)
 
     logging.info("Set log level to %s", preferences.log_level)
     get_console_handler().setLevel(preferences.log_level)
@@ -65,7 +65,7 @@ def run_acquisition(
     plugin = try_register_api_event_plugin()
 
     try:
-        window = MainWindow(app, preferences, configuration, is_dev)
+        window = MainWindow(app, preferences, args.configuration, is_dev=args.dev)
     except:
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()
@@ -83,7 +83,9 @@ def run_acquisition(
         window.close()
         if sigint_received > 2:
             logger.critical("too many sigint, exiting with SIG_TERMINATE ..")
-            os.kill(os.getpid(), signal.SIGTERM)
+            time.sleep(0.5)
+            os.kill(-os.getpid(), signal.SIGTERM)
+            # killing negative of pid is killing process group
 
     signal.signal(signal.SIGINT, handle_sigint)
 
@@ -92,7 +94,7 @@ def run_acquisition(
     window.move(QtGui.QGuiApplication.primaryScreen().availableGeometry().center() - window.rect().center())
 
     try:
-        window.on_activated(target_status=target_status)
+        window.on_activated(target_status=args.start_mode)
     except:
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()

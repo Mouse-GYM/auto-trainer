@@ -1,6 +1,7 @@
 
 import argparse
 from pathlib import Path
+from typing import Optional
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 
@@ -18,6 +19,16 @@ def parse_start_mode(value: str):
     raise ValueError(f"Unknown AppModelStatus: {value!r}")
 
 
+class AutoTrainerParsedArgs:
+    """For ease of dev / type hints"""
+
+    configuration: Optional[Path] = None
+    preferences_file: Optional[Path] = None
+    start_mode: AppModelStatus = AppModelStatus.ACQUIRING
+    dev: bool = False
+    allow_can_emulation: bool = False
+
+
 def make_autotrainer_parser(*, allow_dev_mode: bool=False):
     parser = argparse.ArgumentParser(
         prog="Autotrainer",
@@ -31,5 +42,10 @@ def make_autotrainer_parser(*, allow_dev_mode: bool=False):
     if allow_dev_mode:
         parser.add_argument("-d", "--dev", help="enable development mode and options", action="store_true")
         parser.add_argument("-e", "--allow-can-emulation", help="include CAN emulation as a connection option",
-                            default="", type=str)
+                            default=False, type=lambda v: v.lower() in {"true", "yes", "1"})
     return parser
+
+
+def parse_autotrainer_args(*, allow_dev_mode: bool=False) -> AutoTrainerParsedArgs:
+    parser = make_autotrainer_parser(allow_dev_mode=allow_dev_mode)
+    return parser.parse_args()  # noqa

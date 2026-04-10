@@ -7,7 +7,10 @@ import multiprocessing
 import os
 import pickle
 import queue
+import shlex
+import subprocess
 import threading
+import sys
 import time
 import warnings
 from dataclasses import asdict
@@ -36,6 +39,7 @@ from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTime
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.configuration.helpers import get_config_location
 
 from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
 from autotrainer.inference.analysis import IntersessionResponse
@@ -180,6 +184,7 @@ class AppModel(ObservableObject):
         self,
         preferences: UserPreferences,
         *,
+        config_file: Optional[Path] = None,
         calib_dir: Optional[Path] = None,
         sensor_analysis: Optional[SensorAnalysis] = None,
         inference_model: Optional[InferenceProtocol] = None,
@@ -190,8 +195,6 @@ class AppModel(ObservableObject):
 
         self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
-        logger.notice("Creating app_model with version %s ; env=%s",
-                      app_version, dict(os.environ))
 
         def log_on_error(title, msg):
             logger.error("%s: %s", title, msg)
@@ -251,7 +254,7 @@ class AppModel(ObservableObject):
         self._handle_proc_msg_thread = threading.Thread(
             target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
         self._handle_proc_msg_thread.start()
-        self._timer_recording_age_enough = _recording_age_enough_timer(0, lambda: None)
+        self._timer_recording_age_enough = no_op_timer
         # end not sure
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
@@ -1220,26 +1223,10 @@ class AppModel(ObservableObject):
             logger.success("Switched from %s to %s ; app_version=%s", prev_loc, location, self._app_version)
 
     def get_config_location(self, location: Optional[str] = None) -> Path:
-        if location is None:
-            # Check to see if there is a file in the new default location.  If so, use it.
-            location = Path(self._preferences.configuration_location)
-            logger.info("did not receive explicit configuration file, trying default p_location=%s", location)
-            default_path = SystemConfiguration.make_default_yaml_config_path(location)
-            if default_path.is_file():
-                return default_path
-            file_path = Path(self._preferences.last_configuration)
-            if file_path.is_file():
-                return file_path
-            default_path = SystemConfiguration.make_default_yaml_config_path(Path(get_default_configuration_location()))
-            return default_path
-        path = Path(location)
-        if path.is_dir():
-            return SystemConfiguration.make_default_yaml_config_path(path)
-        return path
+        return get_config_location(self._preferences, location)
 
-    def load_configuration(self, location: Optional[Path] = None):
-        if location is None:
-            location = self.get_config_location()
+    @classmethod
+    def get_config_from_location(cls, location: Path):
         if location.exists():
             logger.info("using configuration from %r", location.as_posix())
             configuration = SystemConfiguration.load_yaml_file(location)
@@ -1247,6 +1234,13 @@ class AppModel(ObservableObject):
             logger.info("using default configuration")
             configuration = SystemConfiguration()
             configuration.save_file(location, as_yaml=True)
+        return configuration
+
+    def load_configuration(self, location: Optional[Path] = None):
+        if location is None:
+            location = self.get_config_location()
+
+        configuration = self.get_config_from_location(location)
 
         prebuffer_duration = 0
 
@@ -1331,10 +1325,18 @@ class AppModel(ObservableObject):
         conf.save_default(loc)
 
     def on_activated(self):
+        """Must be called at start"""
         with self.app_lock:
             self._on_activated()
 
     def _on_activated(self):
+        logger.notice("Activated app_model with version %s", app_version)
+        logger.debug("start cmdline=%s", shlex.join(sys.argv))
+        logger.debug("start env:\n%s", '\n'.join(f"{k}={v!r}" for k, v in os.environ.items()))
+        # getoutput doesn't raise if pstree isn't installed, for instance.
+        pstree_output = subprocess.getoutput(f"pstree -a -l -p -t -s -S -u -U {os.getpid()}")
+        logger.debug("start pstree:\n%s", pstree_output)
+        #
         now = datetime.now()
         today = self._current_day = now.date()
         delay = (
