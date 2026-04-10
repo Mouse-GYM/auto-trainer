@@ -243,26 +243,38 @@ class CanDevice(Device):
         def set_load_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._load_pellet = proc
+            else:
+                logger.warning("set_load_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_send_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._send_pellet = proc
+            else:
+                logger.warning("set_send_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_cover_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._cover_pellet = proc
+            else:
+                logger.warning("set_cover_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_release_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._release_pellet = proc
+            else:
+                logger.warning("set_release_pellet_proc: empty proc: %s", proc)
             return True
 
-        def apply_set_or_move(func, *args, **kwargs):
+        def apply_set_or_move(func, motor=None, *args, **kwargs):
             has_relative = "relative" in kwargs
             is_relative = has_relative and kwargs["relative"]
+            if motor is not None:
+                cfg = self._motor_configs[motor]
+                if cfg.uuid_ack_timeout is not None:
+                    self._prev_command_timeout = cfg.uuid_ack_timeout
             self._prev_command_is_relative = is_relative
             return func(*args, **kwargs)
 
@@ -287,14 +299,18 @@ class CanDevice(Device):
 
             SystemCommandKind.SET_Z: partial(apply_set_or_move, self._interface.set_motor_z),
 
-            SystemCommandKind.MOVE_X: partial(apply_set_or_move, self._interface.move_motor_x),
+            SystemCommandKind.MOVE_X: partial(apply_set_or_move, self._interface.move_motor_x,
+                                              Motor.PELLET_X_MOTOR),
 
-            SystemCommandKind.MOVE_Y: partial(apply_set_or_move, self._interface.move_motor_y),
+            SystemCommandKind.MOVE_Y: partial(apply_set_or_move, self._interface.move_motor_y,
+                                              Motor.PELLET_Y_MOTOR),
 
-            SystemCommandKind.MOVE_Z: partial(apply_set_or_move, self._interface.move_motor_z),
+            SystemCommandKind.MOVE_Z: partial(apply_set_or_move, self._interface.move_motor_z,
+                                              Motor.PELLET_Z_MOTOR),
 
             SystemCommandKind.SEND_RETRACT: self._send_retract,
 
+            # NB: at the moment SEND_TO_LIMITS == SEND_HOME basically
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._start_sequence(MotorSteps(
                     "send_to_limits",
@@ -309,6 +325,7 @@ class CanDevice(Device):
                     [{"home": m} for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
                 )),
 
+            # NB: only used by test and can_console, we should always use SEND_PELLET instead.
             SystemCommandKind.SEND_FIXED_XYZ: lambda _: self._interface.fixed_position(),
 
             # NB: the following sequences are using "predefined" move,
