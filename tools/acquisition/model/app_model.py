@@ -1103,7 +1103,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info)
+        self._save_project_metadata(project_info, session=None)
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1447,7 +1447,7 @@ class AppModel(ObservableObject):
         project = self._project_info
         if notification.context and project is not None:
             now = datetime.now()
-            self._save_metadata(now, project.get_metadata_file(-1, when=now), project.session)
+            self._save_metadata(now, project.get_metadata_file(project.session, when=now), project.session)
 
     def _update_status_text_overlay(self):
         parts = []
@@ -1719,10 +1719,12 @@ class AppModel(ObservableObject):
 
         return configuration
 
-    def _save_project_metadata(self, project_info: ProjectInfo):
-        when = project_info.when if project_info.when is not None else datetime.now()
-        file_name = project_info.get_metadata_file()
-        self._save_metadata(when, file_name, -1)
+    def _save_project_metadata(self, project_info: ProjectInfo, *,
+                               when: Optional[datetime] = None, session: Optional[int] = -1):
+        """Save the given project_info metadata, if session is None : it's main/global metadata"""
+        when = when if when is not None else (project_info.when if project_info.when is not None else datetime.now())
+        file_name = project_info.get_metadata_file(session, when)
+        self._save_metadata(when, file_name, session)
 
     def _save_metadata(self, when: datetime, file_name: str, session: int = None):
         when_as_utc = when.astimezone(timezone.utc)
