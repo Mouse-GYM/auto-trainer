@@ -202,6 +202,12 @@ class CanDevice(Device):
                 "Alogus hardware or hardware support not found. Using emulation interface.")
 
         self._motor_configs: Dict[Motor, Union[StepperConfig, ServoConfig]] = {}
+        # ensure we have config for these steppers/servos, even if empty/default:
+        for m in {Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR}:
+            self._motor_configs[m] = StepperConfig()
+        for m in {Motor.TUNNEL_GATE_SERVO, Motor.TUNNEL_FAN_SERVO, Motor.TUNNEL_MAGNET_SERVO,
+                  Motor.PELLET_COVER_SERVO, Motor.PELLET_LOAD_SERVO}:
+            self._motor_configs[m] = ServoConfig()
 
         self._init_handlers()
 
@@ -454,6 +460,9 @@ class CanDevice(Device):
 
     def _send_retract(self, _):
         self._prev_command_is_relative = True
+        cfg = self._motor_configs[Motor.PELLET_Y_MOTOR]
+        if cfg.uuid_ack_timeout is not None:
+            self._prev_command_timeout = cfg.uuid_ack_timeout
         return self._interface.move_motor_y(self._retract_distance, relative=True)
 
     def _check_tunnel_pellet_status_age(self):
@@ -556,8 +565,10 @@ class CanDevice(Device):
             before_uuid = self._interface.uuid()  # to know if some command has used, or not, a new CAN uuid
             success = False
             if kind is _retry_compound:
+                logger.verbose("retrying perform next compound with %s", data)
                 self._compound_movement.insert(0, data)
                 kind = _next_compound
+            #
             if kind is _next_compound:
                 perform_next_compound()
             elif kind is _uuid_ack:
@@ -569,6 +580,7 @@ class CanDevice(Device):
                 logger.debug("executing ack perform next compound")
                 perform_next_compound()
             else:
+                self._prev_command_timeout = self.default_command_ack_timeout_duration
                 if kind is _retry_full:
                     kind, data, ctx = data
                 handler = self._command_handlers.get(kind)
@@ -859,17 +871,12 @@ class CanDevice(Device):
 
     #
 
-    def _make_servo_steps(self, motor):
-        cfg = self._motor_configs.get(motor, None)
-        if cfg is None:
-            logger.warning("%s: missing internal config", motor)
-            want_detach = False
-        else:
-            want_detach = cfg.detach
+    def _make_servo_steps(self, motor: Motor):
+        cfg = self._motor_configs[motor]
+        want_detach = cfg.detach
         step = {}
-        uuid_ack_timeout = None if cfg is None else cfg.uuid_ack_timeout
-        if uuid_ack_timeout is not None:
-            step["uuid_ack_timeout"] = uuid_ack_timeout
+        if cfg.uuid_ack_timeout is not None:
+            step["uuid_ack_timeout"] = cfg.uuid_ack_timeout
         if want_detach:
             return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
         return step, [step]
@@ -920,15 +927,20 @@ class CanDevice(Device):
         assert isinstance(step, dict)
         save_as_fixed = step.get("save_as_fixed", False)
 
+        motor = None
+
         if "x" in step:
+            motor = Motor.PELLET_X_MOTOR
             location = _to_tuple(step["x"])
             success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
 
         elif "y" in step:
+            motor = Motor.PELLET_Y_MOTOR
             location = _to_tuple(step["y"])
             success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
 
         elif "z" in step:
+            motor = Motor.PELLET_Z_MOTOR
             location = _to_tuple(step["z"])
             success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
 
@@ -937,36 +949,34 @@ class CanDevice(Device):
             success = self._interface.move_servo_motor(motor, position)
 
         elif "load_arm" in step:
+            motor = Motor.PELLET_LOAD_SERVO
             location = _to_tuple(step["load_arm"])
             success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_LOAD_SERVO, location)
 
         elif "barrier_arm" in step:
+            motor = Motor.PELLET_COVER_SERVO
             location = _to_tuple(step["barrier_arm"])
             success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_COVER_SERVO, location)
 
         elif "magnet" in step:
+            motor = Motor.TUNNEL_MAGNET_SERVO
             location = _to_tuple(step["magnet"])
             success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_MAGNET_SERVO, location)
 
         elif "gate" in step:
+            motor = Motor.TUNNEL_GATE_SERVO
             location = _to_tuple(step["gate"])
             success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_GATE_SERVO, location)
 
         # _servo_max_pos / _servo_max_pos are internal and should not be used from outside.
         elif "_servo_max_pos" in step:
-            motor = step["_servo_max_pos"]  # noqa
-            assert isinstance(motor, Motor)
-            cfg = self._motor_configs.get(motor)
-            if cfg is None:
-                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            motor: Motor = step["_servo_max_pos"]  # noqa
+            cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
         elif "_servo_min_pos" in step:
             motor: Motor = step["_servo_min_pos"]  # noqa
-            assert isinstance(motor, Motor)
-            cfg = self._motor_configs.get(motor)
-            if cfg is None:
-                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
         elif "delay" in step:
@@ -985,18 +995,22 @@ class CanDevice(Device):
                 success = self._interface.fixed_position()
 
             elif predefined == "cover":
+                motor = Motor.PELLET_COVER_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_COVER_SERVO, self._interface.cover_pellet)
 
             elif predefined == "release":
+                motor = Motor.PELLET_COVER_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_COVER_SERVO, self._interface.release_pellet)
 
             elif predefined == "retrieve":
+                motor = Motor.PELLET_LOAD_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.retrieve_pellet)
 
             elif predefined == "scoop":
+                motor = Motor.PELLET_LOAD_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.scoop_pellet)
 
@@ -1017,19 +1031,16 @@ class CanDevice(Device):
                 # logger.error("Skipping unhandled predefined: %s", predefined)
 
         elif "servo_attach" in step:
-            motor = step["servo_attach"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["servo_attach"]  # noqa
             success = self._interface.servo_attach(motor)
 
         elif "servo_detach" in step:
-            motor = step["servo_detach"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["servo_detach"]  # noqa
             success = self._interface.servo_detach(motor)
 
         elif "home" in step:
             # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
-            motor = step["home"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["home"]  # noqa
             success = self._interface.stepper_home(motor)
 
         elif "_internal_func" in step:
@@ -1045,7 +1056,11 @@ class CanDevice(Device):
             compound_movements.pop(0)  # remove the one that was just requested successfully
             self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
             logger.debug("executed %s write command", step)
+            # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
             cmd_ack_timeout = step.get("uuid_ack_timeout")
+            if cmd_ack_timeout is None:
+                if motor is not None:
+                    cmd_ack_timeout = self._motor_configs[motor].uuid_ack_timeout
             if cmd_ack_timeout is not None:
                 self._prev_command_timeout = cmd_ack_timeout
         else:
