@@ -212,7 +212,7 @@ class ProjectInfo(_ProjectInfo):
         """Get the location and related datetime for given arguments.
         If when is None then self.when is used, which can eventually be None, in which case now() is used.
         """
-        when = self._get_when_or_now(when)
+        when: datetime = self._get_when_or_now(when)
         today = when.strftime(DATE_FORMAT)
         location = os.path.join(self.root, today)
         if self.device_id:
@@ -274,11 +274,15 @@ class ProjectInfo(_ProjectInfo):
             path = self.get_interval_path(name, interval=interval, skip_ensure=skip_ensure, when=when)
         return ProjectPath(path.location, path.prefix, os.path.join(path.location, path.prefix))
 
-    def get_metadata_file(self, session: int = -1, when: Optional[datetime] = None) -> str:
-        r_when = self._get_when_or_now(when)
-        timestamp = r_when.strftime(TIME_FORMAT)
+    def get_metadata_file(self, session: Optional[int] = -1, when: Optional[datetime] = None) -> str:
+        """Returns the metadata file path,
+            if session is None it's non-trial based.
+            if < -1 then self.session is used
+        """
+        when: datetime = self._get_when_or_now(when)
+        timestamp = when.strftime(TIME_FORMAT)
         if session is None:
-            location, prefix = self.get_day_path(when=r_when)
+            location, prefix = self.get_day_path(when=when)
             d = f"_{self.device_id}" if self.device_id else ""
             return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata")
         else:
