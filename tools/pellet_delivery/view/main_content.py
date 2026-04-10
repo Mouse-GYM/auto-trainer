@@ -7,7 +7,7 @@ from autotrainer.core.logging import get_verbose_logger
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
 from tools.pellet_delivery.view.pellet_status import PelletStatus
-from tools.pellet_delivery.view.pellet_state import PelletState
+from tools.pellet_delivery.view.pellet_state import PelletStateWidget
 from autotrainer.pyside import ConnectionPanel, CardWidget
 
 from autotrainer.pyside import TextBoxHandler
@@ -54,7 +54,7 @@ class MainContent(QWidget):
         self._pellet_status = PelletStatus(self._app_view_model)
         layout.addWidget(self._pellet_status)
 
-        self._pellet_state = PelletState(self._app_view_model)
+        self._pellet_state = PelletStateWidget(self._app_view_model)
         layout.addWidget(self._pellet_state)
 
         log_output, self._diagnostics_panel = create_log_panel()

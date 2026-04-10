@@ -42,7 +42,7 @@ class FileEventPlugin(EventManagerPlugin):
             self._update_event_file()
         event_file = self._event_file
         if event_file is None:
-            logger.verbose("event_file None, skipping %s", info)
+            logger.warning("event_file None, skipping %s", info)
             return
         output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}\n"
         event_file.write(output)

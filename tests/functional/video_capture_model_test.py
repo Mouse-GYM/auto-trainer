@@ -46,7 +46,7 @@ def test_video_capture_model(camera_url: CaptureCameraAttrs, iterations: int, ca
     while count < iterations:
         logger.info(f"video capture model test iteration {count + 1} of {iterations}")
 
-        project_info = ProjectInfo(output_location)
+        project_info = ProjectInfo(root=output_location)
 
         assert model.on_prepare_capture(project_info, None)
 

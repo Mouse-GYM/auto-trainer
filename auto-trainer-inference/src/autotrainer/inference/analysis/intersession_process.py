@@ -14,7 +14,7 @@ from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
 from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
-from . import IntersessionResponse
+from . import ReachEvent, IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 
@@ -29,6 +29,7 @@ def intersession_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
+    frame_rate: int = 150,  # TODO: pass from video camera settings/parameters
     debug_level: int = _segment_reach_debug,
 ) -> IntersessionResponse:
     """
@@ -54,17 +55,29 @@ def intersession_process(
     df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
     #
     results_dict = segment_reaches(
+        project_info=project,
         session=location,
         center_method=center_method,
         df_lr=df_lr,
         df_3d=centered_df_3d,
         debug=debug_level,
+        frame_rate=frame_rate,
     )
     logger.verbose("process intersession pose data complete %s", results_dict)
-    return IntersessionResponse(
-        rh_max_vp_list=results_dict['rh_max_vp_list'],
-        food_consumed=results_dict['pellets_consumed'],
-        successful_reaches=results_dict['successful_reaches'],
-        pellets_presented=results_dict['pellets_presented'],
-        total_reaches=results_dict['total_reaches'],
-    )
+    # rename:
+    results_dict["food_consumed"] = results_dict.pop("pellets_consumed")
+    # all others keys are same than IntersessionResponse fields
+    # convert to ReachEvent instances:
+    results_dict["reach_events"] = [ReachEvent(**d) for d in results_dict["reach_events"]]
+    results_dict["other_events"] = [
+        # other events are pellet_events not associated with reach (by hand)
+        ReachEvent(
+            init=d['placed'],
+            end=d['lost'],
+            max=-1,
+            method=d['method'],
+            outcome=d['outcome'],
+            delay_since_presented=d['placed'] / frame_rate,
+        ) for d in results_dict["other_events"]
+    ]
+    return IntersessionResponse(**results_dict)

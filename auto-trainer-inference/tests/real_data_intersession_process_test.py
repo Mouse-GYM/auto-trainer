@@ -12,10 +12,11 @@ import verboselogs
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
-from autotrainer.inference.analysis import intersession_process, IntersessionResponse
+from autotrainer.inference.analysis import intersession_process, IntersessionResponse, ReachEvent
 
 import pytest
 
+from top_fixtures import AlmostEqualFloat
 
 this_dir = Path(__file__).parent.resolve()
 data_dir = this_dir.joinpath("data")
@@ -80,31 +81,62 @@ def test_fp_and_xp_not_same(project_info, caplog):
     )
     assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
-    assert res.food_consumed == 0
     assert res.pellets_presented == 1
+    assert res.food_consumed == 0
     assert res.successful_reaches == 0
+    assert res.total_reaches == 0
+    assert len(res.reach_events) == len(res.rh_max_vp_list) == 0
+    assert len(res.other_events) == 1
+    event = res.other_events[0]
+    assert event.method == 'other'
+    assert event.outcome == 'dropped'
 
 
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
-def test_index_error(project_info, caplog):
-    # >           dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
-    # E           IndexError: index 378 is out of bounds for axis 0 with size 378
+def test_agx001_20250806_59(project_info, caplog):
     project_info.session = 59
     project_info.root = this_dir.joinpath("index_error").as_posix()
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 8, 6)
     caplog.set_level(verboselogs.VERBOSE)
-    with pytest.raises(IndexError, match="index 378 is out of bounds for axis 0"):
-        intersession_process(
-            project_info,
-            calib_dir=calib_dir,
-        )
-    # TODO: fix underlying issue
+    # with pytest.raises(IndexError, match="fp and xp are not of the same length"):
+    # previously was raising an index error, but is now fixed.
+    res = intersession_process(
+        project_info,
+        calib_dir=calib_dir,
+    )
+    assert res == IntersessionResponse(
+        rh_max_vp_list=[tuple(map(AlmostEqualFloat, (0.5520302810091309, -3.726691745711479, 1.279046251520091)))],
+        reach_events=[
+            ReachEvent(
+                init=112,
+                end=141,
+                max=129,
+                method='right_hand',
+                outcome='dropped',
+                delay_since_presented=AlmostEqualFloat(0.7466666666666667),
+            )
+        ],
+        food_consumed=0,
+        successful_reaches=0,
+        pellets_presented=1,
+        total_reaches=1,
+    )
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(
     rh_max_vp_list=[Offset3DTuple(-1.6103162548648218, -2.4711684859384793, 1.2448511625494527)],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
+    reach_events=[
+        ReachEvent(
+            delay_since_presented=0.6933333333333334,
+            end=164,
+            init=104,
+            max=147,
+            outcome='dropped',
+            method='right_hand',
+        ),
+    ]
 )
 
 
@@ -137,6 +169,13 @@ def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, bench
 agx001_20260205_11_expected_result = IntersessionResponse(
     rh_max_vp_list=[Offset3DTuple(-0.4815189074758326, -5.378078246747098, -0.350716635920838)],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
+    reach_events=[ReachEvent(
+        delay_since_presented=0.0,
+        end=33,
+        init=0,
+        max=17,
+        method='right_hand',
+        outcome='dropped')],
 )
 
 

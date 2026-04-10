@@ -91,7 +91,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # not affect the Send position.
         self._last_motor_coordinates = _nans_offset3dTuple
         # what the motors report they've been SET (with possible drift corrected):
-        self._motor_send_coordinates = _nans_offset3dTuple
+        self._last_motor_send_coordinates = _nans_offset3dTuple
         # What we've SET as coordinates:
         self._last_requested_set_coordinates: Offset3DTuple = _nans_offset3dTuple
 
@@ -132,6 +132,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             if len(expired_tokens) > 0:
                 self._refresh_cmd_in_progress(after_commands)
 
+    @property
+    def pending_tokens(self) -> List[str]:
+        return list(self._pending_tokens)
+
     def _check_dcs_cfg(self, *, return_none: bool=False):
         cfg = self._dcs_config
         if cfg is None or not cfg.fully_valid:
@@ -163,7 +167,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
-        value = self._motor_send_coordinates
+        value = self._last_requested_set_coordinates
         if any(map(math.isnan, value)):
             return None
         cfg = self._check_dcs_cfg(return_none=True)
@@ -193,34 +197,34 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     @property
     def send_x(self):
-        return self._motor_send_coordinates.x
+        return self._last_motor_send_coordinates.x
 
     @send_x.setter
     def send_x(self, value):
-        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(x=value)
+        prev, self._last_motor_send_coordinates = self._last_motor_send_coordinates, self._last_motor_send_coordinates.replace(x=value)
         self._on_property_changed(self.SEND_X, value, prev.x)
 
     @property
     def send_y(self):
-        return self._motor_send_coordinates.y
+        return self._last_motor_send_coordinates.y
 
     @send_y.setter
     def send_y(self, value):
-        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(y=value)
+        prev, self._last_motor_send_coordinates = self._last_motor_send_coordinates, self._last_motor_send_coordinates.replace(y=value)
         self._on_property_changed(self.SEND_Y, value, prev.y)
 
     @property
     def send_z(self):
-        return self._motor_send_coordinates.z
+        return self._last_motor_send_coordinates.z
 
     @send_z.setter
     def send_z(self, value):
-        prev, self._motor_send_coordinates = self._motor_send_coordinates, self._motor_send_coordinates.replace(z=value)
+        prev, self._last_motor_send_coordinates = self._last_motor_send_coordinates, self._last_motor_send_coordinates.replace(z=value)
         self._on_property_changed(self.SEND_Z, value, prev.z)
 
     @property
     def motor_send_coordinates(self) -> Offset3DTuple:
-        return self._motor_send_coordinates
+        return self._last_motor_send_coordinates
 
     @property
     def front_door_open(self):
@@ -412,7 +416,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
-        self._motor_send_coordinates = _nans_offset3dTuple
+        self._last_motor_send_coordinates = _nans_offset3dTuple
 
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
         # configured to generate messages as frequently as the real device.
@@ -621,12 +625,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
         while True:
+            with self._lock:
+                if token not in self._pending_tokens:
+                    logger.debug("Got ack for token=%s ; delay=%.6f",
+                                 token, time.perf_counter() - p_start)
+                    return
             p_now = time.perf_counter()
             if p_now > p_timeout:
                 break
-            with self._lock:
-                if token not in self._pending_tokens:
-                    logger.debug("Got ack for token=%s ; delay=%.6f", token, p_now - p_start)
-                    return
             time.sleep(0.0025)  # 2.5 ms
         raise RuntimeError(f"timeout waiting ack of pending token={token}")

@@ -39,10 +39,10 @@ class _AutoClampTestCase(MockSystemMachine):
         algo.update_mouse_seen(True)  # to have intersession started
         with self.mock_intersession_analysis():
             assert self.update_magnet_mock.call_args_list == []
-            with caplog.at_level(logging.INFO):
-                pressure_mon.is_engaged = True
             assert machine.state == SystemState.tunnel
             assert machine.intersession.state == IntersessionState.idle
+            with caplog.at_level(logging.INFO):
+                pressure_mon.is_engaged = True
             machine.exit_tunnel()
             assert machine.state == SystemState.intersession
             assert machine.intersession.state == IntersessionState.segmentation

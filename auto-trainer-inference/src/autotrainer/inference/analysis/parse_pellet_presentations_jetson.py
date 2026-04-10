@@ -12,7 +12,7 @@ import pandas as pd
 from scipy.signal import savgol_coeffs, filtfilt
 
 
-from autotrainer.core import get_verbose_logger, Offset3DTuple
+from autotrainer.core import get_verbose_logger, Offset3DTuple, ProjectInfo
 
 import autotrainer.inference.analysis._segment_reaches_f1 as segment_reaches_f11_module
 from autotrainer.inference.analysis import prepare_jetson_data as prep_jet
@@ -50,10 +50,12 @@ def get_ln():
 
 def segment_reaches(
     *,
+    project_info: ProjectInfo,
     session,
     center_method,
     df_lr,
     df_3d,
+    frame_rate: int,
     overwrite: bool = True,
     debug: int = 0,
 ) -> Dict[str, Union[float, int, Dict, List]]:
@@ -63,18 +65,22 @@ def segment_reaches(
         'pellets_consumed': 0,
         'successful_reaches': 0,
         'rh_max_vp_list': [],
+        'reach_events': [],
+        'other_events': [],
     }
     if df_3d is None:
         return results_dict
     vid_tag = '.mp4'
-    frame_rate = 150
-    
+
     # Find video files
     mp4_list = os.path.join(session, '*' + vid_tag)
     videoList = glob.glob(mp4_list)
     
     # Extract relevant video paths in order
-    videoOrder = ['left', 'right']
+    videoOrder = [
+        project_info.camera_1,  # supposed to be primary camera
+        project_info.camera_2,  # secondary
+    ]
     video_paths = [video for key in videoOrder for video in videoList if key in video]
     if not video_paths:
         print('No Videos found!\n')
@@ -101,6 +107,7 @@ def segment_reaches(
         print(f"segment_reaches_f1: events={pellet_events}")
 
     pellets_consumed, pellets_presented, successful_reaches, total_reaches, rh_max_vp_list, reach_events = segment_reaches_f2(
+        fps=frame_rate,
         df_3d=df_3d,
         coeffs=coeffs,
         vid_dir=vid_dir,
@@ -120,8 +127,9 @@ def segment_reaches(
 
     def save_reach_events_h5():
         p_before = time.perf_counter()
-        reach_event_h5_path = Path(vid_dir).joinpath(f"{vid_name_base}_reach_events.h5")
-        reach_df = pd.DataFrame(reach_events, columns=["init", "end", "max", "outcome"])
+        # could be done
+        reach_event_h5_path = project_info.get_reach_event_path()
+        reach_df = pd.DataFrame(reach_events, columns=["init", "end", "max", "outcome", "delay_since_presented"])
         reach_df.to_hdf(reach_event_h5_path, key="reach", mode="w")  # use mode='w' for first write,
         # subsequent writes to it will be with mode='a'
 
@@ -181,7 +189,11 @@ def segment_reaches(
     results_dict['pellets_consumed'] = pellets_consumed
     results_dict['successful_reaches'] = successful_reaches
     results_dict['rh_max_vp_list'] = rh_max_vp_list
-
+    results_dict['reach_events'] = reach_events
+    other_events = results_dict['other_events'] = []
+    for pellet_event in pellet_events[:-1]:
+        if pellet_event['method'] not in {'right_hand', 'left_hand'}:
+            other_events.append(pellet_event)
     return results_dict
 
 
@@ -236,6 +248,7 @@ def segment_reaches_f1(
 
 def segment_reaches_f2(
     *,
+    fps: int,
     df_3d: pd.DataFrame,
     coeffs,
     vid_dir,
@@ -281,22 +294,22 @@ def segment_reaches_f2(
     if len(pellet_events) == 0:
         print(f"Pellet never found for {vid_name_base}")
 
-    for p in range(len(pellet_events)):
-        if pellet_events[p]['lost'] >= 0:
-            end_search = pellet_events[p]['lost']+position_window
+    for pellet_event in pellet_events:
+        if pellet_event['lost'] >= 0:
+            end_search = pellet_event['lost'] + position_window
             if end_search >= frm_ct:
-                end_search = frm_ct-1
-            # print(np.round((Z_dist_p[pellet_events[p]['placed']:end_search])))
-            # print(pellet_events[p]['placed'],end_search)
-            if np.nanmin(Z_dist_p[pellet_events[p]['placed']:end_search]) <= pellet_drop_dist:
+                end_search = frm_ct - 1
+            # print(np.round((Z_dist_p[pellet_event['placed']:end_search])))
+            # print(pellet_event['placed'],end_search)
+            if np.nanmin(Z_dist_p[pellet_event['placed']:end_search]) <= pellet_drop_dist:
                 if debug >= 2:
                     print(f'DROP: Z dist at {get_ln()}')
-                pellet_events[p]['outcome'] = 'dropped'
+                pellet_event['outcome'] = 'dropped'
 
     pellet_dict = {
         'x': pellet_home[0],
         'y': pellet_home[1],
-        'z': pellet_home[2]
+        'z': pellet_home[2],
     }
     pellet_events.append(pellet_dict)
     
@@ -322,12 +335,16 @@ def segment_reaches_f2(
     reach_events = []
     dist_list = []
     max_frm = 0
-    
+
     for frmindex, start_frame in enumerate(frames_on_found):
-        
+
+        # NB: pellet_events is same size/length than frames_on_found, actually both could be merged.
+        # also use directly pellet_event instead of find_last_placement(..) below.
+        pellet_event = pellet_events[frmindex]
+
         search_status = 1
         food_was_dropped = False
-        frame = start_frame-20 # in case reach begins prior to pellet placement
+        frame = start_frame - 20 # in case reach begins prior to pellet placement
         pellet_detected = False
         while frame < frm_ct - batch_frm:             # test if we reached the next pellet placement 
             if frmindex < len(frames_on_found)-1 and frame >= frames_on_found[frmindex+1]: 
@@ -354,13 +371,23 @@ def segment_reaches_f2(
                         if testA and testB: 
                             if debug >= 2:
                                 print('reach began at frame %d!' % frame)
+                            delay_since_presented = frame / fps
+                            # for now considering presented moment as the video start itself, so frame / fps.
+                            # eventual todo: this could otherwise be calculated as :
+                            #   A = session_start_perf_c + reach_init_frame / fps
+                            #       # which is ~= start of the reach-init, in perf_counter clock so
+                            #   B = max(pellet_sent_perf_c, session_start_perf_c)
+                            #       # which is ~= "pellet-presented" (arrived at deliver/send position)
+                            # and then doing:
+                            #   delay_since_presented = A - B
                             reach_dict = {
-                                'init': frame,
-                                'max': -1,
-                                'end': -1,
-                                'outcome': ''
+                                "init": frame,  # ~= pellet_event['init'] probably
+                                "max": -1,  # possibly pellet_event['lost'] ?
+                                "end": -1,  # possibly pellet_event['lost'] ?
+                                "method": pellet_event['method'],
+                                "outcome": pellet_event['outcome'],
+                                "delay_since_presented": delay_since_presented,
                             }
-                            # reach_events.append(('reachInit', frame))
                             search_status = 2
                             food_was_dropped = False
                             speed_hvh_init = np.diff(dist_hvpp_R - dist_hvpp_R[frame])*(frame_rate/1000)
@@ -437,8 +464,9 @@ def segment_reaches_f2(
                         # reach_events.append(('reachEnd_dropped', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
                         reach_dict['outcome'] = 'dropped'
-                        lp = find_last_placement(frame+2, pellet_events)
-                        pellet_events[lp]['outcome'] = 'dropped'
+                        # lp = find_last_placement(frame+2, pellet_events)
+                        # pellet_events[lp]['outcome'] = 'dropped'
+                        pellet_event["outcome"] = "dropped"
                         keep_looking = False
                     elif pellet_detected and pTest:
                         if debug >= 2:
@@ -468,7 +496,7 @@ def segment_reaches_f2(
                     testZ = dist_hvpp_R[max_query] > min_dist_from_pellet
                     if not (testX or testY or testZ):
                         reach_events.append(reach_dict)
-                        
+
                 if not keep_looking:
                     break
             frame += 1
@@ -501,10 +529,11 @@ def segment_reaches_f2(
     for r in reach_events:
         if r['outcome'] in {'missed', 'dropped'}:
             fail_ct += 1
+            r_max = r['max']
             o = Offset3DTuple(
-                r_hand_data['x'][r['max']] - pellet_home[0],
-                r_hand_data['y'][r['max']] - pellet_home[1],
-                r_hand_data['z'][r['max']] - pellet_home[2],
+                r_hand_data['x'][r_max] - pellet_home[0],
+                r_hand_data['y'][r_max] - pellet_home[1],
+                r_hand_data['z'][r_max] - pellet_home[2],
             )
             rh_max_vp_list.append(o)
 
