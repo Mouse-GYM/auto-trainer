@@ -175,7 +175,7 @@ class CanDevice(Device):
         self._retract_distance = -15
 
         self._current_pressure = 0
-        self._current_digital = 0
+        self._current_digital = False
         self._current_temperature = 0
         self._current_humidity = 0
         self._current_audio = []
