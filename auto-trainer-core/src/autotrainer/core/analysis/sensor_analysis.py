@@ -3,7 +3,9 @@ from __future__ import annotations
 import csv
 import os
 import math
+import threading
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Tuple, IO
 
 import numpy
@@ -35,10 +37,6 @@ from .system_maintenance_monitor import SystemMaintenanceMonitor
 from .system_fault_monitor import SystemFaultMonitor
 
 logger = get_verbose_logger(__name__)
-
-
-# small alias
-_MeasuresList = List[float]
 
 
 # TODO: Separate true analysis from data recording to file(s) for post-analysis.
@@ -138,18 +136,14 @@ class SensorAnalysis(ObservableObject):
             detector.restart()
 
     @property
-    def project_info(self) -> ProjectInfo:
+    def project_info(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @project_info.setter
     def project_info(self, value: ProjectInfo) -> None:
-        if self._record_file is not None:
-            self._record_file.close()
-
         self._project_info = value
         self._update_record_file()
         self._update_audio_file()
-
         self._perf_monitor.reset()
 
     @property
@@ -217,16 +211,18 @@ class SensorAnalysis(ObservableObject):
     def measurements_received(
         self,
         measurements: List[HeadFixMeasurement]
-    ) -> Tuple[_MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList, _MeasuresList] :
+    ) -> Tuple[List[float], List[bool], List[float], List[float], List[float]] :
+        """Return weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals"""
         # logger.spam("Received %s measures", len(measurements))
         assert len(measurements) > 0
 
-        switch_vals: List[float] = []
+        switch_vals: List[bool] = []
         pressure_vals: List[float] = []
         temperature_vals: List[float] = []
         humidity_vals: List[float] = []
 
-        if self._record_file is not None:
+        fh = self._record_file
+        if fh is not None:
             now = datetime.now()
             needs_update = now.hour != self._current_record_interval \
                 if self._interval == ProjectInterval.HOUR \
@@ -243,10 +239,11 @@ class SensorAnalysis(ObservableObject):
             temperature_vals.append(m.temperature)
             humidity_vals.append(m.humidity)
 
-            if self._record_file is not None:
+            fh = self._record_file
+            if fh is not None:
                 try:
-                    self._record_file.write(
-                        f"{m.when}, {m.timestamp}, {m.weight}, {m.switch}, {m.pressure}, "
+                    fh.write(
+                        f"{m.when}, {m.timestamp}, {m.weight}, {int(m.switch)}, {m.pressure}, "
                         f"{m.temperature}, {m.humidity}, {int(load_cell_mon.is_engaged)}\n")
                 except Exception as err:
                     # This could be too much if something major is wrong.  Just output once per file rotation.
@@ -322,33 +319,35 @@ class SensorAnalysis(ObservableObject):
                     logger.exception("<sensor-analysis>: unable to write: %s", err)
                     self._audio_had_write_error = True
 
-    def _update_record_file(self) -> None:
-        if self._record_file is not None:
+    def _update_record_file(self):
+        fh = self._record_file
+        if fh is not None:
+            self._record_file = None
             try:
-                self._record_file.close()
+                fh.flush()
+                fh.close()
             except Exception as err:
                 logger.warning("Failure closing record file: %s", err)
 
-            self._record_file = None
-
-        if self._project_info is not None:
-            interval_file_info = self._project_info.get_monitor_file(interval=self._interval, when=datetime.now())
-            if interval_file_info is None:
-                logger.error("<sensor-analysis>: unable to write to expected monitor file location")
-                return None
-            try:
-                file_existed = os.path.exists(interval_file_info.file)
-                location = open(interval_file_info.file, "a")
-                if not file_existed:
-                    location.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity, LoadCellEngaged\n")
-                self._current_record_interval = interval_file_info.current_interval
-                self._record_file = location
-                logger.info(f"<sensor-analysis>: saving to {interval_file_info.file}")
-                self._had_write_error = False
-            except Exception as err:
-                logger.error("<sensor-analysis>: unable to write to %s: %s",interval_file_info.file, err)
-
-        return None
+        if self._project_info is None:
+            return
+        interval_file_info = self._project_info.get_monitor_file(interval=self._interval, when=datetime.now())
+        if interval_file_info is None:
+            logger.error("<sensor-analysis>: unable to write to expected monitor file location")
+            return
+        dest_path = Path(interval_file_info.file)
+        try:
+            file_existed = dest_path.exists()
+            fh = dest_path.open("a")
+            if not file_existed:
+                fh.write("Time, Index, Weight, Switch, Pressure, Temperature, Humidity, LoadCellEngaged\n")
+                fh.flush()
+            self._current_record_interval = interval_file_info.current_interval
+            self._had_write_error = False
+            self._record_file = fh  # last
+        except Exception as err:
+            logger.error("<sensor-analysis>: unable to write to %s: %s",dest_path, err)
+        logger.info("<sensor-analysis>: saving to %s", dest_path)
 
     def _update_audio_file(self) -> None:
         cur = self._audio_record_file_writer
