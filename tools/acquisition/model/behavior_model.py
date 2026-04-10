@@ -5,11 +5,13 @@ from typing import Optional, Callable
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntersessionState
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
+from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
+from autotrainer.core.configuration.behavior_configuration import ShiftXYZHandlerConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -104,6 +106,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     @project.setter
     def project(self, value: ProjectInfo) -> None:
         self._project = value
+        self._system_machine.project = value
         # self._machine.project = value  # instead of having to do it in on_prepare_capture()
 
     @property
@@ -115,7 +118,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         return self._system_machine.algorithm
 
     def load_configuration(self, config: BehaviorConfiguration):
-        self._system_machine.algorithm.load_configuration(config)
+        system_m = self._system_machine
+        system_m.shift_xyz_handler.set_config(config.shift_xyz_handler)
+        system_m.algorithm.load_configuration(config)
         analysis = self._analysis
         analysis.headbar_pressure_monitor.load_configuration(config.headbar_pressure)
         analysis.load_cell_monitor.load_configuration(config.load_cell)
@@ -149,7 +154,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         config.headbar_pressure = analysis.headbar_pressure_monitor.save_configuration()
         config.audio = analysis.audio_thrashing_monitor.config
         config.emergency_alarm = analysis.emergency_alarm_monitor.config
-        config.topcam_presence_detection = None if algo.top_camera_presence_detection is None else algo.top_camera_presence_detection.to_config()
+        top_cam = algo.top_camera_presence_detection
+        config.topcam_presence_detection = None if top_cam is None else top_cam.to_config()
         config.global_animal_presence = analysis.global_animal_presence_monitor.config
         config.external_doors = analysis.external_doors_monitor.config
         config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config

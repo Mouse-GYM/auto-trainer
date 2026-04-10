@@ -5,8 +5,7 @@ from autotrainer.core import Offset3DTuple, ObservableObject, FrameIndexCategory
 from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
-import autotrainer.inference.analysis
-from autotrainer.inference import InferenceStatus, PoseAlgorithm, PoseResponse, InferenceMonitorDataMsg
+from autotrainer.inference import InferenceStatus, PoseAlgorithm, PoseResponse, InferenceMonitorDataMsg, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntersessionResponse
 
 from . import SegmentationConfiguration, DetectionConfiguration
@@ -57,15 +56,11 @@ class _InferenceProtocol(Protocol):
     def perform_live(self):  # unused
         """Perform live"""
 
-    def send_message(self, kind: "InferenceCommandMessageKind", context: Any = None):
+    def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
         """Send an InferenceCommandMessageKind to the inference process"""
 
     def put_to_data_handler(self, msg: InferenceMonitorDataMsg):
         """Put msg to data handler process"""
-
-    @property
-    def stop_recorded_event(self) -> synchronize.Event:
-        """The multiprocess event associated with h5 live files, must be set for readers"""
 
 
 class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtocol):

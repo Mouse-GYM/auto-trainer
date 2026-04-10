@@ -42,7 +42,7 @@ def _create_stimulus_panel():
     return inputs, panel
 
 
-class PelletState(QWidget):
+class PelletStateWidget(QWidget):
     def __init__(self, app_model: AppModel):
         super().__init__()
 

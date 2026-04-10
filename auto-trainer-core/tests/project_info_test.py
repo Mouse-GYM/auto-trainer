@@ -152,4 +152,4 @@ def test_new_day_if_output_dir_exists(root, monkeypatch):
 
 def test_reach_event(project_info):
     p = project_info.get_reach_event_path()
-    assert p.endswith(REACH_EVENT_SUFFIX)
+    assert str(p).endswith(REACH_EVENT_SUFFIX)

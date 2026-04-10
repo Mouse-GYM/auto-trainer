@@ -226,7 +226,7 @@ class BehaviorContent(ContentWidget):
         #
 
         inference_model.property_changed += self._inference_model_property_changed
-        algo.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
+        system_machine.shift_xyz_handler.property_changed += self._shift_xyz_property_changed
 
         system_machine.events.state_changed += lambda old, new: self._system_machine_state_label.setText(new)
         pellet_machine.events.state_changed += lambda old, new: self._pellet_machine_state_label.setText(new)
@@ -289,11 +289,12 @@ class BehaviorContent(ContentWidget):
 
     @invoke_method
     def _inference_model_property_changed(self, name, value, _):
-        if name == "is_enabled":
+        props = self._inference_model
+        if name == props.IS_ENABLED:
             self._intersession_toggle.setEnabled(value)
-        elif name == "status":
+        elif name == props.STATUS:
             self.status_changed.emit(f"Inference: {value}")
-        elif name == "model_location":
+        elif name == props.MODEL_LOCATION:
             if value is not None and len(value) > 0:
                 self._model_location_label.setText(value)
             else:

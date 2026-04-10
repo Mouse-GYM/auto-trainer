@@ -646,7 +646,8 @@ class AppModel(ObservableObject):
             else (animal.name, self.animal_name)
         ))
         algo = self._behavior.algorithm
-        algo.shift_xyz_handler.reset()
+        self._behavior.system_machine.shift_xyz_handler.reset()
+
         if animal is None:
             self.training_plan = None
             algo.reset_selected_animal_counts(None)
@@ -930,7 +931,12 @@ class AppModel(ObservableObject):
                       PendingDeprecationWarning, stacklevel=2)
         return self.capture_stop(**kwargs)
 
-    def capture_start(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING) -> bool:
+    def capture_start(
+        self,
+        *,
+        target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+        wait_connected: bool = True,
+    ) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
             before_status = self._status
@@ -1070,6 +1076,28 @@ class AppModel(ObservableObject):
         hard = self._hardware
         hard.connect(self._system_message_handler.input_queue)
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+        if wait_connected:
+            timeout = 5
+            p_end = time.perf_counter() + timeout
+            while True:
+                for tok in hard.pending_tokens:
+                    p0 = time.perf_counter()
+                    try:
+                        hard.wait_pending_command_acked(tok, timeout=timeout)
+                    except Exception as err:
+                        logger.error("pending token %s not acked: %s", tok, err)
+                        self.capture_stop(force=True)
+                        return False
+                    timeout -= time.perf_counter() - p0
+                break
+            while True:
+                if hard.connected:
+                    break
+                if time.perf_counter() > p_end:
+                    logger.error("timeout waiting hardware connected")
+                    self.capture_stop(force=True)
+                    return False
+                time.sleep(0.05)
         logger.info("finished connecting hardware")
         # we always be/go at home on acquisition start, so:
         self._behavior.system_machine.pellet.move_home(force=True)
@@ -1507,6 +1535,13 @@ class AppModel(ObservableObject):
 
         elif name == props.DIAMOND_TRIANGLE_CONFIG:
             self._hardware.set_diamond_triangle_config(value)
+
+        elif name == props.PELLET_SHIFT_Y_LIMIT:
+            if animal is None:
+                return
+            prev, animal.target_y_limit = animal.target_y_limit, value
+            if prev != value:
+                self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal

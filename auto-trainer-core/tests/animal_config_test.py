@@ -12,6 +12,7 @@ def test_save_load(tmp_path):
         pellet_x=-1,
         pellet_y=1,
         pellet_z=2,
+        target_y_limit=0.88,
         pellet_counts_day=AnimalPelletCounts(
             presented=10,
             reaches=5,

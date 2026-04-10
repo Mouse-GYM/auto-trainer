@@ -430,7 +430,7 @@ class MainContent(ContentWidget):
             # the reach indices here are global for the entire trial,
             r_max_idx = df_reach.loc[r_idx, "max"] - df_reach.loc[r_idx, "init"]
             # but df_trajectories is 1 sub-df per reach, each indexed from 0 to nbframes_in_reach_event.
-            # so this substract "init" frame index.
+            # so this subtracts "init" frame index.
             # R_H
             pen.setColor(Qt.GlobalColor.yellow)
             pen.setWidth(1)
