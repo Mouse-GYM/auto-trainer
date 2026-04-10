@@ -235,7 +235,8 @@ class AnalysisContent(ContentWidget):
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
     @invoke_method
-    def _measurement_received(self, measurements):
+    def _measurement_received(self, measurements: Tuple[List[float], List[bool], List[float], List[float], List[float]]):
+        # weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals
         values = measurements[_weight_graph.measure_idx]
         self._perf_monitor.add_cycles(len(values))
         #

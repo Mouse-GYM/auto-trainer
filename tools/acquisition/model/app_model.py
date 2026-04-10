@@ -571,7 +571,7 @@ class AppModel(ObservableObject):
         return self._project_info
 
     @project.setter
-    def project(self, value):
+    def project(self, value: Optional[ProjectInfo]):
         self._project_info = value
         for model in self._models:
             model.project = value
@@ -958,7 +958,7 @@ class AppModel(ObservableObject):
         # and left behind their context.
 
         # also:
-        self.project_info = self.make_project_info()
+        project_info = self.project = self.make_project_info()
 
         algo.reload_diamond_triangle_config()
 
@@ -1075,7 +1075,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(self._project_info)
+        self._save_project_metadata(project_info)
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1820,7 +1820,7 @@ class AppModel(ObservableObject):
         elif cmd == ApiCommand.GET_CONFIGURATION:
             project_info = self._project_info
             if project_info is None:
-                raise RuntimeError(f"No current project info")
+                raise RuntimeError("No current project info")
             prefs = self._preferences
             return ApiSystemConfiguration(
                 application_version=self._app_version,
