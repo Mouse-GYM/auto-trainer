@@ -105,8 +105,9 @@ def test_agx001_20250806_59(project_info, caplog):
         project_info,
         calib_dir=calib_dir,
     )
-    assert res == IntersessionResponse(
-        rh_max_vp_list=[tuple(map(AlmostEqualFloat, (0.5520302810091309, -3.726691745711479, 1.279046251520091)))],
+    #
+    expected = IntersessionResponse(
+        rh_max_vp_list=[Offset3DTuple(0.5520302810091309, -3.726691745711479, 1.279046251520091)],
         reach_events=[
             ReachEvent(
                 init=112,
@@ -122,6 +123,7 @@ def test_agx001_20250806_59(project_info, caplog):
         pellets_presented=1,
         total_reaches=1,
     )
+    assert_deep_almost_equal(res, expected)
 
 
 agx001_20251015_15_expected_result = IntersessionResponse(

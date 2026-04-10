@@ -13,13 +13,14 @@ There is a set of data classes that contain state and status of the gym hardware
 There is a main interface class (DeviceInterface) that defines the API for access to the abstracted
 hardware.
 """
+
 import dataclasses
 import math
 import os
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict, Any
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.core.message import Motor
@@ -96,9 +97,10 @@ class ServoConfig(MotorSource):
     _maximum_velocity: float = 200  # (deg/sec)
     _maximum_acceleration: float = 100.0  # (deg/sec^2)
     _detach: bool = False
+    uuid_ack_timeout: Optional[float] = None
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: Dict[str, Any]):
         config = ServoConfig()
         if "min_pos" in data:
             config.minimum_position = data["min_pos"]
@@ -113,7 +115,8 @@ class ServoConfig(MotorSource):
         if "max_acc" in data:
             config.maximum_acceleration = data["max_acc"]
         if "detach" in data:
-             config.detach = data["detach"]
+            config.detach = data["detach"]
+        config.uuid_ack_timeout = data.get('uuid_ack_timeout')
         return config
 
     @property
@@ -202,6 +205,7 @@ class StepperConfig(MotorSource):
     _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
     _homing_velocity: float = 60  # mm/sec
+    uuid_ack_timeout: Optional[float] = None
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -219,7 +223,7 @@ class StepperConfig(MotorSource):
             config.homing_velocity = data["home_vel"]
         if "flip_limit_orientation" in data:
             config.flip_limit_orientation = data["flip_limit_orientation"] == 1
-
+        config.uuid_ack_timeout = data.get("uuid_ack_timeout")
         return config
 
     @property

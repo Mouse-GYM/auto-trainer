@@ -119,8 +119,7 @@ def apply_system_command_with_data_args(func, data):
 class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
-    default_command_ack_timeout_duration: float = 8  # seconds
-    # TODO: handle different timeout per command kind
+    default_command_ack_timeout_duration: float = 3  # seconds
 
     default_command_ack_timeout_repeat_count: int = 3
 
@@ -203,9 +202,16 @@ class CanDevice(Device):
                 "Alogus hardware or hardware support not found. Using emulation interface.")
 
         self._motor_configs: Dict[Motor, Union[StepperConfig, ServoConfig]] = {}
+        # ensure we have config for these steppers/servos, even if empty/default:
+        for m in {Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR}:
+            self._motor_configs[m] = StepperConfig()
+        for m in {Motor.TUNNEL_GATE_SERVO, Motor.TUNNEL_FAN_SERVO, Motor.TUNNEL_MAGNET_SERVO,
+                  Motor.PELLET_COVER_SERVO, Motor.PELLET_LOAD_SERVO}:
+            self._motor_configs[m] = ServoConfig()
 
         self._init_handlers()
 
+        self._prev_command_timeout: float = self.default_command_ack_timeout_duration
         self._prev_command: Optional[Tuple[object, Any, type(None)]] = None
         self._prev_command_is_relative = False
 
@@ -237,26 +243,38 @@ class CanDevice(Device):
         def set_load_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._load_pellet = proc
+            else:
+                logger.warning("set_load_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_send_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._send_pellet = proc
+            else:
+                logger.warning("set_send_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_cover_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._cover_pellet = proc
+            else:
+                logger.warning("set_cover_pellet_proc: empty proc: %s", proc)
             return True
 
         def set_release_pellet_proc(proc):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._release_pellet = proc
+            else:
+                logger.warning("set_release_pellet_proc: empty proc: %s", proc)
             return True
 
-        def apply_set_or_move(func, *args, **kwargs):
+        def apply_set_or_move(func, motor, *args, **kwargs):
             has_relative = "relative" in kwargs
             is_relative = has_relative and kwargs["relative"]
+            if motor is not None:
+                cfg = self._motor_configs[motor]
+                if cfg.uuid_ack_timeout is not None:
+                    self._prev_command_timeout = cfg.uuid_ack_timeout
             self._prev_command_is_relative = is_relative
             return func(*args, **kwargs)
 
@@ -275,20 +293,24 @@ class CanDevice(Device):
 
             SystemCommandKind.MOVE_GATE_SERVO: partial(handle_servo_move, Motor.TUNNEL_GATE_SERVO),
 
-            SystemCommandKind.SET_X: partial(apply_set_or_move, self._interface.set_motor_x),
+            SystemCommandKind.SET_X: partial(apply_set_or_move, self._interface.set_motor_x, None),
 
-            SystemCommandKind.SET_Y: partial(apply_set_or_move, self._interface.set_motor_y),
+            SystemCommandKind.SET_Y: partial(apply_set_or_move, self._interface.set_motor_y, None),
 
-            SystemCommandKind.SET_Z: partial(apply_set_or_move, self._interface.set_motor_z),
+            SystemCommandKind.SET_Z: partial(apply_set_or_move, self._interface.set_motor_z, None),
 
-            SystemCommandKind.MOVE_X: partial(apply_set_or_move, self._interface.move_motor_x),
+            SystemCommandKind.MOVE_X: partial(apply_set_or_move, self._interface.move_motor_x,
+                                              Motor.PELLET_X_MOTOR),
 
-            SystemCommandKind.MOVE_Y: partial(apply_set_or_move, self._interface.move_motor_y),
+            SystemCommandKind.MOVE_Y: partial(apply_set_or_move, self._interface.move_motor_y,
+                                              Motor.PELLET_Y_MOTOR),
 
-            SystemCommandKind.MOVE_Z: partial(apply_set_or_move, self._interface.move_motor_z),
+            SystemCommandKind.MOVE_Z: partial(apply_set_or_move, self._interface.move_motor_z,
+                                              Motor.PELLET_Z_MOTOR),
 
             SystemCommandKind.SEND_RETRACT: self._send_retract,
 
+            # NB: at the moment SEND_TO_LIMITS == SEND_HOME basically
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._start_sequence(MotorSteps(
                     "send_to_limits",
@@ -303,6 +325,7 @@ class CanDevice(Device):
                     [{"home": m} for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
                 )),
 
+            # NB: only used by test and can_console, we should always use SEND_PELLET instead.
             SystemCommandKind.SEND_FIXED_XYZ: lambda _: self._interface.fixed_position(),
 
             # NB: the following sequences are using "predefined" move,
@@ -454,6 +477,9 @@ class CanDevice(Device):
 
     def _send_retract(self, _):
         self._prev_command_is_relative = True
+        cfg = self._motor_configs[Motor.PELLET_Y_MOTOR]
+        if cfg.uuid_ack_timeout is not None:
+            self._prev_command_timeout = cfg.uuid_ack_timeout
         return self._interface.move_motor_y(self._retract_distance, relative=True)
 
     def _check_tunnel_pellet_status_age(self):
@@ -476,14 +502,24 @@ class CanDevice(Device):
         pending_uuid = None
         repeated_command_count = 0
         uuid_ack_timeout_engaged = False
+
+        def perform_next_compound():
+            self._prev_command_timeout = self.default_command_ack_timeout_duration
+            for _ in range(self.default_command_write_failed_repeat_count):
+                success = self._perform_next_compound_step()
+                if success:
+                    break
+            if not success:
+                raise RuntimeError("too many failure trying _perform_next_compound_step")
+
         while True:
             if has_read_from_queue:
                 q.task_done()
+                has_read_from_queue = False
             try:
                 raw = q.get(timeout=0.005)
             except queue.Empty:
                 raw = None, None, None
-                has_read_from_queue = False
             else:
                 has_read_from_queue = True
             if raw is None:
@@ -511,7 +547,11 @@ class CanDevice(Device):
             )
             #
             if pending_uuid is not None and kind is not _uuid_ack:
-                if time.perf_counter() - t_perf_last_command_with_uuid < self.default_command_ack_timeout_duration:
+                if self._prev_command_timeout <= 0:
+                    logger.warning("correcting invalid command uuid-ack timeout value: %s",
+                                   self._prev_command_timeout)
+                    self._prev_command_timeout = self.default_command_ack_timeout_duration
+                if get_perf_now() - t_perf_last_command_with_uuid < self._prev_command_timeout:
                     # continue poll input queue for uuid ack
                     continue
                 if not uuid_ack_timeout_engaged:
@@ -525,11 +565,12 @@ class CanDevice(Device):
                     raise RuntimeError(f"Reached default_command_ack_timeout_repeat_count {repeated_command_count}")
                 assert self._prev_command is not None
                 if self._prev_command_is_relative:
+                    # TODO: should/could simply continue, probably
                     raise RuntimeError(f"Command {self._prev_command} uuid ack timed out ; refusing retry given relative.")
                 cur_commands.insert(0, self._prev_command)
                 self._prev_command = None
                 retrying = True
-                time.sleep(0.1)  # do not retry eventually too fast to allow eventually reader thread
+                time.sleep(0.05)  # do not retry eventually too fast to allow eventually reader thread
             else:
                 retrying = False
             #
@@ -545,15 +586,12 @@ class CanDevice(Device):
             before_uuid = self._interface.uuid()  # to know if some command has used, or not, a new CAN uuid
             success = False
             if kind is _retry_compound:
+                logger.verbose("retrying perform next compound with %s", data)
                 self._compound_movement.insert(0, data)
                 kind = _next_compound
+            #
             if kind is _next_compound:
-                for _ in range(self.default_command_write_failed_repeat_count):
-                    success = self._perform_next_compound_step()
-                    if success:
-                        break
-                if not success:
-                    raise RuntimeError("too many failure trying _perform_next_compound_step")
+                perform_next_compound()
             elif kind is _uuid_ack:
                 pending_uuid = None
                 if uuid_ack_timeout_engaged:
@@ -561,13 +599,9 @@ class CanDevice(Device):
                     self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, False, True)
                 repeated_command_count = 0
                 logger.debug("executing ack perform next compound")
-                for _ in range(self.default_command_write_failed_repeat_count):
-                    success = self._perform_next_compound_step()
-                    if success:
-                        break
-                if not success:
-                    raise RuntimeError("too many failure trying _perform_next_compound_step")
+                perform_next_compound()
             else:
+                self._prev_command_timeout = self.default_command_ack_timeout_duration
                 if kind is _retry_full:
                     kind, data, ctx = data
                 handler = self._command_handlers.get(kind)
@@ -598,7 +632,7 @@ class CanDevice(Device):
             if after_uuid != before_uuid:
                 #
                 # prev_commands_with_uuid_timeout_state.append(0)
-                t_perf_last_command_with_uuid = time.perf_counter()
+                t_perf_last_command_with_uuid = get_perf_now()
                 # for now we have this rule:
                 if after_uuid != before_uuid + 1 and (before_uuid != 255 or after_uuid != 1):
                     # but this can eventually happens if/when we retry several time the same (write-) command
@@ -661,6 +695,7 @@ class CanDevice(Device):
         # only start the command handler thread on connect,
         # which means we have already obtained the addr of desired devices.
         self._want_exit.clear()
+        self._prev_command_timeout = self.default_command_ack_timeout_duration
         if self._commands_handler_thread is not None and self._commands_handler_thread.is_alive():
             logger.verbose("CAN command Handler thread already alive")
         else:
@@ -857,14 +892,12 @@ class CanDevice(Device):
 
     #
 
-    def _make_servo_steps(self, motor):
-        cfg = self._motor_configs.get(motor, None)
-        if cfg is None:
-            logger.warning("%s: missing internal config", motor)
-            want_detach = False
-        else:
-            want_detach = cfg.detach
+    def _make_servo_steps(self, motor: Motor):
+        cfg = self._motor_configs[motor]
+        want_detach = cfg.detach
         step = {}
+        if cfg.uuid_ack_timeout is not None:
+            step["uuid_ack_timeout"] = cfg.uuid_ack_timeout
         if want_detach:
             return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
         return step, [step]
@@ -915,15 +948,20 @@ class CanDevice(Device):
         assert isinstance(step, dict)
         save_as_fixed = step.get("save_as_fixed", False)
 
+        motor = None
+
         if "x" in step:
+            motor = Motor.PELLET_X_MOTOR
             location = _to_tuple(step["x"])
             success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
 
         elif "y" in step:
+            motor = Motor.PELLET_Y_MOTOR
             location = _to_tuple(step["y"])
             success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
 
         elif "z" in step:
+            motor = Motor.PELLET_Z_MOTOR
             location = _to_tuple(step["z"])
             success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
 
@@ -932,36 +970,34 @@ class CanDevice(Device):
             success = self._interface.move_servo_motor(motor, position)
 
         elif "load_arm" in step:
+            motor = Motor.PELLET_LOAD_SERVO
             location = _to_tuple(step["load_arm"])
             success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_LOAD_SERVO, location)
 
         elif "barrier_arm" in step:
+            motor = Motor.PELLET_COVER_SERVO
             location = _to_tuple(step["barrier_arm"])
             success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_COVER_SERVO, location)
 
         elif "magnet" in step:
+            motor = Motor.TUNNEL_MAGNET_SERVO
             location = _to_tuple(step["magnet"])
             success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_MAGNET_SERVO, location)
 
         elif "gate" in step:
+            motor = Motor.TUNNEL_GATE_SERVO
             location = _to_tuple(step["gate"])
             success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_GATE_SERVO, location)
 
         # _servo_max_pos / _servo_max_pos are internal and should not be used from outside.
         elif "_servo_max_pos" in step:
-            motor = step["_servo_max_pos"]  # noqa
-            assert isinstance(motor, Motor)
-            cfg = self._motor_configs.get(motor)
-            if cfg is None:
-                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            motor: Motor = step["_servo_max_pos"]  # noqa
+            cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
         elif "_servo_min_pos" in step:
             motor: Motor = step["_servo_min_pos"]  # noqa
-            assert isinstance(motor, Motor)
-            cfg = self._motor_configs.get(motor)
-            if cfg is None:
-                raise RuntimeError(f"Missing motor {motor} config. Config must be written by current connection/interface instance.")
+            cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
         elif "delay" in step:
@@ -980,18 +1016,22 @@ class CanDevice(Device):
                 success = self._interface.fixed_position()
 
             elif predefined == "cover":
+                motor = Motor.PELLET_COVER_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_COVER_SERVO, self._interface.cover_pellet)
 
             elif predefined == "release":
+                motor = Motor.PELLET_COVER_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_COVER_SERVO, self._interface.release_pellet)
 
             elif predefined == "retrieve":
+                motor = Motor.PELLET_LOAD_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.retrieve_pellet)
 
             elif predefined == "scoop":
+                motor = Motor.PELLET_LOAD_SERVO
                 success = self._handle_servo_iface_cmd_compound(
                     compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.scoop_pellet)
 
@@ -1012,19 +1052,16 @@ class CanDevice(Device):
                 # logger.error("Skipping unhandled predefined: %s", predefined)
 
         elif "servo_attach" in step:
-            motor = step["servo_attach"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["servo_attach"]  # noqa
             success = self._interface.servo_attach(motor)
 
         elif "servo_detach" in step:
-            motor = step["servo_detach"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["servo_detach"]  # noqa
             success = self._interface.servo_detach(motor)
 
         elif "home" in step:
             # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
-            motor = step["home"]  # noqa
-            assert isinstance(motor, Motor)
+            motor: Motor = step["home"]  # noqa
             success = self._interface.stepper_home(motor)
 
         elif "_internal_func" in step:
@@ -1040,6 +1077,13 @@ class CanDevice(Device):
             compound_movements.pop(0)  # remove the one that was just requested successfully
             self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
             logger.debug("executed %s write command", step)
+            # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
+            cmd_ack_timeout = step.get("uuid_ack_timeout")
+            if cmd_ack_timeout is None:
+                if motor is not None:
+                    cmd_ack_timeout = self._motor_configs[motor].uuid_ack_timeout
+            if cmd_ack_timeout is not None:
+                self._prev_command_timeout = cmd_ack_timeout
         else:
             logger.error("%s write command failed", step)
 
