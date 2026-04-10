@@ -34,9 +34,13 @@ class InvokeMethod(QObject):
 
     @Slot()
     def execute(self):
-        self.method(*self.args, **self.kwargs)
-        # trigger garbage collector
-        self.setParent(None)
+        try:
+            self.method(*self.args, **self.kwargs)
+        finally:
+            # ensure we don't keep a ref to any of these:
+            self.args = self.kwargs = self.method = None
+            # then trigger garbage collector
+            self.setParent(None)
 
 
 def invoke_method(func):
