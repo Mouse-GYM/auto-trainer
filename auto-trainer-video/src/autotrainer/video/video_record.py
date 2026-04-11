@@ -116,6 +116,8 @@ class VideoRecord(Thread):
         self._close_writers()
 
     def _run(self) -> None:
+        input_q = self._input_queue
+
         if self._project_info is None or not self._project_info.is_valid():
             logger.error("video recording and image capture can not proceed without value project information")
             return
@@ -133,9 +135,10 @@ class VideoRecord(Thread):
         while self._is_running:
 
             try:
-                queue_list = self._input_queue.get(timeout=0.005)
+                queue_list = input_q.get(timeout=0.01)
             except Empty:
                 continue
+            input_q.task_done()  # always !
 
             try:
                 # if frame is None or when is None:
