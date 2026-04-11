@@ -351,14 +351,14 @@ class ProjectInfo(_ProjectInfo):
         interval: ProjectInterval = ProjectInterval.NONE,
         session: int = -1,
         when: Optional[datetime] = None,
-    ) -> Tuple[str, str]:
+    ) -> Tuple[Path, str]:
         """Get the 2-tuple of image paths for given arguments"""
         base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True, when=when)
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
         if self.ensure_exists:
             _ensure_location(image_location)
         image_file_format_str = base.prefix + "_{when}" + ".png"
-        return image_location, image_file_format_str
+        return Path(image_location), image_file_format_str
 
     def get_reach_event_path(self) -> Path:
         base = self.get_source_path("")
