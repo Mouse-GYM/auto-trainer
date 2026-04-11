@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-import collections
 import logging.config
 import multiprocessing
 import queue
-import sys
 import threading
 import time
-import os
 import signal
 from dataclasses import dataclass
-from queue import Queue
 from enum import IntEnum
 from multiprocessing import Process, Value, Array, synchronize
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedBase
-from threading import BrokenBarrierError
 from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 
 import numpy
@@ -121,7 +116,7 @@ class CaptureAttrs:
     status: Synchronized[int]
     """Flag for status of the capture process - value is read-only to callers"""
 
-    image_queue: Optional[Union[Queue, FixedArrayQueue]]
+    image_queue: Optional[Union[queue.Queue, FixedArrayQueue]]
     """Queue for camera frame output"""
 
     frame: Synchronized[int]
@@ -186,7 +181,7 @@ class VideoCapture(Process):
         self._command_thread: Optional[threading.Thread] = None
         self._camera_idx = attrs.camera_index
         self._status = attrs.status
-        self._image_queue: Optional[Union[Queue, FixedArrayQueue]] = attrs.image_queue
+        self._image_queue: Optional[Union[queue.Queue, FixedArrayQueue]] = attrs.image_queue
         self._image_queue_frame_delay = None if attrs.fps_image_queue is None else 1 / attrs.fps_image_queue
 
         self._network_queue: Optional[FixedArrayMultiQueue]
@@ -211,13 +206,13 @@ class VideoCapture(Process):
         self._is_capturing = False
         self._camera = None
         self._record: Optional[VideoRecord] = None
-        self._record_queue: Optional[Queue] = None
+        self._record_queue: Optional[queue.Queue] = None
         self._record_queue_list: List = []
 
         self._detection_attrs = attrs.presence_detection_attrs
         self._video_detection: Optional[VideoDetection] = None
 
-        self._command_handlers: Dict[CaptureCommandKind, Callable[[Any], ...]] = {
+        self._command_handlers: Dict[CaptureCommandKind, Callable] = {
             CaptureCommandKind.TERMINATE: self._user_terminate,
             CaptureCommandKind.ENABLE_CAPTURE: self._begin_capture,
             CaptureCommandKind.DISABLE_CAPTURE: self._end_capture,
@@ -277,7 +272,7 @@ class VideoCapture(Process):
 
             self._camera.prepare_capture()
 
-            self._record_queue = Queue()
+            self._record_queue = queue.Queue()
             self._record_properties.name = self._name
             self._record_properties.frame_size = (self._camera.width, self._camera.height)
             self._record_properties.fps = self._camera.fps
@@ -525,10 +520,11 @@ class VideoCapture(Process):
 
             self._camera.end_capture()
 
-            if self._record is not None:
-                self._record.cancel()
+            vid_rec = self._record
+            if vid_rec is not None:
+                vid_rec.cancel()
                 logger.debug("joining record thread")
-                self._record.join()
+                vid_rec.join()
                 self._record = None
 
             video_detection = self._video_detection
@@ -539,18 +535,21 @@ class VideoCapture(Process):
                 self._video_detection = None
 
             logger.debug("joining command thread")
-            self._command_queue.put(None)
-            self._command_thread.join()
+            thread = self._command_thread
+            if thread is not None:
+                if thread.is_alive():
+                    self._command_queue.put(None)
+                thread.join()
 
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             self._set_error(err)
         finally:
-            logger.debug(f"<{self._name}> terminated")
+            logger.debug("terminated")
             self._set_status(CaptureProcessStatus.TERMINATED)
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
-        logger.info(f"<%s> executing %s", self._name, cmd)
+        logger.info("executing %s", cmd)
         handler = self._command_handlers.get(cmd)
         if handler is None:
             logger.warning("No handler for command %s", cmd)
