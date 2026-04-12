@@ -19,7 +19,7 @@ logger = get_verbose_logger(__name__)
 
 class QGLImageView(QWidget):
     def __init__(self, width: int = 450, height: int = 300):
-        """Image view for a camera, (width, height) is the dimention of the output model"""
+        """Image view for a camera, (width, height) is the dimension of the output model"""
         super().__init__()
 
         self.setContentsMargins(0, 0, 0, 0)
