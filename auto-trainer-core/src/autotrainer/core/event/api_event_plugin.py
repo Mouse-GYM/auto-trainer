@@ -26,28 +26,32 @@ class ApiEventPlugin(EventManagerPlugin):
         self._service: Optional[RpcService] = None
 
     @property
-    def service(self) -> RpcService:
+    def service(self) -> Optional[RpcService]:
         return self._service
 
     def set_project(self, project: Optional[ProjectInfo]) -> None:
         pass
 
     def set_enable(self, enable: bool) -> None:
-        if enable and self._service is None:
-            self._service = create_api_service(self._options)
-            self._service.start()
-        elif not enable and self._service is not None:
-            self._service.stop()
+        svc = self._service
+        if enable and svc is None:
+            svc = self._service = create_api_service(self._options)
+            if svc is not None:
+                svc.start()
+        elif not enable and svc is not None:
+            svc.stop()
             self._service = None
 
     def process_event(self, info: EventInfo, repeat_count: int) -> None:
-        if self._service is not None:
-            self._service.send_dict(ApiTopic.EVENT, asdict(info))
+        svc = self._service
+        if svc is not None:
+            svc.send_dict(ApiTopic.EVENT, asdict(info))
 
     def flush(self) -> None:
         pass
 
     def close(self) -> None:
-        if self._service is not None:
-            self._service.stop()
+        svc = self._service
+        if svc is not None:
+            svc.stop()
             self._service = None
