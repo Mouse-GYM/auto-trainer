@@ -15,8 +15,8 @@ from autotrainer.core.configuration import SystemConfiguration
 logger = get_verbose_logger(__name__)
 
 
-def get_default_configuration_location() -> str:
-    return SystemConfiguration.DEFAULT_CONFIG_DIR.expanduser().as_posix()
+def get_default_configuration_location() -> Path:
+    return SystemConfiguration.DEFAULT_CONFIG_DIR.expanduser()
 
 
 _date_format = "%Y%m%d"
@@ -65,7 +65,7 @@ class UserPreferences(ObservableObject):
 
         self._configuration_location: str = settings.value(  # noqa
             "system/configuration_location",
-            get_default_configuration_location(),
+            get_default_configuration_location().as_posix(),
             str,
         )
 

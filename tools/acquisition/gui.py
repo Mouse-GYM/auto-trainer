@@ -1,7 +1,6 @@
 import multiprocessing
 import os
 import sys
-import argparse
 import faulthandler
 
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
@@ -10,13 +9,7 @@ def _exec_main(args, logger):
 
     from tools.acquisition.run_acquisition import run_acquisition
 
-    # strtobool compatibility is all over the place.
-    allow_emulation = args.allow_can_emulation.lower() in {"true", "yes", "1"}
-
-    exit_val = run_acquisition(
-        args.configuration, args.dev, allow_emulation,
-        target_status=args.start_mode,
-    )
+    exit_val = run_acquisition(args)
     (logger.success if exit_val in (0, None) else logger.error)("application finished ; exit_val=%s", exit_val)
     return exit_val
 
@@ -26,11 +19,9 @@ def main():
     fork_method = "spawn"  # please check python multiprocessing fork method documentation
     multiprocessing.set_start_method(fork_method)  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
 
-    from tools.acquisition.args import make_autotrainer_parser
+    from tools.acquisition.args import make_autotrainer_parser, parse_autotrainer_args
 
-    parser = make_autotrainer_parser(allow_dev_mode=True)
-
-    args = parser.parse_args()
+    args = parse_autotrainer_args(allow_dev_mode=True)
 
     # import autotrainer only AFTER having set mp start method,
     # otherwise it can be set by some other 3rd party dependency.

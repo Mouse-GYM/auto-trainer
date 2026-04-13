@@ -5,7 +5,7 @@ import shutil
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Dict, Optional, Union, ClassVar, TextIO
+from typing import List, Dict, Optional, Union, ClassVar, TextIO, Type, Any
 from typing_extensions import Self
 import yaml
 
@@ -57,13 +57,13 @@ class SystemConfiguration:
         self._camera_map = {}
 
     @classmethod
-    def load_yaml(cls, data: TextIO, *, file_path: Optional[Path] = None) -> Self:
-        raw_content = yaml.load(data, GenericSafeLoader)
+    def load_yaml(cls: Type[Self], data: TextIO, *, file_path: Optional[Path] = None) -> Self:
+        raw_content: Dict[str, Any] = yaml.load(data, GenericSafeLoader)
         data.seek(0)
         version = raw_content.get("version", 0)
         if version == SystemConfiguration.version:
             # easy case
-            configuration = yaml.load(data, SystemConfigurationLoader)
+            configuration: Self = yaml.load(data, SystemConfigurationLoader)
         elif version < SystemConfiguration.version:
             content = humps.decamelize(raw_content)
             configuration = cls()
@@ -72,13 +72,13 @@ class SystemConfiguration:
             elif version == 1:
                 configuration._deserialize_version_one(content)
             else:
-                configuration = yaml.load(data, SystemConfigurationSafeLoader)
+                configuration: Self = yaml.load(data, SystemConfigurationSafeLoader)
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "
                            "only considering known config attributes/properties.",
                            version, SystemConfiguration.version)
-            configuration = yaml.load(data, SystemConfigurationSafeLoader)
+            configuration: Self = yaml.load(data, SystemConfigurationSafeLoader)
 
         if version != SystemConfiguration.version and file_path is not None:
             now = datetime.now()
@@ -95,21 +95,21 @@ class SystemConfiguration:
         return configuration
 
     @classmethod
-    def load_yaml_file(cls, path: Union[Path, str], *, save_backup: bool = True) -> Self:
-        path = Path(path)
+    def load_yaml_file(cls: Type[Self], path: Union[Path, str], *, save_backup: bool = True) -> Self:
+        path: Path = Path(path)
         logger.debug("loading configuration from %r", path)
         with path.open() as fh:
-            return SystemConfiguration.load_yaml(fh, file_path=path if save_backup else None)
+            return cls.load_yaml(fh, file_path=path if save_backup else None)
 
     @classmethod
     def make_default_yaml_config_path(cls, dir_path: Path) -> Path:
         return dir_path.joinpath(f"{SystemConfiguration.DEFAULT_NAME}.yaml")
 
     @classmethod
-    def load_default(cls, location: Union[str, Path]) -> Optional[Self]:
+    def load_default(cls: Type[Self], location: Union[str, Path]) -> Optional[Self]:
         path = cls.make_default_yaml_config_path(Path(location))
         if path.is_file():
-            return SystemConfiguration.load_yaml_file(path)
+            return cls.load_yaml_file(path)
         logger.debug("cannot load default from %s ; not a file", path)
         return None
 
@@ -126,7 +126,7 @@ class SystemConfiguration:
     def save_file(self, path: Union[Path, str], as_yaml: bool = False, as_json: bool = False):
         if not (as_json or as_yaml):
             raise ValueError("Missing one of as_json or as_yaml")
-        path = Path(path)
+        path: Path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if as_json:
             p = path.with_suffix(".json")

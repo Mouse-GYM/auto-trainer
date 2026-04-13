@@ -2,12 +2,8 @@ import logging
 import os
 import time
 import sys
-import argparse
 import faulthandler
-from pathlib import Path
 from multiprocessing import set_start_method
-
-
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
@@ -15,18 +11,21 @@ def _exec_main(args):
 
     from autotrainer.core.logging import get_verbose_logger, get_console_handler
     from autotrainer.core.event import try_register_api_event_plugin
+    from tools.acquisition.model.user_preferences import UserPreferences
+    from tools.acquisition.model.helpers import get_config_location
 
     from tools.acquisition.model.app_model import AppModel
-    from tools.acquisition.model.app_model_status import AppModelStatus
-    from tools.acquisition.model.user_preferences import UserPreferences
 
     logger = get_verbose_logger("autotrainer.headless")
 
     configuration = args.configuration
     if configuration and not os.path.exists(configuration):
+        logger.error("Provided configuration location does not exist: %s",
+                     configuration)
         return -1
 
     preferences = UserPreferences(settings_file_path=args.preferences_file)
+    config_file = get_config_location(preferences, configuration)
 
     get_console_handler().setLevel(preferences.log_level)
 
@@ -35,7 +34,6 @@ def _exec_main(args):
     plugin = try_register_api_event_plugin()
     app_model.rpc_service = plugin.service
 
-    config_file = app_model.get_config_location(configuration)
     try:
         app_model.load_configuration(config_file)
     except Exception as err:
