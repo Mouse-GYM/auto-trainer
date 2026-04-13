@@ -12,7 +12,8 @@ import verboselogs
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
-from autotrainer.inference.analysis import intersession_process, IntersessionResponse, ReachEvent
+from autotrainer.inference.analysis import intersession_process, IntersessionResponse
+from autotrainer.core.reach_event import ReachEvent
 
 import pytest
 

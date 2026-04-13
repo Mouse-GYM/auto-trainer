@@ -40,7 +40,8 @@ from .intersession import IntersessionState
 
 from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
-from autotrainer.inference.analysis import IntersessionResponse, ReachEvent
+from autotrainer.core.reach_event import ReachEvent
+from autotrainer.inference.analysis import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 

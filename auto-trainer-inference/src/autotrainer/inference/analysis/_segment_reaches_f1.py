@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-
+from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
 from autotrainer.core.logging import get_verbose_logger
 
 
@@ -128,8 +128,8 @@ def segment_reaches_f11(
                 pellet_dict = {
                     'placed': frame_at_count_begin,
                     'lost': -1,
-                    'method': 'none',
-                    'outcome': 'none'
+                    'method': ReachEventMethod.NONE,
+                    'outcome': ReachEventOutcome.NONE,
                 }
                 pellet_events.append(pellet_dict)
                 frames_on_found.append(frame_at_count_begin)
@@ -156,16 +156,16 @@ def segment_reaches_f11(
                 RVL_test = dist_hvpp_R[frame_at_count_begin] < dist_hvpp_L[frame_at_count_begin]
                 TVR_test = dist_tvpp[frame_at_count_begin] < dist_hvpp_L[frame_at_count_begin]
                 TVL_test = dist_tvpp[frame_at_count_begin] < dist_hvpp_R[frame_at_count_begin]
-                pellet_dict['outcome'] = 'eaten'
+                pellet_dict['outcome'] = ReachEventOutcome.EATEN
                 if TVR_test and TVL_test and tongue_test:
-                    pellet_dict['method'] = 'tongue'
+                    pellet_dict['method'] = ReachEventMethod.TONGUE
                 elif RVL_test and right_test:
-                    pellet_dict['method'] = 'right_hand'
+                    pellet_dict['method'] = ReachEventMethod.RIGHT_HAND
                 elif not RVL_test and left_test:
-                    pellet_dict['method'] = 'left_hand'
+                    pellet_dict['method'] = ReachEventMethod.LEFT_HAND
                 else:
-                    pellet_dict['method'] = 'other'
-                    pellet_dict['outcome'] = 'dropped'
+                    pellet_dict['method'] = ReachEventMethod.OTHER
+                    pellet_dict['outcome'] = ReachEventOutcome.DROPPED
                 if debug >= 1:
                     print(f"Right hand : {dist_hvpp_R[frame_at_count_begin]} at {frame_at_count_begin}")
                     print(f"Left hand : {dist_hvpp_L[frame_at_count_begin]}")

@@ -24,7 +24,7 @@ from autotrainer.behavior import SystemState, SystemMachine
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletMachine
 
-from autotrainer.inference.analysis.intersession_process import IntersessionResponse
+from autotrainer.inference.analysis import IntersessionResponse
 
 
 def test_enter_exit_tunnel(mock_system, machine):
