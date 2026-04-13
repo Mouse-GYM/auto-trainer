@@ -287,6 +287,8 @@ class PoseProcess(Process):
 
         live_input = self._live_input_queue
         offline_input = self._offline_input
+        if offline_input is None:
+            raise RuntimeError("offline_input not configured")
 
         # always begin with live input:
         i_q: Optional[FixedArrayMultiQueue] = live_input
@@ -311,7 +313,9 @@ class PoseProcess(Process):
             return True
 
         cur_get_output = get_live_input
-        cur_release_output = lambda: None
+        def live_release_output():
+            pass
+        cur_release_output = live_release_output
 
         def reset_locals():
             nonlocal i_q, cur_get_output, cur_release_output
@@ -321,7 +325,7 @@ class PoseProcess(Process):
             if prev_iq is not i_q:
                 if i_q is live_input:
                     cur_get_output = get_live_input
-                    cur_release_output = lambda: None
+                    cur_release_output = live_release_output
                     logger.notice("Switched to online/live queue: %s", frames_indices.tolist())
                     frame_buffer = frame_buffer1
                     frames_indices = frames_indices1
@@ -431,6 +435,8 @@ class PoseProcess(Process):
                 # the swap to live queue will be requested explicitly by main app,
                 # there can be many/multiple offline sessions analyzed one after the other,
                 # without going back to live at all in-between them.
+                # Ensure we don't repeat:
+                frames_indices[:] = frames_indices1[:] = FrameIndexCategory.PADDING
 
             if i_q is live_input and not recording_in_progress and offline_input.has_project_waiting():
                 # we have to wait that there is no more recording in progress before switching to offline
