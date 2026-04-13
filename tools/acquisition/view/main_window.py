@@ -1241,7 +1241,7 @@ class MainWindow(QMainWindow):
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
 
-    def _simulate_sessions(self, *, n_sessions: int=1, n_trials: int = 1, sess_sleep: float=8):
+    def _simulate_sessions(self, *, n_sessions: int=1, n_trials: int = 1, sess_sleep: float=4):
         app = self._app_model
         pellet_m = app.behavior.system_machine.pellet
         algo = app.behavior.algorithm
@@ -1251,34 +1251,38 @@ class MainWindow(QMainWindow):
                 return
             logger.notice("starting new simulate session")
             self.load_cell_trigger_action.trigger()
-            time.sleep(1.5)
+            time.sleep(1)
             for idx in range(n_trials):
                 if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     return
-                time.sleep(1.5)
+                time.sleep(1)
                 self.mouse_near_pellet_action.toggle()
                 self.mouse_near_pellet_action.trigger()
-                time.sleep(1.5)
+                time.sleep(1)
                 self.mouse_seen_action.toggle()
                 self.mouse_seen_action.trigger()
                 time.sleep(3)
                 pellet_m.load_pellet(force=True)
                 time.sleep(1)
-                while pellet_m.state != PelletState.monitoring:
-                    logger.verbose("waiting pellet monitoring")
-                    time.sleep(1.5)
+                logger.verbose("waiting pellet monitoring or retract")
+                while pellet_m.state not in {PelletState.monitoring, PelletState.retract}:
+                    time.sleep(1)
                     if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                         return
-                time.sleep(2.5)
+                    if infe.status in {
+                        InferenceStatus.stopped,
+                        InferenceStatus.stopping,
+                    }:
+                        return
+                if infe.status == InferenceStatus.intersession or pellet_m.state == PelletState.retract:
+                    break
+                time.sleep(2)
             #
             self.load_cell_trigger_action.trigger()
-            time.sleep(3.5)
-            if infe.status != InferenceStatus.intersession:
-                logger.error("unexpected infe state: %s", infe.status)
-                return
+            time.sleep(2)
             while infe.status != InferenceStatus.live:
                 time.sleep(1)
-                if infe.status == InferenceStatus.stopped:
+                if infe.status in {InferenceStatus.stopped, InferenceStatus.stopping}:
                     return
             time.sleep(sess_sleep)
 
