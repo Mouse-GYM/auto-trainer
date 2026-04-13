@@ -114,6 +114,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(icon)
 
         self._open_dialogs = []
+        self._debug_view: Optional[DebugView] = None
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
         self._warned_invalid_dcs_config = False
@@ -819,7 +820,7 @@ class MainWindow(QMainWindow):
 
         action = self.debug_action = QAction("Debug", self)
         action.setCheckable(True)
-        action.toggled.connect(self._toggle_debug_view)
+        action.triggered.connect(self._toggle_debug_view)
 
         action = self.load_cell_trigger_action = QAction("Load Cell", self)
         action.setCheckable(True)
@@ -1126,11 +1127,20 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
-    def _toggle_debug_view(self, toggled):
-        if toggled:
-            v = DebugView(self)
+    def _toggle_debug_view(self, toggled: True):
+        v = self._debug_view
+        if v is None:
+            v = self._debug_view = DebugView(self)
+            def close_debug_view_event(evt, orig_close=v.closeEvent):
+                self._debug_view = None
+                orig_close(evt)
+                self.debug_action.setChecked(False)
+            v.closeEvent = close_debug_view_event
             v.show()
             self._add_box_to_open_dialogs(v)
+            self.debug_action.setChecked(True)
+        else:
+            v.close()
 
     def _show_message(self, title: str, message: str):
         @invoke_method
