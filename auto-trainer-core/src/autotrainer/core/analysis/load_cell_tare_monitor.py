@@ -115,23 +115,28 @@ class LoadCellTareMonitor(BaseDetector):
 
     def update(self, values: List[float]) -> bool:
         new_values = numpy.array(values)
-        mask_nan = numpy.ma.array(new_values, mask=numpy.isnan(new_values))
-        # all_nans = numpy.isnan(new_values).all()
+        cur_buff = self._values
+        buf_len = len(cur_buff)
         # replaces NaN by base + threshold, so that if only NaN's get in,
         # then we'll execute a tare.
+        mask_nan = numpy.ma.array(new_values, mask=numpy.isnan(new_values))
         cfg = self._config
         new_values[new_values != mask_nan] = self._baseline + cfg.threshold
-        increase = len(values)
-        cur_buff = self._values
+        increase = len(new_values)
+        if increase > buf_len:
+            # only keep most recent in case we get too much:
+            new_values = new_values[increase - buf_len:]
+            increase = buf_len
+
         idx = self._index
         off = idx + increase
-        buf_len = len(cur_buff)
+
         w_off = min(buf_len, off)
         cur_buff[idx:w_off] = new_values[:w_off - idx]
         idx += increase
-        if idx >= len(cur_buff):
-            idx %= len(cur_buff)
-            cur_buff[:idx] = new_values[w_off - idx:]
+        if idx >= buf_len:
+            idx %= buf_len
+            cur_buff[:idx] = new_values[increase - idx:]
         self._index = idx
         #
         ctx = self._context
