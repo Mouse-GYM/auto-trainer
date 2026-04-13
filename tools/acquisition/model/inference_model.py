@@ -411,7 +411,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             self._cmd_queue_ack.clear()
             cmd_queue.put((kind, context))
             logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
-            if self._pose_process.is_alive():
+            pose_proc = self._pose_process
+            if pose_proc is not None and pose_proc.is_alive():
                 if self._cmd_queue_ack.wait(3):
                     logger.debug("got cmd ack for %s", kind)
                 else:

@@ -45,3 +45,20 @@ def test_low_variance_with_nans():
     values[-1] = monitor.range_threshold + 5
     monitor.update(list(values))
     assert not monitor.context.low_variance_engaged
+
+
+def test_with_non_matching_update_values_len():
+    monitor = LoadCellTareMonitor()
+    values = list(range(9))
+    monitor._index = len(monitor._values) - 4
+    monitor.update(values)
+    assert (monitor._values[-4:] == [0, 1, 2, 3]).all()
+    assert (monitor._values[:5] == [4, 5, 6, 7, 8]).all()
+
+
+def test_with_more_values_than_buffer_size():
+    monitor = LoadCellTareMonitor()
+    values = list(range(250))  # reminder: default buffer size is 200
+    monitor.update(values)
+    assert (monitor._values == list(range(50, 250))).all()
+    assert monitor._index == 0

@@ -122,7 +122,7 @@ v0_expected_result_config = {'version': SystemConfiguration.version,
    'weight_max_filter': LoadCellConfiguration.weight_max_filter,
    },
   'headbar_pressure': {'threshold': 10, 'duration': 1.5},
-  'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0},
+  'auto_tare': {'threshold': 1.1, 'range_threshold': 1.75, 'duration': 1.0, 'sample_rate': 100},
   },
  'persistence': {'output_location': '/home/autotrainer/output'}}
 

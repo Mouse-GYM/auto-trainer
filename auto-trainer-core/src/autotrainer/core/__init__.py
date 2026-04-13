@@ -218,7 +218,7 @@ def build_kwargs_apply_mapping(
     mapping: Iterable[Union[str, Tuple[str, str]]],
     *,
     skip_remaining: bool = False,
-):
+) -> Dict[str, Any]:
     kwargs = {}
     content = dict(content)  # make copy of 1 level given we'll remove/pop from it
     for cur_map in mapping:
