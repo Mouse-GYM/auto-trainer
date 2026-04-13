@@ -49,11 +49,13 @@ class LoadCellAutoTareConfiguration:
     threshold: float = 0.1
     range_threshold: float = 0.75
     duration: float = 2.0
+    sample_rate: int = 100
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
-        return cls(
-            threshold=content.get("threshold", 0.1),
-            range_threshold=content.get("range_threshold", 0.75),
-            duration=content.get("duration", 2.0)
-        )
+        kwargs = {}
+        for k in {"threshold", "range_threshold", "duration", "sample_rate"}:
+            val = content.get(k)
+            if val is not None:
+                kwargs[k] = val
+        return cls(**kwargs)

@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
 from typing import Optional, Tuple
@@ -83,7 +84,7 @@ class VideoRecord(Thread):
         self._video_file = None
         self._video_timestamp_file = None
 
-        self._image_location: Optional[str] = None
+        self._image_location: Optional[Path] = None
         self._last_image_perf_now = time.perf_counter()
 
         self._interval_mode = ProjectInterval.NONE
@@ -116,6 +117,8 @@ class VideoRecord(Thread):
         self._close_writers()
 
     def _run(self) -> None:
+        input_q = self._input_queue
+
         if self._project_info is None or not self._project_info.is_valid():
             logger.error("video recording and image capture can not proceed without value project information")
             return
@@ -133,9 +136,10 @@ class VideoRecord(Thread):
         while self._is_running:
 
             try:
-                queue_list = self._input_queue.get(timeout=0.005)
+                queue_list = input_q.get(timeout=0.01)
             except Empty:
                 continue
+            input_q.task_done()  # always !
 
             try:
                 # if frame is None or when is None:
@@ -155,18 +159,22 @@ class VideoRecord(Thread):
                     frame_time = self._first_frame_time + zero_based_frame_when
 
                     if self._is_video_enabled:
-                        if self._video_writer is None:
+                        vid_writer = self._video_writer
+                        if vid_writer is None:
                             # If triggered, may not be configured yet for this batch
                             prev_perf_now = prev_frame_when = None
                             self._prepare_writers()
+                            vid_writer = self._video_writer
 
-                        if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
-                            self._video_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
-                        else:
-                            self._video_writer.write(frame)
-                        tot_written += 1
+                        if vid_writer is not None:
+                            if len(numpy.shape(frame)) < 3 or numpy.shape(frame)[2] == 1:
+                                vid_writer.write(numpy.tile(frame[:, :, numpy.newaxis], (1, 1, 3)))
+                            else:
+                                vid_writer.write(frame)
+                            tot_written += 1
 
-                        if self._video_timestamp_file is not None:
+                        vid_ts_file = self._video_timestamp_file
+                        if vid_ts_file is not None:
                             # NB: Using camera frame_when, which is the most precise, to measure FPS:
                             # if last_perf_now is None:
                             #     d = 0
@@ -185,20 +193,21 @@ class VideoRecord(Thread):
                                     d2 = 1 / d2
                                 else:
                                     d2 = math.nan
-                            self._video_timestamp_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}\n")
+                            vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}\n")
                             prev_perf_now = frame_perf_now
                             prev_frame_when = frame_when
 
                     if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
-                        if self._image_location is None:
+                        img_loc, img_name = self._image_location, self._image_name
+                        if img_loc is None:
                             self._prepare_writers()
-                        img_loc = self._image_location
-                        if img_loc is not None:
+                            img_loc, img_name = self._image_location, self._image_name
+                        if img_loc is not None and img_name is not None:
                             self._last_image_perf_now = frame_perf_now
                             when_str = datetime.fromtimestamp(frame_time).strftime("%Y%m%d_%H%M%S_%f")
                             when_str = when_str[:-3]  # only keep 3 digits precision (milliseconds)
-                            assert isinstance(self._image_location, str)
-                            cv2.imwrite(os.path.join(self._image_location, self._image_name.format(when=when_str)), frame)
+                            cv2.imwrite(img_loc.joinpath(img_name.format(when=when_str)),
+                                        frame)
 
                     check_count += 1
 
@@ -224,7 +233,6 @@ class VideoRecord(Thread):
     def _check_writers(self):
         if self._interval_mode != ProjectInterval.NONE:
             timestamp = datetime.now()
-
             needs_update = timestamp.hour != self._interval_reference \
                 if self._interval_mode == ProjectInterval.HOUR \
                 else timestamp.minute != self._interval_reference
@@ -235,35 +243,38 @@ class VideoRecord(Thread):
     def _prepare_writers(self):
         logger.debug("preparing writers...")
         now = datetime.now()
-        self._interval_reference = self._project_info.get_interval(self._interval_mode, when=now)
-        self._prepare_video_writer()
-        self._prepare_image_capture()
+        project = self._project_info
+        if project is None:
+            logger.warning("Cannot prepare writers with None project_info")
+            return
+        self._interval_reference = project.get_interval(self._interval_mode, when=now)
+        self._prepare_video_writer(project)
+        self._prepare_image_capture(project)
 
     def _close_writers(self):
         logger.spam("closing writers...")
         self._close_image_writer()
         self._close_video_writer()
 
-    def _prepare_image_capture(self):
+    def _prepare_image_capture(self, project: ProjectInfo):
         logger.debug("preparing image capture")
         self._close_image_writer()
         if self._image_interval > 0:
             self._image_location, self._image_name = (
-                self._project_info.get_image_capture_path(self._name, interval=self._interval_mode,
-                                                          when=datetime.now()))
+                project.get_image_capture_path(self._name, interval=self._interval_mode,
+                                               when=datetime.now()))
             logger.debug(f"<{self.name}>: image capture to {self._image_location}")
 
     def _close_image_writer(self):
         self._image_location = None
 
-    def _prepare_video_writer(self):
+    def _prepare_video_writer(self, project: ProjectInfo):
         self._close_video_writer()
-
         if not self._is_video_enabled:
             logger.verbose("_prepare_video_writer but _is_video_enabled False")
             return
 
-        video_file, timestamp_file, _ = self._project_info.get_video_path(
+        video_file, timestamp_file, _ = project.get_video_path(
             self._name, interval=self._interval_mode, allow_overwrite=True)
 
         self._video_file = video_file
@@ -274,12 +285,15 @@ class VideoRecord(Thread):
         self._video_timestamp_file = open(timestamp_file, "a")
 
     def _close_video_writer(self):
-        if self._video_writer is not None:
-            self._video_writer.release()
+        vid_writer = self._video_writer
+        if vid_writer is not None:
+            vid_writer.release()
             logger.debug("Released %s", self._video_file)
             self._video_writer = None
             self._video_file = None
 
-        if self._video_timestamp_file is not None:
-            self._video_timestamp_file.close()
+        vid_ts_file = self._video_timestamp_file
+        if vid_ts_file is not None:
+            vid_ts_file.flush()
+            vid_ts_file.close()
             self._video_timestamp_file = None
