@@ -85,6 +85,7 @@ class VideoRecord(Thread):
         self._video_timestamp_file = None
 
         self._image_location: Optional[Path] = None
+        self._image_name: Optional[str] = None
         self._last_image_perf_now = time.perf_counter()
 
         self._interval_mode = ProjectInterval.NONE
@@ -267,6 +268,7 @@ class VideoRecord(Thread):
 
     def _close_image_writer(self):
         self._image_location = None
+        self._image_name = None
 
     def _prepare_video_writer(self, project: ProjectInfo):
         self._close_video_writer()
