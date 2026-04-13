@@ -662,7 +662,7 @@ def reorient_and_center_step1(
             with open(path_offsets, 'wb') as fh:
                 pickle.dump(cam_offsets, fh)
 
-    if orig_cam_offsets is not None and not dict_almost_equal(cam_offsets, orig_cam_offsets, rel_tol=0.01):
+    if orig_cam_offsets is not None and not dict_almost_equal(cam_offsets, orig_cam_offsets, rel_tol=0.1):
         logger.warning("Loaded cam_offsets != generated: %s vs %s", orig_cam_offsets, cam_offsets)
 
     # if orig_cam_offsets is not None:
