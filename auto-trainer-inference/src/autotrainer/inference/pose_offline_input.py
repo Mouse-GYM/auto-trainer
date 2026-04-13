@@ -46,7 +46,6 @@ class OfflineInputProcess:
         msg_queue: multiprocessing.Queue,
     ):
         self._project = None
-        self._thread = None
         self._cur_project_info: Optional[ProjectInfo] = None
         self._live_requested = False
         self._interrupted = False
@@ -99,10 +98,10 @@ class OfflineInputProcess:
     def set_project_info(self, project_info: ProjectInfo, *, wait_stop_recorded: bool=True):
         cur_th = self._cur_thread
         prev_prj = self._cur_project_info
-        if prev_prj == project_info and cur_th.is_alive():
-            logger.notice("skipping set_project_info due to already loaded and processing")
+        if prev_prj == project_info and cur_th is not None and cur_th.is_alive():
+            logger.warning("skipping set_project_info due to already loaded and processing")
             return
-        logger.verbose("Received new project to process: %s", project_info)
+        logger.info("Received new project to process: %s", project_info)
         if cur_th is not None:
             if cur_th.is_alive():
                 self._interrupted = True
@@ -138,6 +137,12 @@ class OfflineInputProcess:
         cur_th.start()
 
     def get_output(self, *, timeout: float = 1):
+        if self._cur_project_info is None:
+            # logger.debug("cur_project_info None")
+            # this happens at the end of offline processing, but before detection is finished
+            time.sleep(0.01)
+            # offline detection takes ~2-3 seconds to process.
+            raise queue.Empty
         if self._cur_batch_nr == 0:
             logger.verbose("first get_output")
         if self._live_requested or not self._sema_ready.acquire(timeout=timeout):
@@ -153,6 +158,17 @@ class OfflineInputProcess:
             idc = self._indices3
             self._cur_buffer_r = self._buffer1
         self._cur_batch_nr += 1
+        if (idc[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING).all():
+            # finally:
+            self._cur_project_info = None
+            cur_th = self._cur_thread
+            if cur_th is not None:  # should be
+                logger.verbose("EOF_OFFLINE_PROCESSING ; joining output thread")
+                cur_th.join(3)
+                if cur_th.is_alive():
+                    logger.warning("output thread still alive after join(3), while expected already/fast exited")
+                self._cur_thread = None
+
         return cur, idc
 
     def release_output(self):
@@ -235,8 +251,6 @@ class OfflineInputProcess:
         for _ in range(self._frames_per_cam):
             for cdx in range(self._nr_cams):
                 self._put_block(self._empty_frame, cdx, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
-        # finally:
-        self._cur_project_info = None
 
     def _feed_intersession_analysis_execute(self, project, wait_stop_recorded):
         cams = (project.camera_1, project.camera_2)
