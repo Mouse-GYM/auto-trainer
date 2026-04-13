@@ -9,13 +9,13 @@ from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Callable
+from typing import List, Optional, Dict, Tuple, Callable, Union
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QFrame)
+                               QSpinBox, QDoubleSpinBox, QFrame, QDialog)
 import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
@@ -27,13 +27,16 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.event.api_event_kind import ApiEventKind
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
+from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 from autotrainer.inference import InferenceStatus, PoseResponse
+from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 
 from autotrainer.behavior import TrainingMode
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+from autotrainer.behavior.pellet import PelletState
+
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan, PlanInfo
@@ -47,6 +50,7 @@ from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
+from tools.acquisition.view.debug_content import DebugView
 
 logger = get_verbose_logger(__name__)
 
@@ -110,6 +114,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(icon)
 
         self._open_dialogs = []
+        self._debug_view: Optional[DebugView] = None
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
         self._warned_invalid_dcs_config = False
@@ -173,16 +178,16 @@ class MainWindow(QMainWindow):
         cfg = self._app_model.behavior.algorithm.diamond_triangle_config
         return cfg is not None and cfg.fully_valid
 
-    def _add_box_to_open_dialogs(self, box: QMessageBox):
-        self._open_dialogs.append(box)
-        def close_event(event, orig_close_event=box.closeEvent):
+    def _add_box_to_open_dialogs(self, item: Union[QMessageBox, QDialog]):
+        self._open_dialogs.append(item)
+        def close_event(event, orig_close_event=item.closeEvent):
             try:
-                self._open_dialogs.remove(box)
+                self._open_dialogs.remove(item)
             except ValueError:
                 pass
             orig_close_event(event)
             event.accept()
-        box.closeEvent = close_event
+        item.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
         self.main_content.set_is_capture_active(started)
@@ -811,7 +816,11 @@ class MainWindow(QMainWindow):
         action.setToolTip("Show or hide diagnostics panel")
         action.setCheckable(True)
         action.setChecked(self.main_content.is_diagnostics_visible)
-        action.triggered.connect(lambda: self._toggle_diagnostics_view())
+        action.triggered.connect(self._toggle_diagnostics_view)
+
+        action = self.debug_action = QAction("Debug", self)
+        action.setCheckable(True)
+        action.triggered.connect(self._toggle_debug_view)
 
         action = self.load_cell_trigger_action = QAction("Load Cell", self)
         action.setCheckable(True)
@@ -867,6 +876,7 @@ class MainWindow(QMainWindow):
         if self._is_dev:
             view_menu = menu_bar.addMenu("View")
             view_menu.addAction(self.view_diagnostics_action)
+            view_menu.addAction(self.debug_action)
 
     def _configure_toolbar(self):
 
@@ -1117,6 +1127,21 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
+    def _toggle_debug_view(self, toggled: True):
+        v = self._debug_view
+        if v is None:
+            v = self._debug_view = DebugView(self)
+            def close_debug_view_event(evt, orig_close=v.closeEvent):
+                self._debug_view = None
+                orig_close(evt)
+                self.debug_action.setChecked(False)
+            v.closeEvent = close_debug_view_event
+            v.show()
+            self._add_box_to_open_dialogs(v)
+            self.debug_action.setChecked(True)
+        else:
+            v.close()
+
     def _show_message(self, title: str, message: str):
         @invoke_method
         def show_in_gui_thread(title=title, message=message):
@@ -1215,6 +1240,47 @@ class MainWindow(QMainWindow):
             logger.verbose("Restoring intersession segmentation and detection to real procedures")
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
+
+    def _simulate_sessions(self, *, n_sessions: int=1, n_trials: int = 1, sess_sleep: float=8):
+        app = self._app_model
+        pellet_m = app.behavior.system_machine.pellet
+        algo = app.behavior.algorithm
+        infe = app.inference
+        for sess_idx in range(n_sessions):
+            if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                return
+            logger.notice("starting new simulate session")
+            self.load_cell_trigger_action.trigger()
+            time.sleep(1.5)
+            for idx in range(n_trials):
+                if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                    return
+                time.sleep(1.5)
+                self.mouse_near_pellet_action.toggle()
+                self.mouse_near_pellet_action.trigger()
+                time.sleep(1.5)
+                self.mouse_seen_action.toggle()
+                self.mouse_seen_action.trigger()
+                time.sleep(3)
+                pellet_m.load_pellet(force=True)
+                time.sleep(1)
+                while pellet_m.state != PelletState.monitoring:
+                    logger.verbose("waiting pellet monitoring")
+                    time.sleep(1.5)
+                    if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                        return
+                time.sleep(2.5)
+            #
+            self.load_cell_trigger_action.trigger()
+            time.sleep(3.5)
+            if infe.status != InferenceStatus.intersession:
+                logger.error("unexpected infe state: %s", infe.status)
+                return
+            while infe.status != InferenceStatus.live:
+                time.sleep(1)
+                if infe.status == InferenceStatus.stopped:
+                    return
+            time.sleep(sess_sleep)
 
     def notes_changed(self, value: str):
         self._app_model.notes = value
