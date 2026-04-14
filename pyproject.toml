@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "setuptools >= 61",
-    'setuptools-scm >= 9.2.2, < 10',  # to allow get version from git when in editable mode,
+    'setuptools-scm >= 9.2.2, < 10',
     "tomli >= 2, < 3",  # for current setup.py
 ]
 build-backend = "setuptools.build_meta"
