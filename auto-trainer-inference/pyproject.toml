@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = [
+    "setuptools >= 61",
+    'setuptools-scm >= 9.2.2, < 10',  # to allow get version from git when in editable mode,
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -9,13 +12,27 @@ namespaces = true
 
 [project]
 name = "auto-trainer-inference"
-version = "1.0.0"
 description = "Network implementations for autotrainer"
 license = { text = "MIT" }
 requires-python = ">=3.8"
+dynamic = ["version"]
 dependencies = [
-    "numpy",
-    "deeplabcut",
-    "tensorflow",
-    "auto-trainer-core"
+
+    "auto-trainer-core",
+
+    'deeplabcut == 2.3.9',  # famous deeplab
+
+    'pandas >= 2, < 3',
+    'numpy >= 1.23.5, < 2',
+
+    'tensorflow >= 2.12, < 3 ; platform_machine != "aarch64"',       # for non-aarch64 platform only
+    'tensorflow == 2.12.0+nv23.06 ; platform_machine == "aarch64"',  # for aarch64 platform only
+    # for now let it be installed manually still.
+    # Otherwise, we need to have some pip.conf having extra-index-url to nvidia, or PIP_EXTRA_INDEX_URL variable too.
+
 ]
+
+[tool.setuptools_scm]
+root = ".."
+write_to = "auto-trainer-inference/src/autotrainer/inference/version.txt"
+git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"

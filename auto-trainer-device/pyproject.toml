@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = [
+    "setuptools >= 61",
+    'setuptools-scm >= 9.2.2, < 10',  # to allow get version from git when in editable mode,
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -9,12 +12,20 @@ namespaces = true
 
 [project]
 name = "auto-trainer-device"
-version = "1.0.0"
 description = "Device implementations for autotrainer"
 license = { text = "MIT" }
 requires-python = ">=3.8"
+dynamic = ["version"]
 dependencies = [
-    "pyserial",
     "auto-trainer-core",
-    # "pyjerrycan >= 1.2.0",  optional atm
+
+    'pyyaml >= 6.0.2, < 7',
+
+    # CAN communication with pellet/tunnel boards:
+    'pyjerrycan >= 1.2.5, < 2 ; platform_machine == "aarch64"',
 ]
+
+[tool.setuptools_scm]
+root = ".."
+write_to = "auto-trainer-device/src/autotrainer/device/version.txt"
+git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"

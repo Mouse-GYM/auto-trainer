@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = [
+    "setuptools >= 61",
+    'setuptools-scm >= 9.2.2, < 10',  # to allow get version from git when in editable mode,
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -9,11 +12,16 @@ namespaces = true
 
 [project]
 name = "auto-trainer-model"
-version = "1.0.0"
 description = "Model objects and implementations for autotrainer"
 license = { text = "MIT" }
 requires-python = ">=3.8"
+dynamic = ["version"]
 dependencies = [
-    "auto-trainer-core",
-    "auto-trainer-device"
+    "auto-trainer-device",
 ]
+
+[tool.setuptools_scm]
+root = ".."  # temporary while embedded in autotrainer main repo
+# also strip auto-trainer-core when moved as independent repo
+write_to = "auto-trainer-model/src/autotrainer/model/version.txt"
+git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"
