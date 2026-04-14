@@ -8,13 +8,14 @@ from autotrainer.core import ProjectInfo, video_write_ext
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.reach_event import ReachEvent
 
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 
 from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
 from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
-from . import ReachEvent, IntersessionResponse
+from autotrainer.inference.analysis import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
 

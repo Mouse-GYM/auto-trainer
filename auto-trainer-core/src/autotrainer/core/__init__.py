@@ -288,6 +288,7 @@ import autotrainer.core.logging
 import autotrainer.core.diamond_triangle_config
 # ..
 
+
 from .observable_object import ObservableObject, ObservableObjectProtocol
 
 from .frame_index import FrameIndexCategory

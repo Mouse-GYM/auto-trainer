@@ -11,9 +11,9 @@ from autotrainer.core.configuration.behavior_configuration import (
     ShiftXYZBufferHandlerConfig,
     ShiftXYZHandlerConfig,
 )
+from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
 
 from autotrainer.inference.analysis import IntersessionResponse
-
 
 logger = get_verbose_logger(__name__)
 
@@ -206,7 +206,7 @@ class ShiftXYZHandler(ObservableObject):
             return
         tongue_eaten = False
         for evt in trial_result.other_events:
-            if evt.outcome == "eaten" and evt.method == "tongue":
+            if evt.outcome == ReachEventOutcome.EATEN and evt.method == ReachEventMethod.TONGUE:
                 tongue_eaten = True
                 if is_batch:
                     self._batch_has_tongue_eaten = True

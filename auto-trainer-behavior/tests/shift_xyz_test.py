@@ -9,7 +9,8 @@ from autotrainer.behavior import SystemMachine, SystemState, IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.inference.analysis import IntersessionResponse, ReachEvent
+from autotrainer.core.reach_event import ReachEvent, ReachEventMethod
+from autotrainer.inference.analysis import IntersessionResponse
 from top_fixtures import MockSystemMachine, AlmostEqualFloat
 
 
@@ -50,7 +51,8 @@ class TestShiftXYZ(MockSystemMachine):
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         cfg = algo.active_config
-        other_events = list(filter(lambda r: r.method not in {'right_hand', 'left_hand'}, reach_events))
+        other_events = list(filter(
+            lambda r: r.method not in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}, reach_events))
         rsp = IntersessionResponse(
             reach_events=reach_events,
             rh_max_vp_list=rh_max_vp_list,

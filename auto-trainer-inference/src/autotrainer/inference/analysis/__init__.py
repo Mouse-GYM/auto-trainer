@@ -1,21 +1,17 @@
 import dataclasses
-from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List
 
 from autotrainer.core import Offset3DTuple
+from autotrainer.core.reach_event import ReachEvent
 
+__all__ = [
+    "intersession_process",
+    "intersession_inference",
+    "IntersessionResponse",
+]
 
-@dataclass
-class ReachEvent:
-    init: int  # frame index
-    end: int  # frame index
-    max: int = -1  # frame index
-    method: str = 'none'  # none, right_hand, left_hand, tongue
-    outcome: str = 'none'  # none, stalled, missed, dropped, grabbed, eaten
-    delay_since_presented: float = 0  # is basically: init / fps
-
-
-@dataclass
+# NB: keep me up:
+@dataclasses.dataclass
 class IntersessionResponse:
     # NB: all 3 x/y/z are relative values here:
     rh_max_vp_list: List[Offset3DTuple] = dataclasses.field(default_factory=list)
@@ -43,4 +39,3 @@ class IntersessionResponse:
 from .intersession_process import intersession_process
 from .intersession_inference import intersession_inference
 # might need change this.
-
