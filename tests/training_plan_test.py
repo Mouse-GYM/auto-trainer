@@ -96,7 +96,7 @@ class BaseTrainingPlan(MockSystemMachine):
         # TODO:
         expected_plan_id = '57094295-5234-44f3-a925-14ceb772c8e5'
         expected_plan_id = '8fd60c5d-d543-45b9-8287-b5b97602f8e0'
-        expected_plan_id = '7b430a47-f685-4a1b-929d-801ef32266ff'
+        expected_plan_id = '58cc7a5b-8d75-40ff-9b8c-6d2b3a7ab814'
         plan = app_model.get_training_plan_by_id(expected_plan_id)
         animal = app_model.selected_animal
         animal.training.current_protocol = plan.plan_id
