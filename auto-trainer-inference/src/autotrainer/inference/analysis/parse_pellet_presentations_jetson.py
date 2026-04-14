@@ -197,7 +197,7 @@ def segment_reaches(
     results_dict['reach_events'] = reach_events
     other_events = results_dict['other_events'] = []
     for pellet_event in pellet_events[:-1]:
-        if pellet_event['method'] not in {'right_hand', 'left_hand'}:
+        if pellet_event['method'] not in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}:
             other_events.append(pellet_event)
     return results_dict
 
@@ -309,7 +309,7 @@ def segment_reaches_f2(
             if np.nanmin(Z_dist_p[pellet_event['placed']:end_search]) <= pellet_drop_dist:
                 if debug >= 2:
                     print(f'DROP: Z dist at {get_ln()}')
-                pellet_event['outcome'] = 'dropped'
+                pellet_event['outcome'] = ReachEventOutcome.DROPPED
 
     pellet_dict = {
         'x': pellet_home[0],
@@ -447,7 +447,7 @@ def segment_reaches_f2(
                     if debug >= 2:
                         print('reach ended at frame %d!: NEW REACH' % int(frame-1))
                     reach_dict['end'] = int(frame-1)
-                    reach_dict['outcome'] = 'missed'
+                    reach_dict['outcome'] = ReachEventOutcome.MISSED
                     # reach_events.append(('reachEnd_missed', int(frame-1)))
                     search_status = 1
                     dist_list.append(dist_hvpp_R[max_frm])
