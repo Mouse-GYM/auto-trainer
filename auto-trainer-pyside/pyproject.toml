@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = [
+    "setuptools >= 61",
+    'setuptools-scm >= 9.2.2, < 10',
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -9,12 +12,21 @@ namespaces = true
 
 [project]
 name = "auto-trainer-pyside"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Pyside6 extensions for autotrainer"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = [
-    "PySide6",
-    "pyqtgraph"
+    "auto-trainer-core",
+    "auto-trainer-device",
+    "auto-trainer-inference",
+
+    'PySide6 >= 6.6.3.1, < 7',
+    'pyqtgraph >= 0.13.3, < 1',
+    'QtAwesome >= 1.4.1, < 2',
 ]
 
+[tool.setuptools_scm]
+root = ".."
+write_to = "auto-trainer-pyside/src/autotrainer/pyside/version.txt"
+git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"

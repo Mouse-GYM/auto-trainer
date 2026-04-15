@@ -16,12 +16,9 @@ import time
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
-from autotrainer.api import ApiEventKind, ApiDetectorKind
-
 from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import SystemDataArgsKwargs
-from autotrainer.core import ObservableObject, get_perf_now, EventManager
 
 
 logger = get_verbose_logger(__name__)

@@ -27,6 +27,7 @@ share/python-wheels/
 MANIFEST
 
 /tools/autotrainer_version.txt
+/auto-trainer-*/src/autotrainer/*/version.txt
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
