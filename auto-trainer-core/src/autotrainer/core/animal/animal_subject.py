@@ -88,6 +88,12 @@ class _AnimalSubject:
 
     target_y_limit: Optional[float] = None  # in DCS
 
+    def __post_init__(self):
+        if self.id is None:
+            self.id = str(uuid.uuid4())
+        if not self.name:
+            self.name = f"Mouse-{self.id}"
+
 
 @dataclass
 class AnimalSubject(_AnimalSubject):
@@ -95,12 +101,6 @@ class AnimalSubject(_AnimalSubject):
     def __init__(self, **kwargs):
         kwargs.pop("baseline_magnet_intensity", None)
         super().__init__(**kwargs)
-
-    def __post_init__(self):
-        if self.id is None:
-            self.id = str(uuid.uuid4())
-        if not self.name:
-            self.name = f"Mouse-{self.id}"
 
     def __repr__(self):
         return f"{self.__class__.__name__}(name={self.name!r}, id={self.id!r})"
