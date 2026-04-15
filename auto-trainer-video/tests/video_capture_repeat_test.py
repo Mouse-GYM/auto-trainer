@@ -5,8 +5,8 @@ from multiprocessing import Queue, Value
 
 import pytest
 
-from autotrainer.video import VideoCapture, CaptureCommandKind, CaptureCameraAttrs, CaptureAttrs, \
-    CaptureProcessStatus
+from autotrainer.video import VideoCapture, CaptureCommandKind, CaptureCameraAttrs, CaptureAttrs
+from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.core import clear_queue
 
 logging.basicConfig(level=logging.INFO)
