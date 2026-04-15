@@ -661,7 +661,6 @@ class AppModel(ObservableObject):
                 self.on_error("Notice", "Animal Send Pos reset to 0 due to not fully valid diamond-triangle config")
                 animal.is_pellet_dcs = False
                 animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
-                # self._save_animal_metadata()
             algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
