@@ -308,16 +308,10 @@ class HardwareControlContent(ContentWidget):
                 if not animal.is_pellet_dcs:
                     xyz = cfg.motor_to_diamond(xyz)
 
-        if animal is None:
-            baseline_magnet_intensity = 0
-        else:
-            baseline_magnet_intensity = animal.baseline_magnet_intensity
-
         for widget, value in (
             (self._x_pos, xyz.x),
             (self._y_pos, xyz.y),
             (self._z_pos, xyz.z),
-            (self._head_magnet_position_spinbox, baseline_magnet_intensity)
         ):
             assert isinstance(widget, (QDoubleSpinBox, QSpinBox))
             widget.blockSignals(True)

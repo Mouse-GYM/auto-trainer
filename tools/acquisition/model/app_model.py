@@ -661,7 +661,6 @@ class AppModel(ObservableObject):
                 self.on_error("Notice", "Animal Send Pos reset to 0 due to not fully valid diamond-triangle config")
                 animal.is_pellet_dcs = False
                 animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
-            algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
@@ -1491,7 +1490,6 @@ class AppModel(ObservableObject):
         if not hardware.connected:
             logger.notice("Not setting animal base positions on hardware given not connected (yet?)")
         else:
-            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
             hardware.set_x(xyz.x)
             hardware.set_y(xyz.y)
             hardware.set_z(xyz.z)
@@ -1526,15 +1524,7 @@ class AppModel(ObservableObject):
         props = BehaviorAlgoProps
         animal = self._selected_animal
         #
-        if name == props.BASELINE_INTENSITY:
-            if animal is None:
-                return
-            prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
-            # not anymore:
-            # if value != prev:
-            #     self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
-
-        elif name == props.DIAMOND_TRIANGLE_CONFIG:
+        if name == props.DIAMOND_TRIANGLE_CONFIG:
             self._hardware.set_diamond_triangle_config(value)
 
         elif name == props.PELLET_SHIFT_Y_LIMIT:
