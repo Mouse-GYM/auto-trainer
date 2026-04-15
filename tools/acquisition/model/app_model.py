@@ -1530,8 +1530,9 @@ class AppModel(ObservableObject):
             if animal is None:
                 return
             prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
-            if value != prev:
-                self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
+            # not anymore:
+            # if value != prev:
+            #     self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
 
         elif name == props.DIAMOND_TRIANGLE_CONFIG:
             self._hardware.set_diamond_triangle_config(value)
