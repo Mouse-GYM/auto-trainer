@@ -1847,10 +1847,12 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            return self._behavior.emergency_stop(source="RpcService")
+            self._behavior.emergency_stop(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            return self._behavior.emergency_resume(source="RpcService")
+            self._behavior.emergency_resume(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.USER_DEFINED:
             logger.verbose("TODO")
@@ -1984,27 +1986,26 @@ class AppModel(ObservableObject):
 
     #
 
-    def _on_emergency_handle(self, source, command):
+    def _on_emergency_handle(self, source: str, kind: ApiEventKind):
+        assert kind in {ApiEventKind.emergencyStop, ApiEventKind.emergencyResume}
         rpc = self._rpc_service
         if rpc is None:
             return
-        message = ApiCommandRequestResponse(
-            result=ApiCommandRequestResult.SUCCESS,
-            command=command,
-            data=dict(reason=source),
+        msg = dict(
+            kind=kind,
+            reason=source,
         )
-        dct = dataclasses.asdict(message)
-        logger.verbose("RPC: sending %s", dct)
-        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
+        logger.verbose("RPC: sending %s", msg)
+        rpc.send_dict(ApiTopic.EMERGENCY, message=msg)
 
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_STOP)
+        self._on_emergency_handle(source, ApiEventKind.emergencyStop)
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)
+        self._on_emergency_handle(source, ApiEventKind.emergencyResume)
 
     # pellet machine events
 
