@@ -237,12 +237,18 @@ class _BehaviorConfiguration:
         return configuration
 
     @classmethod
-    def from_version_one(cls, content):
+    def from_version_one(cls, content: Dict):
+        headclamp = content.get("head_clamp", {})
+        headclamp.pop('max_baseline_intensity')
+        headclamp.pop('baseline_intensity_increment')
+        baseline = headclamp.pop('min_baseline_intensity')
+        if baseline is not None:
+            headclamp['baseline_intensity'] = baseline
         return cls(
             load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),
             headbar_pressure=HeadbarPressureConfiguration(**content.get("headbar_pressure", {})),
             auto_tare=LoadCellAutoTareConfiguration(**content.get("auto_tare", {})),
-            head_clamp=HeadClampConfiguration(**content.get("head_clamp", {})),
+            head_clamp=HeadClampConfiguration(**headclamp),
             pellet_delivery=PelletDeliveryConfiguration(**content.get("pellet_delivery", {})),
         )
 
