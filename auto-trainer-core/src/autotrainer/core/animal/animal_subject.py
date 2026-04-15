@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type
 from typing_extensions import Self
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger
@@ -88,6 +88,14 @@ class _AnimalSubject:
 
     target_y_limit: Optional[float] = None  # in DCS
 
+
+@dataclass
+class AnimalSubject(_AnimalSubject):
+
+    def __init__(self, **kwargs):
+        kwargs.pop("baseline_magnet_intensity", None)
+        super().__init__(**kwargs)
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
@@ -98,7 +106,7 @@ class _AnimalSubject:
         return f"{self.__class__.__name__}(name={self.name!r}, id={self.id!r})"
 
     @classmethod
-    def from_file(cls, file_path: Path) -> Optional[Self]:
+    def from_file(cls: Type[Self], file_path: Path) -> Optional[Self]:
         with file_path.open("r") as file:
             try:
                 data = json.load(file)
@@ -198,11 +206,3 @@ class _AnimalSubject:
             self.pellet_counts_day = AnimalPelletCounts()
             return True
         return False
-
-
-@dataclass
-class AnimalSubject(_AnimalSubject):
-
-    def __init__(self, **kwargs):
-        kwargs.pop('baseline_magnet_intensity', None)
-        super().__init__(**kwargs)
