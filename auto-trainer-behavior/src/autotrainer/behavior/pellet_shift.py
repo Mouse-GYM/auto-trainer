@@ -206,12 +206,13 @@ class ShiftXYZHandler(ObservableObject):
             return
 
         tongue_eaten = False
-        for evt in trial_result.other_events:
-            if evt.outcome == ReachEventOutcome.EATEN and evt.method == ReachEventMethod.TONGUE:
-                tongue_eaten = True
-                if is_batch:
-                    self._batch_has_tongue_eaten = True
-                break
+        if cfg.use_tongue_eaten:  # only check when enabled
+            for evt in trial_result.other_events:
+                if evt.outcome == ReachEventOutcome.EATEN and evt.method == ReachEventMethod.TONGUE:
+                    tongue_eaten = True
+                    if is_batch:
+                        self._batch_has_tongue_eaten = True
+                    break
 
         handler = self._result_handler
 
@@ -219,7 +220,7 @@ class ShiftXYZHandler(ObservableObject):
             # "normal" case
             trial_shift = handler.make_shift_from_rh_list(trial_result.rh_max_vp_list,
                                                           reduce_method=reduce_method)
-            if cfg.use_buffer:
+            if cfg.use_reach_buffer:
                 processed_shift = handler(trial_result, reduce_method=reduce_method)
             else:
                 processed_shift = None

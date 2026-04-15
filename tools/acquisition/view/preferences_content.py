@@ -318,6 +318,7 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
         #
+        shift_xyz_cfg = algo.active_config.shift_xyz_handler
         left_grid_layout.addWidget(QLabel("<b>Intertrial Pellet Shift:</b>"), cur_row, cur_col)
         toggle = self._intersession_pellet_shift_toggle = QSwitch()
         toggle.setToolTip("Enables adjustment of the pellet delivery position based on post trial reach analysis.")
@@ -333,11 +334,12 @@ class PreferencesContent(QWidget):
 
         left_grid_layout.addWidget(QLabel("Use Minimum Reach Fail"), cur_row, cur_col)
         toggle = self._use_minimum_reach_fail_toggle = QSwitch()
+        toggle.setChecked(shift_xyz_cfg.use_reach_buffer)
         add_enabled_state(lambda t=toggle: t.setEnabled(
             self._intersession_pellet_shift_toggle.isChecked() and self._inference_enabled_toggle.isChecked()))
         def use_minimum_reach_fail_changed(x: int):
             enabled = x != 0
-            algo.active_config.shift_xyz_handler.use_buffer = enabled
+            algo.active_config.shift_xyz_handler.use_reach_buffer = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(use_minimum_reach_fail_changed)
         left_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -360,6 +362,7 @@ class PreferencesContent(QWidget):
 
         left_grid_layout.addWidget(QLabel("Use Tongue Eaten"), cur_row, cur_col)
         toggle = QSwitch()
+        toggle.setChecked(shift_xyz_cfg.use_tongue_eaten)
         add_enabled_state(
             lambda t=toggle: t.setEnabled(
                 self._intersession_pellet_shift_toggle.isChecked()
