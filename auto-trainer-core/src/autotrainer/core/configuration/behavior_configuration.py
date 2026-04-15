@@ -58,8 +58,11 @@ class ShiftXYZBufferHandlerConfig(_ShiftXYZBufferHandlerConfig):
 
 @dataclasses.dataclass
 class ShiftXYZHandlerConfig:
+
+    use_tongue_eaten: bool = True
     tongue_eaten_shift: Offset3DTuple = field(default_factory=default_tongue_eaten_shift)
 
+    use_reach_buffer: bool = True
     selected: str = "ShiftXYZBufferHandler"
     buffer: ShiftXYZBufferHandlerConfig = field(default_factory=ShiftXYZBufferHandlerConfig)
 
