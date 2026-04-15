@@ -8,7 +8,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import CoverServoStatus, BehaviorAlgoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 
 
 @pytest.fixture

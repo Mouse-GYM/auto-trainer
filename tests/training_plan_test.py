@@ -19,7 +19,7 @@ from autotrainer.core.configuration.behavior_configuration import ShiftXYZBuffer
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntersessionResponse
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel

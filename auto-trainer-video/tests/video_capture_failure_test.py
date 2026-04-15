@@ -1,7 +1,8 @@
 import time
 from multiprocessing import Queue, Value, Array
 
-from autotrainer.video import CaptureCameraAttrs, CaptureAttrs, VideoCapture, CaptureProcessStatus
+from autotrainer.video import CaptureCameraAttrs, CaptureAttrs, VideoCapture
+from autotrainer.core.capture import CaptureProcessStatus
 
 
 def wait_for_status(status: Value, expected: CaptureProcessStatus, timeout: int):

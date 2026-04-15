@@ -22,7 +22,7 @@ from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
 from autotrainer.inference.analysis import IntersessionResponse
 
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
