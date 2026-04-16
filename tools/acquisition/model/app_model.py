@@ -1837,10 +1837,12 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            return self._behavior.emergency_stop(source="RpcService")
+            self._behavior.emergency_stop(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            return self._behavior.emergency_resume(source="RpcService")
+            self._behavior.emergency_resume(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.USER_DEFINED:
             logger.verbose("TODO")
@@ -1974,27 +1976,12 @@ class AppModel(ObservableObject):
 
     #
 
-    def _on_emergency_handle(self, source, command):
-        rpc = self._rpc_service
-        if rpc is None:
-            return
-        message = ApiCommandRequestResponse(
-            result=ApiCommandRequestResult.SUCCESS,
-            command=command,
-            data=dict(reason=source),
-        )
-        dct = dataclasses.asdict(message)
-        logger.verbose("RPC: sending %s", dct)
-        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
-
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_STOP)
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)
 
     # pellet machine events
 
