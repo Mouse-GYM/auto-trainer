@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type
 from typing_extensions import Self
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger
@@ -22,8 +22,6 @@ def _load_old_format(data: Dict[str, Any]) -> "AnimalSubject":
     kw = {}
     if "name" in data:
         kw['name'] = data["name"]
-    if "baseline_magnet_intensity" in data:
-        kw['baseline_magnet_intensity'] = data["baseline_magnet_intensity"]
     animal = AnimalSubject(**kw)
     if "pellet_x" in data and "pellet_y" in data and "pellet_z" in data:
         animal.pellet_x = data["pellet_x"]
@@ -69,15 +67,13 @@ class AnimalPelletCounts:
 
 
 @dataclass
-class AnimalSubject:
+class _AnimalSubject:
     """A subject in an animal experiment."""
 
-    version: int = 1
+    version: int = 2
 
     name: str = ""
     id: str = None   # handled in post_init
-
-    baseline_magnet_intensity: float = 0  # % unit
 
     is_pellet_dcs: bool = False
     pellet_x: float = 0
@@ -98,12 +94,19 @@ class AnimalSubject:
         if not self.name:
             self.name = f"Mouse-{self.id}"
 
+
+@dataclass
+class AnimalSubject(_AnimalSubject):
+
+    def __init__(self, **kwargs):
+        kwargs.pop("baseline_magnet_intensity", None)
+        super().__init__(**kwargs)
+
     def __repr__(self):
         return f"{self.__class__.__name__}(name={self.name!r}, id={self.id!r})"
 
     @classmethod
-    def from_file(cls, file_path: Path) -> Optional[Self]:
-        animal = cls()
+    def from_file(cls: Type[Self], file_path: Path) -> Optional[Self]:
         with file_path.open("r") as file:
             try:
                 data = json.load(file)
@@ -121,7 +124,6 @@ class AnimalSubject:
                     animal = _load_old_format(data)
                 else:
                     reach = data.pop('reach')
-                    baseline_intensity = reach.pop('baselineMagnetIntensity')
                     pellet_dev = reach.pop('pelletDevice', None)
                     pellet_dcs = reach.pop('pelletDcs', None)
                     if pellet_dcs is None:
@@ -132,15 +134,14 @@ class AnimalSubject:
                     training = data.pop('training')
                     pellet_counts_day_dct = data.pop("pelletCountsDay", {})
                     pellet_counts_total_dct = data.pop("pelletCountsTotal", {})
-                    count_day_date_str = data.pop('pelletCountsDayDate', None)
+                    count_day_date_str: Optional[str] = data.pop('pelletCountsDayDate', None)
                     if count_day_date_str is None:
                         pellet_counts_day_date = datetime.date.today()
                     else:
                         pellet_counts_day_date = datetime.datetime.strptime(count_day_date_str, _date_format).date()
-                    animal = AnimalSubject(
+                    animal = cls(
                         id=data.pop('id'),
                         name=data.pop('name'),
-                        baseline_magnet_intensity=baseline_intensity,
                         is_pellet_dcs=pellet_dcs is not None,
                         target_y_limit=data.pop('targetYLimit', None),
                         pellet_x=pellet_x,
@@ -166,9 +167,7 @@ class AnimalSubject:
         return animal
 
     def to_file(self, file_path: Path):
-        reach: Dict[str, Any] = {
-            "baselineMagnetIntensity": self.baseline_magnet_intensity,
-        }
+        reach: Dict[str, Any] = {}
         key = "pelletDcs" if self.is_pellet_dcs else "pelletDevice"
         reach[key] = {
             'x': self.pellet_x,

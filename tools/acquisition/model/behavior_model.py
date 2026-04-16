@@ -180,8 +180,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         # todo: try have intersession stop "normally" too
 
     def use_current_head_magnet_position_as_baseline(self):
-        if self._hardware_model.head_magnet_intensity is not None:
-            self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
+        head_magnet_intensity = self._hardware_model.head_magnet_intensity
+        if head_magnet_intensity is not None:
+            self._system_machine.algorithm.baseline_intensity = head_magnet_intensity
 
     @property
     def source_emergency(self) -> Optional[str]:

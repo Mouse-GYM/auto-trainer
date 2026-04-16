@@ -260,7 +260,7 @@ class BehaviorAlgorithm(ObservableObject):
 
         # now using self._active_config.head_clamp mainly,
         # and also:
-        self._baseline_intensity = self._active_config.head_clamp.min_baseline_intensity
+        self._baseline_intensity = self._active_config.head_clamp.baseline_intensity
 
         # NB: not saved in config:
         self._recording_age_release_pellet_threshold = 0.25
