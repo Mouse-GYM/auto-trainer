@@ -8,20 +8,18 @@ import time
 import signal
 from dataclasses import dataclass
 from enum import IntEnum
-from multiprocessing import Process, Value, Array, synchronize
-from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedBase
-from typing import Callable, Dict, Union, Optional, List, Tuple, Any
+from multiprocessing import Process
+from multiprocessing.sharedctypes import Synchronized, SynchronizedArray
+from typing import Callable, Dict, Union, Optional, List, Tuple
 
 import numpy
-import verboselogs
-from typing_extensions import Any
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
-from autotrainer.core.logging import get_verbose_logger, set_logger_level, get_multiprocess_log_queue, \
-    make_log_dict_config, thread_id_filter, setup_logging, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, set_logger_level, make_log_dict_config, setup_logging, install_log_exception_hook
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.video_detection import PresenceDetectionAttrs, VideoDetection
+from autotrainer.core.capture import CaptureProcessStatus
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
@@ -49,28 +47,6 @@ class CaptureCommandKind(IntEnum):
 
     SET_LOGGER_LEVEL = 6
     """Set a logger log level"""
-
-
-class CaptureProcessStatus(IntEnum):
-    """Valid VideoCaptureProcess states available through the status Value"""
-
-    TERMINATED = -2
-    """The capture loop is terminated"""
-
-    FAILED = -1
-    """Failed to configure or run process"""
-
-    UNKNOWN = 0
-    """Uninitialized value not yet set by capture process"""
-
-    INITIALIZED = 1
-    """The process is created, but not started"""
-
-    RUNNING = 2
-    """The process is running the capture loop"""
-
-    RECORDING = 3
-    """The process is recording the stream to disk"""
 
 
 @dataclass

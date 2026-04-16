@@ -45,7 +45,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
@@ -1986,26 +1986,12 @@ class AppModel(ObservableObject):
 
     #
 
-    def _on_emergency_handle(self, source: str, kind: ApiEventKind):
-        assert kind in {ApiEventKind.emergencyStop, ApiEventKind.emergencyResume}
-        rpc = self._rpc_service
-        if rpc is None:
-            return
-        msg = dict(
-            kind=kind,
-            reason=source,
-        )
-        logger.verbose("RPC: sending %s", msg)
-        rpc.send_dict(ApiTopic.EMERGENCY, message=msg)
-
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._on_emergency_handle(source, ApiEventKind.emergencyStop)
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
-        self._on_emergency_handle(source, ApiEventKind.emergencyResume)
 
     # pellet machine events
 
