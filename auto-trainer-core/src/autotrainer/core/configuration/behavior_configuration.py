@@ -145,9 +145,8 @@ class HeadClampConfiguration:
     """
     Behavior model options related to the head clamp magnet including standard intensity and auto-clamp actions.
     """
-    min_baseline_intensity: float = 0.0
-    max_baseline_intensity: float = 90.0
-    baseline_intensity_increment: float = 10.0
+
+    baseline_intensity: float = 0.0
     auto_clamp_intensity: float = 100.0
     auto_clamp_release_tone_freq: int = 7000
     auto_clamp_release_tone_delay: float = 0.1
@@ -241,12 +240,18 @@ class _BehaviorConfiguration:
         return configuration
 
     @classmethod
-    def from_version_one(cls, content):
+    def from_version_one(cls, content: Dict):
+        headclamp = content.get("head_clamp", {})
+        headclamp.pop('max_baseline_intensity')
+        headclamp.pop('baseline_intensity_increment')
+        baseline = headclamp.pop('min_baseline_intensity')
+        if baseline is not None:
+            headclamp['baseline_intensity'] = baseline
         return cls(
             load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),
             headbar_pressure=HeadbarPressureConfiguration(**content.get("headbar_pressure", {})),
             auto_tare=LoadCellAutoTareConfiguration(**content.get("auto_tare", {})),
-            head_clamp=HeadClampConfiguration(**content.get("head_clamp", {})),
+            head_clamp=HeadClampConfiguration(**headclamp),
             pellet_delivery=PelletDeliveryConfiguration(**content.get("pellet_delivery", {})),
         )
 
