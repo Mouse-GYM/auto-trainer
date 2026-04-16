@@ -19,7 +19,8 @@ from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
-    VideoReader, CaptureCommandKind, CaptureProcessStatus, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
+    VideoReader, CaptureCommandKind, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs
+from autotrainer.core.capture import CaptureProcessStatus
 
 from tools.acquisition.model.user_preferences import UserPreferences
 

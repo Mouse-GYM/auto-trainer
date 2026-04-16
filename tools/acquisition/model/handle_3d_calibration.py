@@ -7,7 +7,8 @@ from pathlib import Path
 from autotrainer.core import Offset3DTuple, get_verbose_logger, ProjectInterval
 from autotrainer.inference import calibration_FLIR
 from autotrainer.pyside.content_widget import InvokeMethod
-from autotrainer.video import VideoRecordMode, CaptureProcessStatus
+from autotrainer.video import VideoRecordMode
+from autotrainer.core.capture import CaptureProcessStatus
 
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.video_capture_model import VideoCaptureModel

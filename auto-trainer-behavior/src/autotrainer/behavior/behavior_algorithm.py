@@ -29,8 +29,7 @@ from autotrainer.core.configuration.behavior_configuration import PelletDelivery
 from autotrainer.core import ApiEventKind as BehaviorEventKind
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
-
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 
 from . import CaptureAnalysisResult, RecordingEndingReason
 

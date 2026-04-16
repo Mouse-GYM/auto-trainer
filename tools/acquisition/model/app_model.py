@@ -45,7 +45,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
