@@ -7,7 +7,7 @@ from typing_extensions import Self
 import numpy
 
 from ..observable_object import ObservableObject
-from ..event import EventManager, ApiEventKind
+from ..event import EventManager, ApiEventKind, post_api_event_content
 
 
 @dataclass
@@ -132,9 +132,10 @@ class HeadbarPressureMonitor(ObservableObject):
         prev_engaged = self._is_engaged
         self.is_engaged = is_engaged
         if is_engaged != prev_engaged:
-            EventManager.default().post_event_content(ApiEventKind.headbarPressureEngagedChanged,
-                                                      context=self._is_engaged,
-                                                      when=datetime.fromtimestamp(when), index=index)
+            EventManager.default().post_event_content(
+                ApiEventKind.headbarPressureEngagedChanged,
+                data=dict(is_engaged=is_engaged),
+                when=datetime.fromtimestamp(when), index=index)
         return is_engaged
 
     def _rebuild_buffers(self):

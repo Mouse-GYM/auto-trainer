@@ -4,8 +4,8 @@ from typing import Callable, Optional, get_type_hints
 
 from transitions import Machine
 
-from autotrainer.core import ProjectInfo, EventManager, transitions_allow_functions
-from autotrainer.core import ApiEventKind as BehaviorEventKind
+from autotrainer.core import ProjectInfo, transitions_allow_functions
+from autotrainer.core import ApiEventKind
 
 from . import IntersessionState
 from .. import CaptureAnalysisResult
@@ -77,8 +77,7 @@ class IntersessionMachine(StateMachine):
             self.end_analysis(False)
         else:
             self.events.on_analysis_started()
-            self.post_event_content(BehaviorEventKind.intersessionSegmentationBegin,
-                                    context=segment_config.nonce)
+            self.post_event_content(ApiEventKind.intertrialSegmentationBegin)
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
         detection_config = DetectionConfiguration(
@@ -91,7 +90,7 @@ class IntersessionMachine(StateMachine):
         res = self._inference.perform_detection(detection_config)
         if res is not None:
             self._detection_configuration = detection_config
-            self.post_event_content(BehaviorEventKind.intersessionDetectionBegin, context=segment_config.nonce)
+            self.post_event_content(ApiEventKind.intertrialDetectionBegin)
 
     def after_end_analysis(self, success):
         seg_cfg = self._segmentation_configuration
@@ -114,10 +113,8 @@ class IntersessionMachine(StateMachine):
         p = project_info is not None
         i = self._inference is not None
         s = self._segmentation_configuration is None
-        self.post_event_content(BehaviorEventKind.intersessionSegmentationCan, context=f"{p}:{i}:{s}")
         res = p and i and s
-        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s",
-                     res, p, i, s)
+        logger.debug("can_perform_segmentation=%s: prj=%s inference=%s segment=%s", res, p, i, s)
         return res
 
     def can_perform_detection(self, segment_config: SegmentationConfiguration):
@@ -125,53 +122,54 @@ class IntersessionMachine(StateMachine):
         p = segment_config.project is not None  # always true
         i = self._inference is not None
         d = self._detection_configuration is None
-        self.post_event_content(BehaviorEventKind.intersessionDetectionCan,
-                                                  context=f"{p}:{i}:{d}:{s}")
         can_do_detection = p and i and d and s
         logger.debug("can_perform_detection=%s ; prj=%s inference=%s detection_config=%s segment_config=%s",
                     can_do_detection, p, i, d, s)
         return can_do_detection
 
-    def _segmentation_complete(self, nonce: str, success: bool, *, segment_config: SegmentationConfiguration):
+    def _segmentation_complete(self, nonce: str, success: bool, *,
+                               segment_config: SegmentationConfiguration, error: str="NA"):
         logger.verbose("segmentation_complete: nonce=%s success=%s config=%s",
                      nonce, success, segment_config)
         if segment_config.nonce != nonce:
             # NB: should not happen anymore
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
                          nonce, segment_config, success)
-            self.post_event_content(BehaviorEventKind.intersessionSegmentationNonceMismatch,
-                                                      context=f"{segment_config.nonce}:{nonce}")
             self.end_analysis(False)
+            self.post_event_content(
+                ApiEventKind.intertrialSegmentationError, data=dict(error="mismatched nonce")
+            )
         else:
             if success:
-                self.post_event_content(BehaviorEventKind.intersessionSegmentationEnd)
+                self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
                 if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                     self.perform_detection(segment_config)
                 else:
                     self.end_analysis(False)
             else:
                 logger.error("perform segmentation failed. config=%s", segment_config)
-                self.post_event_content(BehaviorEventKind.intersessionSegmentationError)
+                # TODO: pass error from caller
+                self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
                 self.end_analysis(False)
 
         self._segmentation_configuration = None
 
-    def _detection_complete(self, nonce: str, success: bool, *, detection_config: DetectionConfiguration):
+    def _detection_complete(self, nonce: str, success: bool, *,
+                            detection_config: DetectionConfiguration, error: str="NA"):
         if detection_config.nonce != nonce:
             # NB: should never happen anymore
             logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
                          nonce, detection_config, success)
-            self.post_event_content(BehaviorEventKind.intersessionDetectionNonceMismatch,
-                                                      context=f"{detection_config.nonce}:{nonce}")
             self.end_analysis(False)
+            self.post_event_content(
+                ApiEventKind.intertrialDetectionError, data=dict(error="mismatched nonce")
+            )
         else:
             if not success:
                 logger.error("perform detection failed. det_config=%s", detection_config)
-                self.post_event_content(BehaviorEventKind.intersessionDetectionError)
+                self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
             else:
-                self.post_event_content(
-                    BehaviorEventKind.intersessionDetectionEnd,
-                    context=f"nonce={detection_config.nonce};session_index={detection_config.session_index}")
+                self.post_event_content(ApiEventKind.intertrialDetectionEnd)
 
             self.end_analysis(success)
 

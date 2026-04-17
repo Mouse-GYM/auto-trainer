@@ -213,12 +213,14 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 project_info, perf_c_start_offline, pose_algo, range_cams,
                 ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
             )
-            success = True
         except Exception as err:
             logger.exception("Error during intersession_inference: %s", err)
             success = False
-            shape = None
-        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, shape=shape)
+            error = str(err)
+        else:
+            success = True
+            error = None
+        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, error=error)
 
     def _intersession_offline_process2(
         self,

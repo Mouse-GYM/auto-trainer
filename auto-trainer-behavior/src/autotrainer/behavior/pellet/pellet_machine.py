@@ -4,14 +4,13 @@ from typing import Callable, Optional, get_type_hints, Protocol
 
 from transitions import Machine
 
-from autotrainer.core import EventManager, transitions_allow_functions, SystemMessageHandler, get_perf_now
-from autotrainer.core import ApiEventKind as BehaviorEventKind
-from autotrainer.core.multiproc import no_op_timer
+from autotrainer.api import ApiEventKind
+
+from autotrainer.core import transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 from ..intersession import IntersessionState
-from .. import RecordingEndingReason
-from ..behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoStatus
+from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
@@ -74,7 +73,12 @@ class PelletMachine(StateMachine):
         self._consecutive_failed_load = 0
         self._load_retract_current_count = 0  # for auto-home when count >= threshold
         self._api_status_token = None
-        self._api_status_token_pellet_send = None
+        self._token_pellet_send = None
+        self._token_pellet_load = None
+        self._token_move_retract = None
+        self._token_cover_pellet = None
+        self._token_release_pellet = None
+
         self._covered_state: Optional[bool] = None  # False == released ; True == covered ; None == unknown/none
         self._prev_can_cover: Optional[bool] = None
         self._prev_can_release: Optional[bool] = None
@@ -112,21 +116,23 @@ class PelletMachine(StateMachine):
     # transitions
 
     def _before_move_home(self, *, force: bool=False):
-        self._api_status_token = self._pellet_device.send_home()
-        if self._api_status_token is None:
+        token = self._pellet_device.send_home()
+        if token is None:
             raise PelletDeviceCommandFailed
-        self.post_event_content(BehaviorEventKind.pelletHomeBegin, context=self._api_status_token)
+        self._api_status_token = self._token_move_home = token
+        self.post_event_content(ApiEventKind.pelletHomeBegin, data=dict(context=token))
 
     def _before_load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
         del force, use_any_cam  # only used for condition can_load_pellet
         logger.verbose("before_load_pellet")
-        self._api_status_token = self._pellet_device.load_pellet()
-        if self._api_status_token is None:
+        token = self._pellet_device.load_pellet()
+        if token is None:
             raise PelletDeviceCommandFailed
+        self._api_status_token = self._token_pellet_load = token
         self.events.pellet_loading()
         self._prev_pellet_load_perf_c = get_perf_now()
         self._covered_state = None
-        self.post_event_content(BehaviorEventKind.pelletLoadBegin, context=self._api_status_token)
+        self.post_event_content(ApiEventKind.pelletLoadBegin, data=dict(context=token))
         self._load_retract_current_count += 1
 
     def _before_send_pellet(self, *, force: bool=False):
@@ -138,8 +144,10 @@ class PelletMachine(StateMachine):
             logger.notice("Forcing a send_home to reset to limits due to load + retract "
                           "count greater-or-equal than threshold: %s vs %s", self._load_retract_current_count,
                           trigger_count)
+            self._event_manager.post_event_content(ApiEventKind.pelletHomeReset, data=dict(cycles=tot_count))
             self._pellet_device.send_home()
             self._load_retract_current_count = 0
+
         # apply the pellet cover or release here right before sending
         algo = self._algorithm
         # use can_cover which checks for both cover_pellet_enabled AND pellet_delivery_enabled:
@@ -153,30 +161,31 @@ class PelletMachine(StateMachine):
         token = self._pellet_device.send_pellet()
         if token is None:
             raise PelletDeviceCommandFailed
-        self._api_status_token_pellet_send = self._api_status_token = token
+        self._token_pellet_send = self._api_status_token = token
         self._send_begin_perf_c = get_perf_now()
         self.events.pellet_sending()
-        self.post_event_content(BehaviorEventKind.pelletSendBegin, context=token)
+        self.post_event_content(ApiEventKind.pelletSendBegin, data=dict(context=token))
 
     def _before_cover_pellet(self, *, force: bool=False):
-        self._api_status_token = self._pellet_device.cover_pellet()
-        if self._api_status_token is None:
+        token = self._pellet_device.cover_pellet()
+        if token is None:
             raise PelletDeviceCommandFailed
+        self._api_status_token = self._token_cover_pellet = token
         self._covered_state = True
-        self.post_event_content(BehaviorEventKind.pelletCoverBegin, context=self._api_status_token)
+        self.post_event_content(ApiEventKind.pelletCoverBegin, data=dict(context=token))
 
     def _before_release_pellet(self, *, force: bool=False):
-        self._api_status_token = self._pellet_device.release_pellet()
-        if self._api_status_token is None:
+        token = self._pellet_device.release_pellet()
+        if token is None:
             raise PelletDeviceCommandFailed
+        self._api_status_token = self._token_release_pellet = token
         self._covered_state = False
-        self.post_event_content(BehaviorEventKind.pelletReleaseBegin, context=self._api_status_token)
+        self.post_event_content(ApiEventKind.pelletReleaseBegin, data=dict(context=token))
 
     def can_move_home(self, *, force: bool=False):
         can = force or self.can_use_pellet_command()
         if can != self._prev_can_home:
             self._prev_can_home = can
-            self.post_event_content(BehaviorEventKind.pelletHomeCan, context=can)
         return can
 
     def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
@@ -191,7 +200,6 @@ class PelletMachine(StateMachine):
         )
         if can != self._prev_can_load:
             self._prev_can_load = can
-            self.post_event_content(BehaviorEventKind.pelletLoadCan, context=can)
         return can
 
     def can_send_pellet(self, *, force: bool=False):
@@ -200,7 +208,6 @@ class PelletMachine(StateMachine):
         )
         if can != self._prev_can_send:
             self._prev_can_send = can
-            self.post_event_content(BehaviorEventKind.pelletSendCan, context=can)
         return can
 
     def can_cover_pellet(self, *, force: bool=False):
@@ -210,7 +217,6 @@ class PelletMachine(StateMachine):
         )
         if can != self._prev_can_cover:
             self._prev_can_cover = can
-            self.post_event_content(BehaviorEventKind.pelletCoverCan, context=can)
         return can
 
     def can_release_pellet(self, *, force: bool=False):
@@ -220,7 +226,6 @@ class PelletMachine(StateMachine):
         )
         if can != self._prev_can_release:
             self._prev_can_release = can
-            self.post_event_content(BehaviorEventKind.pelletReleaseCan, context=can)
         return can
 
     def can_use_pellet_command(self):
@@ -236,9 +241,11 @@ class PelletMachine(StateMachine):
             if self._covered_state is not True:
                 self.cover_pellet()
                 self._api_status_token = None
-        self._api_status_token = self._pellet_device.send_retract()
-        if self._api_status_token is None:
+        token = self._pellet_device.send_retract()
+        if token is None:
             raise PelletDeviceCommandFailed
+        self._api_status_token = self._token_move_retract = token
+        self.post_event_content(ApiEventKind.pelletRetractBegin, data=dict(context=token))
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -253,19 +260,36 @@ class PelletMachine(StateMachine):
 
         if token != self._api_status_token:
             # External command while we are waiting for our own.  Track in case it is causing conflicts.
-            self.post_event_content(BehaviorEventKind.pelletExternalToken, context=token)
+            # self.post_event_content(ApiEventKind.pelletExternalToken, context=token)
             logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
                          token, self._api_status_token)
             return
 
-        self.post_event_content(BehaviorEventKind.pelletAcknowledgeToken, context=token)
-
         self._api_status_token = None
         perf_now = get_perf_now()
-        if token == self._api_status_token_pellet_send:
+        api_evt = None
+        if token == self._token_pellet_send:
             self._send_end_perf_c = perf_now
-            self._api_status_token_pellet_send = None
+            self._token_pellet_send = None
             self.events.pellet_sent()
+        elif token == self._token_pellet_load:
+            self._token_pellet_load = None
+            api_evt = ApiEventKind.pelletLoadEnd
+        elif token == self._token_cover_pellet:
+            self._token_cover_pellet = None
+            api_evt = ApiEventKind.pelletCoverEnd
+        elif token == self._token_release_pellet:
+            self._token_release_pellet = None
+            api_evt = ApiEventKind.pelletReleaseEnd
+        elif token == self._token_move_retract:
+            self._token_move_retract = None
+            api_evt = ApiEventKind.pelletRetractEnd
+        elif token == self._token_move_home:
+            self._token_move_home = None
+            api_evt = ApiEventKind.pelletHomeEnd
+
+        if api_evt is not None:
+            self.post_event_content(api_evt, data=dict(context=token))
 
         # nb: in live we could bypass this call : it's anyway called with live-inference pellet-seen callback..
         self.environment_changed(
