@@ -626,10 +626,12 @@ class SystemMachine(StateMachine):
         self._event_manager.post_event_content(BehaviorEventKind.headFixationEnabled)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_load_cell_tare_requested(self):
-        if not self._analysis.load_cell_monitor.is_engaged:
+    def _on_load_cell_tare_requested(self, *, force: bool = False):
+        if force or not self._analysis.load_cell_monitor.is_engaged:
             self._tunnel_device.tare_load_cell()
             self._event_manager.post_event_content(BehaviorEventKind.headfixAutoTare)
+        else:
+            logger.notice("skipping tare given load-cell engaged and not forced")
         return False
 
     def _evaluate_home_on_excessive_drift(self):

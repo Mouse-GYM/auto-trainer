@@ -1,7 +1,9 @@
 import copy
 import dataclasses
 import math
-from typing import Callable, Optional, List
+import os
+import time
+from typing import Callable, Optional, List, Protocol
 
 import numpy
 
@@ -13,8 +15,12 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-TareCallbackT = Optional[Callable[[], bool]]
+class TareCallbackT(Protocol):
 
+    def __call__(self, *, force: bool = False) -> bool:
+        """Request a tare if possible, or force it
+        If tare callback returns True: reset_baseline, otherwise: update_baseline
+        """
 
 
 @dataclasses.dataclass
@@ -40,6 +46,10 @@ class LoadCellTareMonitor(BaseDetector):
         self._values: numpy.ndarray
         self._index = 0
         self._reset()
+        # debug:
+        self._next_dbg_log = -math.inf
+        self._last_dbg_log = -math.inf
+        self._cnt_received = 0
 
     def _check_state(self) -> Optional[float]:
         # all handled by .update()
@@ -108,25 +118,33 @@ class LoadCellTareMonitor(BaseDetector):
 
     def load_configuration(self, configuration: LoadCellAutoTareConfiguration):
         self._config = configuration
+        logger.info("got new config: %s", configuration)
         self._reset()
 
     def save_configuration(self) -> LoadCellAutoTareConfiguration:
         return self._config
 
     def update(self, values: List[float]) -> bool:
+        log = self._logger
         new_values = numpy.array(values)
+        t_now = time.perf_counter()
         cur_buff = self._values
         buf_len = len(cur_buff)
-        # replaces NaN by base + threshold, so that if only NaN's get in,
-        # then we'll execute a tare.
-        mask_nan = numpy.ma.array(new_values, mask=numpy.isnan(new_values))
-        cfg = self._config
-        new_values[new_values != mask_nan] = self._baseline + cfg.threshold
         increase = len(new_values)
         if increase > buf_len:
             # only keep most recent in case we get too much:
             new_values = new_values[increase - buf_len:]
             increase = buf_len
+        self._cnt_received += increase
+
+        cfg = self._config
+        # replaces NaN by base + 2 * threshold, so that if only NaN's get in,
+        # NB: using 2 * threshold to be sure to be above it for below comparison against it.
+        # so that if all of them are NaN we'll execute a tare.
+        mask_nan = numpy.ma.array(new_values, mask=numpy.isnan(new_values))
+        is_all_nans = bool(numpy.isnan(new_values).all())
+        has_nans = bool(numpy.isnan(new_values).any())
+        new_values[new_values != mask_nan] = self._baseline + 2 * cfg.threshold
 
         idx = self._index
         off = idx + increase
@@ -143,8 +161,21 @@ class LoadCellTareMonitor(BaseDetector):
         p_now = get_perf_now()
         ptp = float(numpy.ptp(cur_buff))
         low_ptp = ptp <= cfg.range_threshold
+        #
+        if __debug__:
+            if t_now > self._next_dbg_log or has_nans:
+                rcv_per_s = self._cnt_received / (t_now - self._last_dbg_log)
+                log.verbose(
+                    "base=%.1f low_ptp=%s new values: received=%.1f/s cur_values=%s ; buffer=%s",
+                    self._baseline, low_ptp, rcv_per_s, new_values, cur_buff.tolist(),
+                )
+                self._last_dbg_log = t_now
+                self._next_dbg_log = t_now + float(os.getenv("LOADCELL_TARE_DBG_DELAY", 30))
+                self._cnt_received = 0
+
+        #
         if (not ctx.low_variance_engaged and low_ptp) or (ctx.low_variance_engaged and not low_ptp):
-            self._logger.notice("low_variance %sengaged ; ptp=%.1f",
+            log.notice("low_variance %sengaged ; ptp=%.1f",
                                 "" if low_ptp else "dis", ptp)
             with self._lock:
                 ctx.low_variance_engaged = low_ptp
@@ -153,17 +184,24 @@ class LoadCellTareMonitor(BaseDetector):
                 else:
                     ctx.low_variance_disengaged_perf_c = p_now
 
-        if low_ptp and numpy.all(numpy.abs(cur_buff - self._baseline) >= cfg.threshold):
-            tare_cb: Optional[Callable] = self._tare_callback
+        if is_all_nans or (low_ptp and numpy.all(numpy.abs(cur_buff - self._baseline) >= cfg.threshold)):
+            tare_cb = self._tare_callback
             if tare_cb is None:
+                log.debug("no tare callback configured")
                 return False
-            tare_cb: Callable
-            if tare_cb():
-                self._logger.verbose("tare_cb=True -> reset_baseline")
+            tare_cb: TareCallbackT
+            if tare_cb(force=is_all_nans):
+                log.verbose("tare_cb=True -> reset_baseline")
                 self.reset_baseline()
             else:
-                self._logger.verbose("tare_cb=False -> update_baseline")
-                self.update_baseline()
+                if is_all_nans:
+                    self.reset_baseline()
+                    log.verbose("all nans: reset_baseline")
+                else:
+                    self.update_baseline()
+                    log.verbose("tare_cb=False -> update_baseline")
+            # replace all values in current buffer with baseline:
+            self._values[:] = self._baseline
             return True
         return False
 
