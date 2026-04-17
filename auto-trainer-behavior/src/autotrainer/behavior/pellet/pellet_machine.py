@@ -271,19 +271,25 @@ class PelletMachine(StateMachine):
         if token == self._token_pellet_send:
             self._send_end_perf_c = perf_now
             self._token_pellet_send = None
+            api_evt = ApiEventKind.pelletSendEnd
             self.events.pellet_sent()
+
         elif token == self._token_pellet_load:
             self._token_pellet_load = None
             api_evt = ApiEventKind.pelletLoadEnd
+
         elif token == self._token_cover_pellet:
             self._token_cover_pellet = None
             api_evt = ApiEventKind.pelletCoverEnd
+
         elif token == self._token_release_pellet:
             self._token_release_pellet = None
             api_evt = ApiEventKind.pelletReleaseEnd
+
         elif token == self._token_move_retract:
             self._token_move_retract = None
             api_evt = ApiEventKind.pelletRetractEnd
+
         elif token == self._token_move_home:
             self._token_move_home = None
             api_evt = ApiEventKind.pelletHomeEnd
