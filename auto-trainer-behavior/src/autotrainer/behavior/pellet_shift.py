@@ -203,6 +203,8 @@ class ShiftXYZHandler(ObservableObject):
                 self._batch_has_tongue_eaten = False
             if is_last:
                 logger.info("Received last batch trial")
+        else:
+            assert is_first and is_last
 
         send_pos = project.dcs_send_position
         if send_pos is None:
@@ -251,8 +253,9 @@ class ShiftXYZHandler(ObservableObject):
         else:
             trial_shift = processed_shift = None
         #
+        tongue_eaten = tongue_eaten or self._batch_has_tongue_eaten
         if is_last:
-            if tongue_eaten or self._batch_has_tongue_eaten:
+            if tongue_eaten:
                 processed_shift = cfg.tongue_eaten_shift
             if self._batch_has_tongue_eaten:
                 handler.reset()  # always at end of batch
@@ -271,7 +274,7 @@ class ShiftXYZHandler(ObservableObject):
             post_api_event_content(
                 ApiEventKind.intertrialPelletShift,
                 data=dict(
-                    source=ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten or self._batch_has_tongue_eaten
+                    source=ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
                            else ApiPelletShiftSource.REACH_FAILURES,
                     shift=dict(x=processed_shift.x, y=processed_shift.y, z=processed_shift.z),
                     deferred=not is_last,
