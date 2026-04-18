@@ -581,7 +581,7 @@ class AppModel(ObservableObject):
         self._analysis.project_info = project
         self._event_manager.post_event_content(
             ApiEventKind.projectChanged,
-            data=dict(
+            data=None if project is None else dict(
                 root=project.root,
                 device_id=project.device_id,
                 day=project.get_day_path()[1],
