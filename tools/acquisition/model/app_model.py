@@ -258,14 +258,15 @@ class AppModel(ObservableObject):
         # end not sure
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue)
+                                              msg_queue=proc_msg_queue, cam_id=CameraId.Left)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue)
+                                               msg_queue=proc_msg_queue, cam_id=CameraId.Right)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
                                              presence_detection=self._top_camera_presence_detection,
-                                             msg_queue=None)  # not interested to webcam status for now.
+                                             msg_queue=None,  # not interested to webcam status for now.
+                                             cam_id=CameraId.Web)
 
         self._cameras = [  # must respect camera_idx/inference_index order
             self._left_camera,
