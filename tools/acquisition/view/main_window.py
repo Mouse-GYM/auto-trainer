@@ -39,7 +39,7 @@ from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
-from autotrainer.training import TrainingPlan, PlanInfo
+from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult
 
 from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.autotrainer_version import __version__ as app_version
@@ -142,6 +142,7 @@ class MainWindow(QMainWindow):
 
         app_model.on_error += self._show_message
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
+        app_model.training_plan_deserialized += self._on_training_plan_deserialized
 
         try:
             app_model.load_configuration(config_file)
@@ -1558,6 +1559,48 @@ class MainWindow(QMainWindow):
         self.show_reach_event_action.setEnabled(True)
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
+
+    @invoke_method
+    def _on_training_plan_deserialized(self, plan: TrainingPlan, result: LoadProgressResult, *,
+                                       force_update: bool = False):
+        app_model = self._app_model
+        #
+        if result == LoadProgressResult.OUT_OF_DATE:
+            if force_update:  # loop detected
+                app_model.training_plan = None
+                logger.warning("detected training_plan_deserialize loop, result=%s plan=%s", result, plan)
+                return
+            msg = (
+                "This training protocol has been revised since it was last used with this animal.\n"
+                "Progress for this animal for training phases that have changed will be reset for this animal."
+            )
+
+        elif result == LoadProgressResult.UNKNOWN_ERROR:
+            if force_update:
+                app_model.training_plan = None
+                app_model.on_error(
+                    "TrainingPlanDeserializeFatalError",
+                    "There was an unexpected error loading progress for this training protocol with this animal.\n"
+                    "It cannot be used with this animal at this time."
+                )
+                return
+            msg = (
+                "There was an unexpected error loading progress for this training protocol with this animal.\n"
+                "You can reset all progress and attempt to load again."
+            )
+        else:
+            # should be LoadProgressResult.OK
+            if result != LoadProgressResult.OK:
+                logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
+            return
+
+        app_model.training_plan = None
+        rsp = QMessageBox.question(
+            self, "Confirmation", f"\n{msg}\n\nApply or Cancel ?\n",
+            QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Cancel,
+        )
+        if rsp == QMessageBox.StandardButton.Apply:
+            app_model.set_training_plan(plan, force_update=True)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model
