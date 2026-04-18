@@ -259,7 +259,8 @@ class ShiftXYZHandler(ObservableObject):
                 processed_shift = cfg.tongue_eaten_shift
             if self._batch_has_tongue_eaten:
                 handler.reset()  # always at end of batch
-            self._batch_has_tongue_eaten = False  # always
+                self._batch_has_tongue_eaten = False  # always,
+                    # even though not necessary given it's also set to False at batch start.
             new_y_limit = self._new_shift_y_limit
             if new_y_limit is not None:
                 logger.notice("Setting new pellet_shift_y_limit: %s", new_y_limit)
