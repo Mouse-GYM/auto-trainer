@@ -159,10 +159,11 @@ class IntersessionMachine(StateMachine):
             # NB: should never happen anymore
             logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
                          nonce, detection_config, success)
-            self.end_analysis(False)
             self.post_event_content(
-                ApiEventKind.intertrialDetectionError, data=dict(error="mismatched nonce")
+                ApiEventKind.intertrialDetectionError,
+                data=dict(error="mismatched nonce"),
             )
+            self.end_analysis(False)
         else:
             if not success:
                 logger.error("perform detection failed. det_config=%s", detection_config)
