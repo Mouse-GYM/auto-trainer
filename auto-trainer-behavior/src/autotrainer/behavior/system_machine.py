@@ -1,7 +1,4 @@
 import math
-import time
-import dataclasses
-from datetime import datetime
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -9,10 +6,10 @@ from typing import Optional, List
 
 from transitions import Machine
 
-from autotrainer.core import (ProjectInfo, EventManager, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
-                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now,
-                              FrameIndexCategory)
-from autotrainer.core import ApiEventKind as BehaviorEventKind
+from autotrainer.api import ApiEventKind
+
+from autotrainer.core import (ProjectInfo, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
+                              HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
@@ -25,7 +22,7 @@ from autotrainer.core.configuration.behavior_configuration import (
     ShiftXYZHandlerConfig,
 )
 
-from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind, InferenceMonitorDataMsg
+from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntersessionResponse
 
 from . import CaptureAnalysisResult, RecordingEndingReason
@@ -86,6 +83,7 @@ class SystemMachine(StateMachine):
         self._project_info: Optional[ProjectInfo] = project_info
         #
         self._next_shift_xyz_to_apply: Optional[Offset3DTuple] = None
+        self._batch_project_sessions_start_list: List[ProjectInfo] = []
         self._batch_project_sessions_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
         self._batch_project_sessions_finished: int = 0
@@ -232,7 +230,7 @@ class SystemMachine(StateMachine):
         if self._state == SystemState.cage:
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
-        self._event_manager.post_event_content(BehaviorEventKind.tunnelEnter)
+        self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
@@ -245,7 +243,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
         self._disengage_auto_clamp()
-        self._event_manager.post_event_content(BehaviorEventKind.tunnelExit)
+        self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
@@ -278,12 +276,21 @@ class SystemMachine(StateMachine):
 
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
+                self._batch_project_sessions_start_list = batch_list.copy()
                 self._batch_current_trial_index = 0
                 self._batch_failed_count = 0
                 self._batch_project_sessions_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
+                self._event_manager.post_event_content(
+                    ApiEventKind.batchAnalysisStarted, data=dict(count=len(batch_list))
+                )
         else:
+            self._batch_project_sessions_start_list = []
+            if algo.active_config.batch_session_recording.enabled:
+                self._event_manager.post_event_content(
+                    ApiEventKind.batchAnalysisStarted, data=dict(count=1)
+                )
             self._batch_project_sessions_finished = 0
             wait_stop_recorded = True
 
@@ -487,11 +494,12 @@ class SystemMachine(StateMachine):
     def _on_intersession_analysis_ended(self, result: CaptureAnalysisResult):
         logger.verbose("intersession ended: result=%s", result)
         cur_batch = self._batch_project_sessions_list
+        if result == CaptureAnalysisResult.ANALYSIS_FAILED:
+            self._batch_failed_count += 1
+        algo = self._algorithm
         if len(cur_batch) > 0:
             self._batch_project_sessions_finished += 1
             del cur_batch[0]
-            if result == CaptureAnalysisResult.ANALYSIS_FAILED:
-                self._batch_failed_count += 1
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
                 # continue remaining session(s) in batch in all cases
                 self._batch_current_trial_index += 1
@@ -506,7 +514,12 @@ class SystemMachine(StateMachine):
             logger.info("batch analysis ending, failed=%s", self._batch_failed_count)
             # force inference project-info back to current/live one:
             self._inference.project = self._project_info
-            self._algorithm.batch_analysis_ending(failed_count=self._batch_failed_count)
+            algo.batch_analysis_ending(failed_count=self._batch_failed_count)
+
+        if algo.active_config.batch_session_recording.enabled:
+            self._event_manager.post_event_content(
+                ApiEventKind.batchAnalysisEnded,
+                data=dict(failed_count=self._batch_failed_count))
 
         self.exit_intersession()
 
@@ -517,8 +530,8 @@ class SystemMachine(StateMachine):
                            prev_value, new_value, self.state)
             self._consider_enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
 
-    def _on_inference_segmentation_finished(self, project: ProjectInfo, success: bool):
-        logger.verbose("got inference segmentation finished: %s ; prj=%s", success, project)
+    def _on_inference_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
+        logger.verbose("got inference segmentation finished: %s ; err=%s prj=%s", success, error, project)
         inference = self._inference
         cur_batch_list = self._batch_project_sessions_list
         logger.debug("remaining batch trials list size: %s", len(cur_batch_list))
@@ -527,28 +540,23 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_headbar_pressure_monitor_property_changed(self, name: str, value, _):
-        # if self._state == SystemState.intersession:
-        #     logger.info("ignoring headbar pressure property changed while intersession")
-        #     # TODO new need event kind
-        #     # self._event_manager.post_event(BehaviorEventKind.headfixLoadCellChangedInIntersession, context=value)
-        #     # but don't we want this in evaluate_auto_clamp() itself ?
-        #     return
 
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
-            self._event_manager.post_event_content(BehaviorEventKind.headFixationForceDetectorChanged, context=value)
+            self._event_manager.post_event_content(
+                ApiEventKind.headFixationForceDetectorChanged, data=dict(is_enabled=value))
             if value:
                 self._evaluate_auto_clamp(caller="headbar_pressure_on")
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_monitor_property_changed(self, name: str, value, _):
         if self._state == SystemState.intersession:
-            self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChangedInIntersession,
-                                                      context=value)
-            # return
-            # allow following code still, we want it always. it's checking state furthermore.
+            self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedInIntersession,
+                                                   data=dict(is_enabled=value))
 
         if name == LoadCellMonitor.IS_ENGAGED_PROPERTY:
-            self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChanged, context=value)
+            self._event_manager.post_event_content(
+                # really not sure about this "headfixLoadCellEnabledChanged"
+                ApiEventKind.headfixLoadCellEnabledChanged, data=dict(is_enabled=value))
             if value:
                 self._analysis.global_animal_presence_monitor.stop()
                 self._consider_enter_tunnel(reason="load_cell_engaged_when_in_cage")
@@ -565,8 +573,8 @@ class SystemMachine(StateMachine):
                         self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
                         # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
-                    self._event_manager.post_event_content(BehaviorEventKind.headfixLoadCellChangedWrongState,
-                                                              context=self._state)
+                    self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
+                                                           data=dict(is_enabled=self._state))
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _evaluate_auto_clamp(self, *, caller: str="NA"):
@@ -611,6 +619,7 @@ class SystemMachine(StateMachine):
         logger.info("auto-clamp setting position to %s ; caller=%s", intensity, caller)
         self._auto_clamp_in_progress = True
         self._update_magnet_position(intensity)
+        self._event_manager.post_event_content(ApiEventKind.autoClampEngaged, data=dict(intensity=intensity))
         self._disengage_auto_clamp_load_count = 0
         self._timer_auto_clamp_disengage.cancel()  # in case of
         if cfg.release_mode == HeadClampReleaseMode.ACTIVITY:
@@ -623,13 +632,12 @@ class SystemMachine(StateMachine):
                 t_delay, self._disengage_auto_clamp,
             )
             new_timer.start()
-        self._event_manager.post_event_content(BehaviorEventKind.headFixationEnabled)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_tare_requested(self, *, force: bool = False):
         if force or not self._analysis.load_cell_monitor.is_engaged:
             self._tunnel_device.tare_load_cell()
-            self._event_manager.post_event_content(BehaviorEventKind.headfixAutoTare)
+            self._event_manager.post_event_content(ApiEventKind.headfixAutoTare)
         else:
             logger.notice("skipping tare given load-cell engaged and not forced")
         return False
@@ -653,6 +661,8 @@ class SystemMachine(StateMachine):
             return
         logger.notice("Measured motor drift too high (%.1fmm), executing home procedure",
                       drift_dist)
+        self._event_manager.post_event_content(
+            ApiEventKind.pelletDriftReset, data=dict(drift=dict(x=cur_drift.x, y=cur_drift.y, z=cur_drift.z)))
         self._pellet_machine.move_home()
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
@@ -808,6 +818,7 @@ class SystemMachine(StateMachine):
         logger.info("Disengaging auto-clamp to intensity %s", baseline_intensity)
         self._last_disengage_autoclamp_perf_c = get_perf_now()
         self._update_magnet_position(baseline_intensity)
+        self._event_manager.post_event_content(ApiEventKind.autoClampDisengaged, data=dict(intensity=baseline_intensity))
         self._auto_clamp_in_progress = False
         self._auto_clamp_disengage_in_progress = False
 
@@ -818,8 +829,10 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_disengage.cancel()  # also
         pre_duration = clamp_cfg.prerelease_duration
         if pre_duration > 0:
-            logger.verbose("setting head-clamp to pre-release intensity %s", clamp_cfg.prerelease_intensity)
-            self._update_magnet_position(clamp_cfg.prerelease_intensity)
+            intensity = clamp_cfg.prerelease_intensity
+            logger.verbose("setting head-clamp to pre-release intensity %s", intensity)
+            self._update_magnet_position(intensity)
+            self._event_manager.post_event_content(ApiEventKind.autoClampPreDisengage, data=dict(intensity=intensity))
             logger.debug("started timer for really disengage auto-clamp in %.1fs", pre_duration)
             timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
                 pre_duration, self._execute_disengage_auto_clamp_if_in_progress
@@ -847,6 +860,8 @@ class SystemMachine(StateMachine):
             freq = clamp_cfg.auto_clamp_release_tone_freq
             logger.debug("sending tone (freq=%s) to indicate auto-clamp disabled", freq)
             pellet_dev.play_tone(freq, 0.5)
+            self._event_manager.post_event_content(ApiEventKind.autoClampPlayReleaseTone,
+                                                   data=dict(frequency=freq, duration=0.5))
         after_tone_delay = algo.auto_clamp_release_tone_delay
         if after_tone_delay > 0:
             logger.debug(
@@ -996,6 +1011,9 @@ class SystemMachine(StateMachine):
 
     def _on_pellet_sent(self):
         self._consider_start_session(reason="pellet-sent")
+        self._event_manager.post_event_content(
+            ApiEventKind.trialPelletPresented,
+        )
 
     def _consider_enter_tunnel(self, reason: str="NA"):
         if not (
@@ -1094,10 +1112,11 @@ class SystemMachine(StateMachine):
     def _on_detection_result_ready(self, prj: ProjectInfo, res: IntersessionResponse):
         logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
         #
-        if len(self._batch_project_sessions_list) > 0:
+        start_list = self._batch_project_sessions_start_list
+        if len(start_list) > 0:
             is_batch = True
-            is_first = self._batch_current_trial_index == 0
-            is_last = prj == self._batch_project_sessions_list[-1]
+            is_first = prj == start_list[0]
+            is_last = prj == start_list[-1]
         else:
             is_batch = False
             is_first = is_last = True
@@ -1120,10 +1139,14 @@ class SystemMachine(StateMachine):
         #
 
     def _handle_processed_shift_xyz(self, project: ProjectInfo, shift: Offset3DTuple):
-        logger.success("Received processed shift xyz: %s", shift.round(1))
+        logger.success("Received processed shift xyz: %s ; project=%s", shift.round(1), project)
         if len(self._batch_project_sessions_list) > 0:
             self._next_shift_xyz_to_apply = shift
             return
+        if __debug__:
+            start_batch_list = self._batch_project_sessions_start_list
+            if len(start_batch_list) > 0:
+                assert project == start_batch_list[-1]
         self._apply_processed_shift_xyz(shift)
 
     def _apply_processed_shift_xyz(self, shift: Offset3DTuple):
@@ -1139,21 +1162,21 @@ class SystemMachine(StateMachine):
         logger.notice("applying pellet send_position shift: %s", shift.round(1))
         # NB: dev.set_x/y/z is in motor coordinate system,
         # but we want the shifts to be in inference system :
-        for idx, (val, meth, kind) in enumerate((
-            (shift[0], dev.set_x, BehaviorEventKind.intersessionShiftX),
-            (shift[1], dev.set_y, BehaviorEventKind.intersessionShiftY),
-            (shift[2], dev.set_z, BehaviorEventKind.intersessionShiftZ),
+        for idx, (val, meth) in enumerate((
+            (shift[0], dev.set_x),
+            (shift[1], dev.set_y),
+            (shift[2], dev.set_z),
         )):
+            coord = "XYZ"[idx]
             if val != 0:
-                logger.debug("applying %s with shift: %.1f", kind, val)
+                logger.debug("applying shift-%s with: %.1f", coord, val)
                 val *= cfg.flips_motor_diamond[idx]
                 token = meth(val, absolute=False, sender="processed_shift_xyz")
                 if token is None:
-                    logger.error("Could not apply %s ; command not successfully sent", kind)
+                    logger.error("Could not apply shift-%s ; command not successfully sent", coord)
                     # TODO: what todo ?
-                self._event_manager.post_event_content(kind, context=val)
             else:
-                logger.debug("%s == 0 ; skip", kind)
+                logger.debug("%s == 0 ; skip", coord)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Protocol, Any, Optional
 
 
 from autotrainer.core import MotorConfigurations, Offset3DTuple, Motor
@@ -36,9 +36,8 @@ class DeviceConnectionProtocol(Protocol):
     def join(self):
         """Join any of the thread/resources used during the connection"""
 
-    def send_message(self, kind: int, data: object = None, context: object = None):
+    def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a message/command to the command writer handler thread"""
-        raise NotImplementedError
 
     def load_default_motor_config(self):
         default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()

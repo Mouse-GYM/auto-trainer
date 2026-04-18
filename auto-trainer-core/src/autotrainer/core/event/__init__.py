@@ -1,5 +1,5 @@
 
-from typing import Optional
+from typing import Optional, Any
 
 from autotrainer.api.api_event_kind import ApiEventKind
 from autotrainer.api.api_options import create_default_api_options
@@ -16,6 +16,7 @@ logger = get_verbose_logger(__name__)
 __all__ = [
     "ApiEventKind",
     "try_register_api_event_plugin",
+    "post_api_event_content",
     "post_api_detector_event_content",
 ]
 
@@ -40,9 +41,14 @@ def try_register_api_event_plugin() -> Optional[ApiEventPlugin]:
 
     return None
 
+
+def post_api_event_content(kind: int, data: Any):
+    EventManager.default().post_event_content(kind, data=data)
+
+
 def post_api_detector_event_content(manager: EventManager, detector_id: int, active: bool, enabled: bool):
-    manager.post_event_content(ApiEventKind.detectorChanged, context={
-        "detector_id": detector_id,
-        "is_active": active,
-        "is_enabled": enabled,
-    })
+    manager.post_event_content(ApiEventKind.detectorChanged, data=dict(
+        detector_id=detector_id,
+        is_active=active,
+        is_enabled=enabled,
+    ))

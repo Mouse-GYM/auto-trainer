@@ -349,6 +349,10 @@ class MainWindow(QMainWindow):
     ):
         self._timer_calibrate_diamond_triangle.cancel()
         if len(offsets) < 3 or len(diamond_locs3d) < 10:
+            self._post_api_event(
+                ApiEventKind.calibrationDcsFailed,
+                dict(reason="MissingData")
+            )
             self.calib_diamond_triangle_action.setEnabled(False)
             box = QMessageBox()
             box.setWindowTitle("Please")
@@ -407,14 +411,17 @@ class MainWindow(QMainWindow):
             if val >= DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE:
                 noisy = True
         if noisy:
+            self._post_api_event(ApiEventKind.calibrationDcsFailed, dict(reason="NoisyData"))
             rsp = QMessageBox.warning(
-                self, "Confirmation", f"The data is noisy, do you want retry longer ?",
+                self, "Confirmation", "The data is noisy, do you want retry longer ?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if rsp == QMessageBox.StandardButton.Yes:
                 self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
                 self.on_calibrate_diamond_triangle(True)
             return
+        # success
+        self._post_api_event(ApiEventKind.calibrationDcsCompleted)
         app_model = self._app_model
         algo = app_model.behavior.algorithm
         save_path = algo.diamond_triangle_offset_config_path.expanduser()
@@ -489,8 +496,6 @@ class MainWindow(QMainWindow):
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
 
-        self._post_api_event(ApiEventKind.calibrationDcsStarted)
-
         app_model = self._app_model
         prev_status, app_model.status = app_model.status, AppModelStatus.CALIBRATION_DCS
 
@@ -552,7 +557,6 @@ class MainWindow(QMainWindow):
         action.setChecked(False)
         #
         self._diamond_triangle_calib_run = None  # MUST be before
-        self._post_api_event(ApiEventKind.calibrationDcsEnded)
         #
         try:
             self._handle_diamond_triangle_calib_run(
@@ -603,7 +607,6 @@ class MainWindow(QMainWindow):
         result_dir: Path = None
         def handle_3d_calib():
             nonlocal error, result_dir
-            self._post_api_event(ApiEventKind.calibration3dStarted)
             try:
                 result_dir = make_3d_calib(self._app_model)
             except Exception as err:
@@ -620,9 +623,11 @@ class MainWindow(QMainWindow):
             app_model.status = prev_status
             logger.verbose("3d-calib thread joined, error=%s", error)
             if error is not None:
+                self._post_api_event(ApiEventKind.calibration3dFailed, dict(reason=str(error)))
                 QMessageBox.warning(self, "3D calibration failed", f"Error received: {error}",
                                     QMessageBox.StandardButton.Ok)
                 return
+            self._post_api_event(ApiEventKind.calibration3dCompleted)
             backup_path = None
             target_calib_dir = Path(self._preferences.configuration_location).joinpath(DEFAULT_3D_CALIB_DIR_NAME)
             if target_calib_dir.exists():
@@ -655,7 +660,6 @@ class MainWindow(QMainWindow):
 
         def wait_3d_calib_done(thread):
             thread.join()
-            self._post_api_event(ApiEventKind.calibration3dEnded)
             show_result()
 
         executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
