@@ -78,6 +78,7 @@ class PelletMachine(StateMachine):
         self._token_move_retract = None
         self._token_cover_pellet = None
         self._token_release_pellet = None
+        self._token_move_home = None
 
         self._covered_state: Optional[bool] = None  # False == released ; True == covered ; None == unknown/none
         self._prev_can_cover: Optional[bool] = None
