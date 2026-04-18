@@ -135,10 +135,10 @@ class IntersessionMachine(StateMachine):
             # NB: should not happen anymore
             logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
                          nonce, segment_config, success)
-            self.end_analysis(False)
             self.post_event_content(
                 ApiEventKind.intertrialSegmentationError, data=dict(error="mismatched nonce")
             )
+            self.end_analysis(False)
         else:
             if success:
                 self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
@@ -148,7 +148,6 @@ class IntersessionMachine(StateMachine):
                     self.end_analysis(False)
             else:
                 logger.error("perform segmentation failed. config=%s", segment_config)
-                # TODO: pass error from caller
                 self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
                 self.end_analysis(False)
 
