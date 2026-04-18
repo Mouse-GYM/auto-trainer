@@ -1583,7 +1583,7 @@ class MainWindow(QMainWindow):
             if force_update:
                 app_model.training_plan = None
                 app_model.on_error(
-                    "TrainingPlanDeserializeFatalError",
+                    "Error Loading Training Progress",
                     "There was an unexpected error loading progress for this training protocol with this animal.\n"
                     "It cannot be used with this animal at this time."
                 )
@@ -1599,12 +1599,20 @@ class MainWindow(QMainWindow):
             return
 
         app_model.training_plan = None
-        rsp = QMessageBox.question(
-            self, "Confirmation", f"\n{msg}\n\nApply or Cancel ?\n",
-            QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Cancel,
-        )
-        if rsp == QMessageBox.StandardButton.Apply:
+        msg_box = QMessageBox(self)
+        self._add_box_to_open_dialogs(msg_box)
+        msg_box.setWindowTitle("Confirmation")
+        msg_box.setText(f"\n{msg}\n\nLoad or Cancel ?\n")
+        load_btn = msg_box.addButton("Load", QMessageBox.ButtonRole.ActionRole)
+        msg_box.addButton(QMessageBox.StandardButton.Cancel)
+        msg_box.exec()
+        if msg_box.clickedButton() == load_btn:
             app_model.set_training_plan(plan, force_update=True)
+        msg_box.close()
+        try:
+            self._open_dialogs.remove(msg_box)
+        except ValueError:
+            pass
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model
