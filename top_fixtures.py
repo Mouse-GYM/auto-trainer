@@ -1,3 +1,4 @@
+import collections
 import contextlib
 import logging
 import math
@@ -283,6 +284,14 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     return machine
 
 
+class FifoExitStack(contextlib.ExitStack):
+    _exit_callbacks: collections.deque
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._exit_callbacks = collections.deque(reversed(list(self._exit_callbacks)))
+        super().__exit__(exc_type, exc_val, exc_tb)
+
+
 class MockSystemMachine:
     """Allow make test case on a fully prepared 'SystemMachine' instance, with many helper methods included"""
 
@@ -383,25 +392,42 @@ class MockSystemMachine:
         segmentation_ok: bool = True,
         detection_ok: bool = True,
         concurrent_func: Optional[Callable] = None,
+        project: Optional[ProjectInfo] = None,
+        stack: Optional["FifoExitStack"] = None,
     ):
         """Allow fake fully 1 intersession/trial analysis (segmentation+detection)"""
         if results is None:
             results = IntersessionResponse()
         results: IntersessionResponse
-        with contextlib.ExitStack() as stack:
+        if project is None:
+            project = self._machine.project.to_local_value()
+        if stack is None:
+            r_stack = FifoExitStack()
+        else:
+            r_stack = stack
+
+        @contextlib.contextmanager
+        def doit(stack):
             stack.enter_context(self.mock_perform_segmentation())
             logger.info("prepared stack for mock_perform_segmentation")
             yield
-            stack.enter_context(self.mock_perform_detection())
-            logger.info("prepared stack for mock_perform_detection")
+            if segmentation_ok:
+                stack.enter_context(self.mock_perform_detection())
+                logger.info("prepared stack for mock_perform_detection")
             if concurrent_func is not None:
                 concurrent_func()
             self.mock_complete_segmentation(segmentation_ok)
-            if segmentation_ok:
-                self.mock_complete_detection(detection_ok)
             if detection_ok:
                 logger.info("sending detection_result_ready")
-                self.inference.detection_result_ready(self.project, results)
+                self.inference.detection_result_ready(project, results)
+            self.mock_complete_detection(detection_ok)
+        if r_stack is stack:
+            r_stack.enter_context(doit(r_stack))
+            yield
+        else:
+            with r_stack:
+                r_stack.enter_context(doit(r_stack))
+                yield
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):

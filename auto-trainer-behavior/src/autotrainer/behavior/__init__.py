@@ -1,15 +1,23 @@
 import enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Protocol, Optional
 
 from autotrainer.core import ProjectInfo
 
 
 # keeping top level atm, given not quite sure where to put
 
-def _unconfigured_complete_action(once, success):
-    raise RuntimeError("complete attribute unconfigured")
+class CompleteCallbackT(Protocol):
+
+    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+        """Signature of Segmentation/Detection Complete Callback"""
+
+
+class _UnconfiguredCompleteAction:
+
+    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+        raise RuntimeError("complete attribute unconfigured")
 
 
 @dataclass
@@ -18,7 +26,7 @@ class SegmentationConfiguration:
     session_index: int
     session_when: datetime
     project: ProjectInfo
-    complete: Callable[[str, bool], None] = _unconfigured_complete_action
+    complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass
@@ -27,7 +35,7 @@ class DetectionConfiguration:
     session_index: int
     session_when: datetime
     project: ProjectInfo
-    complete: Callable[[str, bool], None] = _unconfigured_complete_action
+    complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass

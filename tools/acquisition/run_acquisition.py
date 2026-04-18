@@ -42,6 +42,7 @@ def run_acquisition(
 
     from autotrainer.model import EnvironmentProvider
 
+    from tools.autotrainer_version import __version__ as app_version
     from tools.acquisition.model.user_preferences import UserPreferences
     from tools.acquisition.args import AutoTrainerParsedArgs
     from tools.acquisition.view.main_window import MainWindow
@@ -100,13 +101,16 @@ def run_acquisition(
         BehaviorAlgorithm.close_algorithm_handler()
         raise
 
-    event_manager.post_event_content(ApiEventKind.applicationLaunched)
+    event_manager.post_event_content(ApiEventKind.applicationLaunched, data=dict(version=app_version))
 
     logger.info("Executing app now ..")
     try:
         return app.exec()
     finally:
+        # could move somewhere in main_window.on_close eventually:
+        event_manager.post_event_content(
+            ApiEventKind.applicationTerminating, dict(reason="exit-requested")
+        )
         logger.verbose("Closing event manager and behavior algo thread handler..")
-        event_manager.post_event_content(ApiEventKind.applicationTerminating)
         event_manager.close()
         BehaviorAlgorithm.close_algorithm_handler()

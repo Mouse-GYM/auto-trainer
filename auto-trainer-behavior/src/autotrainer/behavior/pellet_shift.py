@@ -1,17 +1,21 @@
 import abc
-import os
-import math
-import statistics
 from typing import Callable, Optional, List, Union, Protocol, Any
 
-from autotrainer.behavior import BehaviorAlgorithm, PelletDeviceProtocol
+
+from autotrainer.api import ApiEventKind
+
+from autotrainer.api.api_event_kind import ApiPelletShiftSource
+
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo, \
     mean_method
 from autotrainer.core.configuration.behavior_configuration import (
     ShiftXYZBufferHandlerConfig,
     ShiftXYZHandlerConfig,
 )
+from autotrainer.core.event import post_api_event_content
 from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
+
+from autotrainer.behavior import BehaviorAlgorithm
 
 from autotrainer.inference.analysis import IntersessionResponse
 
@@ -120,7 +124,7 @@ class ShiftXYZHandler(ObservableObject):
         self._last_processed_shift_xyz = Offset3DTuple.get_nan()
         self._batch_has_tongue_eaten = False
         self._new_shift_y_limit: Optional[float] = None
-        self._result_handler: ShiftXYZBufferHandler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
+        self._result_handler: ShiftXYZBaseHandler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
         # set config again, to ensure result_handler will be correct one
         self.set_config(algo.active_config.shift_xyz_handler)
 
@@ -199,6 +203,8 @@ class ShiftXYZHandler(ObservableObject):
                 self._batch_has_tongue_eaten = False
             if is_last:
                 logger.info("Received last batch trial")
+        else:
+            assert is_first and is_last
 
         send_pos = project.dcs_send_position
         if send_pos is None:
@@ -247,10 +253,14 @@ class ShiftXYZHandler(ObservableObject):
         else:
             trial_shift = processed_shift = None
         #
+        tongue_eaten = tongue_eaten or self._batch_has_tongue_eaten
         if is_last:
-            if cfg.use_tongue_eaten and self._batch_has_tongue_eaten:
+            if tongue_eaten:
+                processed_shift = cfg.tongue_eaten_shift
+            if self._batch_has_tongue_eaten:
                 handler.reset()  # always at end of batch
-            self._batch_has_tongue_eaten = False  # always
+                self._batch_has_tongue_eaten = False  # always,
+                    # even though not necessary given it's also set to False at batch start.
             new_y_limit = self._new_shift_y_limit
             if new_y_limit is not None:
                 logger.notice("Setting new pellet_shift_y_limit: %s", new_y_limit)
@@ -262,6 +272,15 @@ class ShiftXYZHandler(ObservableObject):
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
             func = self._processed_shift_handler
+            post_api_event_content(
+                ApiEventKind.intertrialPelletShift,
+                data=dict(
+                    source=ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
+                           else ApiPelletShiftSource.REACH_FAILURES,
+                    shift=dict(x=processed_shift.x, y=processed_shift.y, z=processed_shift.z),
+                    deferred=not is_last,
+                )
+            )
             if func is None:
                 logger.debug("handle_processed_shift_func undefined")
             else:

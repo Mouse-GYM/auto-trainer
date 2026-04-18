@@ -3,15 +3,22 @@ import contextlib
 import logging
 
 import pytest
+from unittest import mock
 
-from autotrainer.behavior import IntersessionState, SystemState
-from top_fixtures import MockSystemMachine
+from autotrainer.behavior import IntersessionState, SystemState, SystemMachine
+from top_fixtures import MockSystemMachine, FifoExitStack
 
 
 class TestBatchAnalysis(MockSystemMachine):
 
     batch_start_count = 0
     batch_len_processed = None
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        def perf_seg(cfg):
+            return cfg
+        self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
 
     def batch_starting(self, batch_len):
         self.batch_start_count += 1
@@ -44,12 +51,12 @@ class TestBatchAnalysis(MockSystemMachine):
         for idx in range(1, max_batch_size + 1):
             algo.update_mouse_seen(True)
             assert machine.intersession.state == IntersessionState.idle
-            with contextlib.ExitStack() as stack:
+            with FifoExitStack() as stack:
                 caplog.clear()
                 stack.enter_context(caplog.at_level(logging.DEBUG))
                 if idx >= max_batch_size:
                     for _ in range(max_batch_size):
-                        stack.enter_context(self.mock_intersession_analysis())
+                        stack.enter_context(self.mock_intersession_analysis(stack=stack))
                 pellet.load_pellet(force=True)
                 if idx >= max_batch_size:
                     assert machine.state == SystemState.intersession
@@ -107,9 +114,9 @@ class TestBatchAnalysis(MockSystemMachine):
 
         expected_batch_len = sessions_count + (1 if last_trial_with_mouse else 0)
 
-        with contextlib.ExitStack() as stack:
+        with FifoExitStack() as stack:
             for _ in range(expected_batch_len):
-                stack.enter_context(self.mock_intersession_analysis())
+                stack.enter_context(self.mock_intersession_analysis(stack=stack))
             stack.enter_context(caplog.at_level(logging.DEBUG))
             self.exit_tunnel()
             assert machine.state == SystemState.intersession

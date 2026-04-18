@@ -4,10 +4,15 @@ import time
 import uuid
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union, Optional
+from typing import Callable, Union, Optional, Any
+
+
+from autotrainer.api import ApiEventKind
+
+from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
+from autotrainer.core.event import post_api_event_content
 
 import autotrainer.device
-from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
 from .can_device import HAVE_CAN_DEVICE
 from .device import Device
 from .device_api import DeviceApi
@@ -127,8 +132,9 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.verbose("disconnecting from %s", dev)
             dev.disconnect()
 
-    def send_message(self, kind: int, data: object = None, context: object = None):
+    def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
+        post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
