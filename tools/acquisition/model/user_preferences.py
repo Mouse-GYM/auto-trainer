@@ -19,6 +19,10 @@ def get_default_configuration_location() -> Path:
     return SystemConfiguration.DEFAULT_CONFIG_DIR.expanduser()
 
 
+def get_default_animals_location(default_config_location: Path) -> Path:
+    return default_config_location.joinpath("animals")
+
+
 _date_format = "%Y%m%d"
 
 
@@ -69,7 +73,10 @@ class UserPreferences(ObservableObject):
             str,
         )
 
-        self._animal_location: str = settings.value("system/animal_location", "")  # noqa
+        self._animal_location: str = settings.value(
+            "system/animal_location",
+            get_default_animals_location(Path(self._configuration_location)).as_posix())  # noqa
+
         self._selected_animal: str = settings.value("system/selected_animal", "")  # noqa
 
         self._log_location: str = settings.value("system/log_location", "")  # noqa
