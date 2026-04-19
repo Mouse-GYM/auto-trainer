@@ -92,3 +92,16 @@ jobs:
             coverage report --include="${include}" || true
             echo
           done
+      - name: Sub-projects
+        run: |
+          set -e
+          set -x
+          pip uninstall auto-trainer -y
+          for sub_prj in $(cat auto_trainer_projects_order.txt)
+          do
+            pushd "${sub_prj}"
+            pip install -e .
+            ln -s ../top_fixtures.py
+            pytest -xvs || true  # TODO: top_fixtures contains everything mixed...
+            popd
+          done

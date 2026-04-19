@@ -23,6 +23,7 @@ import yaml
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
     ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+from autotrainer.api.api_status import ProjectStatus
 from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
@@ -45,7 +46,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
-from autotrainer.video import CaptureProcessStatus
+from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
@@ -573,11 +574,19 @@ class AppModel(ObservableObject):
         return self._project_info
 
     @project.setter
-    def project(self, value: Optional[ProjectInfo]):
-        self._project_info = value
+    def project(self, project: Optional[ProjectInfo]):
+        self._project_info = project
         for model in self._models:
-            model.project = value
-        self._analysis.project_info = value
+            model.project = project
+        self._analysis.project_info = project
+        self._event_manager.post_event_content(
+            ApiEventKind.projectChanged,
+            data=None if project is None else dict(
+                root=project.root,
+                device_id=project.device_id,
+                day=project.get_day_path()[1],
+                session=project.session,
+            ))
 
     @property
     def left_camera(self):
@@ -661,8 +670,6 @@ class AppModel(ObservableObject):
                 self.on_error("Notice", "Animal Send Pos reset to 0 due to not fully valid diamond-triangle config")
                 animal.is_pellet_dcs = False
                 animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
-                # self._save_animal_metadata()
-            algo.baseline_intensity = animal.baseline_magnet_intensity
             algo.reset_selected_animal_counts(animal)
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
@@ -671,6 +678,11 @@ class AppModel(ObservableObject):
                 self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
+        self._event_manager.post_event_content(
+            ApiEventKind.animalSelected,
+            data=dict(animal_id=None if animal is None else animal.id,
+                      properties=None if animal is None else dataclasses.asdict(animal)
+        ))
         logger.success("Switched to animal %s", animal)
 
     @property
@@ -699,7 +711,7 @@ class AppModel(ObservableObject):
                     self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.TRAINING_MODE, mode, prev)
         self._event_manager.post_event_content(
-            ApiEventKind.trainingModeChanged, {'training_mode': mode})
+            ApiEventKind.trainingModeChanged, dict(training_mode=mode))
 
     @property
     def attached_plan(self) -> Optional[TrainingPlan]:
@@ -892,6 +904,10 @@ class AppModel(ObservableObject):
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
             self._save_animal_metadata(animal, sender="add_animal")
+            self._event_manager.post_event_content(
+                ApiEventKind.animalCreated,
+                data=dict(animal_id=animal.id, properties=dataclasses.asdict(animal)),
+            )
 
             # Ensure property change events for listeners
             animals = self._animals
@@ -909,7 +925,7 @@ class AppModel(ObservableObject):
         left = None if self._left_camera is None else self._left_camera.name
         right = None if self._right_camera is None else self._right_camera.name
         return ProjectInfo(
-            root=self.output_location,
+            root=self._output_location,
             device_id=self._preferences.serial_number,
             ensure_exists=True,
             camera_1=left,
@@ -1133,7 +1149,10 @@ class AppModel(ObservableObject):
         self._acquisition_started = True
         self.status = target_status
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
-        self._event_manager.post_event_content(ApiEventKind.acquisitionStarted)
+        self._event_manager.post_event_content(
+            ApiEventKind.applicationModeChanged,
+            dict(mode=app_status_to_api_app_mode(target_status))
+        )
 
         self.check_max_pellet_loaded()
 
@@ -1171,7 +1190,10 @@ class AppModel(ObservableObject):
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans(refresh=True)
-            self._event_manager.post_event_content(ApiEventKind.acquisitionEnded)
+            self._event_manager.post_event_content(
+                ApiEventKind.applicationModeChanged,
+                dict(mode=app_status_to_api_app_mode(AppModelStatus.IDLE))
+            )
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
     def _capture_stop(self):
@@ -1492,7 +1514,6 @@ class AppModel(ObservableObject):
         if not hardware.connected:
             logger.notice("Not setting animal base positions on hardware given not connected (yet?)")
         else:
-            hardware.update_head_magnet_intensity(animal.baseline_magnet_intensity)
             hardware.set_x(xyz.x)
             hardware.set_y(xyz.y)
             hardware.set_z(xyz.z)
@@ -1527,14 +1548,7 @@ class AppModel(ObservableObject):
         props = BehaviorAlgoProps
         animal = self._selected_animal
         #
-        if name == props.BASELINE_INTENSITY:
-            if animal is None:
-                return
-            prev, animal.baseline_magnet_intensity = animal.baseline_magnet_intensity, value
-            if value != prev:
-                self._save_animal_metadata(animal, sender="baseline_magnet_intensity")
-
-        elif name == props.DIAMOND_TRIANGLE_CONFIG:
+        if name == props.DIAMOND_TRIANGLE_CONFIG:
             self._hardware.set_diamond_triangle_config(value)
 
         elif name == props.PELLET_SHIFT_Y_LIMIT:
@@ -1543,6 +1557,11 @@ class AppModel(ObservableObject):
             prev, animal.target_y_limit = animal.target_y_limit, value
             if prev != value:
                 self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
+                self._event_manager.post_event_content(
+                    ApiEventKind.animalUpdated, data=dict(
+                        animal_id=animal.id,
+                        properties=dict(name="target_y_limit", prev=prev, value=value)
+                    ))
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
@@ -1646,15 +1665,15 @@ class AppModel(ObservableObject):
                                  loc3d.humanize(), cfg.diamond_coord.humanize())
 
     def _on_detection_result_ready(self, project: ProjectInfo, result: IntersessionResponse):
-        selected = self._selected_animal
-        if selected is None:
+        animal = self._selected_animal
+        if animal is None:
             return
         # NB: instead of reacting to inference.detection_result_ready event,
         # we could eventually sub-depend on system_machine._on_detection_result_ready cb handler,
         # and simply assign from the behavior algo instance pellets counts .. to be sure to be in sync with it.
-        day_changed = selected.check_today_date()  # 1st
-        day_counts = selected.pellet_counts_day
-        total_counts = selected.pellet_counts_total
+        day_changed = animal.check_today_date()  # 1st
+        day_counts = animal.pellet_counts_day
+        total_counts = animal.pellet_counts_total
         #
         # NB2: presented count is handled via pellet-sent event.
         day_counts.success_reaches += result.successful_reaches
@@ -1664,7 +1683,15 @@ class AppModel(ObservableObject):
         day_counts.reaches += result.total_reaches
         total_counts.reaches += result.total_reaches
         if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
-            self._save_animal_metadata(selected, sender="detection_result_ready")
+            self._save_animal_metadata(animal, sender="detection_result_ready")
+            self._event_manager.post_event_content(
+                ApiEventKind.animalUpdated,
+                data=dict(
+                    animal_id=animal.id,
+                    properties=dict(name="pellet_counts",
+                                    day=animal.pellet_counts_day, total=animal.pellet_counts_total),
+                ),
+            )
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
@@ -1685,7 +1712,8 @@ class AppModel(ObservableObject):
         animal.training.set_plan_progress(plan.plan_id, prog)
         self._save_animal_metadata(animal, sender="plan-progress-updated")
         self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
-        self._event_manager.post_event_content(ApiEventKind.trainingProgressUpdate)
+        self._event_manager.post_event_content(
+            ApiEventKind.trainingProgressUpdate, dict(training_phase_id=plan.current_phase.phase_id))
 
     def _on_training_phase_property_changed(self, name, value, _):
         logger.debug("phase prop: %s -> %s", name, value)
@@ -1847,10 +1875,12 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            return self._behavior.emergency_stop(source="RpcService")
+            self._behavior.emergency_stop(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            return self._behavior.emergency_resume(source="RpcService")
+            self._behavior.emergency_resume(source="RpcService")
+            return dict(reason="RpcService")
 
         elif cmd == ApiCommand.USER_DEFINED:
             logger.verbose("TODO")
@@ -1890,7 +1920,7 @@ class AppModel(ObservableObject):
         system_status = self._make_api_system_status_payload()
         self._event_manager.post_event_content(
             kind=ApiEventKind.systemStatus,
-            context=dataclasses.asdict(system_status),
+            data=dataclasses.asdict(system_status),
         )
 
     def _make_api_system_status_payload(self) -> ApiSystemStatus:
@@ -1898,6 +1928,9 @@ class AppModel(ObservableObject):
         algo = self._behavior.algorithm
         analysis = self._behavior.analysis
         magnet_intensity = hard.head_magnet_intensity
+        project = self._project_info
+        if project is None:
+            project = self.make_project_info()
         if magnet_intensity is None:
             magnet_intensity = math.nan
         doors_mon = analysis.external_doors_monitor
@@ -1968,6 +2001,10 @@ class AppModel(ObservableObject):
             application_mode=app_status_to_api_app_mode(self._status),
             training_mode=training_mode_to_api_training_mode(self._training_mode),
             animal_id=None if animal is None else animal.id,
+            project=ProjectStatus(
+                day_path=project.get_day_path()[0],
+                session_index=project.session,
+            ),
             detectors=detectors,
             alarms=alarms,
             pellet=ApiPelletStatus(
@@ -1984,27 +2021,12 @@ class AppModel(ObservableObject):
 
     #
 
-    def _on_emergency_handle(self, source, command):
-        rpc = self._rpc_service
-        if rpc is None:
-            return
-        message = ApiCommandRequestResponse(
-            result=ApiCommandRequestResult.SUCCESS,
-            command=command,
-            data=dict(reason=source),
-        )
-        dct = dataclasses.asdict(message)
-        logger.verbose("RPC: sending %s", dct)
-        rpc.send_dict(ApiTopic.EMERGENCY, message=dct)
-
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_STOP)
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
-        self._on_emergency_handle(source, ApiCommand.EMERGENCY_RESUME)
 
     # pellet machine events
 

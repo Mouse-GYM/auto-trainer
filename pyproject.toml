@@ -1,7 +1,8 @@
 [build-system]
 requires = [
-    "setuptools",
-    "setuptools-scm",
+    "setuptools >= 61",
+    'setuptools-scm >= 9.2.2, < 10',
+    "tomli >= 2, < 3",  # for current setup.py
 ]
 build-backend = "setuptools.build_meta"
 
@@ -10,50 +11,11 @@ name = "auto-trainer"
 description = "Autotrainer full application and libs"
 license = { text = "MIT" }
 requires-python = ">= 3.8"
-dynamic = ["version"]  # handled by setuptools-scm
-dependencies = [
-    # requesting exact version for sub-auto-trainer projects,
-    # given API can be still unstable.
-    'auto-trainer-training == 0.9.16',
-    'auto-trainer-api == 0.9.16',
-
-    # CAN communication with pellet/tunnel boards:
-    'pyjerrycan >= 1.2.5, < 2 ; platform_machine == "aarch64"',
-
-    # FLIR/spinnaker camera
-    'spinnaker-python >= 3.2, < 3.3 ; platform_machine == "aarch64"',
-
-    'verboselogs >= 1.7, < 2',
-    'coloredlogs >= 15, < 16',
-
-    'deeplabcut == 2.3.9',  # famous deeplab
-
-    'events >= 0.5, < 1',   # dynamic events callback handling
-    'transitions >= 0.9.2, < 1',  # machine state transition handling
-
-    'numpy >= 1.23.5, < 2',
-    'opencv-python >= 4.12, < 5',
-    'pandas >= 2, < 3',
-    'psutil >= 7, < 8',  # for free disk space, notably
-    'pyhumps >= 3.8, < 4',  # snake/camel case converter
-    'pyyaml >= 6.0.2, < 7',
-    'PySide6 >= 6.6.3.1, < 7',
-    'pyqtgraph >= 0.13.3, < 1',
-    'QtAwesome >= 1.4.1, < 2',
-
-    'tensorflow >= 2.12, < 3 ; platform_machine != "aarch64"',       # for non-aarch64 platform only
-    'tensorflow == 2.12.0+nv23.06 ; platform_machine == "aarch64"',  # for aarch64 platform only
-    # for now let it be installed manually still.
-    # Otherwise, we need to have some pip.conf having extra-index-url to nvidia, or PIP_EXTRA_INDEX_URL variable too.
-
-    'watchdog >= 4, < 5',  # filesystem change monitoring
-
-    'setuptools-scm >= 9.2.2, < 10',  # to allow get version from git when in editable mode,
-    # without requiring to `pip install -e .` everytime you checkout something.
-
-    'importlib-resources; python_version < "3.10"',
-    'importlib-metadata; python_version < "3.10"'
-]
+dynamic = ["version", "dependencies"]
+# see setup.py
+#dependencies = [
+# ...
+#]
 
 [project.optional-dependencies]
 test = [
@@ -86,6 +48,7 @@ git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"
 
 [tool.setuptools.packages.find]
 where = [
+    # temporary until split in many repos:
     "auto-trainer-behavior/src",
     "auto-trainer-core/src",
     "auto-trainer-device/src",

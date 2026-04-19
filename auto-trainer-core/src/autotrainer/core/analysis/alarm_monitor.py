@@ -37,12 +37,17 @@ class EmergencyReason(str, enum.Enum):
     SYSTEM_FAULT = "SYSTEM_FAULT"
 
 
-@dataclasses.dataclass
-class AlarmCondition:
+_map_emergency_reason_2_api_alarm_kind = {
+    EmergencyReason.MOUSE_THRASHING: ApiAlarmKind.thrashing,
+    EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: ApiAlarmKind.animalMissing,
+    EmergencyReason.GLOBAL_ANIMAL_PRESENCE: ApiAlarmKind.animalImmobile,
+    EmergencyReason.DEVICE_COMM_ERROR: ApiAlarmKind.deviceCommunication,
+    EmergencyReason.SYSTEM_FAULT: ApiAlarmKind.systemFault,
+    EmergencyReason.SYSTEM_MAINTENANCE: ApiAlarmKind.systemMaintenance,
+}
 
-    use: bool = False
-    allow_auto_resume: bool = False
-    check: Callable[[], bool] = dataclasses.field(default_factory=lambda: False)
+def emergency_reason_2_api_alarm_kind(reason: EmergencyReason) -> ApiAlarmKind:
+    return _map_emergency_reason_2_api_alarm_kind[reason]
 
 
 
@@ -117,7 +122,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     def post_alarm_event(self, detector_id: int, active: bool, enabled: bool):
         self._event_manager.post_event_content(
             ApiEventKind.alarmChanged,
-            context={
+            data={
                 "detector_id": detector_id,
                 "is_active": active,
                 "is_enabled": enabled,

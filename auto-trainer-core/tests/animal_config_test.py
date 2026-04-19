@@ -7,7 +7,6 @@ from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 def test_save_load(tmp_path):
     animal = AnimalSubject(
         name="animal1",
-        baseline_magnet_intensity=42,
         is_pellet_dcs=True,
         pellet_x=-1,
         pellet_y=1,

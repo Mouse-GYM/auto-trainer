@@ -10,8 +10,9 @@ from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.analysis import EmergencyAlarmMonitor
-from autotrainer.core.analysis.alarm_monitor import EmergencyReason
+from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZHandlerConfig
+from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
@@ -180,8 +181,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         # todo: try have intersession stop "normally" too
 
     def use_current_head_magnet_position_as_baseline(self):
-        if self._hardware_model.head_magnet_intensity is not None:
-            self._system_machine.algorithm.baseline_intensity = self._hardware_model.head_magnet_intensity
+        head_magnet_intensity = self._hardware_model.head_magnet_intensity
+        if head_magnet_intensity is not None:
+            post_api_event_content(ApiEventKind.headfixBaselineChanged,
+                                   data=dict(baseline=head_magnet_intensity))
+            self._system_machine.algorithm.baseline_intensity = head_magnet_intensity
 
     @property
     def source_emergency(self) -> Optional[str]:
@@ -194,7 +198,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             return
         algo.algo_paused = True
         self._source_emergency = source
-        EventManager.default().post_event_content(ApiEventKind.emergencyStop, dict(reason=source))
+        api_alarm_kinds = list(map(emergency_reason_2_api_alarm_kind,
+                                   self._analysis.emergency_alarm_monitor.engaged_reasons))
+        post_api_event_content(
+            ApiEventKind.emergencyStop,
+            data=dict(reason=source, active_alarms=api_alarm_kinds))
         self.emergency_stopped(source)
 
     def emergency_resume(self, source: str):
@@ -209,5 +217,5 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         self._source_emergency = None
         # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
         self._analysis.restart()
-        EventManager.default().post_event_content(ApiEventKind.emergencyResume, dict(reason=source))
+        post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         self.emergency_resumed(source)

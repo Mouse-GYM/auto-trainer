@@ -420,7 +420,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             else:
                 logger.verbose("pose-process not alive, skipped ack wait for %s", kind)
 
-    def _handle_segmentation_finished(self, prj: ProjectInfo, success: bool):
+    def _handle_segmentation_finished(self, prj: ProjectInfo, success: bool, *, error: str="NA"):
         ib = self._intersession_block
         if ib is None:
             logger.critical("Got segmentation_finished but intersession_block is None ; prj=%s", prj)
@@ -429,17 +429,19 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             r = ib.configuration.session_when, ib.configuration.session_index
             if r != l:
                 logger.critical("unexpected %s vs %s", l, r)
-            ib.configuration.complete(ib.configuration.nonce, success)
+            ib.configuration.complete(ib.configuration.nonce, success, error=error)
             self._intersession_block = None
             logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)
-        self.segmentation_finished(prj, success)
+        self.segmentation_finished(prj, success, error=error)
 
-    def _cb_on_intersession_segmentation_finished(self, project, success, *, shape=None):
+    def _cb_on_intersession_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         if success:
-            self._event_manager.post_event_content(ApiEventKind.intersessionSegmentationSave, context=f"{shape}")
+            self._event_manager.post_event_content(
+                ApiEventKind.intertrialSegmentationSave, data=dict(location=project.get_session_path().location))
         else:
-            self._event_manager.post_event_content(ApiEventKind.intersessionSegmentationSaveError)
-        self._handle_segmentation_finished(project, success)
+            self._event_manager.post_event_content(
+                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error))
+        self._handle_segmentation_finished(project, success, error=error)
 
     def _handle_monitor_data_proc_msg(self, msg, ctx):
         args, kwargs = ctx
@@ -521,8 +523,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def _intersession_process(self, intersession_detection: IntersessionDetection):
         det_cfg = intersession_detection.configuration
+        pool = self._process_pool
         try:
-            async_res = self._process_pool.apply_async(
+            assert pool is not None
+            async_res = pool.apply_async(
                 self._intersession_process_execute,
                 args=(det_cfg.project,),
                 kwds=dict(calib_dir=self._calib_dir),
@@ -532,13 +536,25 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.exception("Error processing intersession: %s", err)
             processed_ok = False
             result = None
+            error = str(err)
         else:
             processed_ok = True
+            error = None
 
         if processed_ok:
             result: IntersessionResponse
+            self._event_manager.post_event_content(
+                ApiEventKind.intertrialDetectionSave,
+                data=dict(location=det_cfg.project.get_session_path().location),
+            )
             # assert isinstance(result, IntersessionResponse)
             self.detection_result_ready(det_cfg.project, result)
+        else:
+            self._event_manager.post_event_content(ApiEventKind.intertrialDetectionError,
+                                                   data=dict(error=error))
 
-        intersession_detection.configuration.complete(intersession_detection.configuration.nonce, processed_ok)
+        intersession_detection.configuration.complete(
+            intersession_detection.configuration.nonce, processed_ok,
+            error=error,
+        )
         self._intersession_detection = None

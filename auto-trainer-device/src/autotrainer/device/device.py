@@ -61,7 +61,9 @@ class Device(ObservableObject):
 
     def _acknowledge_command(self, token: object):
         logger.verbose("sending command ack: %s", token)
-        EventManager.default().post_event_content(ApiEventKind.deviceCommandAcknowledge, context=token)
+        EventManager.default().post_event_content(
+            ApiEventKind.deviceCommandAcknowledge, data=dict(context=token)
+        )
         if self._api is not None:
             self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, token)
 

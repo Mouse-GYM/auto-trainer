@@ -138,7 +138,7 @@ class AppModel(ObservableObject):
             self._device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, motor,
                                                  context="get motor cfg")
 
-    def tare(self) -> bool:
+    def tare(self, *, force: bool=False) -> bool:
         if self._device_connection is not None:
             self._device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE,
                                                  context="tare")

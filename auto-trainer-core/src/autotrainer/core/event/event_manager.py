@@ -2,11 +2,10 @@ import time
 from threading import Thread
 from datetime import datetime
 from queue import Queue, Empty
-from typing import Optional, List
-from typing_extensions import Self
+from typing import Optional, List, Any
 
-from ..logging import get_verbose_logger
-from ..project import ProjectInfo
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.project import ProjectInfo
 
 from .event_info import EventInfo
 from .event_manager_plugin import EventManagerPlugin
@@ -181,7 +180,7 @@ class EventManager:
         if cls_inst is self:
             self._remove_cls_instance()
 
-    def post_event_content(self, kind: int, context: Optional[object] = None, when: Optional[datetime] = None,
+    def post_event_content(self, kind: int, data: Optional[Any] = None, when: Optional[datetime] = None,
                            index: int = None):
         """
         Add an event info instance to the event manager output queue.  This is a convenience method that creates an
@@ -191,7 +190,7 @@ class EventManager:
 
         Args:
             kind: See EventInfo.kind for a detailed description.
-            context: See EventInfo.kind for a detailed description.
+            data: See EventInfo.kind for a detailed description.
             when: See EventInfo.kind for a detailed description.
             index: See EventInfo.kind for a detailed description.
 
@@ -199,7 +198,7 @@ class EventManager:
         info = EventInfo(kind,
                          when=datetime.now() if when is None else when,
                          index=time.perf_counter_ns() if index is None else index,
-                         context=context)
+                         context=data)
 
         self.post_event(info)
 

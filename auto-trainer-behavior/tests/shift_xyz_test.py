@@ -11,7 +11,7 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.reach_event import ReachEvent, ReachEventMethod
 from autotrainer.inference.analysis import IntersessionResponse
-from top_fixtures import MockSystemMachine, AlmostEqualFloat
+from top_fixtures import MockSystemMachine, AlmostEqualFloat, FifoExitStack
 
 
 def make_reach_events(tuples):
@@ -44,6 +44,9 @@ class TestShiftXYZ(MockSystemMachine):
         cfg.pellet_delivery.is_intersession_analysis_enabled = True
         machine._delay_timer_consider_end_session = 0
         assert self.algo.intersession_enabled is True
+        def perf_seg(cfg):
+            return cfg
+        self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
 
     def make_session(self, stack: contextlib.ExitStack, reach_events, rh_max_vp_list):
         algo = self.algo
@@ -58,7 +61,10 @@ class TestShiftXYZ(MockSystemMachine):
             rh_max_vp_list=rh_max_vp_list,
             other_events=other_events,
         )
-        stack.enter_context(self.mock_intersession_analysis(results=rsp))
+        project = self._machine.project.to_local_value()
+        stack.enter_context(
+            self.mock_intersession_analysis(results=rsp, project=project, stack=stack)
+        )
         self.mock_pose_response(pellet_seen=False)
         self.increment_perf_now(cfg.pellet_delivery.max_pellet_missing_seconds)
         self.mock_pose_response(pellet_seen=False, mouse_seen=True)
@@ -165,7 +171,7 @@ class TestShiftXYZ(MockSystemMachine):
         self.start_session_in_tunnel()
         caplog.clear()
         caplog.set_level(logging.INFO)
-        with contextlib.ExitStack() as stack:
+        with FifoExitStack() as stack:
             for reach_events, rh_max_vp_list in zip(reaches_list, rh_max_vp_lists):
                 # with caplog.at_level(logging.DEBUG):
                 self.make_session(stack, reach_events, rh_max_vp_list)
