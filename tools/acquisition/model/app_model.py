@@ -1424,15 +1424,6 @@ class AppModel(ObservableObject):
         self.save_configuration()
 
     def _load_animals(self):
-        if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = get_default_animals_location(Path(self._output_location))
-            try:
-                default_location.mkdir(parents=True, exist_ok=True)
-                self._preferences.animal_location = str(default_location)
-            except Exception as e:
-                logger.error(f"Failed to create default animal location {default_location}: {e}")
-                return
-
         animals = []
         animals_dir_path = Path(self._preferences.animal_location)
 
