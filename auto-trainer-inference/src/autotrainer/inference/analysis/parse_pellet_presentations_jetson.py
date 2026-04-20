@@ -134,7 +134,7 @@ def segment_reaches(
         p_before = time.perf_counter()
         # could be done
         reach_event_h5_path = project_info.get_reach_event_path()
-        reach_df = pd.DataFrame(reach_events, columns=["init", "end", "max", "outcome", "delay_since_presented"])
+        reach_df = pd.DataFrame(reach_events, columns=['init', 'end', 'max', 'outcome', 'delay_since_presented'])
         reach_df.to_hdf(reach_event_h5_path, key="reach", mode="w")  # use mode='w' for first write,
         # subsequent writes to it will be with mode='a'
 
@@ -147,8 +147,8 @@ def segment_reaches(
         pellet_dfs = []
         reaches_dfs = []
         for reach in reach_events:
-            r_end = reach["end"]
-            r_init = reach["init"]
+            r_end = reach['end']
+            r_init = reach['init']
             l = df_lr[0]['R_Hand'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
             r = df_lr[1]['R_Hand'][['x', 'y']].assign(z=0).iloc[r_init:r_end].reset_index(drop=True)
             three_d = df_3d['R_Hand'][['x', 'y', 'z']].iloc[r_init:r_end].reset_index(drop=True)
@@ -386,12 +386,12 @@ def segment_reaches_f2(
                             # and then doing:
                             #   delay_since_presented = A - B
                             reach_dict = {
-                                "init": frame,  # ~= pellet_event['init'] probably
-                                "max": -1,  # possibly pellet_event['lost'] ?
-                                "end": -1,  # possibly pellet_event['lost'] ?
-                                "method": pellet_event['method'],
-                                "outcome": pellet_event['outcome'],
-                                "delay_since_presented": delay_since_presented,
+                                'init': frame,
+                                'max': None,
+                                'end': None,
+                                'method': pellet_event['method'],
+                                'outcome': pellet_event['outcome'],
+                                'delay_since_presented': delay_since_presented,
                             }
                             search_status = 2
                             food_was_dropped = False
@@ -471,7 +471,7 @@ def segment_reaches_f2(
                         reach_dict['outcome'] = ReachEventOutcome.DROPPED
                         # lp = find_last_placement(frame+2, pellet_events)
                         # pellet_events[lp]['outcome'] = 'dropped'
-                        pellet_event["outcome"] = ReachEventOutcome.DROPPED
+                        pellet_event['outcome'] = ReachEventOutcome.DROPPED
                         keep_looking = False
                     elif pellet_detected and pTest:
                         if debug >= 2:
@@ -492,7 +492,7 @@ def segment_reaches_f2(
                         # pellet_events[lp]['outcome'] = 'eaten'
                         keep_looking = False 
                  
-                if reach_dict['end'] > -1:
+                if reach_dict['end'] is not None:
                     start_query = reach_dict['init']
                     max_query = reach_dict['max']
                     end_query = reach_dict['end']
@@ -535,11 +535,14 @@ def segment_reaches_f2(
         if r['outcome'] in {ReachEventOutcome.MISSED, ReachEventOutcome.DROPPED}:
             fail_ct += 1
             r_max = r['max']
-            o = Offset3DTuple(
-                r_hand_data['x'][r_max] - pellet_home[0],
-                r_hand_data['y'][r_max] - pellet_home[1],
-                r_hand_data['z'][r_max] - pellet_home[2],
-            )
+            if r_max is None or r_max < 0:
+                o = None
+            else:
+                o = Offset3DTuple(
+                    r_hand_data['x'][r_max] - pellet_home[0],
+                    r_hand_data['y'][r_max] - pellet_home[1],
+                    r_hand_data['z'][r_max] - pellet_home[2],
+                )
             rh_max_vp_list.append(o)
 
     if debug >= 1:

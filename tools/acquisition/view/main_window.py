@@ -42,6 +42,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult
 
 from autotrainer.pyside.xyz_label import XYZQLabel
+
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -307,6 +308,12 @@ class MainWindow(QMainWindow):
 
     def on_show_reach_event(self, is_toggled):
         raw = self._previous_intersession_analysis_rsp
+        # uncomment for being able show agx001_20260205_11 reach
+        # if is_toggled and raw is None:
+        #     from tests.real_data_intersession_process_test import (
+        #         agx001_20260205_11_project_info,
+        #     )
+        #     raw = (agx001_20260205_11_project_info, None)
         if raw is None or not is_toggled:
             self.main_content.show_analysis_reach_events(None)
             return
