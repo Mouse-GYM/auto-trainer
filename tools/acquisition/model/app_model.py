@@ -69,7 +69,7 @@ from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.model.user_preferences import UserPreferences
+from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
@@ -1452,15 +1452,6 @@ class AppModel(ObservableObject):
         self.save_configuration()
 
     def _load_animals(self):
-        if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = Path(self._output_location).joinpath("Animals")
-            try:
-                default_location.mkdir(parents=True, exist_ok=True)
-                self._preferences.animal_location = str(default_location)
-            except Exception as e:
-                logger.error(f"Failed to create default animal location {default_location}: {e}")
-                return
-
         animals = []
         animals_dir_path = Path(self._preferences.animal_location)
 
