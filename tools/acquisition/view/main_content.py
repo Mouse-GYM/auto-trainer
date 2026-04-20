@@ -172,21 +172,22 @@ class MainContent(ContentWidget):
         # allow auto set of spacing between cameras
         top_layout.addStretch(1)
 
-        self._left_camera_content = CameraContent(self._app_model.left_camera)
+        app_model = self._app_model
+        self._left_camera_content = CameraContent(app_model, app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         top_layout.addWidget(self._left_camera_content)
         self._content_widgets.append(self._left_camera_content)
 
         top_layout.addStretch(1)
 
-        self._right_camera_content = CameraContent(self._app_model.right_camera)
+        self._right_camera_content = CameraContent(app_model, self._app_model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
         top_layout.addWidget(self._right_camera_content)
         self._content_widgets.append(self._right_camera_content)
 
         top_layout.addStretch(1)
 
-        self._top_camera_content = CameraContent(self._app_model.top_camera)
+        self._top_camera_content = CameraContent(app_model, self._app_model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
         top_layout.addWidget(self._top_camera_content)
         self._content_widgets.append(self._top_camera_content)
@@ -367,6 +368,7 @@ class MainContent(ContentWidget):
 
     @invoke_method
     def set_is_capture_active(self, is_active: bool):
+        """Capture active == acquisition started"""
         for widget in self._content_widgets:
             widget.set_is_capture_active(is_active)
 

@@ -15,6 +15,7 @@ from autotrainer.pyside import CardWidget
 from autotrainer.pyside.StackedContent import StackedLayout
 from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model_status import AppModelStatus
 
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -258,8 +259,9 @@ class HardwareControlContent(ContentWidget):
 
         self.command_changed.connect(lambda x: self._command_label.setText(x))
 
-        self._app_model.behavior.algorithm.property_changed += self._behavior_algo_property_changed
-        self._hardware_model.property_changed += self._model_property_changed
+        app_model.behavior.algorithm.property_changed += self._on_algo_property_changed
+        app_model.property_changed += self._on_app_model_property_changed
+        self._hardware_model.property_changed += self._on_hardware_model_property_changed
 
     def _set_pos_limits(self):
         limits = self._travel_limits
@@ -280,7 +282,7 @@ class HardwareControlContent(ContentWidget):
 
     @invoke_method
     def set_is_capture_active(self, is_active: bool):
-        self.setEnabled(is_active)
+        pass
 
     @invoke_method
     def set_selected_animal(self, animal: Optional[AnimalSubject]):
@@ -337,7 +339,13 @@ class HardwareControlContent(ContentWidget):
             widget.setEnabled(enabled)
 
     @invoke_method
-    def _model_property_changed(self, property_name: str, value, _):
+    def _on_app_model_property_changed(self, name, value, _):
+        app_model = self._app_model
+        if name == app_model.Props.STATUS:
+            self.setEnabled(value != AppModelStatus.IDLE)
+
+    @invoke_method
+    def _on_hardware_model_property_changed(self, property_name: str, value, _):
         if property_name == HardwareModel.TUNNEL_VERSION_PROPERTY:
             self._update_title(value)
             if value:
@@ -364,7 +372,7 @@ class HardwareControlContent(ContentWidget):
                 self.set_commands_enabled(True)
 
     @invoke_method
-    def _behavior_algo_property_changed(self, name, value, _):
+    def _on_algo_property_changed(self, name, value, _):
         if name == BehaviorAlgoProps.DIAMOND_TRIANGLE_CONFIG:
             # force execute set-selected-animal
             self.set_selected_animal(self._app_model.selected_animal)
