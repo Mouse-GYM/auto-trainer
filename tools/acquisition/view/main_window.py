@@ -576,7 +576,8 @@ class MainWindow(QMainWindow):
             logger.verbose("No loaded valid config, skipping auto-start")
         else:
             if app_status == AppModelStatus.IDLE:
-                self._on_capture_start_stop(True, target_status=target_status)
+                if target_status != AppModelStatus.IDLE:
+                    self._on_capture_start_stop(True, target_status=target_status)
             else:
                 logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
