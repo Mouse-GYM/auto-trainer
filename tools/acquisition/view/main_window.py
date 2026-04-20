@@ -191,7 +191,6 @@ class MainWindow(QMainWindow):
         item.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
-        self.main_content.set_is_capture_active(started)
         #
         stopped = not started
         self.edit_camera_settings_action.setEnabled(stopped)
@@ -1418,6 +1417,8 @@ class MainWindow(QMainWindow):
                 logger.warning("unhandled app model status: %s", value)
 
             self.blockSignals(False)
+
+            self.main_content.set_is_capture_active(value != AppModelStatus.IDLE)
 
         elif name == props.ANIMALS:
             self._reload_animals(value)

@@ -64,30 +64,30 @@ class QCaptureView(QWidget):
         top_layout.addWidget(self._camera)
         top_layout.addWidget(self._camera_name_label)
 
-        self._card_widget = CardWidget(title="Capture", header_right_layout=top_layout)
+        card_widget = self._card_widget = CardWidget(title="Capture", header_right_layout=top_layout)
 
         # Content/Image
         widget = QWidget()
         widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         widget.setContentsMargins(0, 0, 0, 0)
-        self._content_stack = StackedLayout()
-        self._content_stack.setSpacing(0)
-        self._content_stack.setContentsMargins(0, 0, 0, 0)
-        widget.setLayout(self._content_stack)
-        self._card_widget.setContentWidget(widget)
+        content_stack = self._content_stack = StackedLayout()
+        content_stack.setSpacing(0)
+        content_stack.setContentsMargins(0, 0, 0, 0)
+        widget.setLayout(content_stack)
+        card_widget.setContentWidget(widget)
 
         self._image = QGLImageView(image_width, image_height)
         self._image.setFixedSize(QSize(self._image_width, self._image_height))
-        self._content_stack.addWidget(self._image)
+        content_stack.addWidget(self._image)
 
         # Editable Content
-        self._settings = QCaptureSettings()
-        self._settings.capture_enabled_changed.connect(lambda x: self._update_summary())
-        self._settings.record_enabled_changed.connect(lambda x: self._update_summary())
-        self._settings.record_mode_changed.connect(lambda x: self._update_summary())
-        self._settings.image_capture_enabled_changed.connect(lambda x: self._update_summary())
-        self._settings.image_capture_interval_changed.connect(lambda x: self._update_summary())
-        self._content_stack.addWidget(self._settings)
+        settings = self._settings = QCaptureSettings()
+        settings.capture_enabled_changed.connect(lambda x: self._update_summary())
+        settings.record_enabled_changed.connect(lambda x: self._update_summary())
+        settings.record_mode_changed.connect(lambda x: self._update_summary())
+        settings.image_capture_enabled_changed.connect(lambda x: self._update_summary())
+        settings.image_capture_interval_changed.connect(lambda x: self._update_summary())
+        content_stack.addWidget(settings)
 
         # Footer
         footer = self._footer = QWidget()
@@ -109,21 +109,21 @@ class QCaptureView(QWidget):
         footer_layout.addLayout(lbl_l)
 
         #
-        label = self._is_recording = QLabel("")
+        label = self._is_recording_dot = QLabel("")
         label.setStyleSheet("border: 1px solid gray; border-radius: 8; background-color: green;")
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
         label.setFixedSize(16, 16)
         label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         label.setVisible(False)
         label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        footer_layout.addWidget(self._is_recording, alignment=Qt.AlignmentFlag.AlignRight)
+        footer_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignRight)
 
-        self._card_widget.footer.setContent(footer)
+        card_widget.footer.setContent(footer)
         footer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         final_layout = QVBoxLayout()
         final_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        final_layout.addWidget(self._card_widget)
+        final_layout.addWidget(card_widget)
         final_layout.setContentsMargins(0, 0, 0, 0)
         final_layout.setSpacing(0)
 
@@ -144,7 +144,7 @@ class QCaptureView(QWidget):
     def set_presence_detection(self, detection: Optional[PresenceDetectionAttrs]):
         self._presence_detection = detection
 
-    def set_text_overlay(self, value: str, color: Qt.GlobalColor = Qt.GlobalColor.yellow):
+    def set_text_overlay(self, value: Optional[str], color: Qt.GlobalColor = Qt.GlobalColor.yellow):
         logger.debug("got new text overlay: %r", value)
         self._text_overlay = value
         self._text_color = color
@@ -158,10 +158,13 @@ class QCaptureView(QWidget):
     def set_is_capture_active(self, is_active: bool):
         self._camera.setEnabled(not is_active)
         if not is_active:
-            self._is_recording.setVisible(False)
+            self._is_recording_dot.setVisible(False)
         else:
-            self._is_recording.setVisible(self._settings.isCaptureEnabled and self._settings.isRecordEnabled
-                                          and not self._settings.isTriggerRecordMode)
+            self._is_recording_dot.setVisible(
+                    self._settings.isCaptureEnabled
+                and self._settings.isRecordEnabled
+                and not self._settings.isTriggerRecordMode
+            )
 
     def set_is_editable(self, is_editable: bool):
         self._content_stack.setCurrentIndex(1 if is_editable else 0)
@@ -265,7 +268,7 @@ class QCaptureView(QWidget):
         self.camera_changed.emit(camera)
 
     def _set_recording_enabled_indicator(self, b: bool):
-        self._is_recording.setVisible(b)
+        self._is_recording_dot.setVisible(b)
 
     def _update_summary(self):
         if self._settings.isCaptureEnabled:
