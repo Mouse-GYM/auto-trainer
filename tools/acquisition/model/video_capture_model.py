@@ -66,6 +66,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         preferences: UserPreferences = None,
         camera_index: int = -1,
         *,
+        cam_id: CameraId = CameraId.Left,
         mp_ctx: Optional[BaseContext] = None,
         msg_queue: Optional[multiprocessing.Queue] = None,
         presence_detection: Optional[PresenceDetectionAttrs] = None,
@@ -78,7 +79,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._text_overlay: Optional[str] = None
         self._text_color: Optional[str] = "yellow"
 
-        self._id = CameraId.Left
+        self._id = cam_id
 
         self._name = name
         self._preferences = preferences
