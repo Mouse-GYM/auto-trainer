@@ -176,7 +176,7 @@ class PelletHardwareProtocol(Protocol):
         """Set the motor drift offset"""
 
     def set_auto_correct_motor_drift(self, enabled: bool):
-        """Set auto correct motor drift"""
+        """Set autocorrect motor drift"""
 
     def set_tunnel_fan_on(self) -> Optional[UUID]:
         """Turn ON tunnel FAN"""
@@ -187,7 +187,7 @@ class PelletHardwareProtocol(Protocol):
 
 class TunnelHardwareProtocol(Protocol):
     """
-    Defines an expected/required set of commands and properties from the tunnel device that are used as part of the
+    Defines the expected set of commands and properties from the tunnel device that are used as part of the
     behavior algorithm and state machine.
     """
 
@@ -252,7 +252,7 @@ class BehaviorAlgoEvents:
     session_starting = EventHandler[Callable[[], None]]
     session_capture_ending = EventHandler[Callable[[RecordingEndingReason], None]]
 
-    session_processing_starting = Callable[[], None]
+    session_processing_starting = EventHandler[Callable[[], None]]
 
     batch_analysis_starting = EventHandler[BatchAnalysisStartingEvent]
     batch_analysis_ending = EventHandler[BatchAnalysisEndingEvent]
