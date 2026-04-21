@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Protocol, Optional
 
 from autotrainer.core import ProjectInfo
+from autotrainer.core.interfaces import (
+    CaptureAnalysisResult, RecordingEndingReason
+)  # actually for autotrainer.training only
 
 
 # keeping top level atm, given not quite sure where to put
