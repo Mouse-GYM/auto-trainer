@@ -533,10 +533,10 @@ def mock_system(machine) -> MockSystemMachine:
 
 
 @pytest.fixture
-def hardware_model(fake_system_msg_handler, sensor_analysis):
+def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:
     return HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
 
 
 @pytest.fixture
-def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inference):
+def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inference) -> BehaviorModel:
     return BehaviorModel(fake_system_msg_handler, sensor_analysis, hardware_model, inference)

@@ -1,7 +1,7 @@
 import enum
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Protocol, Optional
+from typing import Protocol, Optional
 
 from autotrainer.core import ProjectInfo
 
@@ -49,26 +49,10 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
-class CaptureAnalysisResult(str, enum.Enum):
-    CAPTURE_ONLY = "capture_only"
-    ANALYSIS_SUCCEEDED = "analysis_succeeded"
-    ANALYSIS_FAILED = "analysis_failed"
-    ANALYSIS_DELAYED = "analysis_delayed"
-
-
 class TrainingMode(str, enum.Enum):  # todo: eventually find better place
     MANUAL = "Manual"
     MANUAL_WITH_PROTOCOL = "Manual with Protocol"
     AUTOMATIC = "Automatic"
-
-
-class RecordingEndingReason(str, enum.Enum):
-    NA = "NA"
-    ALGO_PAUSED = "AlgoPaused"
-    EXIT_TUNNEL = "ExitTunnel"
-    PELLET_LOADING = "PelletLoading"
-    MISSING_ANIMAL_ACTIVITY_TIMEOUT = "MissingAnimalActivityTimeout"
-    MOTOR_DRIFT_HOMING = "MotorDriftHoming"
 
 
 # Protocol first (less strict)

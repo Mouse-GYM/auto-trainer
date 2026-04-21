@@ -24,6 +24,7 @@ from autotrainer.core import ObservableObject, EventManager, post_trigger_enable
     AnimalSubject, get_perf_now, calculate_std_dev_manual, ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.core.reach_event import ReachEvent
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
     BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, \
@@ -31,8 +32,8 @@ from autotrainer.core.configuration.behavior_configuration import PelletDelivery
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
 from autotrainer.core.capture import CaptureProcessStatus
-
-from . import CaptureAnalysisResult, RecordingEndingReason
+from autotrainer.core.interfaces import CaptureAnalysisResult, RecordingEndingReason, BehaviorAlgorithmProtocol, \
+    CoverServoStatus, BehaviorAlgoEvents
 
 from .pellet import PelletState
 from .system_machine_state import SystemState
@@ -40,7 +41,6 @@ from .intersession import IntersessionState
 
 from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
-from autotrainer.core.reach_event import ReachEvent
 from autotrainer.inference.analysis import IntersessionResponse
 
 logger = get_verbose_logger(__name__)
@@ -59,18 +59,6 @@ class PelletUncoverContext:
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
         return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
-
-
-class CoverServoStatus(int, enum.Enum):
-    OK = 0
-    COVER_POSITION_ERROR = 1
-    RELEASE_POSITION_ERROR = 2
-
-    COVER_AND_RELEASE_POS_ERROR = COVER_POSITION_ERROR | RELEASE_POSITION_ERROR
-
-    @property
-    def is_error(self):
-        return self is not CoverServoStatus.OK
 
 
 @dataclasses.dataclass
@@ -179,37 +167,7 @@ class BehaviorAlgoStatus(str, enum.Enum):
     ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
 
 
-class BehaviorAlgoEvents:
-    """Define the behavior algo events and their signature"""
-
-    session_starting = Callable[[], None]
-    session_capture_ending = Callable[[RecordingEndingReason], None]  # reason
-
-    class batch_analysis_starting:  # noqa
-        def __call__(self, *, batch_len: int):
-            """When a session batch analysis starts"""
-
-    session_processing_starting = Callable[[], None]
-
-    class batch_analysis_ending:  # noqa
-        def __call__(self, *, failed_count: int):
-            """When a session batch analysis is finished"""
-
-    session_ending = Callable[[CaptureAnalysisResult], None]
-
-    #
-
-    cover_servo_status_changed = Callable[[CoverServoStatus], None]
-
-    # NB:
-    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
-    pellets_presented_evt = Callable[[int], None]
-    pellets_consumed_evt = Callable[[int], None]
-    successful_reaches_evt = Callable[[int], None]
-    total_reaches_evt = Callable[[int], None]
-
-
-class BehaviorAlgorithm(ObservableObject):
+class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
     session_starting: BehaviorAlgoEvents.session_starting
@@ -479,11 +437,11 @@ class BehaviorAlgorithm(ObservableObject):
         return self
 
     @property
-    def project(self):
+    def project(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @project.setter
-    def project(self, project):
+    def project(self, project: ProjectInfo):
         self._project_info = project
 
     @property
@@ -496,11 +454,11 @@ class BehaviorAlgorithm(ObservableObject):
         # self._on_property_changed(self.Props.STATUS, value, prev)
 
     @property
-    def algo_paused(self):
+    def algo_paused(self) -> bool:
         return self._algo_paused
 
     @algo_paused.setter
-    def algo_paused(self, value):
+    def algo_paused(self, value: bool):
         prev, self._algo_paused = self._algo_paused, value
         if value == prev:
             return
@@ -570,7 +528,7 @@ class BehaviorAlgorithm(ObservableObject):
         return self._active_config.auto_close_gate_on_intersession
 
     @property
-    def pellet_delivery_enabled(self):
+    def pellet_delivery_enabled(self) -> bool:
         return self._active_config.pellet_delivery.is_enabled
 
     @pellet_delivery_enabled.setter
@@ -581,7 +539,7 @@ class BehaviorAlgorithm(ObservableObject):
         # self._on_property_changed(BehaviorAlgoProps.PELLET_DELIVERY_ENABLED, value, prev)
 
     @property
-    def pellet_cover_enabled(self):
+    def pellet_cover_enabled(self) -> bool:
         return self._active_config.pellet_delivery.is_pellet_cover_enabled
 
     @pellet_cover_enabled.setter
@@ -629,15 +587,15 @@ class BehaviorAlgorithm(ObservableObject):
         return self._active_config.pellet_delivery.max_pellet_missing_seconds
 
     @pellet_missing_time.setter
-    def pellet_missing_time(self, value):
+    def pellet_missing_time(self, value: float):
         self._active_config.pellet_delivery.max_pellet_missing_seconds = value
 
     @property
-    def triangle_missing_time(self):  # alias/mirror value of pellet_missing_time
+    def triangle_missing_time(self) -> float:  # alias/mirror value of pellet_missing_time
         return self.pellet_missing_time
 
     @property
-    def intersession_enabled(self):
+    def intersession_enabled(self) -> bool:
         return self._active_config.pellet_delivery.is_intersession_analysis_enabled
 
     @intersession_enabled.setter
@@ -647,7 +605,7 @@ class BehaviorAlgorithm(ObservableObject):
         self._on_property_changed(BehaviorAlgoProps.INTERSESSION_ENABLED, value, prev)
 
     @property
-    def intersession_pellet_shift_enabled(self):
+    def intersession_pellet_shift_enabled(self) -> bool:
         return self._active_config.pellet_delivery.is_intersession_pellet_shift_enabled
 
     @intersession_pellet_shift_enabled.setter
@@ -657,7 +615,7 @@ class BehaviorAlgorithm(ObservableObject):
         # self._on_property_changed(BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED, value, prev)
 
     @property
-    def head_fixation_enabled(self):
+    def head_fixation_enabled(self) -> bool:
         # NB: not saved in config
         return self._head_fixation_enabled
 
@@ -679,12 +637,12 @@ class BehaviorAlgorithm(ObservableObject):
         self._clean_raw_data_on_inactive_session = value
 
     @property
-    def baseline_intensity(self):
+    def baseline_intensity(self) -> float:
         """Head magnet "baseline" intensity ; set from animal/subject"""
         return self._baseline_intensity
 
     @baseline_intensity.setter
-    def baseline_intensity(self, value):
+    def baseline_intensity(self, value: float):
         prev, self._baseline_intensity = self._baseline_intensity, value
         if value != prev:
             self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
@@ -696,11 +654,11 @@ class BehaviorAlgorithm(ObservableObject):
         return self._active_config.head_clamp
 
     @property
-    def auto_clamp_intensity(self):
+    def auto_clamp_intensity(self) -> float:
         return self._active_config.head_clamp.auto_clamp_intensity
 
     @auto_clamp_intensity.setter
-    def auto_clamp_intensity(self, value):
+    def auto_clamp_intensity(self, value: float):
         cfg = self._active_config.head_clamp
         prev, cfg.auto_clamp_intensity = cfg.auto_clamp_intensity, value
         if value != prev:
@@ -710,12 +668,12 @@ class BehaviorAlgorithm(ObservableObject):
                 ApiEventKind.autoClampIntensityChanged, data=dict(intensity=value))
 
     @property
-    def auto_clamp_release_tone_freq(self):
+    def auto_clamp_release_tone_freq(self) -> int:
         """Frequency of the tone played when auto-clamp is released in Hz"""
         return self._active_config.head_clamp.auto_clamp_release_tone_freq
 
     @auto_clamp_release_tone_freq.setter
-    def auto_clamp_release_tone_freq(self, value):
+    def auto_clamp_release_tone_freq(self, value: int):
         cfg = self._active_config.head_clamp
         prev, cfg.auto_clamp_release_tone_freq = cfg.auto_clamp_release_tone_freq, value
         if value != prev:
@@ -725,11 +683,11 @@ class BehaviorAlgorithm(ObservableObject):
                                                    data=dict(frequency=value))
 
     @property
-    def auto_clamp_release_tone_delay(self):
+    def auto_clamp_release_tone_delay(self) -> float:
         return self._active_config.head_clamp.auto_clamp_release_tone_delay
 
     @auto_clamp_release_tone_delay.setter
-    def auto_clamp_release_tone_delay(self, value):
+    def auto_clamp_release_tone_delay(self, value: float):
         cfg = self._active_config.head_clamp
         prev, cfg.auto_clamp_release_tone_delay = cfg.auto_clamp_release_tone_delay, value
         if value != prev:
@@ -739,11 +697,11 @@ class BehaviorAlgorithm(ObservableObject):
                                                    data=dict(delay=value))
 
     @property
-    def auto_clamp_release_load_count(self):
+    def auto_clamp_release_load_count(self) -> int:
         return self._active_config.head_clamp.auto_clamp_release_load_count
 
     @auto_clamp_release_load_count.setter
-    def auto_clamp_release_load_count(self, value):
+    def auto_clamp_release_load_count(self, value: int):
         self._active_config.head_clamp.auto_clamp_release_load_count = value
 
     @property

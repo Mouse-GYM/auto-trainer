@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import RecordingEndingReason
+from autotrainer.core.interfaces import RecordingEndingReason
 from top_fixtures import MockSystemMachine, AlmostEqualFloat
 
 
