@@ -332,7 +332,7 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
     """Emitted when a new trial recording ends"""
 
     session_ending: BehaviorAlgoEvents.session_ending
-    """Emitted when a trial analysis ended"""
+    """Emitted when a trial "full session" ended, this can have analysis processed or not"""
 
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
     """When a pellet is "presented" ; i.e: when it's arrived at deliver/send position"""
