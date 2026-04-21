@@ -37,6 +37,7 @@ _map_idx_motors = {
 
 
 class Target(IntEnum):
+    """Target is also known as board"""
     PELLET_DEVICE = 0
     MAGNET_DEVICE = 1
 

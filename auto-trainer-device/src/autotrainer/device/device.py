@@ -14,6 +14,9 @@ class Device(ObservableObject):
     """Defines the required methods to represent a device."""
 
     UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"
+    PELLET_UUID_ACK_TIMEOUT_ENGAGED = "pellet_uuid_ack_timeout_engaged"
+    MAGNET_UUID_ACK_TIMEOUT_ENGAGED = "magnet_uuid_ack_timeout_engaged"
+
     PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"
     TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"
 

@@ -7,6 +7,7 @@ class relies on the CanInterface class to send and receive data.
 """
 import collections
 import copy
+import dataclasses
 import logging
 import math
 import os
@@ -16,23 +17,9 @@ import time
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
-from autotrainer.core import Offset3DTuple, get_perf_now
+from autotrainer.core import Offset3DTuple, get_perf_now, Motor
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.message import SystemDataArgsKwargs
-
-
-logger = get_verbose_logger(__name__)
-
-_force_emulation = os.getenv("AUTOTRAINER_FORCE_CAN_EMULATION_IFACE", "") == "1"
-if _force_emulation:
-    HAVE_CAN_DEVICE = False
-else:
-    try:
-        from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
-
-        HAVE_CAN_DEVICE = True
-    except ModuleNotFoundError:
-        HAVE_CAN_DEVICE = False
 
 from autotrainer.core import (SystemStatusMessageKind, SystemCommandKind,
                               AudioSpectrumData, Offset3DTuple)
@@ -42,7 +29,7 @@ from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
 from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
-from .can_interface import CanInterface
+from .can_interface import CanInterface, Target, target_of_motor
 from .device_interface import (
     Acknowledge,
     AnalogOutput,
@@ -67,21 +54,43 @@ from .device_interface import (
 )
 
 
+logger = get_verbose_logger(__name__)
+
+_force_emulation = os.getenv("AUTOTRAINER_FORCE_CAN_EMULATION_IFACE", "") == "1"
+if _force_emulation:
+    HAVE_CAN_DEVICE = False
+else:
+    try:
+        from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCfgMsg, JerryCANCmdType
+
+        HAVE_CAN_DEVICE = True
+    except ModuleNotFoundError:
+        HAVE_CAN_DEVICE = False
+
+
 # this is used to reduce the rate of messages sent to "clients/listeners" to the property changed callback:
 _similar_data_refresh_delay = os.getenv("AUTOTRAINER_DEVICE_SIMILAR_DATA_REFRESH_DELAY") or 2.5
 _similar_data_refresh_delay = float(_similar_data_refresh_delay)
 
 # some sentinels object:
 
+class _Sentinel:
+
+    def __init__(self, role):
+        self.role = role
+
+    def __repr__(self):
+        return f"Sentinel(role={self.role})"
+
 # this is used from CAN reader thread to put to CAN writer thread message queue :
-_uuid_ack = object()
+_uuid_ack = _Sentinel(role="uuid_ack")
 
 # this is used by CAN writer thread to manage its handling of internal queue of received commands to be executed.
-_next_compound = object()
+_next_compound = _Sentinel(role="next_compound")
 
 # for eventual retry when uuid ack timeout:
-_retry_compound = object()
-_retry_full = object()
+_retry_compound = _Sentinel(role="retry_compound")
+_retry_full = _Sentinel(role="retry_full")
 
 
 def _no_op():
@@ -111,6 +120,30 @@ def unpack_data_arg(data):
 def apply_system_command_with_data_args(func, data):
     args, kwargs = unpack_data_arg(data)
     return func(*args, **kwargs)
+
+
+@dataclasses.dataclass
+class BoardPendingContext:
+    uuid_ack_timeout_engaged_property_name: str  # but actually unused
+    target: Optional[Target]
+    ctx: Optional[str] = None  # current command context
+    kind: Optional[Any] = None  # "kind", can be different things
+    uuid: Optional[int] = None # currently awaited uuid ack
+    ack_perf_timeout: float = math.inf  # perf timeout for current uuid ack
+    prev_command: Optional[Tuple[str, Any, str]] = None
+    prev_command_relative: bool = False
+    uuid_ack_timeout_engaged: bool = False
+    repeated_command_count: int = 0
+    retrying_command: bool = False
+    compound_steps: Optional[List[Dict[str, Any]]] = None
+
+    def is_available(self):
+        return (
+                self.ctx is None
+            and self.uuid is None
+            and self.prev_command is None
+            and self.compound_steps is None
+        )
 
 
 class CanDevice(Device):
@@ -176,16 +209,13 @@ class CanDevice(Device):
         self._current_humidity = 0
         self._current_audio = []
 
-        self._pending_context = None
-        self._pending_kind = None
-
         self._load_pellet = default_load_pellet()
         self._send_pellet = default_send_pellet()
         self._cover_pellet = default_cover_pellet()
         self._release_pellet = default_release_pellet()
         self._open_tunnel_gate = default_open_gate()
         self._close_tunnel_gate = default_close_gate()
-        self._compound_movement: Optional[List[Dict[str, Any]]] = None  # Current compound movement
+        self._compound_movement: Optional[List[Dict[str, Any]]] = None
 
         self._last_limit_switch: Dict[Motor, Optional[bool]] = {
             Motor.PELLET_X_MOTOR: None,
@@ -215,18 +245,24 @@ class CanDevice(Device):
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
-
+        self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
         self._previous_stepper_status_perf_c = {}  # (None, -math.inf)
         self._previous_servo_status_perf_c = {}  # (None, -math.inf)
 
     def _init_handlers(self):
 
-        def inject_steps(steps):
+        def inject_steps(steps, motor, dest_steps):
+            logger.verbose("motor: %s: injecting steps(%s) into dest_steps(%s)",
+                           motor, len(steps), len(dest_steps))
             # replace current _internal_func with one doing nothing;
-            self._compound_movement[0] = {"_internal_func": _no_op}
+            dest_steps[0] = {
+                '_internal_func': _no_op,
+                '_internal_func_motor': motor,
+            }
             # so that the inner steps are not re-injected on eventual write retry:
-            self._compound_movement[1:1] = steps
+            dest_steps[1:1] = steps
+            logger.debug("result steps: %s", dest_steps)
             return True
 
         def handle_servo_move(motor: Motor, position):
@@ -234,7 +270,14 @@ class CanDevice(Device):
             return self._start_sequence(MotorSteps(f"move_servo_{motor.name}", steps))
 
         def handle_servo_sequence(motor: Motor, sequence: MotorSteps):
-            steps = self._make_servo_iface_func_steps(motor, lambda: inject_steps(sequence.steps))
+            step, steps = self._make_servo_steps(motor)
+            for sub_step in sequence.steps:
+                sub_step.update(step)  # eventual uuid_ack_timeout
+            if len(steps) > 1:  # attach/detach
+                step_idx = steps.index(step)
+                steps[step_idx:-1] = sequence.steps
+            else:
+                steps = sequence.steps
             return self._start_sequence(MotorSteps(f"{motor.name}_{sequence.name}", steps))
 
         def set_load_pellet_proc(proc):
@@ -280,8 +323,6 @@ class CanDevice(Device):
             SystemCommandKind.REQUEST_VERSION:
                 lambda data: self._interface.request_version(),
 
-            SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
-
             SystemCommandKind.MOVE_MAGNET_SERVO: partial(handle_servo_move, Motor.TUNNEL_MAGNET_SERVO),
 
             SystemCommandKind.MOVE_LOAD_SERVO: partial(handle_servo_move, Motor.PELLET_LOAD_SERVO),
@@ -317,7 +358,7 @@ class CanDevice(Device):
                 )),
 
             SystemCommandKind.SEND_HOME:
-                lambda data: self._start_sequence(MotorSteps(
+                lambda _: self._start_sequence(MotorSteps(
                     "send_home",
                     [{"home": m} for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
                 )),
@@ -345,9 +386,9 @@ class CanDevice(Device):
             # digital only allow 2 "position"
             # SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
 
-            #
-
             SystemCommandKind.DELAY: self._interface.delay,
+
+            SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION: self._handle_write_motor_configuration,
 
@@ -494,16 +535,30 @@ class CanDevice(Device):
     def _command_handler(self):
         cur_commands = []
         t_perf_last_command_with_uuid = None
-        q = self._commands_queue
+        input_q = self._commands_queue
         has_read_from_queue = False
-        pending_uuid = None
-        repeated_command_count = 0
-        uuid_ack_timeout_engaged = False
+        boards_pending_ctx: Dict[Target, BoardPendingContext] = {
+            None: BoardPendingContext(target=None, uuid_ack_timeout_engaged_property_name=""),
+            Target.PELLET_DEVICE: BoardPendingContext(
+                target=Target.PELLET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+            Target.MAGNET_DEVICE: BoardPendingContext(
+                target=Target.MAGNET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+        }
 
-        def perform_next_compound():
+        def boards_has_ack_timeout_engaged():
+            for board in boards_pending_ctx.values():
+                if board.uuid_ack_timeout_engaged:
+                    return True
+            return False
+
+        def perform_next_compound(steps):
             self._prev_command_timeout = self.default_command_ack_timeout_duration
             for _ in range(self.default_command_write_failed_repeat_count):
-                success = self._perform_next_compound_step()
+                success = self._perform_next_compound_step(steps)
                 if success:
                     break
             if not success:
@@ -511,98 +566,168 @@ class CanDevice(Device):
 
         while True:
             if has_read_from_queue:
-                q.task_done()
+                input_q.task_done()
                 has_read_from_queue = False
             try:
-                raw = q.get(timeout=0.005)
+                raw = input_q.get(timeout=0.05)
             except queue.Empty:
                 raw = None, None, None
             else:
                 has_read_from_queue = True
             if raw is None:
-                q.task_done()
+                input_q.task_done()
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = raw
+            found_board_with_uuid_ack = None
             if kind is _uuid_ack:
-                if data == pending_uuid and pending_uuid is not None:
-                    cur_commands.insert(0, raw)
-                    self._prev_command = None
-                else:
-                    if pending_uuid is not None:
-                        logger.verbose("Got CAN msg ack with uuid=%s but pending_uuid=%s", data, pending_uuid)
-                    else:
-                        logger.debug("skipping unknown CAN uuid: %s", data)
+                for target, board_ctx in boards_pending_ctx.items():
+                    if board_ctx.uuid is not None and board_ctx.uuid == data:
+                        found_board_with_uuid_ack = board_ctx
+                        cur_commands.insert(0, raw)
+                        board_ctx.uuid = None
+                        board_ctx.retrying = False
+                        board_ctx.repeated_command_count = 0
+                        board_ctx.prev_command = None
+                        if board_ctx.uuid_ack_timeout_engaged:
+                            board_ctx.uuid_ack_timeout_engaged = False
+                            if not boards_has_ack_timeout_engaged():
+                                self.property_changed(
+                                    self.UUID_ACK_TIMEOUT_ENGAGED,
+                                    False,
+                                    True,
+                                )
+                        break
+                if found_board_with_uuid_ack is None:
+                    logger.debug("skipping unknown CAN uuid: %s", data)
                     continue
             else:
                 if kind is not None:
                     cur_commands.append(raw)
             #
-            has_compound_left = (
-                self._compound_movement is not None
-                and len(self._compound_movement) > 0
-            )
+            has_compound_left = False
+            for board_ctx in boards_pending_ctx.values():
+                if board_ctx.compound_steps is not None and len(board_ctx.compound_steps) > 0:
+                    has_compound_left = True
             #
-            if pending_uuid is not None and kind is not _uuid_ack:
-                if self._prev_command_timeout <= 0:
-                    logger.warning("correcting invalid command uuid-ack timeout value: %s",
-                                   self._prev_command_timeout)
-                    self._prev_command_timeout = self.default_command_ack_timeout_duration
-                if get_perf_now() - t_perf_last_command_with_uuid < self._prev_command_timeout:
-                    # continue poll input queue for uuid ack
-                    continue
-                if not uuid_ack_timeout_engaged:
-                    uuid_ack_timeout_engaged = True
-                    self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, False)
-                logger.warning("timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
-                               self._pending_kind, self._pending_context, pending_uuid)
-                pending_uuid = None
-                repeated_command_count += 1
-                if repeated_command_count >= self.default_command_ack_timeout_repeat_count:
-                    raise RuntimeError(f"Reached default_command_ack_timeout_repeat_count {repeated_command_count}")
-                assert self._prev_command is not None
-                if self._prev_command_is_relative:
-                    # TODO: should/could simply continue, probably
-                    raise RuntimeError(f"Command {self._prev_command} uuid ack timed out ; refusing retry given relative.")
-                cur_commands.insert(0, self._prev_command)
-                self._prev_command = None
-                retrying = True
-                time.sleep(0.05)  # do not retry eventually too fast to allow eventually reader thread
+            p_now = get_perf_now()
+            retrying_board = None
+            if kind is _uuid_ack:
+                # ensure we don't try to retry a command when we got an uuid ack
+                search_retry_boards = {}
             else:
-                retrying = False
-            #
-            if not retrying and has_compound_left:
-                if pending_uuid is None:
-                    cur_commands.insert(0, (_next_compound, None, None))  # will trigger perform next compound
-                elif kind is not _uuid_ack:
+                search_retry_boards = boards_pending_ctx
+            for target, board_ctx in sorted(search_retry_boards.items(), key=lambda t: t[1].ack_perf_timeout):
+                if board_ctx.uuid is None:
                     continue
+                if p_now > board_ctx.ack_perf_timeout:
+                    logger.warning(
+                        "timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
+                        board_ctx.kind,
+                        board_ctx.ctx,
+                        board_ctx.uuid,
+                    )
+                    if not board_ctx.uuid_ack_timeout_engaged:
+                        before = boards_has_ack_timeout_engaged()
+                        board_ctx.uuid_ack_timeout_engaged = True
+                        self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, before)
+                    board_ctx.repeated_command_count += 1
+                    board_ctx.retrying = True
+                    if board_ctx.repeated_command_count >= self.default_command_ack_timeout_repeat_count:
+                        raise RuntimeError(
+                            f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}"
+                        )
+                    if board_ctx.prev_command_relative:
+                        # TODO: should/could simply continue, probably
+                        raise RuntimeError(
+                            f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
+                        )
+                    retrying_board = target
+                    cur_commands.insert(0, board_ctx.prev_command)
+                    break  # only retry 1 board at a time
+            #
+            if retrying_board is None and has_compound_left and kind is not _uuid_ack:
+                for board_ctx in boards_pending_ctx.values():
+                    if board_ctx.uuid is None and board_ctx.compound_steps is not None:
+                        cur_commands.insert(0, (_next_compound, board_ctx.compound_steps, board_ctx.ctx))
+                        # board_ctx.compound_steps = None
+            #
             if len(cur_commands) == 0:
                 continue
-            kind, data, ctx = cur_commands.pop(0)
+            kind, data, ctx = cur_commands[0]
+            # check if need wait for another board:
+            if kind is _uuid_ack:
+                assert found_board_with_uuid_ack is not None
+                steps = found_board_with_uuid_ack.compound_steps
+                if steps:
+                    target_board = boards_pending_ctx[self._find_steps_next_board(steps)]
+                    if target_board is not found_board_with_uuid_ack and not target_board.is_available():
+                        # target has to finish some compound
+                        cur_commands.pop(0)  # still pop it.
+                        # but reinsert as _next_compound:
+                        cur_commands.append((_next_compound, steps, found_board_with_uuid_ack.ctx))
+                        found_board_with_uuid_ack.ctx = None
+                        found_board_with_uuid_ack.kind = None
+                        found_board_with_uuid_ack.compound_steps = None
+                        continue
+                else:
+                    found_board_with_uuid_ack.compound_steps = None  # ensure None, always
+                    target_board = found_board_with_uuid_ack
+            else:
+                target = self._find_command_next_board(kind, data)
+                target_board = boards_pending_ctx[target]
+                if not target_board.is_available():
+                    logger.spam("target board %s not available yet", target)
+                    continue
+            cur_commands.pop(0)
+            #
+            # execute command
+            logger.verbose("executing command kind: %s with ctx=%s ; target_board: ctx=%s",
+                           kind, ctx, target_board.ctx)
+            #
             self._prev_command_is_relative = False  # always before trying new command, it's used on ack timeout
             before_uuid = self._interface.uuid()  # to know if some command has used, or not, a new CAN uuid
-            success = False
             if kind is _retry_compound:
-                logger.verbose("retrying perform next compound with %s", data)
-                self._compound_movement.insert(0, data)
+                step, target, steps = data
+                logger.verbose("retrying perform next compound with %s", step)
+                steps.insert(0, step)
+                data = steps
                 kind = _next_compound
             #
+            # preset the possible default command (uuid) timeout:
+            self._prev_command_timeout = self.default_command_ack_timeout_duration
+            #
             if kind is _next_compound:
-                perform_next_compound()
+                steps = data
+                target_board.compound_steps = steps
+                perform_next_compound(steps)
             elif kind is _uuid_ack:
-                pending_uuid = None
-                if uuid_ack_timeout_engaged:
-                    uuid_ack_timeout_engaged = False
-                    self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, False, True)
-                repeated_command_count = 0
-                logger.debug("executing ack perform next compound")
-                perform_next_compound()
+                assert found_board_with_uuid_ack is not None
+                assert target_board is not None
+                logger.debug("executing ack perform next compound, board_target=%s",
+                             found_board_with_uuid_ack.target)
+                # detach current steps:
+                steps = found_board_with_uuid_ack.compound_steps
+                found_board_with_uuid_ack.compound_steps = None
+                if steps:
+                    assert target_board.compound_steps is None
+                    target_board.compound_steps = steps
+                    target_board.ctx = found_board_with_uuid_ack.ctx
+                    target_board.kind = found_board_with_uuid_ack.kind
+                    if found_board_with_uuid_ack is not target_board:
+                        found_board_with_uuid_ack.ctx = None
+                        found_board_with_uuid_ack.kind = None
+                    perform_next_compound(steps)
+                else:
+                    assert target_board is found_board_with_uuid_ack
             else:
-                self._prev_command_timeout = self.default_command_ack_timeout_duration
                 if kind is _retry_full:
                     kind, data, ctx = data
+                    target_board.ctx = ctx
+                    target_board.kind = kind
                 handler = self._command_handlers.get(kind)
-                if handler is None:
+                if handler is None:  # actually not anymore necessary,
+                    # since we check target_board
                     logger.warning("unhandled command queue message: %s", kind)
                     continue
                 success = False
@@ -617,44 +742,63 @@ class CanDevice(Device):
                     logger.error("Failed sending %s to bus", kind)
                 if not success:
                     raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind.name} ctx={ctx}")
-                #
-                if ctx is not None:
-                    if self._pending_context is not None:
-                        logger.error("pending_context=%s and ctx=%s", self._pending_context, ctx)
-                    else:
-                        self._pending_context = ctx
-                        self._pending_kind = kind
             # end possible handling cases
-            after_uuid = self._interface.uuid()  # get CAN uuid after,
+            # get CAN uuid after, to distinguish both cases (with or without uuid used):
+            after_uuid = self._interface.uuid()
+            # if __debug__:
+            #     # could bypass using self._prev_board_command entirely, since we have target_board
+            #     prev_target = self._prev_target_command
+            #     if prev_target is not None:  # some commands really do not write to CAN bus.
+            #         board_ctx = boards_pending_ctx[prev_target]
+            #         assert board_ctx is target_board, "unexpected prev_target_command"
+            #         del board_ctx
+            #
+            if ctx is not None and target_board.ctx != ctx:
+                logger.debug("attaching ctx %s to target_board %s", ctx, target_board.target)
+                assert target_board.ctx is None or ctx == target_board.ctx
+                target_board.ctx = ctx
+            #
+            compound = self._compound_movement
+            if compound is not None:  # on start_sequence commands
+                assert target_board.compound_steps is None, f"{target_board.compound_steps=}"
+                target_board.compound_steps = compound
+                self._compound_movement = None
+            #
+            target_board.prev_command_relative = self._prev_command_is_relative
+            self._prev_command_is_relative = None
+            #
             if after_uuid != before_uuid:
+                assert target_board.target is not None
+                assert target_board.uuid is None
                 #
-                # prev_commands_with_uuid_timeout_state.append(0)
                 t_perf_last_command_with_uuid = get_perf_now()
                 # for now we have this rule:
                 if after_uuid != before_uuid + 1 and (before_uuid != 255 or after_uuid != 1):
                     # but this can eventually happens if/when we retry several time the same (write-) command
                     logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
                 #
-                pending_uuid = after_uuid
-                if ctx is not None:
-                    if kind not in {_uuid_ack, _next_compound}:
-                        self._pending_context = ctx
-                        self._pending_kind = kind
-                if self._prev_command is None:  # given compound step do set it itself
-                    self._prev_command = (_retry_full, (kind, data, ctx), None)
+                prev_command = self._prev_command
+                if prev_command is None:  # given compound step do set it itself
+                    prev_command = (_retry_full, (kind, data, ctx), ctx)
+                target_board.uuid = after_uuid
+                command_timeout_delay = self._prev_command_timeout or self.default_command_ack_timeout_duration
+                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + command_timeout_delay
+                self._prev_command_timeout = self.default_command_ack_timeout_duration
+                target_board.prev_command = prev_command
             else:
                 # no uuid generated
-                has_compound_left = (
-                    self._compound_movement is not None
-                    and len(self._compound_movement) > 0
-                )
-                if kind not in {_uuid_ack, _next_compound}:
-                    if self._pending_context is not None:
-                        if not has_compound_left:
-                            logger.warning("Handled %s with ctx=%s but CanInterface.uuid did not changed: %s",
-                                         self._pending_kind, self._pending_kind, after_uuid)
-                if not has_compound_left and self._pending_context is not None:
-                    self._command_complete()
+                compound_steps = target_board.compound_steps
+                has_compound_left = compound_steps is not None and len(compound_steps) > 0
+                if has_compound_left:
+                    cur_commands.insert(0, (_next_compound, compound_steps, target_board.ctx))
+                    target_board.ctx = None
+                    target_board.compound_steps = None
+                else:
+                    target_board.compound_steps = None
+                    if target_board.ctx is not None:
+                        self._acknowledge_command(target_board.ctx)
+                        target_board.ctx = None
+                        target_board.kind = None
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
@@ -734,16 +878,136 @@ class CanDevice(Device):
         Args:
             movements: The motor/device steps to execute
         """
+        move_steps = movements.steps
+        logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
         assert self._compound_movement is None
-        if movements is None or movements.is_empty:
-            logger.warning("start_sequence with empty or None sequence: %s", movements)
-            self._command_complete()
-            return True
+        self._compound_movement = move_steps
+        return self._perform_next_compound_step(move_steps)
+
+    def _find_step_board(self, step):
+        if 'x' in step or 'y' in step or 'z' in step:
+            motor = (
+                Motor.PELLET_X_MOTOR if 'x' in step
+                else Motor.PELLET_Y_MOTOR if 'y' in step
+                else Motor.PELLET_Z_MOTOR)
+        elif 'load_arm' in step:
+            motor = Motor.PELLET_LOAD_SERVO
+        elif 'barrier_arm' in step:
+            motor = Motor.PELLET_COVER_SERVO
+        elif 'gate' in step:
+            motor = Motor.TUNNEL_GATE_SERVO
+        elif 'magnet' in step:
+            motor = Motor.TUNNEL_MAGNET_SERVO
+        elif '_servo_move' in step:
+            motor = step['_servo_move'][0]
+        elif '_servo_max_pos' in step:
+            motor = step['_servo_max_pos']
+        elif '_servo_min_pos' in step:
+            motor = step['_servo_min_pos']
+        elif 'delay' in step:
+            motor = Motor.DELAY
+        elif 'tone' in step:
+            motor = Motor.TONE
+        elif 'servo_attach' in step:
+            motor = step['servo_attach']
+        elif 'servo_detach' in step:
+            motor = step['servo_detach']
+        elif 'home' in step:
+            motor = step['home']
+        elif '_internal_func_motor' in step:
+            motor = step['_internal_func_motor']
+        elif 'predefined' in step:
+            predef = step['predefined']
+            if predef in {'send', 'cover', 'release', 'retrieve', 'home', 'scoop'}:
+                # single one where we don't use motor = ..
+                # but they are all on PELLET board.
+                return Target.PELLET_DEVICE
+            return None
         else:
-            move_steps = movements.steps
-            logger.info("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
-            self._compound_movement = move_steps
-            return self._perform_next_compound_step()
+            return None
+        return target_of_motor(motor)
+
+    def _find_steps_next_board(self, steps):
+        for step in steps:
+            tgt = self._find_step_board(step)
+            if tgt is not None:
+                return tgt
+        raise ValueError("Found no target board for steps")
+
+    def _find_command_next_board(self, kind, data) -> Optional[Target]:
+        if kind is _next_compound:
+            return self._find_steps_next_board(data)
+        elif kind is _retry_compound:
+            return data[1]
+        elif kind is _retry_full:
+            return self._find_command_next_board(data[0], data[1])
+        elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
+            return Target.MAGNET_DEVICE
+        elif kind == {
+            SystemCommandKind.SET_DIGITAL_OUTPUT,
+            SystemCommandKind.SET_ANALOG_OUTPUT,
+            SystemCommandKind.SET_RGB_LED,
+        }:
+            return Target.PELLET_DEVICE
+        elif kind in {
+            SystemCommandKind.MOVE_X,
+            SystemCommandKind.MOVE_Y,
+            SystemCommandKind.MOVE_Z,
+            SystemCommandKind.SET_X,
+            SystemCommandKind.SET_Y,
+            SystemCommandKind.SET_Z,
+            SystemCommandKind.COVER_PELLET,
+            SystemCommandKind.RELEASE_PELLET,
+            SystemCommandKind.LOAD_PELLET,
+            SystemCommandKind.SEND_PELLET,
+            SystemCommandKind.SEND_HOME,
+            SystemCommandKind.MOVE_COVER_SERVO,
+            SystemCommandKind.MOVE_LOAD_SERVO,
+            SystemCommandKind.SEND_TO_LIMITS,
+            SystemCommandKind.SEND_RETRACT,
+        }:
+            return Target.PELLET_DEVICE
+        elif kind == SystemCommandKind.MOVE_MAGNET_SERVO:
+            motor = Motor.TUNNEL_MAGNET_SERVO
+        elif kind in {
+            SystemCommandKind.TUNNEL_FAN_ON,
+            SystemCommandKind.TUNNEL_FAN_OFF,
+        }:
+            motor = Motor.TUNNEL_FAN_SERVO
+        elif kind in {
+            SystemCommandKind.OPEN_TUNNEL_GATE,
+            SystemCommandKind.CLOSE_TUNNEL_GATE,
+        }:
+            motor = Motor.TUNNEL_GATE_SERVO
+        elif kind == SystemCommandKind.DELAY:
+            motor = Motor.DELAY
+        elif kind == SystemCommandKind.PLAY_TONE:
+            motor = Motor.TONE
+        elif kind in {SystemCommandKind.MOVE_GATE_SERVO, SystemCommandKind.OPEN_TUNNEL_GATE, SystemCommandKind.CLOSE_TUNNEL_GATE}:
+            motor = Motor.TUNNEL_GATE_SERVO
+        elif kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
+            motor = data[0]
+        elif kind == SystemCommandKind.READ_MOTOR_CONFIGURATION:
+            motor = data
+        elif kind == SystemCommandKind.SERVO_ATTACH:
+            motor = data
+        elif kind == SystemCommandKind.SERVO_DETACH:
+            motor = data
+        elif kind == SystemCommandKind.REQUEST_VERSION:
+            # it's both, but doesn't use uuid, so does not matter, safe to give any:
+            return None
+        elif kind in {SystemCommandKind.STREAM_START, SystemCommandKind.STREAM_STOP}:
+            return None
+        elif kind in {
+            SystemCommandKind.SET_LOAD_PELLET_PROCEDURE,
+            SystemCommandKind.SET_SEND_PELLET_PROCEDURE,
+            SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
+            SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE,
+        }:
+            return None
+        else:
+            raise ValueError(f"Invalid kind for _find_command_next_board: {kind}")
+        return target_of_motor(motor)
 
     def _handle_write_motor_configuration(self, data: Tuple[Motor, Union[StepperConfig, ServoConfig]]):
         """
@@ -827,21 +1091,6 @@ class CanDevice(Device):
             self._api.send_message(SystemStatusMessageKind.MEASUREMENTS, measures)
             self._measurements = []
 
-    def _command_complete(self) -> None:
-        """
-        On completion of a command, the class reports that to a DeviceAPI class.
-        Note that 'completion' may only indicate that the message was sent to the
-        target, not that the target is complete in executing the command.
-        NB: although with the CAN uuid ack that's what it actually means/signifies.
-        """
-        pending_ctx = self._pending_context
-        if pending_ctx is not None:
-            self._acknowledge_command(pending_ctx)
-        self._prev_command = None
-        self._compound_movement = None
-        self._pending_kind = None
-        self._pending_context = None  # last
-
     def _report_stepper_status(self, message: StepperStatus):
         """
         Report stepper status to the API.
@@ -889,54 +1138,59 @@ class CanDevice(Device):
 
     #
 
-    def _make_servo_steps(self, motor: Motor):
+    def _make_servo_steps(self, motor: Motor) -> Tuple[Dict, List[Dict]]:
         cfg = self._motor_configs[motor]
+        assert isinstance(cfg, ServoConfig)
         want_detach = cfg.detach
         step = {}
         if cfg.uuid_ack_timeout is not None:
-            step["uuid_ack_timeout"] = cfg.uuid_ack_timeout
+            step['uuid_ack_timeout'] = cfg.uuid_ack_timeout
         if want_detach:
             return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
         return step, [step]
 
     def _make_servo_move_steps(self, motor, position):
         step, steps = self._make_servo_steps(motor)
-        step["_servo_move"] = (motor, position)
+        step['_servo_move'] = (motor, position)
         return steps
 
     def _make_servo_iface_func_steps(self, motor, func):
         step, steps = self._make_servo_steps(motor)
         step['_internal_func'] = func
-        return steps
+        step['_internal_func_motor'] = motor
+        return step, steps
 
     def _handle_servo_move_compound(self, compound_movements, motor, position):
         steps = self._make_servo_move_steps(motor, position)
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_move_compound,
         # by one doing nothing now:
-        compound_movements[0] = {"_internal_func": _no_op}  # noqa
+        compound_movements[0] = {
+            '_internal_func': _no_op,
+            '_internal_func_motor': motor,
+        }  # noqa
         compound_movements[1:1] = steps
+        logger.verbose("injected steps: new=%s", compound_movements)
         return True
 
     def _handle_servo_iface_cmd_compound(self, compound_movements, motor, iface_func):
-        steps = self._make_servo_iface_func_steps(motor, iface_func)
+        step, steps = self._make_servo_iface_func_steps(motor, iface_func)
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_iface_cmd_compound,
         # by one doing nothing now:
-        compound_movements[0] = {"_internal_func": _no_op}  # noqa
+        compound_movements[0] = {
+            '_internal_func': _no_op,
+            '_internal_func_motor': motor,
+        }  # noqa
         compound_movements[1:1] = steps
         return True
 
-    def _perform_next_compound_step(self) -> bool:
+    def _perform_next_compound_step(self, compound_movements: List[Dict[str, Any]]) -> bool:
         """
         Issue the next step in a multi-step motor sequence.
         """
-        compound_movements = self._compound_movement
-        if compound_movements is None or len(compound_movements) == 0:
-            self._command_complete()
-            return True
-
         step = compound_movements[0]
+        orig_step = step.copy()
         logger.debug("executing next compound step: %s (remains=%s)",
                      step,
                      len(compound_movements) - 1,  # don't include current one
@@ -946,141 +1200,150 @@ class CanDevice(Device):
         save_as_fixed = step.get("save_as_fixed", False)
 
         motor = None
+        before_uuid = self._interface.uuid()
 
-        if "x" in step:
+        if 'x' in step:
             motor = Motor.PELLET_X_MOTOR
-            location = _to_tuple(step["x"])
+            location = _to_tuple(step['x'])
             success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
 
-        elif "y" in step:
+        elif 'y' in step:
             motor = Motor.PELLET_Y_MOTOR
-            location = _to_tuple(step["y"])
+            location = _to_tuple(step['y'])
             success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
 
-        elif "z" in step:
+        elif 'z' in step:
             motor = Motor.PELLET_Z_MOTOR
-            location = _to_tuple(step["z"])
+            location = _to_tuple(step['z'])
             success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
 
-        elif "_servo_move" in step:  # should be internal only
-            motor, position = step["_servo_move"]  # noqa
+        elif '_servo_move' in step:  # should be internal only
+            motor, position = step['_servo_move']  # noqa
             success = self._interface.move_servo_motor(motor, position)
 
-        elif "load_arm" in step:
+        elif 'load_arm' in step:
             motor = Motor.PELLET_LOAD_SERVO
-            location = _to_tuple(step["load_arm"])
-            success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_LOAD_SERVO, location)
+            location = _to_tuple(step['load_arm'])
+            success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif "barrier_arm" in step:
+        elif 'barrier_arm' in step:
             motor = Motor.PELLET_COVER_SERVO
-            location = _to_tuple(step["barrier_arm"])
-            success = self._handle_servo_move_compound(compound_movements, Motor.PELLET_COVER_SERVO, location)
+            location = _to_tuple(step['barrier_arm'])
+            success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif "magnet" in step:
+        elif 'magnet' in step:
             motor = Motor.TUNNEL_MAGNET_SERVO
-            location = _to_tuple(step["magnet"])
-            success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_MAGNET_SERVO, location)
+            location = _to_tuple(step['magnet'])
+            success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif "gate" in step:
+        elif 'gate' in step:
             motor = Motor.TUNNEL_GATE_SERVO
-            location = _to_tuple(step["gate"])
-            success = self._handle_servo_move_compound(compound_movements, Motor.TUNNEL_GATE_SERVO, location)
+            location = _to_tuple(step['gate'])
+            success = self._handle_servo_move_compound(compound_movements, motor, location)
 
         # _servo_max_pos / _servo_max_pos are internal and should not be used from outside.
-        elif "_servo_max_pos" in step:
-            motor: Motor = step["_servo_max_pos"]  # noqa
+        elif '_servo_max_pos' in step:
+            motor: Motor = step['_servo_max_pos']  # noqa
             cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
-        elif "_servo_min_pos" in step:
-            motor: Motor = step["_servo_min_pos"]  # noqa
+        elif '_servo_min_pos' in step:
+            motor: Motor = step['_servo_min_pos']  # noqa
             cfg = self._motor_configs[motor]
             success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
-        elif "delay" in step:
-            duration = step["delay"]
+        elif 'delay' in step:
+            motor = Motor.DELAY
+            duration = step['delay']
             success = self._interface.delay(duration)
 
-        elif "tone" in step:
-            freq, duration = step["tone"].split(',')  # noqa  # (hz), (sec)
+        elif 'tone' in step:
+            motor = Motor.TONE
+            freq, duration = step['tone'].split(',')  # noqa  # (hz), (sec)
             success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
 
-        elif "predefined" in step:
+        elif 'predefined' in step:
 
-            predefined = step["predefined"]
+            predefined = step['predefined']
 
-            if predefined == "send":
+            if predefined == 'send':
+                motor = Motor.PELLET_X_MOTOR  # could choose Y or Z
                 success = self._interface.fixed_position()
+                if success:
+                    self._prev_target_command = Target.PELLET_DEVICE
 
-            elif predefined == "cover":
+            elif predefined == 'cover':
                 motor = Motor.PELLET_COVER_SERVO
-                success = self._handle_servo_iface_cmd_compound(
-                    compound_movements, Motor.PELLET_COVER_SERVO, self._interface.cover_pellet)
+                success = self._handle_servo_iface_cmd_compound(compound_movements, motor, self._interface.cover_pellet)
 
-            elif predefined == "release":
+            elif predefined == 'release':
                 motor = Motor.PELLET_COVER_SERVO
-                success = self._handle_servo_iface_cmd_compound(
-                    compound_movements, Motor.PELLET_COVER_SERVO, self._interface.release_pellet)
+                success = self._handle_servo_iface_cmd_compound(compound_movements, motor, self._interface.release_pellet)
 
-            elif predefined == "retrieve":
+            elif predefined == 'retrieve':
                 motor = Motor.PELLET_LOAD_SERVO
-                success = self._handle_servo_iface_cmd_compound(
-                    compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.retrieve_pellet)
+                success = self._handle_servo_iface_cmd_compound(compound_movements, motor, self._interface.retrieve_pellet)
 
-            elif predefined == "scoop":
+            elif predefined == 'scoop':  # NB: unused
                 motor = Motor.PELLET_LOAD_SERVO
-                success = self._handle_servo_iface_cmd_compound(
-                    compound_movements, Motor.PELLET_LOAD_SERVO, self._interface.scoop_pellet)
+                success = self._handle_servo_iface_cmd_compound(compound_movements, motor, self._interface.scoop_pellet)
 
-            elif predefined == "home":
+            elif predefined == 'home':
                 # replace by home steps (not predefined->home), 1 for each XYZ :
-                step = {'home': Motor.PELLET_Y_MOTOR}  # for possible retry on ack timeout
+                motor = Motor.PELLET_Y_MOTOR
+                step = {'home': motor}  # for possible retry on ack timeout
                 compound_movements[0] = step
                 # inject at index 1 the steps:
                 compound_movements[1:1] = [
-                    {"home": m}
+                    {'home': m}
                     for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
                 ]
-                success = self._interface.stepper_home(Motor.PELLET_Y_MOTOR)
+                success = self._interface.stepper_home(motor)
 
             else:
                 raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
-                # success = True
-                # logger.error("Skipping unhandled predefined: %s", predefined)
 
-        elif "servo_attach" in step:
-            motor: Motor = step["servo_attach"]  # noqa
+        elif 'servo_attach' in step:
+            motor: Motor = step['servo_attach']  # noqa
             success = self._interface.servo_attach(motor)
 
-        elif "servo_detach" in step:
-            motor: Motor = step["servo_detach"]  # noqa
+        elif 'servo_detach' in step:
+            motor: Motor = step['servo_detach']  # noqa
             success = self._interface.servo_detach(motor)
 
-        elif "home" in step:
+        elif 'home' in step:
             # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
-            motor: Motor = step["home"]  # noqa
+            motor: Motor = step['home']  # noqa
             success = self._interface.stepper_home(motor)
 
-        elif "_internal_func" in step:
-            func = step["_internal_func"]
+        elif '_internal_func' in step:
+            func = step['_internal_func']
+            motor: Motor = step['_internal_func_motor']  # noqa
             success = func()  # noqa
 
         else:
             raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
-            # logger.error("Skipping unknown compound step: %s", step)
-            # success = True  # just skip it
+
+        assert motor is not None, "all possible compound steps relate to a specific Motor"
 
         if success:
-            compound_movements.pop(0)  # remove the one that was just requested successfully
-            self._prev_command = (_retry_compound, step, None)  # in case need for retry for ack timeout
-            logger.debug("executed %s write command", step)
-            # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
-            cmd_ack_timeout = step.get("uuid_ack_timeout")
-            if cmd_ack_timeout is None:
-                if motor is not None:
-                    cmd_ack_timeout = self._motor_configs[motor].uuid_ack_timeout
-            if cmd_ack_timeout is not None:
-                self._prev_command_timeout = cmd_ack_timeout
+            after_uuid = self._interface.uuid()
+            self._prev_target_command = target_of_motor(motor)
+            compound_movements.pop(0)  # remove the one that was just executed successfully
+            logger.debug("executed %s write command ; uuid: before=%s after=%s",
+                         orig_step, before_uuid, after_uuid)
+            if after_uuid != before_uuid:
+                # in case need for retry for ack timeout:
+                self._prev_command = (_retry_compound, (step, target_of_motor(motor), compound_movements), None)
+                # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
+                cmd_ack_timeout = step.get('uuid_ack_timeout')
+                if cmd_ack_timeout is None:
+                    if motor is not None:
+                        motor_cfg = self._motor_configs.get(motor)
+                        if motor_cfg is not None:
+                            cmd_ack_timeout = motor_cfg.uuid_ack_timeout
+                if cmd_ack_timeout is not None:
+                    self._prev_command_timeout = cmd_ack_timeout
         else:
             logger.error("%s write command failed", step)
 

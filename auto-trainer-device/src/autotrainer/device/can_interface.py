@@ -264,16 +264,14 @@ _pellet_motors = {
     Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
 }
 
+
 _tunnel_motors = {
     Motor.TUNNEL_GATE_SERVO,
     Motor.TUNNEL_MAGNET_SERVO,
 }
 
 
-def target_of_motor(motor: Motor,
-                    *,
-                    _tunnel_servos=_tunnel_servos,  # noqa
-                    ) -> Target:
+def target_of_motor(motor: Motor) -> Target:
     """
     Args:
         motor: motor identifier
@@ -281,10 +279,11 @@ def target_of_motor(motor: Motor,
     Returns:
         Target: the hardware target that the motor resides on
     """
-    return (
-        Target.MAGNET_DEVICE if motor in _tunnel_servos
-        else Target.PELLET_DEVICE
-    )
+    if motor in _tunnel_motors:
+        return Target.MAGNET_DEVICE
+    if motor in _pellet_motors or motor in {Motor.DELAY, Motor.TONE}:
+        return Target.PELLET_DEVICE
+    raise ValueError(f"Unhandled motor for target_of_motor: {motor!r}")
 
 
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
@@ -1643,11 +1642,12 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return self._jc.RGBLEDWrite(addr,
-                                                         red_percent,
-                                                         green_percent,
-                                                         blue_percent,
-                                                         CanInterface.next_uuid()) == 0
+        rc = self._jc.RGBLEDWrite(addr,
+                                    red_percent,
+                                    green_percent,
+                                    blue_percent,
+                                    CanInterface.next_uuid())
+        return rc == 0
 
     def request_version(self) -> bool:
         """
