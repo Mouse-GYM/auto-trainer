@@ -50,7 +50,8 @@ from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
-    IntersessionMachine, CaptureAnalysisResult
+    IntersessionMachine
+from autotrainer.core.interfaces import CaptureAnalysisResult
 
 from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
 

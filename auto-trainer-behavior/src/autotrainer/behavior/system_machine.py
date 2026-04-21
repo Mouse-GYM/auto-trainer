@@ -10,8 +10,8 @@ from autotrainer.api import ApiEventKind
 
 from autotrainer.core import (ProjectInfo, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
                               HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
-
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.interfaces import (CaptureAnalysisResult, RecordingEndingReason)
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -19,20 +19,18 @@ from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.configuration.behavior_configuration import (
     HeadClampReleaseMode,
-    ShiftXYZHandlerConfig,
 )
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntersessionResponse
 
-from . import CaptureAnalysisResult, RecordingEndingReason
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps, BehaviorAlgoStatus
 from .inference_protocol import InferenceProtocol
 from .intersession import IntersessionMachine, IntersessionState
 from .pellet import PelletState
 from .pellet.pellet_machine import PelletMachine
 from .pellet_device_protocol import PelletDeviceProtocol
-from .pellet_shift import ShiftXYZHandler, ShiftXYZBufferHandler
+from .pellet_shift import ShiftXYZHandler
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
@@ -208,7 +206,7 @@ class SystemMachine(StateMachine):
         return self._intersession
 
     @property
-    def project(self) -> ProjectInfo:
+    def project(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @project.setter

@@ -10,7 +10,8 @@ from autotrainer.core import get_perf_now, Offset3DTuple
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
-from autotrainer.behavior import SystemMachine, SystemState, RecordingEndingReason
+from autotrainer.behavior import SystemMachine, SystemState
+from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.inference import PoseResponse
 
 from top_fixtures import MockSystemMachine
