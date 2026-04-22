@@ -496,9 +496,16 @@ def segment_reaches_f2(
                     start_query = reach_dict['init']
                     max_query = reach_dict['max']
                     end_query = reach_dict['end']
-                    testX = end_query - start_query < min_reach_dur*frame_rate
-                    testY = end_query - start_query > max_reach_dur*frame_rate
-                    testZ = dist_hvpp_R[max_query] > min_dist_from_pellet
+                    if start_query is not None and end_query is not None:
+                        testX = end_query - start_query < min_reach_dur * frame_rate
+                        testY = end_query - start_query > max_reach_dur * frame_rate
+                    else:
+                        testX = True
+                        testY = True
+                    if end_query is not None:
+                        testZ = dist_hvpp_R[max_query] > min_dist_from_pellet
+                    else:
+                        testZ = False
                     if not (testX or testY or testZ):
                         reach_events.append(reach_dict)
 

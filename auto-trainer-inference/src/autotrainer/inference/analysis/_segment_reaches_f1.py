@@ -127,7 +127,7 @@ def segment_reaches_f11(
             if count >= n_frames_2_place:
                 pellet_dict = {
                     'placed': frame_at_count_begin,
-                    'lost': -1,
+                    'lost': None,
                     'method': ReachEventMethod.NONE,
                     'outcome': ReachEventOutcome.NONE,
                 }

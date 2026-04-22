@@ -34,8 +34,8 @@ class ReachEvent:
     #  if determined before the start of the corresponding video
 
     init: int  # frame index, can be negative
-    end: int  # frame index, can be negative
-    max: Optional[int] = None  # frame index, can be negative
+    end: Optional[int]  # frame index, can be negative ; None means unknown
+    max: Optional[int] = None  # frame index, can be negative ; None means unknown
 
     # Notice the "str" type hint for both method and outcome,
     #  *not* the 'ReachEventMethod' or 'ReachEventOutcome' type hint.

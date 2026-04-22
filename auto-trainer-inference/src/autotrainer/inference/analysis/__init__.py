@@ -33,7 +33,7 @@ class IntersessionResponse:
     def humanize(self, n_digits=2):
         rounded = dataclasses.replace(
             self,
-            rh_max_vp_list=[o.round(n_digits) for o in self.rh_max_vp_list],
+            rh_max_vp_list=[None if o is None else o.round(n_digits) for o in self.rh_max_vp_list],
         )
         return repr(rounded)
 
