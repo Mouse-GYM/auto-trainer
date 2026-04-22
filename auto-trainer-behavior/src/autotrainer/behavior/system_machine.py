@@ -633,11 +633,11 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_tare_requested(self, *, force: bool = False):
-        if force or not self._analysis.load_cell_monitor.is_engaged:
+        if force or not self._algorithm.is_in_session:
             self._tunnel_device.tare_load_cell()
             self._event_manager.post_event_content(ApiEventKind.headfixAutoTare)
         else:
-            logger.notice("skipping tare given load-cell engaged and not forced")
+            logger.notice("skipping tare given algo.is_in_session and not forced")
         return False
 
     def _evaluate_home_on_excessive_drift(self):
