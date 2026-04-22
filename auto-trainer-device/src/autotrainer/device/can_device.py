@@ -123,7 +123,7 @@ def apply_system_command_with_data_args(func, data):
 
 
 @dataclasses.dataclass
-class BoardPendingContext:
+class _BoardPendingContext:
     uuid_ack_timeout_engaged_property_name: str  # but actually unused
     target: Optional[Target]
     ctx: Optional[str] = None  # current command context
@@ -134,7 +134,6 @@ class BoardPendingContext:
     prev_command_relative: bool = False
     uuid_ack_timeout_engaged: bool = False
     repeated_command_count: int = 0
-    retrying_command: bool = False
     compound_steps: Optional[List[Dict[str, Any]]] = None
 
     def is_available(self):
@@ -524,13 +523,13 @@ class CanDevice(Device):
         t_perf_last_command_with_uuid = None
         input_q = self._commands_queue
         has_read_from_queue = False
-        boards_pending_ctx: Dict[Target, BoardPendingContext] = {
-            None: BoardPendingContext(target=None, uuid_ack_timeout_engaged_property_name=""),
-            Target.PELLET_DEVICE: BoardPendingContext(
+        boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
+            None: _BoardPendingContext(target=None, uuid_ack_timeout_engaged_property_name=""),
+            Target.PELLET_DEVICE: _BoardPendingContext(
                 target=Target.PELLET_DEVICE,
                 uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
             ),
-            Target.MAGNET_DEVICE: BoardPendingContext(
+            Target.MAGNET_DEVICE: _BoardPendingContext(
                 target=Target.MAGNET_DEVICE,
                 uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
             ),
@@ -544,9 +543,13 @@ class CanDevice(Device):
 
         def perform_next_compound(steps):
             self._prev_command_timeout = self.default_command_ack_timeout_duration
-            for _ in range(self.default_command_write_failed_repeat_count):
+            attempt_idx = 0
+            while True:
                 success = self._perform_next_compound_step(steps)
                 if success:
+                    break
+                attempt_idx += 1
+                if attempt_idx > self.default_command_write_failed_repeat_count:
                     break
             if not success:
                 raise RuntimeError("too many failure trying _perform_next_compound_step")
@@ -555,8 +558,14 @@ class CanDevice(Device):
             if has_read_from_queue:
                 input_q.task_done()
                 has_read_from_queue = False
+            p_now = time.perf_counter()
+            # don't check too often:
+            timeout = max(0.5,
+                          min(p_now - board.ack_perf_timeout
+                              for board in boards_pending_ctx.values()))
+            # what can anyway unblock use, is receiving anything, including _uuid_ack, in this input_q:
             try:
-                raw = input_q.get(timeout=0.05)
+                raw = input_q.get(timeout=timeout)
             except queue.Empty:
                 raw = None, None, None
             else:
@@ -573,7 +582,6 @@ class CanDevice(Device):
                         found_board_with_uuid_ack = board_ctx
                         cur_commands.insert(0, raw)
                         board_ctx.uuid = None
-                        board_ctx.retrying = False
                         board_ctx.repeated_command_count = 0
                         board_ctx.prev_command = None
                         if board_ctx.uuid_ack_timeout_engaged:
@@ -590,7 +598,11 @@ class CanDevice(Device):
                     continue
             else:
                 if kind is not None:
-                    cur_commands.append(raw)
+                    # Also always place new command on top/first of cur_commands,
+                    # so it gets at a first chance to be procssed,
+                    # if there would be some other(s) command already queued-up in cur_commands.
+                    cur_commands.insert(0, raw)
+                    # given this can relate to a board which is free to use.
             #
             has_compound_left = False
             for board_ctx in boards_pending_ctx.values():
@@ -599,7 +611,7 @@ class CanDevice(Device):
             #
             p_now = get_perf_now()
             retrying_board = None
-            if kind is _uuid_ack:
+            if kind is _uuid_ack or kind is not None:
                 # ensure we don't try to retry a command when we got an uuid ack
                 search_retry_boards = {}
             else:
@@ -615,17 +627,18 @@ class CanDevice(Device):
                         board_ctx.uuid,
                     )
                     if not board_ctx.uuid_ack_timeout_engaged:
+                        # note: checking the "before" value doesn't really matter,
+                        # given "property_changed" always relays the value to listeners.
                         before = boards_has_ack_timeout_engaged()
                         board_ctx.uuid_ack_timeout_engaged = True
                         self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, before)
                     board_ctx.repeated_command_count += 1
-                    board_ctx.retrying = True
                     if board_ctx.repeated_command_count >= self.default_command_ack_timeout_repeat_count:
                         raise RuntimeError(
                             f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}"
                         )
                     if board_ctx.prev_command_relative:
-                        # TODO: should/could simply continue, probably
+                        # TODO: should/could simply continue, probably, although surely only for retract command
                         raise RuntimeError(
                             f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
                         )
@@ -666,7 +679,7 @@ class CanDevice(Device):
                 if not target_board.is_available():
                     logger.spam("target board %s not available yet", target)
                     continue
-            cur_commands.pop(0)
+            cur_commands.pop(0)  # (kind, data, ctx) will be pushed back if command need to eventually retry
             #
             # execute command
             logger.verbose("executing command kind: %s with ctx=%s ; target_board: ctx=%s",
@@ -674,6 +687,7 @@ class CanDevice(Device):
             #
             self._prev_command_is_relative = False  # always before trying new command, it's used on ack timeout
             before_uuid = self._interface.uuid()  # to know if some command has used, or not, a new CAN uuid
+            #
             if kind is _retry_compound:
                 step, target, steps = data
                 logger.verbose("retrying perform next compound with %s", step)
