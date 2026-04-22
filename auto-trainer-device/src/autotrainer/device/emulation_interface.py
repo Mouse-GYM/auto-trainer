@@ -462,11 +462,9 @@ class EmulationInterface(DeviceInterface):
     def request_version(self):
         if self._is_open:
             self._version_requested = True
-            logger.info(f"request version")
+            logger.verbose("request version")
             self._messages.append(Version(Target.PELLET_DEVICE, "Pellet Emulator v0.1.0"))
             self._messages.append(Version(Target.MAGNET_DEVICE, "Magnet Emulator v0.1.0"))
-
-            self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def delay(self, delay):

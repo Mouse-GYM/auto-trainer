@@ -768,7 +768,7 @@ class CanDevice(Device):
             self._prev_command_is_relative = None
             #
             if after_uuid != before_uuid:
-                assert target_board.target is not None
+                assert target_board.target is not None, (kind, ctx,)
                 assert target_board.uuid is None
                 #
                 t_perf_last_command_with_uuid = get_perf_now()
