@@ -45,7 +45,7 @@ class ShiftXYZBaseHandler(abc.ABC):
         return None if the response does not generate yet a full shift XYZ result"""
 
     @abc.abstractmethod
-    def make_shift_from_rh_list(self, rh_list: List[Offset3DTuple],
+    def make_shift_from_rh_list(self, rh_list: List[Optional[Offset3DTuple]],
                                 *, reduce_method=mean_method) -> Offset3DTuple:
         """Compute the full shift from an entire RH max vp list"""
 
@@ -62,7 +62,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
         config: ShiftXYZBufferHandlerConfig,
     ):
         self._config = config
-        self._failed_reaches_buffer: List[Offset3DTuple] = []
+        self._failed_reaches_buffer: List[Optional[Offset3DTuple]] = []
 
     def reset(self):
         self._failed_reaches_buffer.clear()
@@ -79,10 +79,12 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
 
     def make_shift_from_rh_list(
         self,
-        rh_list: List[Offset3DTuple],
+        rh_list: List[Optional[Offset3DTuple]],
         *,
         reduce_method=mean_method,
     ) -> Offset3DTuple:
+        rh_list = [e for e in rh_list if e is not None]
+        rh_list: List[Offset3DTuple]
         if len(rh_list) == 0:
             return Offset3DTuple.get_nan()
         cfg = self._config

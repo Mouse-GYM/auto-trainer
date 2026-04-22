@@ -9,7 +9,7 @@ import h5py.h5f
 import numpy
 import verboselogs
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, ProjectInfo
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
 from autotrainer.inference.analysis import intersession_process, IntersessionResponse
@@ -182,12 +182,18 @@ agx001_20260205_11_expected_result = IntersessionResponse(
 )
 
 
-def test_agx001_20260205_11(project_info):
-    project_info.root = data_dir.as_posix()
-    project_info.session = 11
-    project_info.device_id = "agx001"
-    project_info.when = datetime(2026, 2, 5)
-    res = intersession_process(project_info, calib_dir=calib_dir)
+agx001_20260205_11_project_info = ProjectInfo(
+    root=data_dir.as_posix(),
+    device_id="agx001",
+    session=11,
+    when=datetime(2026, 2, 5),
+    camera_1="left",
+    camera_2="right",
+)
+
+
+def test_agx001_20260205_11():
+    res = intersession_process(agx001_20260205_11_project_info, calib_dir=calib_dir)
     assert_deep_almost_equal(res, agx001_20260205_11_expected_result)
 
 
