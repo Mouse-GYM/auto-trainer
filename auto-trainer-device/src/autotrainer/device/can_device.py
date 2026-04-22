@@ -922,6 +922,8 @@ class CanDevice(Device):
         raise ValueError("Found no target board for steps")
 
     def _find_command_next_board(self, kind, data) -> Optional[Target]:
+        # NB: following is kind of fragile:
+        # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
             return self._find_steps_next_board(data)
         elif kind is _retry_compound:
@@ -930,7 +932,7 @@ class CanDevice(Device):
             return self._find_command_next_board(data[0], data[1])
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             return Target.MAGNET_DEVICE
-        elif kind == {
+        elif kind in {
             SystemCommandKind.SET_DIGITAL_OUTPUT,
             SystemCommandKind.SET_ANALOG_OUTPUT,
             SystemCommandKind.SET_RGB_LED,
@@ -952,6 +954,7 @@ class CanDevice(Device):
             SystemCommandKind.MOVE_LOAD_SERVO,
             SystemCommandKind.SEND_TO_LIMITS,
             SystemCommandKind.SEND_RETRACT,
+            SystemCommandKind.SEND_FIXED_XYZ,
         }:
             return Target.PELLET_DEVICE
         elif kind == SystemCommandKind.MOVE_MAGNET_SERVO:
@@ -962,6 +965,7 @@ class CanDevice(Device):
         }:
             motor = Motor.TUNNEL_FAN_SERVO
         elif kind in {
+            SystemCommandKind.MOVE_GATE_SERVO,
             SystemCommandKind.OPEN_TUNNEL_GATE,
             SystemCommandKind.CLOSE_TUNNEL_GATE,
         }:
@@ -970,8 +974,6 @@ class CanDevice(Device):
             motor = Motor.DELAY
         elif kind == SystemCommandKind.PLAY_TONE:
             motor = Motor.TONE
-        elif kind in {SystemCommandKind.MOVE_GATE_SERVO, SystemCommandKind.OPEN_TUNNEL_GATE, SystemCommandKind.CLOSE_TUNNEL_GATE}:
-            motor = Motor.TUNNEL_GATE_SERVO
         elif kind == SystemCommandKind.WRITE_MOTOR_CONFIGURATION:
             motor = data[0]
         elif kind == SystemCommandKind.READ_MOTOR_CONFIGURATION:
@@ -981,9 +983,10 @@ class CanDevice(Device):
         elif kind == SystemCommandKind.SERVO_DETACH:
             motor = data
         elif kind == SystemCommandKind.REQUEST_VERSION:
-            # it's both, but doesn't use uuid, so does not matter, safe to give any:
+            # it's both boards, but doesn't use uuid, so does not matter, safe to give any:
             return None
         elif kind in {SystemCommandKind.STREAM_START, SystemCommandKind.STREAM_STOP}:
+            # is no CAN operation
             return None
         elif kind in {
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE,
@@ -991,6 +994,12 @@ class CanDevice(Device):
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
             SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE,
         }:
+            # is no CAN operation
+            return None
+        elif kind in {
+            SystemCommandKind.SET_MOTOR_DRIFT, SystemCommandKind.SET_AUTO_CORRECT_DRIFT
+        }:
+            # no CAN operation, also currently unused.
             return None
         else:
             raise ValueError(f"Invalid kind for _find_command_next_board: {kind}")
