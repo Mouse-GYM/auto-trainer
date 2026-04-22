@@ -43,4 +43,4 @@ dependencies = [
 root = ".."  # temporary while embedded in autotrainer main repo
 # also strip auto-trainer-core when moved as independent repo
 write_to = "auto-trainer-core/src/autotrainer/core/version.txt"
-git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"
+git_describe_command = "git describe --tags --dirty --match 'core-v*' --abbrev=8"
