@@ -30,6 +30,8 @@ dependencies = [
 
     'numpy >= 1.23.5, < 2',
 
+    'opencv-python >= 4.12, < 5',
+
     'pyhumps >= 3.8, < 4',  # snake/camel case converter
     'pyyaml >= 6.0.2, < 7',
 
@@ -41,4 +43,4 @@ dependencies = [
 root = ".."  # temporary while embedded in autotrainer main repo
 # also strip auto-trainer-core when moved as independent repo
 write_to = "auto-trainer-core/src/autotrainer/core/version.txt"
-git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"
+git_describe_command = "git describe --tags --dirty --match 'core-v*' --abbrev=8"

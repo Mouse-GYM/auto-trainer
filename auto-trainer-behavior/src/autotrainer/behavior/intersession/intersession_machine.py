@@ -1,19 +1,20 @@
 import secrets
 from functools import partial
-from typing import Callable, Optional, get_type_hints
+from typing import Callable, Optional
 
 from transitions import Machine
 
+from autotrainer.api.api_event_kind import ApiEventKind
+
 from autotrainer.core import ProjectInfo, transitions_allow_functions
-from autotrainer.core import ApiEventKind
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.interfaces import CaptureAnalysisResult
 
 from . import IntersessionState
-from .. import CaptureAnalysisResult
-
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine, StateMachineEvents
-from autotrainer.core.logging import get_verbose_logger
+
 
 logger = get_verbose_logger(__name__)
 
