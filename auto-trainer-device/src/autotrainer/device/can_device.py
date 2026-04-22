@@ -252,19 +252,6 @@ class CanDevice(Device):
 
     def _init_handlers(self):
 
-        def inject_steps(steps, motor, dest_steps):
-            logger.verbose("motor: %s: injecting steps(%s) into dest_steps(%s)",
-                           motor, len(steps), len(dest_steps))
-            # replace current _internal_func with one doing nothing;
-            dest_steps[0] = {
-                '_internal_func': _no_op,
-                '_internal_func_motor': motor,
-            }
-            # so that the inner steps are not re-injected on eventual write retry:
-            dest_steps[1:1] = steps
-            logger.debug("result steps: %s", dest_steps)
-            return True
-
         def handle_servo_move(motor: Motor, position):
             steps = self._make_servo_move_steps(motor, position)
             return self._start_sequence(MotorSteps(f"move_servo_{motor.name}", steps))
