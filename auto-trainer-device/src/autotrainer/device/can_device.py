@@ -797,12 +797,7 @@ class CanDevice(Device):
                 # no uuid generated
                 compound_steps = target_board.compound_steps
                 has_compound_left = compound_steps is not None and len(compound_steps) > 0
-                if has_compound_left:
-                    pass
-                    # cur_commands.insert(0, (_next_compound, compound_steps, target_board.ctx))
-                    # target_board.ctx = None
-                    # target_board.compound_steps = None
-                else:
+                if not has_compound_left:
                     target_board.compound_steps = None
                     if target_board.ctx is not None:
                         self._acknowledge_command(target_board.ctx)
