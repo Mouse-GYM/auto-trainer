@@ -654,7 +654,7 @@ class CanDevice(Device):
             if retrying_board is None and has_compound_left and kind is not _uuid_ack:
                 for board_ctx in boards_pending_ctx.values():
                     if board_ctx.uuid is None and board_ctx.compound_steps is not None:
-                        cur_commands.insert(0, (_next_compound, board_ctx.compound_steps, board_ctx.ctx))
+                        cur_commands.insert(0, (_next_compound, (board_ctx.kind, board_ctx.compound_steps), board_ctx.ctx))
                         # don't forget detach (even if temporarily):
                         # or else below is_available() check will say no..
                         board_ctx.compound_steps = None
@@ -675,7 +675,7 @@ class CanDevice(Device):
                         # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
                         # but reinsert as _next_compound:
-                        cur_commands.append((_next_compound, steps, found_board_with_uuid_ack.ctx))
+                        cur_commands.append((_next_compound, (found_board_with_uuid_ack.kind, steps), found_board_with_uuid_ack.ctx))
                         found_board_with_uuid_ack.ctx = None
                         found_board_with_uuid_ack.kind = None
                         found_board_with_uuid_ack.compound_steps = None
@@ -699,25 +699,28 @@ class CanDevice(Device):
             before_uuid = self._interface.uuid()  # to know if some command has used, or not, a new CAN uuid
             #
             if kind is _retry_compound:
-                step, target, steps = data
+                kind, step, steps = data
                 logger.verbose("retrying perform next compound with %s", step)
                 steps.insert(0, step)
-                data = steps
+                data = kind, steps
                 kind = _next_compound
             #
             # preset the possible default command (uuid) timeout:
             self._prev_command_timeout = self.default_command_ack_timeout_duration
             #
             if kind is _next_compound:
-                steps = data
+                kind, steps = data
+                target_board.kind = kind
                 target_board.compound_steps = steps
                 perform_next_compound(steps)
+
             elif kind is _uuid_ack:
                 assert found_board_with_uuid_ack is not None
                 assert target_board is not None
                 logger.debug("executing ack perform next compound, board_target=%s",
                              found_board_with_uuid_ack.target)
                 # detach current steps:
+                ctx = found_board_with_uuid_ack.ctx
                 steps = found_board_with_uuid_ack.compound_steps
                 found_board_with_uuid_ack.compound_steps = None
                 if steps:
@@ -732,11 +735,10 @@ class CanDevice(Device):
                     perform_next_compound(steps)
                 else:
                     assert target_board is found_board_with_uuid_ack
+
             else:
                 if kind is _retry_full:
-                    kind, data, ctx = data
-                    target_board.ctx = ctx
-                    target_board.kind = kind
+                    kind, data = data
                 handler = self._command_handlers.get(kind)
                 if handler is None:  # actually not anymore necessary,
                     # since we check target_board
@@ -753,7 +755,8 @@ class CanDevice(Device):
                         break
                     logger.error("Failed sending %s to bus", kind)
                 if not success:
-                    raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind.name} ctx={ctx}")
+                    raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind} ctx={ctx}")
+                target_board.kind = kind  # only used for debug/log
             # end possible handling cases
             #
             # get CAN uuid after, to distinguish both cases (with or without uuid used):
@@ -785,8 +788,9 @@ class CanDevice(Device):
                 #
                 prev_command = self._prev_command
                 if prev_command is None:  # given compound step do set it itself
-                    prev_command = (_retry_full, (kind, data, ctx), ctx)
+                    prev_command = (_retry_full, (kind, data), ctx)
                 else:
+                    prev_command[1][0] = kind
                     prev_command[-1] = ctx  # ensure it keeps the context/token as well
                 target_board.uuid = after_uuid
                 command_timeout_delay = self._prev_command_timeout or self.default_command_ack_timeout_duration
@@ -942,11 +946,14 @@ class CanDevice(Device):
         # NB: following is kind of fragile:
         # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
-            return self._find_steps_next_board(data)
+            kind, steps = data
+            return self._find_steps_next_board(steps)
         elif kind is _retry_compound:
-            return data[1]
+            kind, step, steps = data
+            return self._find_steps_next_board([step] + steps)
         elif kind is _retry_full:
-            return self._find_command_next_board(data[0], data[1])
+            kind, data = data
+            return self._find_command_next_board(kind, data)
         elif kind == SystemCommandKind.UPDATE_SCALE_TARE:
             return Target.MAGNET_DEVICE
         elif kind in {
@@ -1347,7 +1354,7 @@ class CanDevice(Device):
                          orig_step, before_uuid, after_uuid)
             if after_uuid != before_uuid:
                 # in case need for retry for ack timeout:
-                self._prev_command = [_retry_compound, (step, target_of_motor(motor), compound_movements), None]
+                self._prev_command = [_retry_compound, [None, step, compound_movements], None]
                 # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
                 cmd_ack_timeout = step.get('uuid_ack_timeout')
                 if cmd_ack_timeout is None:
