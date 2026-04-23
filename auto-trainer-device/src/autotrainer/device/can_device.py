@@ -687,7 +687,7 @@ class CanDevice(Device):
             else:
                 target_board = boards_pending_ctx[self._find_command_next_board(kind, data)]
                 if not target_board.is_available():
-                    logger.spam("target board %s not available yet", target)
+                    logger.spam("target %s not available yet", target_board.target)
                     continue
             # start processing of cur_commands[0]
             cur_commands.pop(0)  # (kind, data, ctx) will be pushed back if command need to eventually retry
