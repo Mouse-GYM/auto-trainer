@@ -583,7 +583,7 @@ class CanDevice(Device):
                     if board_ctx.uuid is not None and board_ctx.uuid == data:
                         found_board_with_uuid_ack = board_ctx
                         ctx = board_ctx.ctx
-                        cur_commands.insert(0, (kind, data, ctx))
+                        cur_commands.insert(0, (_uuid_ack, data, ctx))
                         board_ctx.uuid = None
                         board_ctx.repeated_command_count = 0
                         board_ctx.prev_command = None
@@ -721,6 +721,7 @@ class CanDevice(Device):
                 logger.debug("executing ack perform next compound, board_target=%s",
                              found_board_with_uuid_ack.target)
                 # detach current steps:
+                kind = found_board_with_uuid_ack.kind
                 steps = found_board_with_uuid_ack.compound_steps
                 found_board_with_uuid_ack.compound_steps = None
                 if steps:
