@@ -802,7 +802,7 @@ class CanDevice(Device):
                     if target_board.ctx is not None:
                         self._acknowledge_command(target_board.ctx)
                         target_board.ctx = None
-                        target_board.kind = None
+                    target_board.kind = None
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
