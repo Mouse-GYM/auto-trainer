@@ -2,6 +2,7 @@ import math
 import re
 import threading
 import time
+import uuid
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union, List
@@ -9,7 +10,7 @@ from typing import Optional, Tuple, Dict, Union, List
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration,
-                              get_perf_now)
+                              get_perf_now, SystemStatusMessageKind)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
@@ -76,6 +77,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_uuid_ack_timeout_engaged = False
         self._device_pellet_status_timeout_engaged = False
         self._device_tunnel_status_timeout_engaged = False
+        self._device_stream_started = False
 
         self._pending_tokens: Dict[UUID, Tuple[SystemCommandKind, float]] = {}
 
@@ -435,7 +437,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         device_conn.load_default_motor_config()
         device_conn.load_default_move_config()
 
-        self._send_command(device_conn, SystemCommandKind.STREAM_START)
+        tokens = set()
+        tok = str(uuid.uuid4())
+        tokens.add(tok)
+        with device_conn.await_acknowledge(tokens):
+            self._send_command(device_conn, SystemCommandKind.STREAM_START, context=tok)
+        logger.success("STREAM_START acknowledged")
+        self._device_stream_started = True
+
         self._send_command(device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
 
         prev_thread = self._check_timedout_commands_thread
@@ -465,6 +474,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if prev_thread is not None:
             logger.debug("joining checktimedout commands thread")
             prev_thread.join()
+        self._device_stream_started = False
 
     def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
@@ -616,7 +626,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())
         if popped is None:
-            logger.warning("Received unexpected ack token: %s", token)
+            # this can happen at device connection
+            (logger.debug if not self._device_stream_started else logger.warning)(
+                "Received unexpected ack token: %s", token)
         else:
             self._refresh_cmd_in_progress(commands_in_prog)
 
