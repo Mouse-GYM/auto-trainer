@@ -80,7 +80,8 @@ class _Sentinel:
         self.role = role
 
     def __repr__(self):
-        return f"Sentinel(role={self.role})"
+        return self.role
+
 
 # this is used from CAN reader thread to put to CAN writer thread message queue :
 _uuid_ack = _Sentinel(role="uuid_ack")
