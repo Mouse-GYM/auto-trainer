@@ -475,6 +475,12 @@ def run_monitor():
                 elif cmd in ('fan_off', 'tunnel_fan_off'):
                     device_connection.send_message(SystemCommandKind.TUNNEL_FAN_OFF, context="fan_off")
 
+                elif cmd == 'open_gate':
+                    device_connection.send_message(SystemCommandKind.OPEN_TUNNEL_GATE, context="open_gate")
+
+                elif cmd == 'close_gate':
+                    device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE, context="close_gate")
+
                 elif cmd == "logger":
                     get_input = True
                     if len(params) == 0:
@@ -709,6 +715,10 @@ def print_help():
           " ::Show Status")
     print("t[are]                             "
           " ::Tare Load Cell/Pressure Sensors")
+    print("open_gate                          "
+          " ::Open tunnel gate")
+    print("close_gate                         "
+          " ::Close tunnel gate")
     print("fan_on                             "
           " ::Set tunnel fan ON")
     print("fan_off                            "

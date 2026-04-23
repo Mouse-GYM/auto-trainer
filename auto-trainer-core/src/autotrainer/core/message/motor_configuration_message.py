@@ -16,6 +16,8 @@ class Motor(IntEnum):
     PELLET_LOAD_SERVO = 6
     TUNNEL_GATE_SERVO = 7
     TUNNEL_FAN_SERVO = 8
+    DELAY = 9
+    TONE = 10
 
 
 class StepperConfigMessage(Protocol):

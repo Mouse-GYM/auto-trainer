@@ -349,11 +349,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def move_z(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
         return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Z, coord_idx=2)
 
-    def send_to_limits(self):
+    def send_to_limits(self) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.SEND_TO_LIMITS,
                                      [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
-    def send_retract(self):
+    def send_retract(self) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.SEND_RETRACT)
 
     def send_home(self) -> Optional[UUID]:
@@ -379,7 +379,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         duration_ms = int(duration * 1000)
         return self._send_with_token(self._device, SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
 
-    def delay(self, amount: float):
+    def delay(self, amount: float) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.DELAY, amount)
 
     def set_tunnel_fan_on(self) -> Optional[UUID]:
