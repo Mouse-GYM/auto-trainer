@@ -12,7 +12,8 @@ from typing import Deque, Tuple, List
 import cv2
 import numpy
 import numpy as np
-from autotrainer.core import ProjectInfo
+
+from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
 
