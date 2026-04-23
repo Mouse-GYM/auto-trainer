@@ -18,7 +18,8 @@ from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo,
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, make_log_dict_config, setup_logging, install_log_exception_hook
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.fixed_array_queue import BufferResult
-from autotrainer.core.video_detection import PresenceDetectionAttrs, VideoDetection
+from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.video.video_detection import VideoDetection
 from autotrainer.core.capture import CaptureProcessStatus
 
 from .video_manager import VideoManager
