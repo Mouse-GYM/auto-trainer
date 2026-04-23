@@ -126,8 +126,8 @@ def apply_system_command_with_data_args(func, data):
 class _BoardPendingContext:
     uuid_ack_timeout_engaged_property_name: str  # but actually unused
     target: Optional[Target]
-    ctx: Optional[str] = None  # current command context
-    kind: Optional[Any] = None  # "kind", can be different things
+    ctx: Optional[str] = None  # current command context (token)
+    kind: Optional[Any] = None  # "kind", can be different things, actually unused
     uuid: Optional[int] = None # currently awaited uuid ack
     ack_perf_timeout: float = math.inf  # perf timeout for current uuid ack
     prev_command: Optional[Tuple[str, Any, str]] = None
@@ -560,10 +560,11 @@ class CanDevice(Device):
                 has_read_from_queue = False
             p_now = time.perf_counter()
             # don't check too often:
-            timeout = max(0.5,
-                          min(p_now - board.ack_perf_timeout
-                              for board in boards_pending_ctx.values()))
-            # what can anyway unblock use, is receiving anything, including _uuid_ack, in this input_q:
+            if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
+                timeout = 0.5
+            else:
+                timeout = 0.002
+            # what can anyway unblocks, is receiving anything, including _uuid_ack, in this input_q:
             try:
                 raw = input_q.get(timeout=timeout)
             except queue.Empty:
@@ -598,11 +599,12 @@ class CanDevice(Device):
                     continue
             else:
                 if kind is not None:
-                    # Also always place new command on top/first of cur_commands,
-                    # so it gets at a first chance to be procssed,
-                    # if there would be some other(s) command already queued-up in cur_commands.
-                    cur_commands.insert(0, raw)
-                    # given this can relate to a board which is free to use.
+                    target = self._find_command_next_board(kind, data)
+                    board = boards_pending_ctx[target]
+                    if board.is_available():
+                        cur_commands.insert(0, raw)
+                    else:
+                        cur_commands.append(raw)
             #
             has_compound_left = False
             for board_ctx in boards_pending_ctx.values():
@@ -650,7 +652,6 @@ class CanDevice(Device):
                 for board_ctx in boards_pending_ctx.values():
                     if board_ctx.uuid is None and board_ctx.compound_steps is not None:
                         cur_commands.insert(0, (_next_compound, board_ctx.compound_steps, board_ctx.ctx))
-                        # board_ctx.compound_steps = None
             #
             if len(cur_commands) == 0:
                 continue
@@ -662,7 +663,7 @@ class CanDevice(Device):
                 if steps:
                     target_board = boards_pending_ctx[self._find_steps_next_board(steps)]
                     if target_board is not found_board_with_uuid_ack and not target_board.is_available():
-                        # target has to finish some compound
+                        # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
                         # but reinsert as _next_compound:
                         cur_commands.append((_next_compound, steps, found_board_with_uuid_ack.ctx))
@@ -674,11 +675,11 @@ class CanDevice(Device):
                     found_board_with_uuid_ack.compound_steps = None  # ensure None, always
                     target_board = found_board_with_uuid_ack
             else:
-                target = self._find_command_next_board(kind, data)
-                target_board = boards_pending_ctx[target]
+                target_board = boards_pending_ctx[self._find_command_next_board(kind, data)]
                 if not target_board.is_available():
                     logger.spam("target board %s not available yet", target)
                     continue
+            # start processing of cur_commands[0]
             cur_commands.pop(0)  # (kind, data, ctx) will be pushed back if command need to eventually retry
             #
             # execute command
@@ -711,6 +712,7 @@ class CanDevice(Device):
                 steps = found_board_with_uuid_ack.compound_steps
                 found_board_with_uuid_ack.compound_steps = None
                 if steps:
+                    # and attach to target:
                     assert target_board.compound_steps is None
                     target_board.compound_steps = steps
                     target_board.ctx = found_board_with_uuid_ack.ctx
@@ -744,15 +746,9 @@ class CanDevice(Device):
                 if not success:
                     raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind.name} ctx={ctx}")
             # end possible handling cases
+            #
             # get CAN uuid after, to distinguish both cases (with or without uuid used):
             after_uuid = self._interface.uuid()
-            # if __debug__:
-            #     # could bypass using self._prev_board_command entirely, since we have target_board
-            #     prev_target = self._prev_target_command
-            #     if prev_target is not None:  # some commands really do not write to CAN bus.
-            #         board_ctx = boards_pending_ctx[prev_target]
-            #         assert board_ctx is target_board, "unexpected prev_target_command"
-            #         del board_ctx
             #
             if ctx is not None and target_board.ctx != ctx:
                 logger.debug("attaching ctx %s to target_board %s", ctx, target_board.target)
@@ -766,7 +762,7 @@ class CanDevice(Device):
                 self._compound_movement = None
             #
             target_board.prev_command_relative = self._prev_command_is_relative
-            self._prev_command_is_relative = None
+            self._prev_command_is_relative = False
             #
             if after_uuid != before_uuid:
                 assert target_board.target is not None, (kind, ctx,)
@@ -781,11 +777,13 @@ class CanDevice(Device):
                 prev_command = self._prev_command
                 if prev_command is None:  # given compound step do set it itself
                     prev_command = (_retry_full, (kind, data, ctx), ctx)
+                else:
+                    prev_command[-1] = ctx  # ensure it keeps the context/token as well
                 target_board.uuid = after_uuid
                 command_timeout_delay = self._prev_command_timeout or self.default_command_ack_timeout_duration
                 target_board.ack_perf_timeout = t_perf_last_command_with_uuid + command_timeout_delay
                 self._prev_command_timeout = self.default_command_ack_timeout_duration
-                target_board.prev_command = prev_command
+                target_board.prev_command = tuple(prev_command)
             else:
                 # no uuid generated
                 compound_steps = target_board.compound_steps
@@ -1344,7 +1342,7 @@ class CanDevice(Device):
                          orig_step, before_uuid, after_uuid)
             if after_uuid != before_uuid:
                 # in case need for retry for ack timeout:
-                self._prev_command = (_retry_compound, (step, target_of_motor(motor), compound_movements), None)
+                self._prev_command = [_retry_compound, (step, target_of_motor(motor), compound_movements), None]
                 # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
                 cmd_ack_timeout = step.get('uuid_ack_timeout')
                 if cmd_ack_timeout is None:
