@@ -619,40 +619,43 @@ class CanDevice(Device):
             else:
                 search_retry_boards = boards_pending_ctx
             for target, board_ctx in sorted(search_retry_boards.items(), key=lambda t: t[1].ack_perf_timeout):
-                if board_ctx.uuid is None:
+                if board_ctx.uuid is None or p_now < board_ctx.ack_perf_timeout:
                     continue
-                if p_now > board_ctx.ack_perf_timeout:
-                    logger.warning(
-                        "timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
-                        board_ctx.kind,
-                        board_ctx.ctx,
-                        board_ctx.uuid,
+                logger.warning(
+                    "timeout waiting ack previous command: %s ; context=%s ; pending_uuid=%s",
+                    board_ctx.kind,
+                    board_ctx.ctx,
+                    board_ctx.uuid,
+                )
+                if not board_ctx.uuid_ack_timeout_engaged:
+                    # note: checking the "before" value doesn't really matter,
+                    # given "property_changed" always relays the value to listeners.
+                    before = boards_has_ack_timeout_engaged()
+                    board_ctx.uuid_ack_timeout_engaged = True
+                    self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, before)
+                board_ctx.repeated_command_count += 1
+                if board_ctx.repeated_command_count >= self.default_command_ack_timeout_repeat_count:
+                    raise RuntimeError(
+                        f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}"
                     )
-                    if not board_ctx.uuid_ack_timeout_engaged:
-                        # note: checking the "before" value doesn't really matter,
-                        # given "property_changed" always relays the value to listeners.
-                        before = boards_has_ack_timeout_engaged()
-                        board_ctx.uuid_ack_timeout_engaged = True
-                        self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, before)
-                    board_ctx.repeated_command_count += 1
-                    if board_ctx.repeated_command_count >= self.default_command_ack_timeout_repeat_count:
-                        raise RuntimeError(
-                            f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}"
-                        )
-                    if board_ctx.prev_command_relative:
-                        # TODO: should/could simply continue, probably, although surely only for retract command
-                        raise RuntimeError(
-                            f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
-                        )
-                    retrying_board = target
-                    cur_commands.insert(0, board_ctx.prev_command)
-                    break  # only retry 1 board at a time
-            #
+                if board_ctx.prev_command_relative:
+                    # TODO: should/could simply continue, probably, although surely only for retract command
+                    raise RuntimeError(
+                        f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
+                    )
+                retrying_board = target
+                cur_commands.insert(0, board_ctx.prev_command)
+                board_ctx.prev_command = None
+                board_ctx.uuid = None
+                board_ctx.ctx = None  # it's also included in prev_command
+                break  # only retry 1 board at a time
+            # check for possible _next_compound to process:
             if retrying_board is None and has_compound_left and kind is not _uuid_ack:
                 for board_ctx in boards_pending_ctx.values():
                     if board_ctx.uuid is None and board_ctx.compound_steps is not None:
                         cur_commands.insert(0, (_next_compound, board_ctx.compound_steps, board_ctx.ctx))
-                        # don't forget detach:
+                        # don't forget detach (even if temporarily):
+                        # or else below is_available() check will say no..
                         board_ctx.compound_steps = None
                         board_ctx.ctx = None
                         board_ctx.prev_command = None
