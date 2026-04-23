@@ -559,11 +559,11 @@ class CanDevice(Device):
                 input_q.task_done()
                 has_read_from_queue = False
             p_now = time.perf_counter()
-            # don't check too often:
+            # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
                 timeout = 0.5
             else:
-                timeout = 0.002
+                timeout = 0.001  # there might be next-compound to execute, or wait for uuid-ack
             # what can anyway unblocks, is receiving anything, including _uuid_ack, in this input_q:
             try:
                 raw = input_q.get(timeout=timeout)
@@ -652,6 +652,11 @@ class CanDevice(Device):
                 for board_ctx in boards_pending_ctx.values():
                     if board_ctx.uuid is None and board_ctx.compound_steps is not None:
                         cur_commands.insert(0, (_next_compound, board_ctx.compound_steps, board_ctx.ctx))
+                        # don't forget detach:
+                        board_ctx.compound_steps = None
+                        board_ctx.ctx = None
+                        board_ctx.prev_command = None
+                        break
             #
             if len(cur_commands) == 0:
                 continue
@@ -789,9 +794,10 @@ class CanDevice(Device):
                 compound_steps = target_board.compound_steps
                 has_compound_left = compound_steps is not None and len(compound_steps) > 0
                 if has_compound_left:
-                    cur_commands.insert(0, (_next_compound, compound_steps, target_board.ctx))
-                    target_board.ctx = None
-                    target_board.compound_steps = None
+                    pass
+                    # cur_commands.insert(0, (_next_compound, compound_steps, target_board.ctx))
+                    # target_board.ctx = None
+                    # target_board.compound_steps = None
                 else:
                     target_board.compound_steps = None
                     if target_board.ctx is not None:
