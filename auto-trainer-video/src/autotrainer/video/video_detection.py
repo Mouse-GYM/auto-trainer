@@ -13,8 +13,11 @@ import cv2
 import numpy
 import numpy as np
 
-from autotrainer.core import ProjectInfo, get_perf_now
+from autotrainer.core import ProjectInfo, get_perf_now, get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+
+
+logger = get_verbose_logger(__name__)
 
 
 class VideoDetection(threading.Thread):
