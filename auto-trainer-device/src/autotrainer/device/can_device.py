@@ -582,7 +582,8 @@ class CanDevice(Device):
                 for target, board_ctx in boards_pending_ctx.items():
                     if board_ctx.uuid is not None and board_ctx.uuid == data:
                         found_board_with_uuid_ack = board_ctx
-                        cur_commands.insert(0, raw)
+                        ctx = board_ctx.ctx
+                        cur_commands.insert(0, (kind, data, ctx))
                         board_ctx.uuid = None
                         board_ctx.repeated_command_count = 0
                         board_ctx.prev_command = None
@@ -720,7 +721,6 @@ class CanDevice(Device):
                 logger.debug("executing ack perform next compound, board_target=%s",
                              found_board_with_uuid_ack.target)
                 # detach current steps:
-                ctx = found_board_with_uuid_ack.ctx
                 steps = found_board_with_uuid_ack.compound_steps
                 found_board_with_uuid_ack.compound_steps = None
                 if steps:
@@ -790,6 +790,7 @@ class CanDevice(Device):
                 if prev_command is None:  # given compound step do set it itself
                     prev_command = (_retry_full, (kind, data), ctx)
                 else:
+                    assert prev_command[0] is _retry_compound
                     prev_command[1][0] = kind
                     prev_command[-1] = ctx  # ensure it keeps the context/token as well
                 target_board.uuid = after_uuid
@@ -803,8 +804,9 @@ class CanDevice(Device):
                 has_compound_left = compound_steps is not None and len(compound_steps) > 0
                 if not has_compound_left:
                     target_board.compound_steps = None
-                    if target_board.ctx is not None:
-                        self._acknowledge_command(target_board.ctx)
+                    logger.success("finished executing %s ; ctx=%s board=%s", kind, ctx, target_board.ctx)
+                    if ctx is not None:
+                        self._acknowledge_command(ctx)
                         target_board.ctx = None
                     target_board.kind = None
 
