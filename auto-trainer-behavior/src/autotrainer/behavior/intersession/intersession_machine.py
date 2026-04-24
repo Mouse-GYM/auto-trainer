@@ -74,7 +74,7 @@ class IntersessionMachine(StateMachine):
         if res is None:
             logger.error("perform segmentation didn't started")
             self._segmentation_configuration = None
-            self.end_analysis(False)
+            self.end_analysis(project_info, False)
         else:
             self.events.on_analysis_started()
             self.post_event_content(ApiEventKind.intertrialSegmentationBegin)
@@ -91,17 +91,13 @@ class IntersessionMachine(StateMachine):
             self._detection_configuration = detection_config
             self.post_event_content(ApiEventKind.intertrialDetectionBegin)
 
-    def after_end_analysis(self, success):
+    def after_end_analysis(self, project: ProjectInfo, success: bool):
+        logger.info("end_analysis(success=%s) of %s", success, project)
         seg_cfg = self._segmentation_configuration
         det_cfg = self._detection_configuration
-        if det_cfg is not None:
-            project = det_cfg.project
-        elif seg_cfg is not None:
-            project = seg_cfg.project
-        else:
-            logger.warning("Unexpected end_analysis while no segmentation or detection configuration")
-            project = None
-        logger.info("end_analysis(success=%s) of %s", success, project)
+        if det_cfg is None and seg_cfg is None:
+            logger.warning("Unexpected end_analysis while no segmentation or detection configuration, project=%s",
+                           project)
         self._segmentation_configuration = None
         self._detection_configuration = None
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
@@ -128,19 +124,20 @@ class IntersessionMachine(StateMachine):
 
     def _segmentation_complete(self, success: bool, *,
                                segment_config: SegmentationConfiguration, error: str="NA"):
-        logger.verbose("segmentation_complete: success=%s config=%s",
-                     success, segment_config)
+        logger.verbose("segmentation_complete: success=%s config=%s ; error=%s",
+                     success, segment_config, error)
+        project = segment_config.project
         if success:
             self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                 self.perform_detection(segment_config)
             else:
-                logger.warning("cannot perform detection for %s", segment_config.project)
-                self.end_analysis(False)
+                logger.warning("cannot perform detection for %s", project)
+                self.end_analysis(project, False)
         else:
             logger.error("perform segmentation failed. config=%s", segment_config)
             self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
-            self.end_analysis(False)
+            self.end_analysis(project, False)
         self._segmentation_configuration = None
 
     def _detection_complete(self, success: bool, *,
@@ -150,7 +147,7 @@ class IntersessionMachine(StateMachine):
             self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
         else:
             self.post_event_content(ApiEventKind.intertrialDetectionEnd)
-        self.end_analysis(success)
+        self.end_analysis(detection_config.project, success)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
@@ -172,7 +169,7 @@ class IntersessionMachine(StateMachine):
     def may_perform_detection(self):
         """Perform detection"""
 
-    def end_analysis(self, success: bool):
+    def end_analysis(self, project: ProjectInfo, success: bool):
         """End analysis"""
 
     def may_end_analysis(self):
