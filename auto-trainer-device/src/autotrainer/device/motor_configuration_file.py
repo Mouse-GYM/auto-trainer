@@ -15,7 +15,7 @@ In either case, the YAML base key for contents is either "magnet" or "pellet".
 import copy
 import yaml
 from pathlib import Path
-from typing import Tuple, Union, Dict, Optional
+from typing import Tuple, Union, Dict, Optional, Type
 
 from typing_extensions import Self
 
@@ -57,6 +57,8 @@ class MotorConfigurationFile(MotorConfigurations):
         self._y_config = StepperConfig()
         self._z_config = StepperConfig()
         self._tunnel_fan_config = ServoConfig()
+        # ensure we actually set the .motor on each one, or any other needed extra convert:
+        self._convert({}, source=None)
 
     @classmethod
     def from_file(cls, filename: Union[str, Path]) -> Self:
@@ -74,18 +76,19 @@ class MotorConfigurationFile(MotorConfigurations):
         return inst
 
     @classmethod
-    def from_yaml_dict(cls, yaml_dict) -> Self:
+    def from_yaml_dict(cls, yaml_dict, *, source: str="NA") -> Self:
         """
         Import configurations from a dictionary.
 
         Args:
             yaml_dict (dict): Dictionary of data
+            source (str): Eventual source of the data
 
         Returns:
             MotorConfigurationFile: populated with file contents
         """
         inst = cls()
-        inst._convert(yaml_dict)
+        inst._convert(yaml_dict, source=source)
         return inst
 
     def _load(self, filename: Union[str, Path]):
@@ -95,28 +98,20 @@ class MotorConfigurationFile(MotorConfigurations):
         Args:
             filename (str or Path): Filename to load from
         """
-        filename = Path(filename)
+        filename: Path = Path(filename)
         if filename.exists():
             try:
                 with filename.open("r") as fh:
-                    loaded = self._convert(yaml.safe_load(fh))
+                    loaded = self._convert(yaml.safe_load(fh), source=filename.as_posix())
             except Exception as e:
                 logger.error(f"Alogus motor configuration file {filename}: {e}")
                 raise
             else:
                 logger.notice("Config %s, loaded: %s", filename, loaded)
-                if "tunnel-fan" not in loaded:
-                    logger.notice("Auto-adding default tunnel-fan to motor config")
-                    self._tunnel_fan_config = copy.deepcopy(DEFAULT_TUNNEL_FAN_CONFIG)
-                    self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
-                if len(loaded) != 8:
-                    # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet + tunnel-fan
-                    logger.warning("Expected 8 sections loaded from motor config file %r but got %s: loaded=%s",
-                                   filename.as_posix(), len(loaded), loaded)
         else:
             logger.error(f"Alogus motor configuration file {filename}: No such file")
 
-    def _convert(self, yaml_dict):
+    def _convert(self, yaml_dict, *, source: Optional[str]="NA"):
         """
         Load configurations from a dictionary.
 
@@ -124,65 +119,51 @@ class MotorConfigurationFile(MotorConfigurations):
             yaml_dict (dict): Dictionary of data
         """
         items_loaded = []
-        pellet_dct: Optional[Dict] = yaml_dict.get("pellet", None)
-        if pellet_dct is not None:
-            load_dct: Optional[Dict] = pellet_dct.get("load")
-            if load_dct is not None:
-                self._load_config = ServoConfig.from_dict(load_dct)
-                self._load_config.motor = Motor.PELLET_LOAD_SERVO
-                logger.info("load configuration: %s", self._load_config)
-                items_loaded.append("pellet-load")
 
-            barrier_dct: Optional[Dict] = pellet_dct.get("barrier")
-            if barrier_dct:
-                self._cover_config = ServoConfig.from_dict(barrier_dct)
-                self._cover_config.motor = Motor.PELLET_COVER_SERVO
-                logger.info("barrier configuration: %s", self._cover_config)
-                items_loaded.append("pellet-barrier")
+        pellet_dct: Dict = yaml_dict.get("pellet", {})
+        search_dct = pellet_dct
 
-            x_dct: Optional[Dict] = pellet_dct.get("x")
-            if x_dct is not None:
-                self._x_config = StepperConfig.from_dict(x_dct)
-                self._x_config.motor = Motor.PELLET_X_MOTOR
-                logger.info("X stepper configuration: %s", self._x_config)
-                items_loaded.append("pellet-x")
-            #
-            y_dct: Optional[Dict] = pellet_dct.get("y")
-            if y_dct is not None:
-                self._y_config = StepperConfig.from_dict(y_dct)
-                self._y_config.motor = Motor.PELLET_Y_MOTOR
-                logger.info("Y stepper configuration: %s", self._y_config)
-                items_loaded.append("pellet-y")
-            #
-            z_dct: Optional[Dict] = pellet_dct.get("z")
-            if z_dct is not None:
-                self._z_config = StepperConfig.from_dict(z_dct)
-                self._z_config.motor = Motor.PELLET_Z_MOTOR
-                logger.info("Z stepper configuration: %s", self._z_config)
-                items_loaded.append("pellet-z")
-            #
-            fan_dct: Optional[Dict] = pellet_dct.get("tunnel_fan", None)
-            if fan_dct is not None:
-                self._tunnel_fan_config = ServoConfig.from_dict(fan_dct)
-                self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
-                logger.info("Fan stepper config: %s", self._tunnel_fan_config)
-                items_loaded.append("tunnel-fan")
-
-        tunnel_dct: Optional[Dict] = yaml_dict.get("tunnel")
-        if tunnel_dct is not None:
-            magnet_dct: Optional[Dict] = tunnel_dct.get("magnet", None)
-            if magnet_dct is not None:
-                self._magnet_config = ServoConfig.from_dict(magnet_dct)
-                self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
-                logger.info("Magnet stepper configuration: %s", self._magnet_config)
-                items_loaded.append("tunnel-magnet")
-
-            gate_dct: Optional[Dict] = tunnel_dct.get("gate", None)
-            if gate_dct is not None:
-                self._gate_config = ServoConfig.from_dict(gate_dct)
-                self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
-                logger.info("Gate stepper configuration: %s", self._gate_config)
-                items_loaded.append("tunnel-gate")
+        def do_load(section: str, item: str, motor: Motor, cls: Type[Union[ServoConfig, StepperConfig]]):
+            dct: Optional[Dict] = search_dct.get(section)
+            if dct is None:
+                cfg = cls()
+            else:
+                cfg = cls.from_dict(dct)
+                if source is not None:
+                    logger.info("%s configuration: %s", item, cfg)
+                items_loaded.append(item)
+            cfg.motor = motor
+            return cfg
+        #
+        self._load_config = do_load("load", "pellet-load", Motor.PELLET_LOAD_SERVO, ServoConfig)
+        self._cover_config = do_load("barrier", "pellet-barrier", Motor.PELLET_COVER_SERVO, ServoConfig)
+        #
+        self._x_config = do_load("x", "pellet-x", Motor.PELLET_X_MOTOR, StepperConfig)
+        self._y_config = do_load("y", "pellet-y", Motor.PELLET_Y_MOTOR, StepperConfig)
+        self._z_config = do_load("z", "pellet-z", Motor.PELLET_Z_MOTOR, StepperConfig)
+        #
+        self._tunnel_fan_config = do_load("tunnel_fan", "tunnel-fan", Motor.TUNNEL_FAN_SERVO, ServoConfig)
+        if "tunnel-fan" not in items_loaded:
+            if source is not None:
+                logger.notice("Auto-adding default tunnel-fan to motor config")
+            self._tunnel_fan_config = copy.deepcopy(DEFAULT_TUNNEL_FAN_CONFIG)
+            self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
+        #
+        tunnel_dct: Dict = yaml_dict.get("tunnel", {})
+        search_dct = tunnel_dct
+        #
+        self._magnet_config = do_load("magnet", "tunnel-magnet", Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
+        self._gate_config = do_load("gate", "tunnel-gate", Motor.TUNNEL_GATE_SERVO, ServoConfig)
+        #
+        if len(items_loaded) != 8:
+            # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet + tunnel-fan
+            if source is not None:
+                logger.warning(
+                    "Expected 8 sections loaded from source %r but got %s: loaded=%s",
+                    source,
+                    len(items_loaded),
+                    items_loaded,
+                )
 
         return items_loaded
 
