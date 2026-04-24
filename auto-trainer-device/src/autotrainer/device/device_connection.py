@@ -1,15 +1,16 @@
+import contextlib
 import logging
 import math
 import time
 import uuid
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union, Optional, Any
+from typing import Callable, Union, Optional, Any, Set
 
 
 from autotrainer.api import ApiEventKind
 
-from autotrainer.core import MotorConfigurations, SystemCommandKind, Offset3DTuple, Motor
+from autotrainer.core import MotorConfigurations, SystemCommandKind, SystemStatusMessageKind
 from autotrainer.core.event import post_api_event_content
 
 import autotrainer.device
@@ -132,6 +133,33 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.verbose("disconnecting from %s", dev)
             dev.disconnect()
 
+    @contextlib.contextmanager
+    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True):
+        orig_cb = self._api.message_callback
+        tokens_acked = []
+        def cb(kind, context):
+            if kind == SystemStatusMessageKind.ACKNOWLEDGE and context in tokens:
+                tokens_acked.append(context)
+                tokens.remove(context)
+            elif orig_cb is not None:
+                orig_cb(kind, context)
+        self._api.message_callback = cb
+        try:
+            yield
+            logger.verbose("Now waiting tokens %s", tokens)
+            perf_timeout = time.perf_counter() + timeout
+            while len(tokens) > 0:
+                if time.perf_counter() > perf_timeout:
+                    if raise_on_timeout:
+                        raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
+                    logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
+                    break
+                time.sleep(0.001)
+            if len(tokens) == 0:
+                logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+        finally:
+            self._api.message_callback = orig_cb
+
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
@@ -145,14 +173,27 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def use_motor_configurations(self, data: MotorConfigurations):
         logger.notice("Setting motor configurations")
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.x_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.y_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.z_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.load_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.magnet_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.cover_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.gate_config)
-        self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, data.tunnel_fan_config)
+        tokens = set()
+        def make_token():
+            tok = str(uuid.uuid4())
+            tokens.add(tok)
+            return tok
+
+        def send(cfg):
+            self.send_message(
+                SystemCommandKind.WRITE_MOTOR_CONFIGURATION, cfg,
+                context=make_token(),
+            )
+
+        with self.await_acknowledge(tokens, timeout=3):
+            send(data.x_config)
+            send(data.y_config)
+            send(data.z_config)
+            send(data.load_config)
+            send(data.magnet_config)
+            send(data.cover_config)
+            send(data.gate_config)
+            send(data.tunnel_fan_config)
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)

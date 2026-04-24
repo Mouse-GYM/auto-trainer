@@ -1015,7 +1015,7 @@ class AppModel(ObservableObject):
 
         algo.reload_diamond_triangle_config()
 
-        self._behavior.on_prepare_capture()
+        self._behavior.on_prepare_capture()  # might be better at the end...
 
         self._inference_queue = None
 
