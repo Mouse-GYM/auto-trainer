@@ -74,14 +74,18 @@ class TrainingPhaseProgressContent(CardWidget):
         label = self._pellets_consumed_label = QLabel("")
         right.addWidget(label, r, c + 1)
         r += 1
-        right.addWidget(QLabel("Reaches"), r, c)
-        label = self._pellets_reaches_label = QLabel("")
+        right.addWidget(QLabel("Successful Reaches"), r, c)
+        label = self._successful_reaches_label = QLabel("")
+        right.addWidget(label, r, c + 1)
+        r += 1
+        right.addWidget(QLabel("Total Reaches"), r, c)
+        label = self._total_reaches_label = QLabel("")
         right.addWidget(label, r, c + 1)
 
-        border_with_padding_style = f"""QLabel {{
+        border_with_padding_style = """QLabel {
             border: 1px solid gray;
             padding: 4px;
-        }}"""
+        }"""
 
         main_content.setStyleSheet(border_with_padding_style)
 
@@ -115,7 +119,8 @@ class TrainingPhaseProgressContent(CardWidget):
                 self._attempts_label,
                 self._pellets_presented_label,
                 self._pellets_consumed_label,
-                self._pellets_reaches_label,
+                self._successful_reaches_label,
+                self._total_reaches_label,
             ):
                 label.setText("")
             return
@@ -131,7 +136,8 @@ class TrainingPhaseProgressContent(CardWidget):
             (self._attempts_label,  prog.phase_attempts),
             (self._pellets_presented_label, prog.pellets_presented),
             (self._pellets_consumed_label, prog.pellets_consumed),
-            (self._pellets_reaches_label, prog.successful_reaches),
+            (self._successful_reaches_label, prog.successful_reaches),
+            (self._total_reaches_label, prog.total_reaches)
         ):
             label.setText(f"{value}")
 
