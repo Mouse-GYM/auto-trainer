@@ -132,47 +132,26 @@ class IntersessionMachine(StateMachine):
                                segment_config: SegmentationConfiguration, error: str="NA"):
         logger.verbose("segmentation_complete: nonce=%s success=%s config=%s",
                      nonce, success, segment_config)
-        if segment_config.nonce != nonce:
-            # NB: should not happen anymore
-            logger.error("mismatched segmentation nonce: passed=%s cur_seg_config=%s success=%s",
-                         nonce, segment_config, success)
-            self.post_event_content(
-                ApiEventKind.intertrialSegmentationError, data=dict(error="mismatched nonce")
-            )
-            self.end_analysis(False)
-        else:
-            if success:
-                self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
-                if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
-                    self.perform_detection(segment_config)
-                else:
-                    self.end_analysis(False)
+        if success:
+            self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
+            if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
+                self.perform_detection(segment_config)
             else:
-                logger.error("perform segmentation failed. config=%s", segment_config)
-                self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
                 self.end_analysis(False)
-
+        else:
+            logger.error("perform segmentation failed. config=%s", segment_config)
+            self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
+            self.end_analysis(False)
         self._segmentation_configuration = None
 
     def _detection_complete(self, nonce: str, success: bool, *,
                             detection_config: DetectionConfiguration, error: str="NA"):
-        if detection_config.nonce != nonce:
-            # NB: should never happen anymore
-            logger.error("mismatched detection nonce: passed=%s cur_config=%s success=%s",
-                         nonce, detection_config, success)
-            self.post_event_content(
-                ApiEventKind.intertrialDetectionError,
-                data=dict(error="mismatched nonce"),
-            )
-            self.end_analysis(False)
+        if not success:
+            logger.error("perform detection failed. det_config=%s", detection_config)
+            self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
         else:
-            if not success:
-                logger.error("perform detection failed. det_config=%s", detection_config)
-                self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
-            else:
-                self.post_event_content(ApiEventKind.intertrialDetectionEnd)
-
-            self.end_analysis(success)
+            self.post_event_content(ApiEventKind.intertrialDetectionEnd)
+        self.end_analysis(success)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
