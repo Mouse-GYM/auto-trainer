@@ -27,7 +27,6 @@ def test_intersession(
 
     with pytest.raises(MachineError):
         seg_cfg = SegmentationConfiguration(
-            nonce="foobar",
             session_index=project.session,
             session_when=project.when,
             project=project,
@@ -49,7 +48,7 @@ def test_intersession(
     assert intersession.state == IntersessionState.segmentation
 
     with mock_system.mock_perform_detection() as m_perf_detect:
-        segment_cfg.complete(segment_cfg.nonce, True)
+        segment_cfg.complete(True)
 
     assert intersession.state == IntersessionState.detection
 
@@ -60,7 +59,7 @@ def test_intersession(
 
     assert intersession.state == IntersessionState.detection
 
-    detection_cfg.complete(detection_cfg.nonce, True)
+    detection_cfg.complete(True)
 
     assert intersession.state == IntersessionState.idle
 

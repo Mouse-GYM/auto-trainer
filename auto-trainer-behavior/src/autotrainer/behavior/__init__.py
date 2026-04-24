@@ -13,19 +13,18 @@ from autotrainer.core.interfaces import (
 
 class CompleteCallbackT(Protocol):
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         """Signature of Segmentation/Detection Complete Callback"""
 
 
 class _UnconfiguredCompleteAction:
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         raise RuntimeError("complete attribute unconfigured")
 
 
 @dataclass
 class SegmentationConfiguration:
-    nonce: str
     session_index: int
     session_when: datetime
     project: ProjectInfo
@@ -34,7 +33,6 @@ class SegmentationConfiguration:
 
 @dataclass
 class DetectionConfiguration:
-    nonce: str
     session_index: int
     session_when: datetime
     project: ProjectInfo

@@ -64,7 +64,6 @@ class IntersessionMachine(StateMachine):
     def after_enter_segmentation(self, project_info: ProjectInfo):
         logger.success("entering segmentation with %s", project_info)
         segment_config = SegmentationConfiguration(
-            nonce=secrets.token_hex(),
             session_index=project_info.session,
             session_when=project_info.when,
             project=project_info,
@@ -82,7 +81,6 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
         detection_config = DetectionConfiguration(
-            nonce=secrets.token_hex(),
             session_index=segment_config.session_index,
             session_when=segment_config.session_when,
             project=segment_config.project,
@@ -128,10 +126,10 @@ class IntersessionMachine(StateMachine):
                     can_do_detection, p, i, d, s)
         return can_do_detection
 
-    def _segmentation_complete(self, nonce: str, success: bool, *,
+    def _segmentation_complete(self, success: bool, *,
                                segment_config: SegmentationConfiguration, error: str="NA"):
-        logger.verbose("segmentation_complete: nonce=%s success=%s config=%s",
-                     nonce, success, segment_config)
+        logger.verbose("segmentation_complete: success=%s config=%s",
+                     success, segment_config)
         if success:
             self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
@@ -145,7 +143,7 @@ class IntersessionMachine(StateMachine):
             self.end_analysis(False)
         self._segmentation_configuration = None
 
-    def _detection_complete(self, nonce: str, success: bool, *,
+    def _detection_complete(self, success: bool, *,
                             detection_config: DetectionConfiguration, error: str="NA"):
         if not success:
             logger.error("perform detection failed. det_config=%s", detection_config)
