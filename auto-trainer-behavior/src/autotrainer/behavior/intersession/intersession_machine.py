@@ -137,6 +137,7 @@ class IntersessionMachine(StateMachine):
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                 self.perform_detection(segment_config)
             else:
+                logger.warning("cannot perform detection for %s", segment_config.project)
                 self.end_analysis(False)
         else:
             logger.error("perform segmentation failed. config=%s", segment_config)
