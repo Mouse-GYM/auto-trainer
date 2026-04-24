@@ -136,27 +136,29 @@ class DeviceConnection(DeviceConnectionProtocol):
     @contextlib.contextmanager
     def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True):
         orig_cb = self._api.message_callback
-        count_ack = 0
+        tokens_acked = []
         def cb(kind, context):
-            nonlocal count_ack
             if kind == SystemStatusMessageKind.ACKNOWLEDGE and context in tokens:
-                count_ack += 1
+                tokens_acked.append(context)
                 tokens.remove(context)
             elif orig_cb is not None:
                 orig_cb(kind, context)
         self._api.message_callback = cb
-        yield
-        logger.verbose("Now waiting tokens %s", tokens)
-        perf_timeout = time.perf_counter() + timeout
-        while len(tokens) > 0:
-            if time.perf_counter() > perf_timeout:
-                if raise_on_timeout:
-                    raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
-                logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
-                break
-            time.sleep(0.001)
-        logger.info("successfully obtained %s acknowledge", count_ack)
-        self._api.message_callback = orig_cb
+        try:
+            yield
+            logger.verbose("Now waiting tokens %s", tokens)
+            perf_timeout = time.perf_counter() + timeout
+            while len(tokens) > 0:
+                if time.perf_counter() > perf_timeout:
+                    if raise_on_timeout:
+                        raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
+                    logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
+                    break
+                time.sleep(0.001)
+            if len(tokens) == 0:
+                logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+        finally:
+            self._api.message_callback = orig_cb
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
