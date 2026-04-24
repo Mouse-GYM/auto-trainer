@@ -425,10 +425,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if ib is None:
             logger.critical("Got segmentation_finished but intersession_block is None ; prj=%s", prj)
         else:
-            l = prj.when, prj.session
-            r = ib.configuration.session_when, ib.configuration.session_index
-            if r != l:
-                logger.critical("unexpected %s vs %s", l, r)
             ib.configuration.complete(success, error=error)
             self._intersession_block = None
             logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)

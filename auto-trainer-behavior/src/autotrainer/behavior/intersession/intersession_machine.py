@@ -63,11 +63,7 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_segmentation(self, project_info: ProjectInfo):
         logger.success("entering segmentation with %s", project_info)
-        segment_config = SegmentationConfiguration(
-            session_index=project_info.session,
-            session_when=project_info.when,
-            project=project_info,
-        )
+        segment_config = SegmentationConfiguration(project=project_info)
         segment_config.complete = partial(self._segmentation_complete, segment_config=segment_config)
         self._segmentation_configuration = segment_config
         res = self._inference.perform_segmentation(segment_config)
@@ -81,8 +77,6 @@ class IntersessionMachine(StateMachine):
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
         detection_config = DetectionConfiguration(
-            session_index=segment_config.session_index,
-            session_when=segment_config.session_when,
             project=segment_config.project,
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)

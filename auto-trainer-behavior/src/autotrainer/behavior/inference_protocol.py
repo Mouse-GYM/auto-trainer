@@ -16,6 +16,8 @@ class SegmentationFinishedEvent(Protocol):
 
 
 class InferenceEvents:
+    # NB: events are *defined/assigned* here,
+    # but are type hinted in InferenceProtocol below.
 
     segmentation_finished = SegmentationFinishedEvent
     detection_result_ready = Callable[[ProjectInfo, IntersessionResponse], None]

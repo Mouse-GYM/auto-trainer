@@ -27,8 +27,6 @@ def test_intersession(
 
     with pytest.raises(MachineError):
         seg_cfg = SegmentationConfiguration(
-            session_index=project.session,
-            session_when=project.when,
             project=project,
             complete=lambda n, s: 1 / 0,  # noqa
         )

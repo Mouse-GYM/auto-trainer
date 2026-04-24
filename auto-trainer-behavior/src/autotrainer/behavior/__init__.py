@@ -25,16 +25,12 @@ class _UnconfiguredCompleteAction:
 
 @dataclass
 class SegmentationConfiguration:
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass
 class DetectionConfiguration:
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
