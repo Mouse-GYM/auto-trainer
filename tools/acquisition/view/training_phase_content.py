@@ -43,11 +43,11 @@ class TrainingPhaseCard(CardWidget):
         label.setWordWrap(True)
         layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignTop) # | Qt.AlignmentFlag.AlignLeft)
 
-        border_with_padding_style = f"""QLabel {{
+        border_with_padding_style = """QLabel {
             border: 1px solid gray;
             margin: 0px;
             padding: 2px;
-        }}"""
+        }"""
 
         sub = QHBoxLayout()
         sub.setContentsMargins(0, 0, 0, 0)
@@ -67,7 +67,7 @@ class TrainingPhaseCard(CardWidget):
         predicate.setStyleSheet(border_with_padding_style)
         left.addWidget(predicate)
 
-        left.addStretch(1)  # allows consume any remaining space
+        left.addStretch(1)  # allows to consume any remaining space
 
         behavior = self._make_behavior(phase)
         behavior.setStyleSheet(border_with_padding_style)
@@ -182,13 +182,7 @@ class TrainingPhaseCard(CardWidget):
         grid = QGridLayout()
         layout.addLayout(grid)
         r = c = 0
-        grid.addWidget(QLabel("Pellet Min Hand Distance"), r, c)
-        hbox = QHBoxLayout()
-        hbox.addWidget(QLabel(f"{phase.pellet_hands_min_distance:.1f}"))
-        hbox.setStretch(0, 1)
-        hbox.addWidget(self._make_unit_label("mm"))
-        grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
-
+        #
         r += 1
         grid.addWidget(QLabel("Pellet Shift"), r, c)
         grid.addWidget(QLabel("On" if phase.is_pellet_shift_enabled else "Off"), r, c + 1)
