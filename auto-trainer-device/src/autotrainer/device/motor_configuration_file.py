@@ -1,5 +1,5 @@
 """
-Class to manage compound movement configuration YAML file or YAML dictionary.
+Class to manage compound motor configuration YAML file or YAML dictionary.
 
 In either case, the YAML base key for contents is either "magnet" or "pellet".
 "pellet" can have 6 subgroups:
@@ -8,14 +8,18 @@ In either case, the YAML base key for contents is either "magnet" or "pellet".
 * "x" - for x stepper configuration
 * "y" - for y stepper configuration
 * "z" - for z stepper configuration
+* "tunnel_fan" - for tunnel FAN servo config
 
-"tunnel" can have 1 subgroup:
-* "magnet" - for magnet head servo
+"tunnel" can have 2 subgroup:
+* "magnet" - for magnet head servo config
+* "gate" - for tunnel gate servo config
 """
 import copy
+from functools import partial
+
 import yaml
 from pathlib import Path
-from typing import Tuple, Union, Dict, Optional, Type
+from typing import Tuple, Union, Dict, Optional, Type, TypeVar
 
 from typing_extensions import Self
 
@@ -27,14 +31,19 @@ from .device_interface import ServoConfig, StepperConfig, Motor
 logger = get_verbose_logger(__name__)
 
 
-DEFAULT_TUNNEL_FAN_CONFIG = ServoConfig.from_dict(dict(
+DEFAULT_TUNNEL_FAN_CONFIG_DCT = dict(
     min_pos=0,
     max_pos=100,
     min_pwm=0,
     max_pwm=500,
     max_vel=500.0,
     max_acc=5000.0,
-))
+)
+
+DEFAULT_TUNNEL_FAN_CONFIG = ServoConfig.from_dict(DEFAULT_TUNNEL_FAN_CONFIG_DCT)
+
+
+T_MotorConfig = TypeVar("T_MotorConfig", ServoConfig, StepperConfig)
 
 
 class MotorConfigurationFile(MotorConfigurations):
@@ -44,20 +53,22 @@ class MotorConfigurationFile(MotorConfigurations):
 
     DEFAULT_LOCATION = Path("~/Autotrainer/motor_config.yaml")  # you shall use .expanduser() when you use it
 
+    _magnet_config: ServoConfig
+    _load_config: ServoConfig
+    _cover_config: ServoConfig
+    _gate_config: ServoConfig
+    _x_config: StepperConfig
+    _y_config: StepperConfig
+    _z_config: StepperConfig
+    _tunnel_fan_config: ServoConfig
+
     def __init__(self):
         """
         Define the set of configuration data sets as the defaults of their respective
         motor configuration types.
         """
-        self._magnet_config = ServoConfig()
-        self._load_config = ServoConfig()
-        self._cover_config = ServoConfig()
-        self._gate_config = ServoConfig()
-        self._x_config = StepperConfig()
-        self._y_config = StepperConfig()
-        self._z_config = StepperConfig()
-        self._tunnel_fan_config = ServoConfig()
-        # ensure we actually set the .motor on each one, or any other needed extra convert:
+        # NB: the following _convert() is actually the main "initializer" of any instance,
+        # it ensures we actually set the .motor on each one, or any other needed extra convert:
         self._convert({}, source=None)
 
     @classmethod
@@ -76,7 +87,7 @@ class MotorConfigurationFile(MotorConfigurations):
         return inst
 
     @classmethod
-    def from_yaml_dict(cls, yaml_dict, *, source: str="NA") -> Self:
+    def from_yaml_dict(cls, yaml_dict, *, source: Optional[str]="NA") -> Self:
         """
         Import configurations from a dictionary.
 
@@ -121,28 +132,28 @@ class MotorConfigurationFile(MotorConfigurations):
         items_loaded = []
 
         pellet_dct: Dict = yaml_dict.get("pellet", {})
-        search_dct = pellet_dct
 
-        def do_load(section: str, item: str, motor: Motor, cls: Type[Union[ServoConfig, StepperConfig]]):
-            dct: Optional[Dict] = search_dct.get(section)
+        def do_load(parent_dct: Dict, section: str, item: str, motor: Motor, config_cls: Type[T_MotorConfig]) -> T_MotorConfig:
+            dct: Optional[Dict] = parent_dct.get(section)
             if dct is None:
-                cfg = cls()
+                cfg = config_cls()
             else:
-                cfg = cls.from_dict(dct)
+                cfg = config_cls.from_dict(dct)
                 if source is not None:
                     logger.info("%s configuration: %s", item, cfg)
                 items_loaded.append(item)
             cfg.motor = motor
             return cfg
         #
-        self._load_config = do_load("load", "pellet-load", Motor.PELLET_LOAD_SERVO, ServoConfig)
-        self._cover_config = do_load("barrier", "pellet-barrier", Motor.PELLET_COVER_SERVO, ServoConfig)
+        do_load_pellet = partial(do_load, pellet_dct)
+        self._load_config = do_load_pellet("load", "pellet-load", Motor.PELLET_LOAD_SERVO, ServoConfig)
+        self._cover_config = do_load_pellet("barrier", "pellet-barrier", Motor.PELLET_COVER_SERVO, ServoConfig)
         #
-        self._x_config = do_load("x", "pellet-x", Motor.PELLET_X_MOTOR, StepperConfig)
-        self._y_config = do_load("y", "pellet-y", Motor.PELLET_Y_MOTOR, StepperConfig)
-        self._z_config = do_load("z", "pellet-z", Motor.PELLET_Z_MOTOR, StepperConfig)
+        self._x_config = do_load_pellet("x", "pellet-x", Motor.PELLET_X_MOTOR, StepperConfig)
+        self._y_config = do_load_pellet("y", "pellet-y", Motor.PELLET_Y_MOTOR, StepperConfig)
+        self._z_config = do_load_pellet("z", "pellet-z", Motor.PELLET_Z_MOTOR, StepperConfig)
         #
-        self._tunnel_fan_config = do_load("tunnel_fan", "tunnel-fan", Motor.TUNNEL_FAN_SERVO, ServoConfig)
+        self._tunnel_fan_config = do_load_pellet("tunnel_fan", "tunnel-fan", Motor.TUNNEL_FAN_SERVO, ServoConfig)
         if "tunnel-fan" not in items_loaded:
             if source is not None:
                 logger.notice("Auto-adding default tunnel-fan to motor config")
@@ -150,10 +161,10 @@ class MotorConfigurationFile(MotorConfigurations):
             self._tunnel_fan_config.motor = Motor.TUNNEL_FAN_SERVO
         #
         tunnel_dct: Dict = yaml_dict.get("tunnel", {})
-        search_dct = tunnel_dct
+        do_load_tunnel = partial(do_load, tunnel_dct)
         #
-        self._magnet_config = do_load("magnet", "tunnel-magnet", Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
-        self._gate_config = do_load("gate", "tunnel-gate", Motor.TUNNEL_GATE_SERVO, ServoConfig)
+        self._magnet_config = do_load_tunnel("magnet", "tunnel-magnet", Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
+        self._gate_config = do_load_tunnel("gate", "tunnel-gate", Motor.TUNNEL_GATE_SERVO, ServoConfig)
         #
         if len(items_loaded) != 8:
             # x + y + z + pellet load + pellet cover + tunnel-gate + tunnel-magnet + tunnel-fan
