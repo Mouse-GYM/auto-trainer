@@ -439,7 +439,7 @@ class MockSystemMachine:
         seg_cfg = self._machine.intersession._segmentation_configuration
         logger.info("calling segmentation complete")
         assert seg_cfg is not None
-        seg_cfg.complete(seg_cfg.nonce, success)
+        seg_cfg.complete(success)
 
     @contextlib.contextmanager
     def mock_perform_detection(self):
@@ -450,7 +450,7 @@ class MockSystemMachine:
     def mock_complete_detection(self, success: bool):
         det_cfg = self._machine.intersession._detection_configuration
         assert det_cfg is not None
-        det_cfg.complete(det_cfg.nonce, success)
+        det_cfg.complete(success)
 
     def mock_pose_response(
         self,

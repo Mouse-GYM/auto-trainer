@@ -1,42 +1,36 @@
 import enum
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Protocol, Optional
 
 from autotrainer.core import ProjectInfo
-from autotrainer.core.interfaces import (
+from autotrainer.core.interfaces import (  # noqa
+    # actually for autotrainer.training only
     CaptureAnalysisResult, RecordingEndingReason
-)  # actually for autotrainer.training only
+)
 
 
 # keeping top level atm, given not quite sure where to put
 
 class CompleteCallbackT(Protocol):
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         """Signature of Segmentation/Detection Complete Callback"""
 
 
 class _UnconfiguredCompleteAction:
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         raise RuntimeError("complete attribute unconfigured")
 
 
 @dataclass
 class SegmentationConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass
 class DetectionConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 

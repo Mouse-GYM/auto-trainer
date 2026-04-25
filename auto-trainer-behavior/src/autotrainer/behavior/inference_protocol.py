@@ -1,7 +1,6 @@
-from multiprocessing import synchronize
 from typing import Protocol, Callable, Tuple, Optional, Any
 
-from autotrainer.core import Offset3DTuple, ObservableObject, FrameIndexCategory
+from autotrainer.core import Offset3DTuple, ObservableObject
 from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
@@ -11,9 +10,16 @@ from autotrainer.inference.analysis import IntersessionResponse
 from . import SegmentationConfiguration, DetectionConfiguration
 
 
-class InferenceEvents:
+class SegmentationFinishedEvent(Protocol):
+    def __call__(self, project: ProjectInfo, success: bool, *, error: str="NA"):
+        """Declare the segmentation finished event signature"""
 
-    segmentation_finished = Callable[[ProjectInfo, bool], None]
+
+class InferenceEvents:
+    # NB: events are *defined/assigned* here,
+    # but are type hinted in InferenceProtocol below.
+
+    segmentation_finished = SegmentationFinishedEvent
     detection_result_ready = Callable[[ProjectInfo, IntersessionResponse], None]
     pose_response_ready = Callable[[PoseResponse], None]
     algo_initialised = Callable[[PoseAlgorithm], None]  # not used by any listener
