@@ -1,4 +1,4 @@
-from typing import Protocol, Tuple
+from typing import Protocol, Tuple, Optional
 from enum import IntEnum
 
 
@@ -29,7 +29,6 @@ class StepperConfigMessage(Protocol):
     def motor(self) -> Motor:
         """Motor associated with the configuration"""
 
-
     @property
     def maximum_velocity(self) -> float:
         """Units: turns/sec"""
@@ -52,6 +51,9 @@ class StepperConfigMessage(Protocol):
         0 - Do no invert motor direction
         1 - Invert motor direction
         """
+
+    uuid_ack_timeout: Optional[float]
+    """Optional custom uuid ack timeout for the motor"""
 
 
 class ServoConfigMessage(Protocol):
@@ -90,6 +92,9 @@ class ServoConfigMessage(Protocol):
     @property
     def detach(self) -> bool:
         """Is attach/detach used"""
+
+    uuid_ack_timeout: Optional[float]
+    """Optional custom uuid ack timeout for the motor"""
 
 
 class MotorConfigurations(Protocol):
