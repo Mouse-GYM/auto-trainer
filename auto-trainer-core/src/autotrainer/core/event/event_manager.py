@@ -80,9 +80,6 @@ class EventManager:
 
         self._project_info = None
 
-        self._last_event_info: Optional[EventInfo] = None
-        self._repeat_event_count = 0
-
         # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
         # so that processing can be done in a separate thread as resources allow.
         self._write_queue = Queue()
@@ -244,49 +241,60 @@ class EventManager:
 
         is_same_error_reported = False
         process_event_error_reported = False
+        last_event_info: Optional[EventInfo] = None
+        repeat_event_count = 0
+        input_q = self._write_queue
+        got_data = False
+        do_process = self._process_event
 
         while True:
+            if got_data:
+                input_q.task_done()
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
-                info = self._write_queue.get(timeout=0.5)
+                info = input_q.get(timeout=0.5)
+                got_data = True
                 if info is None:
                     logger.verbose("got exit sentinel, exiting main loop")
-                    self._write_queue.task_done()
                     break
             except Empty:
+                got_data = False
                 continue
 
             if not isinstance(info, EventInfo):
                 logger.warning("unexpected event info instance")
-                self._write_queue.task_done()
                 continue
 
             try:
-                is_same = info.is_same(self._last_event_info)
+                is_same = False if last_event_info is None else info.is_same(last_event_info)
             except Exception as err:  # Possibly coming from EventInfo subclass - cannot predict type of error.
                 if not is_same_error_reported:
                     logger.error("is_same failed: %s", err)
                     is_same_error_reported = True
             else:
                 if is_same:
-                    self._repeat_event_count += 1
-                    self._write_queue.task_done()
+                    repeat_event_count += 1
                     continue
 
             try:
-                if self._repeat_event_count > 0:
-                    self._process_event(self._last_event_info, self._repeat_event_count)
-                    self._repeat_event_count = 0
+                if last_event_info is not None and repeat_event_count > 0:
+                    do_process(last_event_info, repeat_event_count)
+                    repeat_event_count = 0
 
-                self._last_event_info = info
-                self._process_event(info)
+                last_event_info = info
+                do_process(info)
             except Exception as err:  # Coming from an arbitrary plugin process_event() - cannot predict type of error.
                 # TODO (maybe): track exceptions per plugin.  After some number N exceptions, disable the plugin.
                 if not process_event_error_reported:
                     logger.exception("process queue info (%s) failed: %s", info, err)
                     process_event_error_reported = True
+        # end while True
 
-            self._write_queue.task_done()
+        if last_event_info is not None and repeat_event_count > 0:
+            do_process(last_event_info, repeat_event_count)
+
+        # if got_data: always True.
+        input_q.task_done()
 
         for plugin in self._plugins:
             plugin.close()
