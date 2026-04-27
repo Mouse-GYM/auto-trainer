@@ -47,10 +47,9 @@ class SensorAnalysis(ObservableObject):
 
         self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
-        self._have_new_project_audio = False
-        self._have_new_project_record_data = False
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
         # NB: need one have_new_project bool for each file
-
         self._filter_invalid_weight_started = False
 
         # The "monitor" CSV file with the bulk of the sensor data.
@@ -127,18 +126,27 @@ class SensorAnalysis(ObservableObject):
         return self._detectors
 
     def start(self):
+        logger.notice("Start requested, starting all ..")
+        # ensure new check_update() will be done:
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
         for detector in self._detectors:
             detector.start()
 
     def stop(self):
+        logger.notice("Stop requested, stopping all ..")
         for detector in self._detectors:
             detector.stop()
         self._close_record_file()
         self._close_audio_file()
 
     def restart(self):
+        logger.notice("Restart requested")
+        cur_project = self._project_info
+        self.project_info = None
         for detector in self._detectors:
             detector.restart()
+        self.project_info = cur_project
 
     @property
     def project_info(self) -> Optional[ProjectInfo]:
@@ -227,25 +235,30 @@ class SensorAnalysis(ObservableObject):
         humidity_vals: List[float] = []
 
         fh = self._record_file
+        needs_update = self._have_new_project_record_data
         if fh is not None:
             now = datetime.now()
-            needs_update = self._have_new_project_record_data or (
+            needs_update |= (
                 now.hour if self._interval == ProjectInterval.HOUR
                 else now.minute
             ) != self._current_record_interval
-            if needs_update:
-                self._update_record_file()
-
+        if needs_update:
+            self._update_record_file()
+        fh = self._record_file
+        #
         load_cell_mon = self._load_cell_monitor
+        # Load cell monitor. and Auto-Tare monitor
+        weight_vals: List[float] = []
+        filtered_weight_vals: List[float] = []
+        load_cell_cfg = load_cell_mon.config
 
         for m in measurements:
-            # NB: save all measurements to file
             switch_vals.append(m.switch)
             pressure_vals.append(m.pressure)
             temperature_vals.append(m.temperature)
             humidity_vals.append(m.humidity)
 
-            fh = self._record_file
+            # NB: save all measurements to file
             if fh is not None:
                 try:
                     fh.write(
@@ -256,12 +269,6 @@ class SensorAnalysis(ObservableObject):
                     if not self._had_write_error:
                         logger.exception("<sensor-analysis>: unable to write: %s", err)
                         self._had_write_error = True
-
-        # Load cell monitor. and Auto-Tare monitor
-        weight_vals: List[float] = []
-        filtered_weight_vals: List[float] = []
-        load_cell_cfg = load_cell_mon.config
-        for m in measurements:
             value = m.weight
             weight_vals.append(value)
             if not (load_cell_cfg.weight_min_filter < value < load_cell_cfg.weight_max_filter):
@@ -277,7 +284,8 @@ class SensorAnalysis(ObservableObject):
                 self._filter_invalid_weight_started = False
             #
             filtered_weight_vals.append(value)
-            self._load_cell_monitor.update(value, m.when, m.timestamp)
+            load_cell_mon.update(value, m.when, m.timestamp)
+
         # (Auto-)tare detection.
         self._tare_detector.update(filtered_weight_vals)
 
@@ -301,14 +309,14 @@ class SensorAnalysis(ObservableObject):
         self._audio_thrashing_monitor.update(spectrum.magnitudes, spectrum.when, spectrum.index)
 
         cur = self._audio_record_file_writer
+        needs_update = self._have_new_project_audio
         if cur is not None:
             now = datetime.now()
-            needs_update = self._have_new_project_audio or (
+            needs_update |= (
                 now.hour if self._interval == ProjectInterval.HOUR else now.minute
             ) != self._current_audio_record_interval
-            if needs_update:
-                self._update_audio_file()
-
+        if needs_update:
+            self._update_audio_file()
         # May or may not exist after the above.
         cur = self._audio_record_file_writer
         if cur is not None:
