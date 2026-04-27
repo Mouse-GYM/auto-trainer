@@ -157,8 +157,6 @@ class EventManager:
         instance, including the `default` cannot be restarted.
         """
         cls_inst = getattr(EventManager, "_instance", None)
-        for plugin in self._plugins:
-            plugin.set_enable(False)
         wt = self._write_thread
         wq = self._write_queue
         if wt is not None:
@@ -166,6 +164,9 @@ class EventManager:
                 wq.put(None)
             wt.join()
             self._write_thread = None
+        # disable plugins
+        for plugin in self._plugins:
+            plugin.set_enable(False)
         # queue needs be flushed so that we can join it:
         if wq is not None:
             self._write_queue = None  # set it directly, so that no other thread can now put through this instance
