@@ -47,6 +47,9 @@ class SensorAnalysis(ObservableObject):
 
         self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
+        self._have_new_project_audio = False
+        self._have_new_project_record_data = False
+        # NB: need one have_new_project bool for each file
 
         self._filter_invalid_weight_started = False
 
@@ -130,6 +133,8 @@ class SensorAnalysis(ObservableObject):
     def stop(self):
         for detector in self._detectors:
             detector.stop()
+        self._close_record_file()
+        self._close_audio_file()
 
     def restart(self):
         for detector in self._detectors:
@@ -142,8 +147,8 @@ class SensorAnalysis(ObservableObject):
     @project_info.setter
     def project_info(self, value: ProjectInfo) -> None:
         self._project_info = value
-        self._update_record_file()
-        self._update_audio_file()
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
         self._perf_monitor.reset()
 
     @property
@@ -224,7 +229,7 @@ class SensorAnalysis(ObservableObject):
         fh = self._record_file
         if fh is not None:
             now = datetime.now()
-            needs_update = (
+            needs_update = self._have_new_project_record_data or (
                 now.hour if self._interval == ProjectInterval.HOUR
                 else now.minute
             ) != self._current_record_interval
@@ -298,7 +303,7 @@ class SensorAnalysis(ObservableObject):
         cur = self._audio_record_file_writer
         if cur is not None:
             now = datetime.now()
-            needs_update = (
+            needs_update = self._have_new_project_audio or (
                 now.hour if self._interval == ProjectInterval.HOUR else now.minute
             ) != self._current_audio_record_interval
             if needs_update:
@@ -322,7 +327,7 @@ class SensorAnalysis(ObservableObject):
                     logger.exception("audio unable to write: %s", err)
                     self._audio_had_write_error = True
 
-    def _update_record_file(self):
+    def _close_record_file(self):
         fh = self._record_file
         if fh is not None:
             self._record_file = None
@@ -332,6 +337,9 @@ class SensorAnalysis(ObservableObject):
             except Exception as err:
                 logger.warning("Failure closing record file: %s", err)
 
+    def _update_record_file(self):
+        self._have_new_project_record_data = False
+        self._close_record_file()
         project = self._project_info
         if project is None:
             return
@@ -365,11 +373,11 @@ class SensorAnalysis(ObservableObject):
 
     def _update_audio_file(self) -> None:
         logger.verbose("updating audio file .. cur = %s", self._audio_record_file_writer)
+        self._have_new_project_audio = False
         project = self._project_info
         if project is None:
             self._close_audio_file()
             return
-
         interval_file_info = project.get_audio_spectrum_file(interval=self._interval, when=datetime.now())
         dest_path = Path(interval_file_info.file)
         cur = self._audio_record_file_writer
