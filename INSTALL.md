@@ -57,9 +57,15 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
    - `pip install .\library\spinnaker_python-3.2.0.62-cp38-cp38-win_amd64.whl`
 
 5) **Jetson Only** and only once first time:
-   - `conda install --channel=conda-forge ffmpeg=6.0.0`
-   - `pip install --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512 tensorflow==2.12.0+nv23.06`
-   - `pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
+   1) `conda install --channel=conda-forge ffmpeg=6.0.0`
+   2) Unfortunately nvidia torch wheel version is not fully valid, and prevent to be installed with regular index-url,
+      so we have to :
+      - `wget https://developer.download.nvidia.cn/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl`
+      - `pip install ./torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl`
+   3) On the other hand, nvidia tensorflow wheel version is valid, so we can do:
+      - `pip install tensorflow==2.12.0+nv23.06 --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512`
+   4) `pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
+     - Usually pyjerrycan wheel file is copied in home dir.
 
 6) Activate an appropriate branch, *e.g.,*
 `git checkout develop`
@@ -74,7 +80,7 @@ A command similar to following must be used or added to `.bashrc`/`.bash_profile
 
 ```shell
 # NB: long line: copy to the end:
-export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/torch/lib/libgomp-d22c30c5.so.1
+export LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0
 ```
 
 The exact filenames of the last two in particular may be slightly different based on versioning. There will be an

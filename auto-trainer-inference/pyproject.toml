@@ -20,7 +20,15 @@ dependencies = [
 
     "auto-trainer-core",
 
-    'deeplabcut == 2.3.9',  # famous deeplab
+    'deeplabcut >= 2.3.11, < 2.4',  # famous deeplab
+
+    'tensorpack >= 0.11, < 1',
+    'tf-slim >= 1.1, < 2',
+    # NB: tensorpack and tf-slim are used/required by deeplabcut, even tough they are not depended on by it,
+    # so we explicitly add them here.
+
+    'torch == 2.1.0a0+41361538.nv23.6 ; platform_machine == "aarch64"',
+    # ensure we get/specify the desired version from nvidia for aarch64 ( == Jetson)
 
     'pandas >= 2, < 3',
     'numpy >= 1.23.5, < 2',
