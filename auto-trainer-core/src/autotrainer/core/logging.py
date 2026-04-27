@@ -100,7 +100,7 @@ class LogConfig:
     root_level: _LogLevelT = logging.NOTSET
     log_format: str = MULTIPROC_LOG_FORMAT
     date_format: str = DateTimeFormats.hour_time_precise
-    time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
+    time_precision: int = 3  # for sub seconds precision, nbr of digits after the dot.
     level_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_LEVEL_STYLES))
     field_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_FIELD_STYLES))
     stream: str = "sys.stdout"
