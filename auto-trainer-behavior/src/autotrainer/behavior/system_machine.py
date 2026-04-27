@@ -249,8 +249,8 @@ class SystemMachine(StateMachine):
             if len(batch_projects) > 0:
                 if self._intersession.state != IntersessionState.idle:
                     # this can happen is a batch-list is in processing, for instance
-                    logger.verbose("intersession state: %s with projects=%s",
-                                   self._intersession.state, batch_projects)
+                    logger.verbose("exit_tunnel but intersession state=%s, doing nothing. n_batch_trials=%s",
+                                   self._intersession.state, len(batch_projects))
                 else:
                     prj = batch_projects[0]
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
