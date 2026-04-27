@@ -593,11 +593,11 @@ class SystemMachine(StateMachine):
         if not self._analysis.load_cell_monitor.is_engaged:
             logger.info("auto-clamp: load-cell not engaged (no action taken)")
             return
-        if not algo.is_in_session:
-            logger.info("auto-clamp: algo not in-session (no action taken)")
-            return
         if self._intersession.state != IntersessionState.idle:
             logger.info("auto-clamp: intersession not idle (no action taken)")
+            return
+        if not algo.is_in_session:
+            logger.info("auto-clamp: algo not in-session (no action taken)")
             return
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")

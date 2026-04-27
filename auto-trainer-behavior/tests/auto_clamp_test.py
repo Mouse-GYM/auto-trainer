@@ -80,6 +80,7 @@ class TestDisabled(_AutoClampTestCase):
         assert "auto-clamp: disabled (no action taken)" in caplog.text
         assert self.update_magnet_mock.call_args_list == []
 
+
 class TestEnabled(_AutoClampTestCase):
 
     @pytest.fixture(autouse=True)
@@ -87,6 +88,7 @@ class TestEnabled(_AutoClampTestCase):
         self.algo.head_fixation_enabled = True
         self.algo.head_clamp_config.prerelease_duration = 0  # this disables the prerelease
         self.algo.auto_clamp_release_tone_delay = 0  # this skip an extra timer overhead
+        machine._delay_timer_consider_end_session = 0  # TODO: use some config
 
     def test_when_not_in_session(self, machine, caplog):
         algo = machine.algorithm
@@ -273,3 +275,17 @@ class TestEnabled(_AutoClampTestCase):
             self.headbar_pressure.is_engaged = True
         self.headbar_pressure.is_engaged = False
         assert f"delaying evaluate auto-clamp in {half_delay:.1f}s" in caplog.text
+
+    def test_not_trigger_when_in_intersession(self, caplog):
+        algo = self.algo
+        algo.intersession_enabled = True
+        algo.batch_session_recording_config.maximum_batch_size = 1
+        self.start_session_in_tunnel()
+        with self.mock_intersession_analysis():
+            algo.update_mouse_seen(True)  # ensure analysis will run
+            self.pellet.load_pellet(force=True)  # force load-pellet to trigger end-capture -> intersession
+            assert self._machine.state == SystemState.intersession
+            with caplog.at_level(logging.DEBUG):
+                self.headbar_pressure.is_engaged = True
+        assert "auto-clamp: intersession not idle (no action taken)" in caplog.text
+        assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0
