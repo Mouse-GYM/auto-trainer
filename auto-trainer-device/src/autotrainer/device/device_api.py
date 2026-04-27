@@ -1,13 +1,15 @@
 import math
-from collections import defaultdict
 
 from queue import Queue
-from typing import Callable
+from typing import Callable, Optional
 
 from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
+
+
+MessageCallbackT = Optional[Callable[[int, object], None]]
 
 
 class DeviceApi:
@@ -19,11 +21,19 @@ class DeviceApi:
     `send_message()`).
     """
 
-    def __init__(self, message_callback: Callable[[int, object], None] = None, message_queue: Queue = None):
+    def __init__(self, message_callback: MessageCallbackT = None, message_queue: Queue = None):
         self._message_callback = message_callback
         self._message_queue = message_queue
         self._prev_perf_c = -math.inf
         self._tot_msgs = 0
+
+    @property
+    def message_callback(self) -> MessageCallbackT:
+        return self._message_callback
+
+    @message_callback.setter
+    def message_callback(self, value: MessageCallbackT):
+        self._message_callback = value
 
     def send_message(self, kind: int, context: object):
         """Sends a message identifier and optional data to client script or application"""

@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TextIO
 
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo, ProjectInterval
@@ -18,8 +18,9 @@ class FileEventPlugin(EventManagerPlugin):
     """
 
     def __init__(self):
-        self._project_info = None
-        self._event_file = None
+        self._project_info: Optional[ProjectInfo] = None
+        self._has_new_project = False
+        self._event_file: Optional[TextIO] = None
         self._write_active = True
         self._current_record_interval = -1
         self._bad_file_attempt = False
@@ -27,7 +28,7 @@ class FileEventPlugin(EventManagerPlugin):
     def set_project(self, project: Optional[ProjectInfo]) -> None:
         self._project_info = project
         self._bad_file_attempt = False
-        self._update_event_file()
+        self._has_new_project = True
 
     def set_enable(self, enable: bool) -> None:
         self._write_active = enable
@@ -37,7 +38,10 @@ class FileEventPlugin(EventManagerPlugin):
             logger.debug("write not active, skipping %s", info)
             return
         file_timestamp = datetime.now()
-        needs_update = file_timestamp.hour != self._current_record_interval
+        needs_update = (
+            self._has_new_project
+            or file_timestamp.hour != self._current_record_interval
+        )
         if needs_update:
             self._update_event_file()
         event_file = self._event_file
@@ -53,19 +57,20 @@ class FileEventPlugin(EventManagerPlugin):
 
     def close(self) -> None:
         event_file = self._event_file
+        self._event_file = None
         if event_file is not None:
+            logger.debug("closing %s", event_file.name)
             event_file.close()
-            self._event_file = None
 
     def _update_event_file(self):
         self.close()
-
         if not self._write_active:
             return
-
-        if self._project_info is not None:
-            event_file_info = self._project_info.get_monitor_file(name="events", interval=ProjectInterval.HOUR,
-                                                                  when=datetime.now())
+        project = self._project_info
+        self._has_new_project = False
+        if project is not None:
+            event_file_info = project.get_monitor_file(name="events", interval=ProjectInterval.HOUR,
+                                                       when=datetime.now())
             if event_file_info is None:
                 logger.error("unable to write to expected event file location")
                 return
@@ -77,6 +82,7 @@ class FileEventPlugin(EventManagerPlugin):
                 fh = file_path.open("a")
                 if not file_existed:
                     fh.write("Time, Index, EventId, EventName, Data, Repeat\n")
+                    fh.flush()
 
                 self._current_record_interval = event_file_info.current_interval
                 self._event_file = fh

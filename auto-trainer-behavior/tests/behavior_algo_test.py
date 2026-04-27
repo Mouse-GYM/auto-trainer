@@ -5,7 +5,8 @@ import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.behavior.behavior_algorithm import CoverServoStatus, BehaviorAlgoStatus
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+from autotrainer.core.interfaces import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.core.capture import CaptureProcessStatus

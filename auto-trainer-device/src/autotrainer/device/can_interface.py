@@ -264,16 +264,14 @@ _pellet_motors = {
     Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
 }
 
+
 _tunnel_motors = {
     Motor.TUNNEL_GATE_SERVO,
     Motor.TUNNEL_MAGNET_SERVO,
 }
 
 
-def target_of_motor(motor: Motor,
-                    *,
-                    _tunnel_servos=_tunnel_servos,  # noqa
-                    ) -> Target:
+def target_of_motor(motor: Motor) -> Target:
     """
     Args:
         motor: motor identifier
@@ -281,10 +279,11 @@ def target_of_motor(motor: Motor,
     Returns:
         Target: the hardware target that the motor resides on
     """
-    return (
-        Target.MAGNET_DEVICE if motor in _tunnel_servos
-        else Target.PELLET_DEVICE
-    )
+    if motor in _tunnel_motors:
+        return Target.MAGNET_DEVICE
+    if motor in _pellet_motors or motor in {Motor.DELAY, Motor.TONE}:
+        return Target.PELLET_DEVICE
+    raise ValueError(f"Unhandled motor for target_of_motor: {motor!r}")
 
 
 def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
@@ -1081,15 +1080,16 @@ class CanInterface(DeviceInterface):
         """
         Query all motor configurations from the remote devices
         """
-        self._query_motor_configuration(Motor.PELLET_X_MOTOR, StepperConfig)
-        self._query_motor_configuration(Motor.PELLET_Y_MOTOR, StepperConfig)
-        self._query_motor_configuration(Motor.PELLET_Z_MOTOR, StepperConfig)
+        query = self._query_motor_configuration
+        query(Motor.PELLET_X_MOTOR, StepperConfig)
+        query(Motor.PELLET_Y_MOTOR, StepperConfig)
+        query(Motor.PELLET_Z_MOTOR, StepperConfig)
         #
-        self._query_motor_configuration(Motor.PELLET_LOAD_SERVO, ServoConfig)
-        self._query_motor_configuration(Motor.PELLET_COVER_SERVO, ServoConfig)
-        self._query_motor_configuration(Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
-        self._query_motor_configuration(Motor.TUNNEL_GATE_SERVO, ServoConfig)
-        self._query_motor_configuration(Motor.TUNNEL_FAN_SERVO, ServoConfig)
+        query(Motor.PELLET_LOAD_SERVO, ServoConfig)
+        query(Motor.PELLET_COVER_SERVO, ServoConfig)
+        query(Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
+        query(Motor.TUNNEL_GATE_SERVO, ServoConfig)
+        query(Motor.TUNNEL_FAN_SERVO, ServoConfig)
 
     def delay(self, delay_sec) -> bool:
         """
@@ -1300,14 +1300,6 @@ class CanInterface(DeviceInterface):
     def set_motor_x(self, position: float, *, relative: bool = False) -> bool:
         # NB: SET == saved-as-fixed:
         return self.move_motor_x(position, save_as_fixed=True, relative=relative)
-
-    def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
-        # unused
-        # only for steppers, XYZ
-        return self._move_stepper_motor(
-            motor, position, self._motor_configs[motor],
-            save_as_fixed=save_as_fixed, relative=relative,
-        )
 
     def move_motor_x(
         self,
@@ -1643,11 +1635,12 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
         addr = self._tgt2addr(Target.PELLET_DEVICE)
-        return self._jc.RGBLEDWrite(addr,
-                                                         red_percent,
-                                                         green_percent,
-                                                         blue_percent,
-                                                         CanInterface.next_uuid()) == 0
+        rc = self._jc.RGBLEDWrite(addr,
+                                    red_percent,
+                                    green_percent,
+                                    blue_percent,
+                                    CanInterface.next_uuid())
+        return rc == 0
 
     def request_version(self) -> bool:
         """
@@ -1748,17 +1741,18 @@ class CanInterface(DeviceInterface):
             ServoConfig object with updated settings
         """
         target = _addr2tgt(message.dst_id)
-        motor = _id_to_motor(target, True, message.cfg_response.servo.motor_id)
+        r_cfg = message.cfg_response.servo
+        motor = _id_to_motor(target, True, r_cfg.motor_id)
 
         config = self.get_motor_configuration(motor)
 
         # Update configuration with values from the message
-        config.minimum_position = message.cfg_response.servo.min_position
-        config.maximum_position = message.cfg_response.servo.max_position
-        config.minimum_pwm_duration = message.cfg_response.servo.min_pwm_duration_us
-        config.maximum_pwm_duration = message.cfg_response.servo.max_pwm_duration_us
-        config.maximum_velocity = message.cfg_response.servo.motor_max_velocity
-        config.maximum_acceleration = message.cfg_response.servo.motor_max_acceleration
+        config.minimum_position = r_cfg.min_position
+        config.maximum_position = r_cfg.max_position
+        config.minimum_pwm_duration = r_cfg.min_pwm_duration_us
+        config.maximum_pwm_duration = r_cfg.max_pwm_duration_us
+        config.maximum_velocity = r_cfg.motor_max_velocity
+        config.maximum_acceleration = r_cfg.motor_max_acceleration
 
         return config
 
@@ -1773,18 +1767,18 @@ class CanInterface(DeviceInterface):
             StepperConfig object with updated settings
         """
         target = _addr2tgt(message.dst_id)
-        motor = _id_to_motor(target, False, message.cfg_response.stepper.motor_id)
+        r_cfg = message.cfg_response.stepper
+        motor = _id_to_motor(target, False, r_cfg.motor_id)
 
         config = self.get_motor_configuration(motor)
 
         # Update configuration with values from the message
-        config.microsteps = message.cfg_response.stepper.microsteps
-        config.steps_per_revolution = message.cfg_response.stepper.steps_per_revolution
-        config.flip_limit_orientation = message.cfg_response.stepper.flip_limit_orientation
-        config.maximum_velocity = turns_to_mm(message.cfg_response.stepper.motor_max_velocity)
-        config.maximum_acceleration = turns_to_mm(
-            message.cfg_response.stepper.motor_max_acceleration)
-        config.homing_velocity = turns_to_mm(message.cfg_response.stepper.homing_velocity)
+        config.microsteps = r_cfg.microsteps
+        config.steps_per_revolution = r_cfg.steps_per_revolution
+        config.flip_limit_orientation = r_cfg.flip_limit_orientation
+        config.maximum_velocity = turns_to_mm(r_cfg.motor_max_velocity)
+        config.maximum_acceleration = turns_to_mm(r_cfg.motor_max_acceleration)
+        config.homing_velocity = turns_to_mm(r_cfg.homing_velocity)
 
         return config
 
@@ -1800,19 +1794,19 @@ class CanInterface(DeviceInterface):
             MagnetDigitalInputs or PelletDigitalInputs depending on the source address
         """
         if _is_magnet_by_addr(message.dst_id):
-            gpios = MagnetDigitalInputs()
-            gpios.target = _addr2tgt(message.dst_id)
-            gpios.continuity_0 = bool(message.gpio_read.state & 0x10)
-            gpios.continuity_1 = bool(message.gpio_read.state & 0x20)
-            return gpios
+            return MagnetDigitalInputs(
+                target=_addr2tgt(message.dst_id),
+                continuity_0=bool(message.gpio_read.state & 0x10),
+                continuity_1=bool(message.gpio_read.state & 0x20),
+            )
         else:
-            gpios = PelletDigitalInputs()
-            gpios.target = _addr2tgt(message.dst_id)
-            gpios.stimulus_1 = message.gpio_read.state & 0x010 == 0x010
-            gpios.stimulus_2 = message.gpio_read.state & 0x020 == 0x020
-            gpios.stimulus_3 = message.gpio_read.state & 0x040 == 0x040
-            gpios.stimulus_4 = message.gpio_read.state & 0x080 == 0x080
-            return gpios
+            return PelletDigitalInputs(
+                target=_addr2tgt(message.dst_id),
+                stimulus_1=message.gpio_read.state & 0x010 == 0x010,
+                stimulus_2=message.gpio_read.state & 0x020 == 0x020,
+                stimulus_3=message.gpio_read.state & 0x040 == 0x040,
+                stimulus_4=message.gpio_read.state & 0x080 == 0x080,
+            )
 
     @staticmethod
     def _translate_analog_out(message) -> Optional[AnalogOutput]:
@@ -1826,10 +1820,10 @@ class CanInterface(DeviceInterface):
             AnalogOutput object if it's from the pellet device, None otherwise
         """
         if message.analog_out.instance == 0 and _is_pellet_by_addr(message.dst_id):
-            analog = AnalogOutput()
-            analog.target = _addr2tgt(message.dst_id)
-            analog.status_out_mv = message.analog_out.value_mv
-            return analog
+            return AnalogOutput(
+                target=_addr2tgt(message.dst_id),
+                status_out_mv=message.analog_out.value_mv,
+            )
         return None
 
     def _handle_audio_begin(self, message) -> None:
@@ -1840,11 +1834,12 @@ class CanInterface(DeviceInterface):
         Args:
             message: JerryCANMsg with beginning of audio data
         """
-        self._audio.magnitudes.clear()
-        self._audio.target = _addr2tgt(message.dst_id)
-        self._audio.packet_id = message.audio_data_cmd.stream_id
+        cur_audio = self._audio
+        cur_audio.magnitudes.clear()
+        cur_audio.target = _addr2tgt(message.dst_id)
+        cur_audio.packet_id = message.audio_data_cmd.stream_id
         # NB: kind of duplicate:
-        self._audio.when = self._get_timestamp_ns(message) / 1e9
+        cur_audio.when = self._get_timestamp_ns(message) / 1e9
         # when : timestamp_ns is already applied in self._translate() method
         # But really duplicate:
         # self._audio.index = self._get_index(message)
@@ -1915,16 +1910,14 @@ class CanInterface(DeviceInterface):
         Returns:
             DoorData object with state information
         """
-        door = DoorData()
-        door.target = _addr2tgt(message.dst_id)
-
-        # Reported state is inverse of requested state
-        door.door1 = message.doors.door1
-        door.door2 = message.doors.door2
-        door.door3 = message.doors.door3
-        door.ext_button = message.doors.ext_button
-
-        return door
+        return DoorData(
+            target=_addr2tgt(message.dst_id),
+            # Reported state is inverse of requested state
+            door1=message.doors.door1,
+            door2=message.doors.door2,
+            door3=message.doors.door3,
+            ext_button=message.doors.ext_button,
+        )
 
     def _translate_servo_status(self, message) -> Optional[ServoStatus]:
         """
@@ -1973,7 +1966,7 @@ class CanInterface(DeviceInterface):
         if self._auto_correct_motor_drift:
             motor_send_pos += self._active_motors_drift[motor_axis_idx]
         round_val = self.round_float
-        status = StepperStatus(
+        return StepperStatus(
             target=target,
             motor=motor,
             position=round_val(turns_to_mm(message.stepper_status.position)),
@@ -1981,7 +1974,6 @@ class CanInterface(DeviceInterface):
             limit_switch=message.stepper_status.limit_switch == 1,
             position_error=self._motors_drift_error[motor_axis_idx],
         )
-        return status
 
     def servo_attach(self, motor: Motor):
         addr = self._tgt2addr(target_of_motor(motor))

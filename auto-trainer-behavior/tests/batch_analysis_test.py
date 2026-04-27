@@ -6,6 +6,7 @@ import pytest
 from unittest import mock
 
 from autotrainer.behavior import IntersessionState, SystemState, SystemMachine
+from autotrainer.behavior.pellet import PelletState
 from top_fixtures import MockSystemMachine, FifoExitStack
 
 
@@ -142,3 +143,35 @@ class TestBatchAnalysis(MockSystemMachine):
         assert self.batch_end_count == 1
         assert self.batch_len_processed == 1
         assert "enter_intersession: reason=exit-tunnel-with-sessions-batch-list" in caplog.text
+
+    def test_exit_tunnel_while_batch_analysis_in_progress(self, machine, caplog):
+        algo = self.algo
+        pellet = self.pellet
+        n_trials = 2
+        algo.active_config.batch_session_recording.maximum_batch_size = n_trials
+        #
+        self.start_session_in_tunnel()
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        with FifoExitStack() as stack:
+            for _  in range(n_trials):
+                self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+                self.mock_pellet_ack(until_none=True)
+                assert pellet.state == PelletState.monitoring
+                stack.enter_context(self.mock_intersession_analysis(stack=stack))
+                # trigger load and end-capture-session:
+                self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+                assert pellet.state == PelletState.monitoring
+                self.increment_perf_now(algo.active_config.pellet_delivery.max_pellet_missing_seconds)
+                self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+                assert pellet.state == PelletState.loading
+            assert pellet.state == PelletState.loading
+            assert machine.state == SystemState.intersession
+            #
+            with caplog.at_level(logging.DEBUG):
+                self.exit_tunnel()  # expected log happen here
+            expected_txt = (
+                f"exit_tunnel but intersession state={IntersessionState.segmentation!s}, doing nothing."
+                f" n_batch_trials={n_trials}"
+            )
+            assert expected_txt in caplog.text
+            assert machine.state == SystemState.intersession  # still

@@ -1,6 +1,8 @@
 import dataclasses
 import enum
 
+from typing import Optional
+
 
 class ReachEventMethod:  #  (str, enum.Enum):
         # NB: not enum subclass, as the members are pickled in the saved h5 files,
@@ -26,13 +28,18 @@ class ReachEventOutcome:  # (str, enum.Enum):  # see above.
 
 @dataclasses.dataclass
 class ReachEvent:
-    init: int  # frame index
-    end: int  # frame index
-    max: int = -1  # frame index
+    """Represents a general "reach/pellet" event, see ReachEventMethod"""
+
+    # NB: all frame indices: 'init', 'end' and 'max', can be negative
+    #  if determined before the start of the corresponding video
+
+    init: int  # frame index, can be negative
+    end: Optional[int]  # frame index, can be negative ; None means unknown
+    max: Optional[int] = None  # frame index, can be negative ; None means unknown
 
     # Notice the "str" type hint for both method and outcome,
     #  *not* the 'ReachEventMethod' or 'ReachEventOutcome' type hint.
     method: str = ReachEventMethod.NONE
     outcome: str = ReachEventOutcome.NONE
 
-    delay_since_presented: float = 0  # is basically: init / fps
+    delay_since_presented: float = 0  # is basically calculated as `init / fps`

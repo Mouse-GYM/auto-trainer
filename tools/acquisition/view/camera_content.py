@@ -14,15 +14,18 @@ from autotrainer.pyside.capture.QtCaptureView import ImageData
 from autotrainer.pyside import QCaptureView
 from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
+from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
 
 
 class CameraContent(ContentWidget):
-    def __init__(self, capture_model: VideoCaptureModel):
+    def __init__(self, app_model: AppModel, capture_model: VideoCaptureModel):
         super().__init__()
 
+        self._app_model = app_model
         self._model = capture_model
 
         self._text_overlay: Optional[str] = None
@@ -59,11 +62,14 @@ class CameraContent(ContentWidget):
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
-        self._model.property_changed += self._model_property_changed
+        capture_model.property_changed += self._on_model_property_changed
 
         # Swap because model shape is row x col == height x width
-        capture_view.setShape(self._model.shape[1], self._model.shape[0])
+        capture_view.setShape(capture_model.shape[1], capture_model.shape[0])
         capture_view.set_presence_detection(capture_model.presence_detection)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(name={self._model.name!r})"
 
     @property
     def camera_view(self) -> QCaptureView:
@@ -80,7 +86,8 @@ class CameraContent(ContentWidget):
 
     @invoke_method
     def set_is_capture_active(self, is_active: bool):
-        self._capture_view.set_is_capture_active(is_active)
+        self._capture_view.set_is_capture_active(
+            is_active and self._app_model.status == AppModelStatus.ANIMAL_IN_TRAINING)
 
     @invoke_method
     def update_image(self):
@@ -99,7 +106,6 @@ class CameraContent(ContentWidget):
 
     def _recording_enabled_changed(self, is_enabled):
         self._model.is_recording_enabled = is_enabled
-
         self._model.record_mode = VideoRecordMode.TRIGGER if \
             self._settings.isTriggerRecordMode else VideoRecordMode.CONTINUOUS
 
@@ -115,7 +121,7 @@ class CameraContent(ContentWidget):
             self._capture_view.recording_indicator_changed.emit(notification.context)
 
     @invoke_method
-    def _model_property_changed(self, name, value, _):
+    def _on_model_property_changed(self, name, value, _):
         if name == VideoCaptureModel.CAMERA_PROP:
             self._capture_view.setCamera(value)
         elif name == VideoCaptureModel.IS_ENABLED_PROP:

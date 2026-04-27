@@ -5,7 +5,8 @@ import pytest
 
 from top_fixtures import MockSystemMachine, AlmostEqualFloat
 
-from autotrainer.behavior import CaptureAnalysisResult, IntersessionState, RecordingEndingReason
+from autotrainer.behavior import IntersessionState
+from autotrainer.core.interfaces import CaptureAnalysisResult, RecordingEndingReason
 from autotrainer.behavior import SystemState, SystemMachine
 
 

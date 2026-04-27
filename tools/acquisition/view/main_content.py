@@ -1,3 +1,4 @@
+import math
 import time
 from typing import Tuple, Optional, List
 
@@ -172,21 +173,22 @@ class MainContent(ContentWidget):
         # allow auto set of spacing between cameras
         top_layout.addStretch(1)
 
-        self._left_camera_content = CameraContent(self._app_model.left_camera)
+        app_model = self._app_model
+        self._left_camera_content = CameraContent(app_model, app_model.left_camera)
         self._left_camera_content.camera_view.setTitle("Left Camera")
         top_layout.addWidget(self._left_camera_content)
         self._content_widgets.append(self._left_camera_content)
 
         top_layout.addStretch(1)
 
-        self._right_camera_content = CameraContent(self._app_model.right_camera)
+        self._right_camera_content = CameraContent(app_model, self._app_model.right_camera)
         self._right_camera_content.camera_view.setTitle("Right Camera")
         top_layout.addWidget(self._right_camera_content)
         self._content_widgets.append(self._right_camera_content)
 
         top_layout.addStretch(1)
 
-        self._top_camera_content = CameraContent(self._app_model.top_camera)
+        self._top_camera_content = CameraContent(app_model, self._app_model.top_camera)
         self._top_camera_content.camera_view.setTitle("Top Camera")
         top_layout.addWidget(self._top_camera_content)
         self._content_widgets.append(self._top_camera_content)
@@ -367,6 +369,7 @@ class MainContent(ContentWidget):
 
     @invoke_method
     def set_is_capture_active(self, is_active: bool):
+        """Capture active == acquisition started"""
         for widget in self._content_widgets:
             widget.set_is_capture_active(is_active)
 
@@ -428,7 +431,12 @@ class MainContent(ContentWidget):
         painter.setOpacity(0.75)
         for r_idx in range(len(df_reach)):
             # the reach indices here are global for the entire trial,
-            r_max_idx = df_reach.loc[r_idx, "max"] - df_reach.loc[r_idx, "init"]
+            r_max = df_reach.loc[r_idx, "max"]
+            if math.isnan(r_max) or r_max is None:
+                continue
+            r_max_idx = r_max - df_reach.loc[r_idx, "init"]
+            if r_max_idx < 0:
+                continue
             # but df_trajectories is 1 sub-df per reach, each indexed from 0 to nbframes_in_reach_event.
             # so this subtracts "init" frame index.
             # R_H

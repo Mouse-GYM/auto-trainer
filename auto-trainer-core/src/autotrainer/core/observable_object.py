@@ -1,5 +1,6 @@
 import os
-from typing import Protocol, Callable, Any
+from typing import Protocol, Callable, Any, TypeVar
+from typing_extensions import Self
 
 import verboselogs
 from events import Events
@@ -9,13 +10,33 @@ from autotrainer.core.logging import get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-NewValueAny = Any
-OldValueAny = Any
-
-
 _debug_properties_change = {
     v.strip() for v in os.getenv("AUTOTRAINER_DEBUG_PROPERTIES", "").split(",")
 }
+
+
+HandlerT = TypeVar("HandlerT", bound=Callable[..., None])
+
+AnyNewValue = Any
+AnyOldValue = Any
+
+
+class EventHandler(Protocol[HandlerT]):
+    """Single event handler"""
+
+    __call__: HandlerT
+
+    def __iadd__(self, handler: HandlerT) -> Self:
+        """Register event handler"""
+
+    def __isub__(self, handler: HandlerT) -> Self:
+        """Unregister event handler"""
+
+
+class ObservableObjectProtocol(Protocol):
+    """Allow classes that do not inherit from ObservableObject to indicate they support the property_changed event."""
+
+    property_changed: EventHandler[Callable[[str, AnyNewValue, AnyOldValue], None]]
 
 
 class ObservableObject(Events):
@@ -32,7 +53,7 @@ class ObservableObject(Events):
     """
 
     # type hint for dynamic event function (added by Events):
-    property_changed: Callable[[str, NewValueAny, OldValueAny], None]
+    property_changed: EventHandler[Callable[[str, AnyNewValue, AnyOldValue], None]]
 
     def __init__(self, event_names=()):
         super().__init__(event_names + ("property_changed",))
@@ -45,7 +66,7 @@ class ObservableObject(Events):
     #     #  which returns the nbr of events handled by the given instance.
     #     return True
 
-    def _on_property_changed(self, property_name: str, new_value, old_value):
+    def _on_property_changed(self, name: str, new_value: AnyNewValue, old_value: AnyOldValue):
         """
         Generate a property-changed event if the new value does not pass the == test with the old value.
 
@@ -68,7 +89,7 @@ class ObservableObject(Events):
         event is handled.  Handlers must use the `new_value` argument to get the new value.
 
         Args:
-            property_name (str): Name of the property that changed.
+            name (str): Name of the property that changed.
             new_value: New value of the property.
             old_value: Old/current value of the property.
         """
@@ -76,22 +97,9 @@ class ObservableObject(Events):
             return old_value
 
         if __debug__:
-            if property_name in _debug_properties_change:
-                logger.debug("%s: property %r: from %s to %s", self, property_name, old_value, new_value,
+            if name in _debug_properties_change:
+                logger.debug("%s: property %r: from %s to %s", self, name, old_value, new_value,
                              stack_info=logger.level == verboselogs.SPAM)
 
-        self.property_changed(property_name, new_value, old_value)
+        self.property_changed(name, new_value, old_value)
         return new_value
-
-
-class EventSlotProtocol(Protocol):
-    def __iadd__(self, f):
-        """Allow register a function for callback on the given slot/event"""
-
-    def __isub__(self, f):
-        """Allow unregister a function for callback on the given slot/event"""
-
-
-class ObservableObjectProtocol(Protocol):
-    """Allow classes that do not inherit from ObservableObject to indicate they support the property_changed event."""
-    property_changed: EventSlotProtocol

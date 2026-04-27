@@ -1,4 +1,4 @@
-from autotrainer.behavior.behavior_algorithm import CoverServoStatus
+from autotrainer.core.interfaces import CoverServoStatus
 
 
 def test_or_value():

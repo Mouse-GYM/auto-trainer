@@ -16,7 +16,7 @@ import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union, ClassVar
+from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol
 
 import yaml
 
@@ -50,9 +50,10 @@ from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
-    IntersessionMachine, CaptureAnalysisResult
+    IntersessionMachine
+from autotrainer.core.interfaces import CaptureAnalysisResult
 
-from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo
+from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
 
 from autotrainer.api import (
     RpcService,
@@ -69,7 +70,7 @@ from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel
-from tools.acquisition.model.user_preferences import UserPreferences
+from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
@@ -156,12 +157,29 @@ def training_mode_to_api_training_mode(mode: TrainingMode) -> ApiTrainingMode:
         return ApiTrainingMode.UNDEFINED
 
 
+class TrainingPlanDeserializedEvent(Protocol):
+    def __call__(self, plan: TrainingPlan, result: LoadProgressResult, *, force_update: bool):
+        """Emitted when we deserialize a plan"""
+
+
+class AppModelEvents:
+
+    # NB: events "definition/typehint" are forwarded *into* AppModel below,
+    # so we *assign* them here (=), but we'll typehint (:) in AppModel.
+
+    configuration_loaded_event = Callable[[SystemConfiguration], None]
+    on_error = Callable[[str, str], None]
+    training_plan_deserialized = TrainingPlanDeserializedEvent
+
+
 class AppModel(ObservableObject):
 
     status_file_path: ClassVar[Path] = Path("~/.config/Colorado/autotrainer_running_status.env")
 
-    configuration_loaded_event: Callable[[SystemConfiguration], None]
-    on_error: Callable[[str, str], None]
+    configuration_loaded_event: AppModelEvents.configuration_loaded_event
+    on_error: AppModelEvents.on_error
+
+    training_plan_deserialized: AppModelEvents.training_plan_deserialized
 
     class Props(str, enum.Enum):
 
@@ -191,7 +209,8 @@ class AppModel(ObservableObject):
         system_message_handler: Optional[SystemMessageHandler] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
-        super().__init__(('on_error', 'configuration_loaded_event'))
+        event_names = tuple(filter(lambda n: not n.startswith('_'), dir(AppModelEvents)))
+        super().__init__(event_names)
 
         self._app_version = app_version
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
@@ -258,14 +277,15 @@ class AppModel(ObservableObject):
         # end not sure
 
         self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue)
+                                              msg_queue=proc_msg_queue, cam_id=CameraId.Left)
         self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue)
+                                               msg_queue=proc_msg_queue, cam_id=CameraId.Right)
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
                                              presence_detection=self._top_camera_presence_detection,
-                                             msg_queue=None)  # not interested to webcam status for now.
+                                             msg_queue=None,  # not interested to webcam status for now.
+                                             cam_id=CameraId.Web)
 
         self._cameras = [  # must respect camera_idx/inference_index order
             self._left_camera,
@@ -723,6 +743,9 @@ class AppModel(ObservableObject):
 
     @training_plan.setter
     def training_plan(self, plan: Optional[TrainingPlan]):
+        self.set_training_plan(plan)
+
+    def set_training_plan(self, plan: Optional[TrainingPlan], *, force_update: bool = False):
         animal = self._selected_animal
         prev, self._training_plan = self._training_plan, plan
         if prev == plan and self._training_plan_animal == animal:
@@ -739,7 +762,8 @@ class AppModel(ObservableObject):
             self._detach_training_plan()  # always
         elif animal is not None:
             if self._training_mode != TrainingMode.MANUAL:
-                self._attach_training_plan(plan)
+                if self._attach_training_plan(plan, force_update=force_update) is False:
+                    return
         self._on_property_changed(self.Props.TRAINING_PLAN, plan, prev)
         self._event_manager.post_event_content(
             ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
@@ -823,7 +847,8 @@ class AppModel(ObservableObject):
             return None
         return self._plan_repo.get_plan(plan_id)
 
-    def _attach_training_plan(self, plan: TrainingPlan):
+    def _attach_training_plan(self, plan: TrainingPlan, *, force_update: bool = False) -> Optional[bool]:
+        """Returns False if attach not done"""
         algo = self._behavior.algorithm
         animal = self._selected_animal
         if animal is None:
@@ -843,7 +868,11 @@ class AppModel(ObservableObject):
         # do we ?
         if prog is not None:
             logger.debug("%s: deserializing plan progress: %s", animal, prog)
-            plan.deserialize_progress(prog)
+            load_result = plan.deserialize_progress(prog, force_update=force_update)
+            self.training_plan_deserialized(plan, load_result, force_update=force_update)
+            if load_result != LoadProgressResult.OK:
+                return False
+
         is_auto = self._training_mode == TrainingMode.AUTOMATIC
         logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
                        animal.name, is_auto, plan.plan_id, hex(id(plan)))
@@ -986,7 +1015,7 @@ class AppModel(ObservableObject):
 
         algo.reload_diamond_triangle_config()
 
-        self._behavior.on_prepare_capture()
+        self._behavior.on_prepare_capture()  # might be better at the end...
 
         self._inference_queue = None
 
@@ -1424,15 +1453,6 @@ class AppModel(ObservableObject):
         self.save_configuration()
 
     def _load_animals(self):
-        if self._preferences.animal_location is None or len(self._preferences.animal_location) == 0:
-            default_location = Path(self._output_location).joinpath("Animals")
-            try:
-                default_location.mkdir(parents=True, exist_ok=True)
-                self._preferences.animal_location = str(default_location)
-            except Exception as e:
-                logger.error(f"Failed to create default animal location {default_location}: {e}")
-                return
-
         animals = []
         animals_dir_path = Path(self._preferences.animal_location)
 

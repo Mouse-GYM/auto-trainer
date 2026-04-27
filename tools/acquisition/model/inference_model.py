@@ -425,11 +425,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if ib is None:
             logger.critical("Got segmentation_finished but intersession_block is None ; prj=%s", prj)
         else:
-            l = prj.when, prj.session
-            r = ib.configuration.session_when, ib.configuration.session_index
-            if r != l:
-                logger.critical("unexpected %s vs %s", l, r)
-            ib.configuration.complete(ib.configuration.nonce, success, error=error)
+            ib.configuration.complete(success, error=error)
             self._intersession_block = None
             logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)
         self.segmentation_finished(prj, success, error=error)
@@ -553,8 +549,5 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             self._event_manager.post_event_content(ApiEventKind.intertrialDetectionError,
                                                    data=dict(error=error))
 
-        intersession_detection.configuration.complete(
-            intersession_detection.configuration.nonce, processed_ok,
-            error=error,
-        )
+        intersession_detection.configuration.complete(processed_ok, error=error)
         self._intersession_detection = None

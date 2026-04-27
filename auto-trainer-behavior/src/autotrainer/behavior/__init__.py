@@ -1,39 +1,36 @@
 import enum
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Callable, Protocol, Optional
+from typing import Protocol, Optional
 
 from autotrainer.core import ProjectInfo
+from autotrainer.core.interfaces import (  # noqa
+    # actually for autotrainer.training only
+    CaptureAnalysisResult, RecordingEndingReason
+)
 
 
 # keeping top level atm, given not quite sure where to put
 
 class CompleteCallbackT(Protocol):
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         """Signature of Segmentation/Detection Complete Callback"""
 
 
 class _UnconfiguredCompleteAction:
 
-    def __call__(self, nonce: str, success: bool, *, error: Optional[str] = None):
+    def __call__(self, success: bool, *, error: Optional[str] = None):
         raise RuntimeError("complete attribute unconfigured")
 
 
 @dataclass
 class SegmentationConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass
 class DetectionConfiguration:
-    nonce: str
-    session_index: int
-    session_when: datetime
     project: ProjectInfo
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
@@ -49,26 +46,10 @@ class IntersessionDetection:
     configuration: DetectionConfiguration
 
 
-class CaptureAnalysisResult(str, enum.Enum):
-    CAPTURE_ONLY = "capture_only"
-    ANALYSIS_SUCCEEDED = "analysis_succeeded"
-    ANALYSIS_FAILED = "analysis_failed"
-    ANALYSIS_DELAYED = "analysis_delayed"
-
-
 class TrainingMode(str, enum.Enum):  # todo: eventually find better place
     MANUAL = "Manual"
     MANUAL_WITH_PROTOCOL = "Manual with Protocol"
     AUTOMATIC = "Automatic"
-
-
-class RecordingEndingReason(str, enum.Enum):
-    NA = "NA"
-    ALGO_PAUSED = "AlgoPaused"
-    EXIT_TUNNEL = "ExitTunnel"
-    PELLET_LOADING = "PelletLoading"
-    MISSING_ANIMAL_ACTIVITY_TIMEOUT = "MissingAnimalActivityTimeout"
-    MOTOR_DRIFT_HOMING = "MotorDriftHoming"
 
 
 # Protocol first (less strict)
