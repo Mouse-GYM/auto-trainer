@@ -20,7 +20,6 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
 from autotrainer.core.event.event_manager import EventManager
 
-
 logger = get_verbose_logger(__name__)
 
 # to allow to be patched from tests:
@@ -102,12 +101,7 @@ class LoadCellMonitor(BaseDetector):
             Tuple[float, float, float]
             # data, unix timestamp, perf_c
         ] = deque()
-        self._context = LoadCellMonitorContext(
-            last_engaged_perf_c=-math.inf,
-            last_disengaged_perf_c=-math.inf,
-            thrashing_last_engaged_perf_c=-math.inf,
-            thrashing_last_disengaged_perf_c=-math.inf,
-        )
+        self._context = LoadCellMonitorContext()
 
     def _check_state(self) -> Optional[float]:
         return None
@@ -132,6 +126,7 @@ class LoadCellMonitor(BaseDetector):
 
     @property
     def is_engaged(self) -> bool:
+        # overloading BaseDetector.is_engaged property on purpose, see LoadCellMonitorContext.
         return self._context.is_engaged
 
     @is_engaged.setter
@@ -139,6 +134,7 @@ class LoadCellMonitor(BaseDetector):
         with self._lock:
             if is_engaged == self._context.is_engaged:
                 return
+            self._is_engaged = is_engaged  # keeps BaseDetector._is_engaged private synced
             new_context = dataclasses.replace(self._context, is_engaged=is_engaged)
             if is_engaged:
                 related_perf_c = self._p_start_active
@@ -151,11 +147,11 @@ class LoadCellMonitor(BaseDetector):
             else:
                 new_context.last_disengaged_perf_c = related_perf_c
             self._context = new_context
-            logger.verbose("new context: %s", new_context)
-            EventManager.default().post_event_content(
-                ApiEventKind.loadCellEngagedChanged, data=dict(is_engaged=is_engaged),
-                when=datetime.now() - timedelta(seconds=get_perf_now() - related_perf_c), index=self._index)
         # executing the event without the lock acquired:
+        logger.verbose("new context: %s", new_context)
+        EventManager.default().post_event_content(
+            ApiEventKind.loadCellEngagedChanged, data=dict(is_engaged=is_engaged),
+            when=datetime.now() - timedelta(seconds=get_perf_now() - related_perf_c), index=self._index)
         self._on_property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, is_engaged, not is_engaged)
 
     @property
