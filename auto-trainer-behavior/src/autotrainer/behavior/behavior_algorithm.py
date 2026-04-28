@@ -1465,10 +1465,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
             if handler_thread.is_alive():
                 handler_queue.put(None)
+            logger.debug("joinging algo handler thread")
             handler_thread.join(3)
             logger.info("Closed algorithm thread handler")
             if handler_thread.is_alive():
-                logger.warning("handler thread still alive")
+                logger.warning("handler thread still alive, but continuing")
 
     # finally:
     relay_func = staticmethod(relay_func)
