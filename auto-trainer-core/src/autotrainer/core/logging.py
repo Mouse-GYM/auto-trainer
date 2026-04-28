@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 _LogLevelT = Union[str, int]
 
+_orig_logger_set_level = logging.Logger.setLevel
+
+#
 
 _already_setup = False
 _base_logger: logging.Logger = logging.root
@@ -100,7 +103,7 @@ class LogConfig:
     root_level: _LogLevelT = logging.NOTSET
     log_format: str = MULTIPROC_LOG_FORMAT
     date_format: str = DateTimeFormats.hour_time_precise
-    time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
+    time_precision: int = 3  # for sub seconds precision, nbr of digits after the dot.
     level_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_LEVEL_STYLES))
     field_styles: Dict[str, Dict[str, str]] = dataclasses.field(default_factory=lambda: copy.deepcopy(DEFAULT_FIELD_STYLES))
     stream: str = "sys.stdout"
@@ -349,6 +352,9 @@ class ColoredPreciseTimeFormatter(PreciseTimeFormatter, coloredlogs.ColoredForma
 
 def stop_multiproc_logging():
     global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _already_setup
+
+    # always:
+    logging.Logger.setLevel = _orig_logger_set_level
 
     mp_log_queue = _multiprocess_log_queue
     q_listener = _queue_listener
