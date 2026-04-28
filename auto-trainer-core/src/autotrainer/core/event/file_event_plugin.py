@@ -90,7 +90,7 @@ class FileEventPlugin(EventManagerPlugin):
             try:
                 file_path = Path(event_file_info.file)
                 file_existed = file_path.exists()
-                file_path.parent.mkdir(exist_ok=True)
+                file_path.parent.mkdir(exist_ok=True, parents=True)
                 fh = file_path.open("a")
                 dict_writer = csv.DictWriter(
                     fh,
