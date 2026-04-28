@@ -1018,7 +1018,7 @@ class SystemMachine(StateMachine):
             self._state == SystemState.cage
             and self._inference.status == InferenceStatus.live
             and not self._algorithm.algo_paused
-            and self._analysis.load_cell_monitor.context.is_engaged
+            and self._analysis.load_cell_monitor.is_engaged
         ):
             return
         self.enter_tunnel(reason=reason)

@@ -146,3 +146,11 @@ def test_detect_load_cell_animal_thrashing(
     assert load_cell_monitor.thrashing_detected is False
     assert thrash_detected_list == [True, False]
     assert load_cell_monitor.is_engaged
+
+
+def test_engaged_is_synced_with_base_detector(load_cell_monitor):
+    assert load_cell_monitor.is_engaged == load_cell_monitor._is_engaged
+    load_cell_monitor.is_engaged = True
+    assert load_cell_monitor._is_engaged
+    load_cell_monitor.is_engaged = False
+    assert not load_cell_monitor._is_engaged
