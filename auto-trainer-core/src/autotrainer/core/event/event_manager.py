@@ -259,20 +259,19 @@ class EventManager:
                 continue
 
             if not isinstance(info, EventInfo):
-                logger.warning("unexpected event info instance")
+                logger.warning("unexpected event info: type=%s value=%s", type(info), info)
                 continue
 
             try:
                 is_same = False if last_event_info is None else info.is_same(last_event_info)
-            except Exception as err:  # Possibly coming from EventInfo subclass - cannot predict type of error.
+            except Exception as err:
                 if not is_same_error_reported:
-                    logger.error("is_same failed: %s", err)
                     is_same_error_reported = True
+                    logger.exception("info.is_same() failed: %s", err)
             else:
                 if is_same:
                     repeat_event_count += 1
                     continue
-
             try:
                 if last_event_info is not None and repeat_event_count > 0:
                     do_process(last_event_info, repeat_event_count)
