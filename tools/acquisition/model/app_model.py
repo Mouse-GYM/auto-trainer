@@ -1279,7 +1279,7 @@ class AppModel(ObservableObject):
     def get_config_from_location(cls, location: Path):
         if location.exists():
             logger.info("using configuration from %r", location.as_posix())
-            configuration = SystemConfiguration.load_yaml_file(location)
+            configuration = SystemConfiguration.load_yaml_file(location, save_backup=True)
         else:
             logger.info("using default configuration")
             configuration = SystemConfiguration()
