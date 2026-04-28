@@ -323,15 +323,17 @@ class SystemMachine(StateMachine):
     def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
 
         def do_clean():
+            paths_removed = []
             for cam_name in (project.camera_1, project.camera_2):
                 paths = map(Path, chain(
                     project.get_video_path(cam_name, allow_overwrite=True),
-                    [project.get_intersession_pose_path(cam_name, allow_overwrite=True, suffix="_live")],
+                    [project.get_intersession_pose_path(cam_name, suffix="_live")],
                 ))
                 for path in paths:
                     if path.exists():
-                        logger.debug("removing %s", path)
+                        paths_removed.append(path.as_posix())
                         path.unlink(missing_ok=True)
+            logger.debug("removed %s", paths_removed)
 
         # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
         # making the deletes to not work here

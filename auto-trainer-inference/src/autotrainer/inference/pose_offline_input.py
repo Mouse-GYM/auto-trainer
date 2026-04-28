@@ -329,7 +329,7 @@ class OfflineInputProcess:
                 [
                     lst[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
                     for lst in h5py.File(
-                        project.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live")
+                        project.get_intersession_pose_path(cam, suffix="_live")
                     )["df_with_missing"]["table"]
                 ]
                 for cdx, cam in enumerate(cams)

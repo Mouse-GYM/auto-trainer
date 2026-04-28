@@ -368,19 +368,12 @@ class ProjectInfo(_ProjectInfo):
         self,
         name: str = "",
         session: int = -1,
-        allow_overwrite: bool = False,
         *,
         suffix: str = "",
         when: Optional[datetime] = None,
     ) -> str:
         source = self.get_source_path(name, session=session, when=when)
-        file_name = os.path.join(source.location, f"{source.prefix}_raw2D{suffix}.h5")
-        index = 0
-        if not allow_overwrite:
-            while os.path.exists(file_name):
-                index += 1
-                file_name = os.path.join(source.location, f"{source.prefix}_{index}.h5")
-        return file_name
+        return os.path.join(source.location, f"{source.prefix}_raw2D{suffix}.h5")
 
     def calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
