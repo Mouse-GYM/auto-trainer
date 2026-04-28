@@ -519,11 +519,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._trace(str(self._camera_properties))
 
     def _video_reader_initialize(self):
-        if self._video_reader is None and self._display_update_fcn is not None:
+        if self._video_reader is None and self._video_image_queue is not None:
             self._video_reader_stop_event = Event()
             self._video_reader_reset_event = Event()
             self._video_reader = VideoReader(self._name, self._video_image_queue, self.refresh_image,
-                                             self._video_reader_stop_event)
+                                             stop_event=self._video_reader_stop_event,
+                                             reset_event=self._video_reader_reset_event)
             self._video_reader.start()
 
     def _video_reader_teardown(self):
