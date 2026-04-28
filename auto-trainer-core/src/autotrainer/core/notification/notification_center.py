@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Dict, List, TypeVar
 
@@ -44,11 +45,16 @@ class NotificationCenter:
 
     def __init__(self):
         self._subscribers: Dict[str, List[TCallable]] = {}
+        self._lock = threading.Lock()
 
     def add_observer(self, event_type: Any, callback: TCallable):
         """
         Subscribe to a specific event type with a callback function.
         """
+        with self._lock:
+            self._add_observer(event_type, callback)
+
+    def _add_observer(self, event_type, callback):
         if event_type not in self._subscribers:
             self._subscribers[event_type] = []
 
@@ -59,6 +65,10 @@ class NotificationCenter:
         """
         Unsubscribe from a specific event type.
         """
+        with self._lock:
+            self._remove_observer(event_type, callback)
+
+    def _remove_observer(self, event_type: Any, callback: TCallable):
         if event_type in self._subscribers:
             if callback in self._subscribers[event_type]:
                 self._subscribers[event_type].remove(callback)
@@ -75,6 +85,7 @@ class NotificationCenter:
             assert event_type is not None, "event_type must not be None"
             notification = Notification(event_type, kwargs.get("source"), kwargs.get("context"))
 
-        if notification.event_type in self._subscribers:
-            for callback in self._subscribers[notification.event_type]:
-                callback(notification)
+        with self._lock:
+            if notification.event_type in self._subscribers:
+                for callback in self._subscribers[notification.event_type]:
+                    callback(notification)
