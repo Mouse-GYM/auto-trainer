@@ -58,6 +58,8 @@ jobs:
           pip install -e ".[test]"
       - name: Show current version
         run: python -m setuptools_scm
+      - name: Show auto-trainer and ensure we don't use sub-projects wheel(s)
+        run: ./.check_sub_projects_not_installed.sh
       - name: Test with pytest
         run: |
           set -x
