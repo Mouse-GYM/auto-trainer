@@ -226,8 +226,8 @@ class SensorAnalysis(ObservableObject):
         measurements: List[HeadFixMeasurement]
     ) -> Tuple[List[float], List[bool], List[float], List[float], List[float]] :
         """Return weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals"""
-        # logger.spam("Received %s measures", len(measurements))
-        assert len(measurements) > 0
+        if len(measurements) == 0:
+            raise RuntimeError("Expected non-empty measurements list")
 
         switch_vals: List[bool] = []
         pressure_vals: List[float] = []
