@@ -47,7 +47,9 @@ class SensorAnalysis(ObservableObject):
 
         self._project_info: Optional[ProjectInfo] = None
         self._interval = ProjectInterval.HOUR
-
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
+        # NB: need one have_new_project bool for each file
         self._filter_invalid_weight_started = False
 
         # The "monitor" CSV file with the bulk of the sensor data.
@@ -124,16 +126,27 @@ class SensorAnalysis(ObservableObject):
         return self._detectors
 
     def start(self):
+        logger.notice("Start requested, starting all ..")
+        # ensure new check_update() will be done:
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
         for detector in self._detectors:
             detector.start()
 
     def stop(self):
+        logger.notice("Stop requested, stopping all ..")
         for detector in self._detectors:
             detector.stop()
+        self._close_record_file()
+        self._close_audio_file()
 
     def restart(self):
+        logger.notice("Restart requested")
+        cur_project = self._project_info
+        self.project_info = None
         for detector in self._detectors:
             detector.restart()
+        self.project_info = cur_project
 
     @property
     def project_info(self) -> Optional[ProjectInfo]:
@@ -142,8 +155,8 @@ class SensorAnalysis(ObservableObject):
     @project_info.setter
     def project_info(self, value: ProjectInfo) -> None:
         self._project_info = value
-        self._update_record_file()
-        self._update_audio_file()
+        self._have_new_project_audio = True
+        self._have_new_project_record_data = True
         self._perf_monitor.reset()
 
     @property
@@ -222,24 +235,30 @@ class SensorAnalysis(ObservableObject):
         humidity_vals: List[float] = []
 
         fh = self._record_file
+        needs_update = self._have_new_project_record_data
         if fh is not None:
             now = datetime.now()
-            needs_update = now.hour != self._current_record_interval \
-                if self._interval == ProjectInterval.HOUR \
-                else now.minute != self._current_record_interval
-            if needs_update:
-                self._update_record_file()
-
+            needs_update |= (
+                now.hour if self._interval == ProjectInterval.HOUR
+                else now.minute
+            ) != self._current_record_interval
+        if needs_update:
+            self._update_record_file()
+        fh = self._record_file
+        #
         load_cell_mon = self._load_cell_monitor
+        # Load cell monitor. and Auto-Tare monitor
+        weight_vals: List[float] = []
+        filtered_weight_vals: List[float] = []
+        load_cell_cfg = load_cell_mon.config
 
         for m in measurements:
-            # NB: save all measurements to file
             switch_vals.append(m.switch)
             pressure_vals.append(m.pressure)
             temperature_vals.append(m.temperature)
             humidity_vals.append(m.humidity)
 
-            fh = self._record_file
+            # NB: save all measurements to file
             if fh is not None:
                 try:
                     fh.write(
@@ -250,12 +269,6 @@ class SensorAnalysis(ObservableObject):
                     if not self._had_write_error:
                         logger.exception("<sensor-analysis>: unable to write: %s", err)
                         self._had_write_error = True
-
-        # Load cell monitor. and Auto-Tare monitor
-        weight_vals: List[float] = []
-        filtered_weight_vals: List[float] = []
-        load_cell_cfg = load_cell_mon.config
-        for m in measurements:
             value = m.weight
             weight_vals.append(value)
             if not (load_cell_cfg.weight_min_filter < value < load_cell_cfg.weight_max_filter):
@@ -271,7 +284,8 @@ class SensorAnalysis(ObservableObject):
                 self._filter_invalid_weight_started = False
             #
             filtered_weight_vals.append(value)
-            self._load_cell_monitor.update(value, m.when, m.timestamp)
+            load_cell_mon.update(value, m.when, m.timestamp)
+
         # (Auto-)tare detection.
         self._tare_detector.update(filtered_weight_vals)
 
@@ -289,23 +303,24 @@ class SensorAnalysis(ObservableObject):
 
     def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
         if spectrum is None or not spectrum.magnitudes:
+            logger.debug("audio spectrum empty magnitudes")
             return
 
         self._audio_thrashing_monitor.update(spectrum.magnitudes, spectrum.when, spectrum.index)
 
         cur = self._audio_record_file_writer
+        needs_update = self._have_new_project_audio
         if cur is not None:
-            file_timestamp = datetime.now()
-            needs_update = file_timestamp.hour != self._current_audio_record_interval \
-                if self._interval == ProjectInterval.HOUR \
-                else file_timestamp.minute != self._current_audio_record_interval
-            if needs_update:
-                self._update_audio_file()
-
+            now = datetime.now()
+            needs_update |= (
+                now.hour if self._interval == ProjectInterval.HOUR else now.minute
+            ) != self._current_audio_record_interval
+        if needs_update:
+            self._update_audio_file()
         # May or may not exist after the above.
         cur = self._audio_record_file_writer
         if cur is not None:
-            _, writer = cur
+            fh, writer = cur
             try:
                 r = dict(
                     Time=spectrum.when,
@@ -313,13 +328,14 @@ class SensorAnalysis(ObservableObject):
                     **{f"Bin {i}": val for i, val in enumerate(spectrum.magnitudes)},
                 )
                 writer.writerow(r)
+                # fh.flush()
             except Exception as err:
                 # This could be too much if something major is wrong.  Just output once per file rotation.
                 if not self._audio_had_write_error:
-                    logger.exception("<sensor-analysis>: unable to write: %s", err)
+                    logger.exception("audio unable to write: %s", err)
                     self._audio_had_write_error = True
 
-    def _update_record_file(self):
+    def _close_record_file(self):
         fh = self._record_file
         if fh is not None:
             self._record_file = None
@@ -329,12 +345,13 @@ class SensorAnalysis(ObservableObject):
             except Exception as err:
                 logger.warning("Failure closing record file: %s", err)
 
-        if self._project_info is None:
+    def _update_record_file(self):
+        self._have_new_project_record_data = False
+        self._close_record_file()
+        project = self._project_info
+        if project is None:
             return
-        interval_file_info = self._project_info.get_monitor_file(interval=self._interval, when=datetime.now())
-        if interval_file_info is None:
-            logger.error("<sensor-analysis>: unable to write to expected monitor file location")
-            return
+        interval_file_info = project.get_monitor_file(interval=self._interval, when=datetime.now())
         dest_path = Path(interval_file_info.file)
         try:
             file_existed = dest_path.exists()
@@ -346,45 +363,52 @@ class SensorAnalysis(ObservableObject):
             self._had_write_error = False
             self._record_file = fh  # last
         except Exception as err:
-            logger.error("<sensor-analysis>: unable to write to %s: %s",dest_path, err)
-        logger.info("<sensor-analysis>: saving to %s", dest_path)
+            logger.error("unable to write to %s: %s",dest_path, err)
+        logger.info("saving to %s", dest_path)
+
+    def _close_audio_file(self):
+        cur = self._audio_record_file_writer
+        if cur is None:
+            return
+        fh, writer = cur
+        self._audio_record_file_writer = None
+        logger.debug("closing audio %s", fh.name)
+        try:
+            fh.flush()
+            fh.close()
+        except Exception as err:
+            logger.warning("audio record file close failed: %s", err)
 
     def _update_audio_file(self) -> None:
+        logger.verbose("updating audio file .. cur = %s", self._audio_record_file_writer)
+        self._have_new_project_audio = False
+        project = self._project_info
+        if project is None:
+            self._close_audio_file()
+            return
+        interval_file_info = project.get_audio_spectrum_file(interval=self._interval, when=datetime.now())
+        dest_path = Path(interval_file_info.file)
         cur = self._audio_record_file_writer
         if cur is not None:
             fh, writer = cur
-            try:
-                fh.flush()
-                fh.close()
-            except Exception as err:
-                logger.warning("audio record file close failed: %s", err)
-            self._audio_record_file_writer = None
+            if fh.name == dest_path.as_posix():
+                logger.debug("audio already to %s", fh.name)
+                return
+            self._close_audio_file()
 
-        if self._project_info is not None:
-            interval_file_info = self._project_info.get_audio_spectrum_file(
-                interval=self._interval, when=datetime.now())
-
-            if interval_file_info is None:
-                logger.error("<sensor-analysis>: unable to write to expected audio file location")
-                return None
-
-            try:
-                file_existed = os.path.exists(interval_file_info.file)
-
-                fh = open(interval_file_info.file, "a")
-                writer = csv.DictWriter(
-                    fh,
-                    fieldnames=('Time', 'Index', *(f'Bin {i}' for i in range(64))),
-                )
-
-                if not file_existed:
-                    writer.writeheader()
-
-                self._current_audio_record_interval = interval_file_info.current_interval
-                self._audio_record_file_writer = (fh, writer)
-                logger.info(f"<sensor-analysis>: saving audio spectrum to {interval_file_info.file}")
-                self._audio_had_write_error = False
-            except Exception as err:
-                logger.error("<sensor-analysis>: unable to write to %r: %s", interval_file_info.file, err)
-
-        return None
+        try:
+            file_existed = dest_path.exists() and dest_path.stat().st_size > 0
+            fh = dest_path.open("a")
+            writer = csv.DictWriter(
+                fh,
+                fieldnames=('Time', 'Index', *(f'Bin {i}' for i in range(64))),
+            )
+            if not file_existed:
+                logger.debug("writing audio header to %s", dest_path)
+                writer.writeheader()
+            logger.info("saving audio spectrum to %s", dest_path)
+            self._current_audio_record_interval = interval_file_info.current_interval
+            self._audio_had_write_error = False
+            self._audio_record_file_writer = fh, writer  # last
+        except Exception as err:
+            logger.error("unable to write to %r: %s", interval_file_info.file, err)

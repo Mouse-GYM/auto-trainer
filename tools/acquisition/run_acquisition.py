@@ -112,5 +112,8 @@ def run_acquisition(
             ApiEventKind.applicationTerminating, dict(reason="exit-requested")
         )
         logger.verbose("Closing event manager and behavior algo thread handler..")
-        event_manager.close()
+        # close first the behavior algo handler thread,
         BehaviorAlgorithm.close_algorithm_handler()
+        # given it can push some events to the event manager,
+        # then only close event manager:
+        event_manager.close()

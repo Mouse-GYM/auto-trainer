@@ -249,8 +249,8 @@ class SystemMachine(StateMachine):
             if len(batch_projects) > 0:
                 if self._intersession.state != IntersessionState.idle:
                     # this can happen is a batch-list is in processing, for instance
-                    logger.verbose("intersession state: %s with projects=%s",
-                                   self._intersession.state, batch_projects)
+                    logger.verbose("exit_tunnel but intersession state=%s, doing nothing. n_batch_trials=%s",
+                                   self._intersession.state, len(batch_projects))
                 else:
                     prj = batch_projects[0]
                     self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
@@ -593,11 +593,11 @@ class SystemMachine(StateMachine):
         if not self._analysis.load_cell_monitor.is_engaged:
             logger.info("auto-clamp: load-cell not engaged (no action taken)")
             return
-        if not algo.is_in_session:
-            logger.info("auto-clamp: algo not in-session (no action taken)")
-            return
         if self._intersession.state != IntersessionState.idle:
             logger.info("auto-clamp: intersession not idle (no action taken)")
+            return
+        if not algo.is_in_session:
+            logger.info("auto-clamp: algo not in-session (no action taken)")
             return
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")

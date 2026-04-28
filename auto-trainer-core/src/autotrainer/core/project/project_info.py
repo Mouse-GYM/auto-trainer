@@ -236,14 +236,14 @@ class ProjectInfo(_ProjectInfo):
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
     ) -> IntervalSource:
-        r_when = self._get_when_or_now(when)
+        when: datetime = self._get_when_or_now(when)
         time_format = HOUR_INTERVAL_FORMAT if interval == ProjectInterval.HOUR else MINUTE_INTERVAL_FORMAT
-        when_str = f"_{r_when.strftime(time_format)}"
-        location, today = self.get_day_path(skip_ensure=skip_ensure, when=r_when)
+        when_str = f"_{when.strftime(time_format)}"
+        location, today = self.get_day_path(skip_ensure=skip_ensure, when=when)
         s = f"_{name}" if name else ""
         d = f"_{self.device_id}" if self.device_id else ""
         prefix = f"{today}{d}{when_str}{s}"
-        return IntervalSource(location, prefix, r_when.hour if interval == ProjectInterval.HOUR else r_when.minute)
+        return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
     def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
                          when: Optional[datetime] = None) -> SessionSource:
@@ -291,7 +291,7 @@ class ProjectInfo(_ProjectInfo):
 
     def get_monitor_file(self, name: str = "monitor", ext: str = "csv",
                          interval: ProjectInterval = ProjectInterval.HOUR,
-                         when: Optional[datetime] = None) -> Optional[IntervalFileInfo]:
+                         when: Optional[datetime] = None) -> IntervalFileInfo:
         iv_path = self.get_interval_path(name, interval, when=when)
         return IntervalFileInfo(iv_path.location,
                                 os.path.join(iv_path.location, f"{iv_path.prefix}.{ext}"),
