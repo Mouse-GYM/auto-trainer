@@ -1459,17 +1459,17 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             self._start_day()
 
     @staticmethod
-    def close_algorithm_handler():
+    def close_algorithm_handler(*, timeout: float=3):
         handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
         if handler_queue is not None:
             BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
             if handler_thread.is_alive():
                 handler_queue.put(None)
-            logger.debug("joinging algo handler thread")
-            handler_thread.join(3)
-            logger.info("Closed algorithm thread handler")
+            logger.debug("joining algo handler thread")
+            handler_thread.join(timeout)
             if handler_thread.is_alive():
                 logger.warning("handler thread still alive, but continuing")
+            logger.info("Joined algorithm thread handler")
 
     # finally:
     relay_func = staticmethod(relay_func)

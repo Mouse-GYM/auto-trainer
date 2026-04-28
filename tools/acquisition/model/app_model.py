@@ -1411,27 +1411,22 @@ class AppModel(ObservableObject):
             logger.debug("stopping timer %s", timer)
             timer.cancel()
 
-        self.capture_stop()  # ensure
-
-        self._preferences.save()
+        # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
+        self.capture_stop()
 
         if self._inference is not None:
+            # fully terminate inference, which keeps a background process alive between different stop/start
             self._inference.terminate()
 
-        analysis = self._analysis
-        analysis.stop()
+        self._behavior.system_machine.cancel_timers()
 
+        # also fully close cameras now:
         for camera in self._cameras:
             camera.on_close()
 
-        self.hardware.disconnect()
-
-        self._system_message_handler.request_terminate()
-        self._system_message_handler.wait_terminated()
-
+        # Now stop the multi-proc messages handler thread:
         logger.debug("Putting None to process messages thread")
         self._multiproc_msg_queue.put(None)
-
         logger.debug("Joining process messages thread")
         self._handle_proc_msg_thread.join(5)
         if self._handle_proc_msg_thread.is_alive():
@@ -1439,7 +1434,13 @@ class AppModel(ObservableObject):
         # self._multiproc_msg_queue.close()
         # do not close to allow multiple on_close() calls.
 
-        self._behavior.system_machine.cancel_timers()
+        # at this point all background processes are normally stopped and fully joined,
+        # there only remains the system message handler thread:
+        self._system_message_handler.request_terminate()
+        # request terminate post a stop message on the thread input queue,
+        # given the queue is ordered, if there are any other unprocessed message(s) in it at this point,
+        # then these will be naturally processed before the stop message is processed.
+        self._system_message_handler.wait_terminated()
 
         # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
         # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
@@ -1450,6 +1451,7 @@ class AppModel(ObservableObject):
         # mp_mgr.shutdown()
         # mp_mgr.join()
 
+        self._preferences.save()
         self.save_configuration()
 
     def _load_animals(self):
