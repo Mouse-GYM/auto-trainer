@@ -20,6 +20,9 @@ class BufferResult(IntEnum):
 
 
 class FixedArrayQueue:
+    # NB:
+    # this is a single producer & singler consumer implementation
+
     def __init__(self, depth: int, shape: Tuple[int, int], name: str="noname", *,
                  mp_ctx: Optional[BaseContext] = None,
     ):
