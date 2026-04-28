@@ -501,7 +501,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
                     cams_frame_idx_fhs.append(Path(p_indices).open("w"))
                     pose_path = Path(
-                        cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
+                        cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
                     pose_paths.append(pose_path)
 
             elif recording_in_progress and frames_indices is not None:
@@ -594,7 +594,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         cur_local_prj = self._project.to_local_value()
                         # re-obtain the paths, project info might be from a batch session
                         pose_paths = [
-                            Path(cur_local_prj.get_intersession_pose_path(cam, allow_overwrite=True, suffix="_live"))
+                            Path(cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
                             for cam in cams
                         ]
                         cams_read_h5_dss = [
