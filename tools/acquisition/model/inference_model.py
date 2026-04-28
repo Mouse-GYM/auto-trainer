@@ -345,7 +345,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._data_monitor_cmd_queue.put((msg, None, None))
         self._data_monitor_cmd_ack_event.wait()
 
-    def terminate(self):
+    def terminate(self, *, timeout: float = 5):
         logger.debug("terminating..")
         self.stop()
         data_proc = self._data_monitor_proc
@@ -353,7 +353,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if data_proc is not None:
             logger.debug("joining data_monitor_proc")
             data_monitor_cmd_queue.put(None)
-            data_proc.join(3)
+            data_proc.join(timeout)
             if data_proc.exitcode is None:
                 logger.warning("sending interrupt to monitor data process")
                 os.kill(data_proc.pid, signal.SIGINT)
@@ -361,11 +361,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 if data_proc.exitcode is None:
                     logger.warning("terminating to monitor data process")
                     data_proc.terminate()
-                    data_proc.join(2)
+                    data_proc.join(1)
                     if data_proc.exitcode is None:
                         logger.warning("killing monitor data process")
                         data_proc.kill()
-                        data_proc.join(5)
+                        data_proc.join(2)
             logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread

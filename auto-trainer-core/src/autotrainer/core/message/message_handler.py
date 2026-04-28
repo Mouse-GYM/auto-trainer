@@ -1,5 +1,6 @@
 import functools
 import logging
+import queue
 import threading
 import time
 from functools import partial
@@ -95,11 +96,9 @@ class MessageHandler(ObservableObject):
         logger.debug(f"<{self._name}>: entering message event loop")
         q_get = self._input_queue.get
         task_done = self._input_queue.task_done
-        msg_received = self.message_received
         tot_read_count = 0
         t_next_check_size = time.perf_counter()
         while True:
-            msg, data = q_get()
             if __debug__:
                 tot_read_count += 1
                 t_now = time.perf_counter()
@@ -108,10 +107,15 @@ class MessageHandler(ObservableObject):
                                  self._input_queue.qsize(), tot_read_count / 60)
                     t_next_check_size += 60
                     tot_read_count = 0
+            try:
+                msg, data = q_get(timeout=0.5)
+            except queue.Empty:
+                continue
             if msg == TERMINATE:
                 task_done()
                 break
-            elif msg == SystemStatusMessageKind.ACKNOWLEDGE:
+            #
+            if msg == SystemStatusMessageKind.ACKNOWLEDGE:
                 try:
                     self.ack_received(data)
                 except Exception as err:
@@ -120,7 +124,7 @@ class MessageHandler(ObservableObject):
                 self.property_changed(MessageHandler.FIRMWARE_VERSION_PROPERTY, data, None)
             else:
                 try:
-                    msg_received(msg, data)
+                    self.message_received(msg, data)
                 except Exception as err:
                     logger.exception("Error during msg_received callback: msg=%s err=%s ; data=%s",
                                      msg, err, data)
@@ -135,12 +139,12 @@ class MessageHandler(ObservableObject):
         if self._input_queue is not None:
             self._input_queue.put((TERMINATE, None))
 
-    def wait_terminated(self):
+    def wait_terminated(self, *, timeout: float=3):
         thread = self._current_thread
         queue = self._input_queue
         if thread is not None:
             self._current_thread = None
-            thread.join(5)
+            thread.join(timeout)
             if thread.is_alive():
                 logger.warning("message handler thread still alive")
         if queue is not None:
