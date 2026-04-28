@@ -1,3 +1,4 @@
+import csv
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, TextIO
@@ -21,6 +22,7 @@ class FileEventPlugin(EventManagerPlugin):
         self._project_info: Optional[ProjectInfo] = None
         self._have_new_project = False
         self._event_file: Optional[TextIO] = None
+        self._dict_writer: Optional[csv.DictWriter] = None
         self._write_active = True
         self._current_record_interval = -1
         self._bad_file_attempt = False
@@ -48,8 +50,17 @@ class FileEventPlugin(EventManagerPlugin):
         if event_file is None:
             logger.warning("event_file None, skipping %s", info)
             return
-        output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}\n"
-        event_file.write(output)
+        dict_writer = self._dict_writer
+        if dict_writer is not None:
+            # ["Time" , "Index", "EventId", "EventName", "Data", "Repeat"]
+            dict_writer.writerow(dict(
+                Time=info.when,
+                Index=info.index,
+                EventId=int(info.kind),
+                EventName=str(info.kind),
+                Data=str(info.context),
+                Repeat=repeat_count,
+            ))
 
     def flush(self):
         if self._event_file is not None:
@@ -58,6 +69,7 @@ class FileEventPlugin(EventManagerPlugin):
     def close(self) -> None:
         event_file = self._event_file
         self._event_file = None
+        self._dict_writer = None
         if event_file is not None:
             logger.debug("closing %s", event_file.name)
             event_file.close()
@@ -80,13 +92,19 @@ class FileEventPlugin(EventManagerPlugin):
                 file_existed = file_path.exists()
                 file_path.parent.mkdir(exist_ok=True)
                 fh = file_path.open("a")
+                dict_writer = csv.DictWriter(
+                    fh,
+                    fieldnames=["Time" , "Index", "EventId", "EventName", "Data", "Repeat"],
+                    quotechar='"',
+                    escapechar='\\',
+                    quoting=csv.QUOTE_NONNUMERIC,
+                )
                 if not file_existed:
-                    fh.write("Time, Index, EventId, EventName, Data, Repeat\n")
+                    dict_writer.writeheader()
                     fh.flush()
-
                 self._current_record_interval = event_file_info.current_interval
                 self._event_file = fh
-
+                self._dict_writer = dict_writer
                 logger.info(f"event file opened at {event_file_info.file}")
             except Exception as ex:
                 if not self._bad_file_attempt:
