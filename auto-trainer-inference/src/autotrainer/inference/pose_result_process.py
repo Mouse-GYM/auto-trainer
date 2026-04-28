@@ -675,8 +675,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                     logger.spam("cam-%s : fx=%s got negative frame idx: %s",
                                                  cdx, fx, cam_fr_indices)
                                     continue
-                                    # break
-                                while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
+                                # NB: in cur_h5_dss[cur_h5_ix][2][0]:
+                                #   [2] access the frame index column,
+                                #   and [0] extract the frame index from the scalar value.
+                                while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2][0]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
                                     f = cur_h5_dss[cur_h5_ix][1]
                                     if __debug__ and _local_do_debug:
