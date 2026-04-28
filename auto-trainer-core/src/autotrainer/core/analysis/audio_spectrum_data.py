@@ -3,6 +3,7 @@ from typing import List
 
 from ..message.audio_spectrum_message import AudioSpectrumMessage
 
+
 @dataclass
 class AudioSpectrumData(AudioSpectrumMessage):
     """
