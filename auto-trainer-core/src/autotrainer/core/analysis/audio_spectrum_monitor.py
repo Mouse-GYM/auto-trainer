@@ -39,10 +39,10 @@ class AudioSpectrumThrashMonitor(BaseDetector):
     def __init__(
         self,
         *,
-        config: AudioSpectrumThrashMonitorConfig = AudioSpectrumThrashMonitorConfig()
+        config: Optional[AudioSpectrumThrashMonitorConfig] = None,
     ):
         super().__init__()
-        self._config = config
+        self._config = AudioSpectrumThrashMonitorConfig() if config is None else config
         self._values_history = deque()
         perf_now = get_perf_now()
         self._when_start_detecting: Optional[float] = None

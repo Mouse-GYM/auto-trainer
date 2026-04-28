@@ -82,3 +82,9 @@ def test_detect_thrashing():
 
     assert not monitor.thrashing_detected
     assert thrash_detected_list == [False, True, False]  # False again
+
+
+def test_default_config_is_unique_per_instance():
+    monitor1 = AudioSpectrumThrashMonitor()
+    monitor2 = AudioSpectrumThrashMonitor()
+    assert monitor1.config is not monitor2.config
