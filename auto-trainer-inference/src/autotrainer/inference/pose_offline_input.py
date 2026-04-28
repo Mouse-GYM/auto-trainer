@@ -335,9 +335,10 @@ class OfflineInputProcess:
                 for cdx, cam in enumerate(cams)
             ]
             if cams_already_processed_idx_list != cams_already_processed_idx2:
-                set_diff = set(cams_already_processed_idx_list) - set(cams_already_processed_idx2)
-                logger.warning("Unexpected difference in processed cams frames index vs processed h5: len1=%s len2=%s diff=%s",
-                               len(cams_already_processed_idx_list), len(cams_already_processed_idx2), set_diff)
+                for cdx in range(2):
+                    set_diff = set(cams_already_processed_idx_list[cdx]) - set(cams_already_processed_idx2[cdx])
+                    logger.warning("Unexpected difference in processed cams frames index vs processed h5: cdx=%s len1=%s len2=%s diff=%s",
+                                   cdx, len(cams_already_processed_idx_list), len(cams_already_processed_idx2), set_diff)
 
         # NB: tot_frames_to_process:
         # not sure which one to use:
