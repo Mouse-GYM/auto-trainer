@@ -1,10 +1,9 @@
 import ctypes
 import logging
-import multiprocessing
 import queue
 import time
 from enum import IntEnum
-from multiprocessing import RawArray, Value
+from multiprocessing import RawArray, Value, sharedctypes
 from multiprocessing.context import BaseContext
 from typing import List, Optional, Tuple
 
@@ -21,6 +20,9 @@ class BufferResult(IntEnum):
 
 
 class FixedArrayQueue:
+    # NB:
+    # this is a single producer & singler consumer implementation
+
     def __init__(self, depth: int, shape: Tuple[int, int], name: str="noname", *,
                  mp_ctx: Optional[BaseContext] = None,
     ):
@@ -29,8 +31,8 @@ class FixedArrayQueue:
 
         self._name = name
         # indexing: [buffer]
-        self._buffers: List[RawArray] = []
-        self._is_dirty: List[Value] = []
+        self._buffers: List[sharedctypes.SynchronizedArray[ctypes.c_ubyte]] = []
+        self._is_dirty: List[sharedctypes.Synchronized[bool]] = []
 
         self._depth = depth
         self._shape = shape
@@ -40,7 +42,7 @@ class FixedArrayQueue:
         self._read_index = 0
 
         self._buff_views = []
-        for idx in range(self._depth):
+        for idx in range(depth):
             self._buffers.append(mp_ctx.RawArray(ctypes.c_ubyte, self._byte_count))
             self._is_dirty.append(mp_ctx.Value(ctypes.c_bool, False))
 
@@ -77,48 +79,34 @@ class FixedArrayQueue:
             return BufferResult.Overflow
 
         self._put_count += 1
-
-        # t = time.time()
-        # if t > self._next_counts_log_time:
-        #     self._next_counts_log_time += 10
-        #     logger.info("%s: put=%s overflow=%s", self, self._put_count, self._overflow_count)
-        #     self._put_count = self._overflow_count = 0
-
-        self._buff_views[buffer_index][:] = content.reshape(-1)  # content.flatten()
-
+        self._buff_views[buffer_index][:] = content.reshape(-1)
         self._is_dirty[buffer_index].value = True
 
         buffer_index += 1
         buffer_index %= self._depth
         self._buffer_index = buffer_index
 
-        return BufferResult.Ok if not is_overflow else BufferResult.Overflow
+        return BufferResult.Ok
 
     def get(self, block: bool = True, timeout: float = 0.01) -> numpy.ndarray:
         perf_timeout = time.perf_counter() + timeout
+        read_index = self._read_index
+        dirty = self._is_dirty[read_index]
         while True:
-            read_index = self._read_index
-            if self._is_dirty[read_index].value:
+            if dirty.value:
                 break
-            if time.perf_counter() > perf_timeout:
+            if not block or time.perf_counter() > perf_timeout:
                 raise queue.Empty
-            time.sleep(0.005)
-
+            time.sleep(0.001)
         buffer = self._buffers[read_index]
-
-        v = numpy.frombuffer(buffer, "uint8", self._byte_count).reshape(self.shape)
+        v = numpy.frombuffer(buffer, ctypes.c_uint8, self._byte_count).reshape(self.shape)  # noqa
         output = v.copy()  # numpy.frombuffer() returns a view
-
-        self._is_dirty[read_index].value = False
-
+        dirty.value = False  # after copy of content
         self._read_index = (read_index + 1) % self._depth
-
         return output
 
-    # noinspection PyMethodMayBeStatic
     def empty(self) -> bool:
-        return True
+        return all(not dirty.value for dirty in self._is_dirty)
 
-    # noinspection PyMethodMayBeStatic
     def qsize(self) -> int:
-        return 0
+        return sum(1 if dirty.value else 0 for dirty in self._is_dirty)

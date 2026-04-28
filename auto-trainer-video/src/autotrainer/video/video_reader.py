@@ -14,8 +14,8 @@ class VideoReader(Thread):
     Block on an image Queue off of the GUI thread
     """
 
-    def __init__(self, name: str, image_queue: Union[queue.Queue, FixedArrayQueue], update_fcn, stop_event: Event, reset_event: Event = None,
-                 decimation: int = 10):
+    def __init__(self, name: str, image_queue: Union[queue.Queue, FixedArrayQueue], update_fcn, *,
+                 stop_event: Event, reset_event: Event = None, decimation: int = 10):
         super().__init__(name=name, daemon=True)
         self._image_queue = image_queue
         self._update_fcn = update_fcn
@@ -37,22 +37,21 @@ class VideoReader(Thread):
     def run(self):
         count = 0
 
-        while True:
-            if self._stop_event.is_set():
-                break
+        want_stop = self._stop_event.is_set
+        want_reset = self._reset_event.is_set
+        q_get = self._image_queue.get
 
-            if self._reset_event.is_set():
+        while not want_stop():
+
+            if want_reset():
                 count = 0
                 self._reset_event.clear()
 
-            if self._image_queue is not None:
-                try:
-                    data = self._image_queue.get(timeout=0.5)
-                except queue.Empty:
-                    continue
-                # if count % self._decimation == 0:
-                # applied on camera capture side
-                self._update_fcn(data)
-                count += 1
-            else:
-                time.sleep(0.1)
+            try:
+                data = q_get(timeout=0.5)
+            except queue.Empty:
+                continue
+            # if count % self._decimation == 0:
+            # applied on camera capture side
+            self._update_fcn(data)
+            count += 1
