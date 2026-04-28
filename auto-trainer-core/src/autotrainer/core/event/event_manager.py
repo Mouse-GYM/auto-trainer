@@ -1,3 +1,5 @@
+import atexit
+import threading
 import time
 from threading import Thread
 from datetime import datetime
@@ -31,6 +33,7 @@ class EventManager:
     """
 
     _instance: "EventManager"
+    _class_lock = threading.Lock()
 
     @staticmethod
     def _remove_cls_instance():
@@ -45,12 +48,13 @@ class EventManager:
         Creates (if needed) and returns the default instance.
         """
         cls = EventManager
-        if not hasattr(cls, "_instance"):
-            instance = cls("EventManagerInstance")
-            instance.register_plugin(LoggerEventPlugin())
-            instance.register_plugin(FileEventPlugin())
-            cls._instance = instance
-        return cls._instance
+        with cls._class_lock:
+            instance: Optional[EventManager] = getattr(cls, "_instance", None)
+            if instance is None:
+                instance = cls._instance = cls("EventManagerInstance")
+                instance.register_plugin(LoggerEventPlugin())
+                instance.register_plugin(FileEventPlugin())
+        return instance
 
     @staticmethod
     def try_close_default():
@@ -59,18 +63,11 @@ class EventManager:
         EventManager.default().close() if one was never created).
         """
         cls = EventManager
-        cls_inst = getattr(cls, "_instance", None)
-        if cls_inst is not None:
-            cls_inst.close()
-            cls._remove_cls_instance()
-
-    def __del__(self):
-        # in case of
-        cls_inst = getattr(EventManager, "_instance", None)
-        if cls_inst is self:
-            self.try_close_default()
-        else:
-            self.close()
+        with cls._class_lock:
+            cls_inst: Optional[EventManager] = getattr(cls, "_instance", None)
+            if cls_inst is not None:
+                cls_inst.close()
+                cls._remove_cls_instance()
 
     def __init__(self, key=""):
         if key != "EventManagerInstance":
@@ -303,3 +300,6 @@ class EventManager:
         for plugin in self._plugins:
             logger.spam("plugin %s: processing event %s", plugin, info)
             plugin.process_event(info, repeat_count)
+
+
+atexit.register(EventManager.try_close_default)
