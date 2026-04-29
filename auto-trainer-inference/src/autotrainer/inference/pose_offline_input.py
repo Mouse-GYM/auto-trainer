@@ -104,9 +104,11 @@ class OfflineInputProcess:
         logger.info("Received new project to process: %s", project_info)
         if cur_th is not None:
             if cur_th.is_alive():
+                logger.warning("interrupting previous offline read thread still alive")
                 self._interrupted = True
-                logger.warning("joining previous offline read thread")
-            cur_th.join()
+            cur_th.join(3)
+            if cur_th.is_alive():
+                logger.critical("Previous feeder thread still alive, but continuing")
         self._cur_project_info = project_info
         self._live_requested = False
         self._interrupted = False
