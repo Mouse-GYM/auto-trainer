@@ -152,16 +152,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         prev = self._process_pool
         if prev is None:
             return
-        logger.verbose("Closing previous process pool %s", prev)
+        logger.verbose("Terminating previous process pool %s", prev)
+        self._process_pool = None
         try:
-            prev.close()
-            # prev.terminate()
+            # prev.close()
+            prev.terminate()
             prev.join()
         except Exception as err:
             logger.error("Error closing previous pool: %s", err)
         else:
             logger.debug("previous pool closed")
-        self._process_pool = None
 
     def _init_process_pool(self, pose_algo):
         self._close_process_pool()
