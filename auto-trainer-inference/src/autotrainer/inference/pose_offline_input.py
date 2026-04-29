@@ -33,6 +33,35 @@ def check_frame_count(file_path: Path):
     return capture, count
 
 
+class ConditionalSemaphore(object):
+    # adapted from https://stackoverflow.com/a/60765044/30431755
+
+    def __init__(self):
+        self._count = 0
+        self._lock = threading.Condition()
+
+    @property
+    def count(self):
+        with self._lock:
+            return self._count
+
+    def acquire(self, *, timeout: Optional[float] = None):
+        with self._lock:
+            while self._count == 0:
+                p0 = time.perf_counter()
+                if not self._lock.wait(timeout):
+                    return False
+                p1 = time.perf_counter()
+                if timeout is not None:
+                    timeout -= p1 - p0
+            self._count -= 1
+        return True
+
+    def release(self):
+        with self._lock:
+            self._count += 1
+            self._lock.notify()
+
 
 class OfflineInputProcess:
 
@@ -71,8 +100,8 @@ class OfflineInputProcess:
         # same3:
         self._buffer3 = self._buffer1.copy()
         self._indices3 = self._indices1.copy()
-        self._sema_ready = threading.Semaphore(0)  # 3 buffers
-        self._sema_free = threading.Semaphore(0)  # 3 buffers
+        self._sema_ready = ConditionalSemaphore()  # 3 buffers
+        self._sema_free = ConditionalSemaphore()  # 3 buffers
         self._cur_batch_nr = 0
         self._cur_put_frame_idx = 0  # current frame count in current batch buffer [0, fames_per_cam * nr_cams - 1]
         self._cur_buffer_w = self._buffer1
@@ -104,9 +133,11 @@ class OfflineInputProcess:
         logger.info("Received new project to process: %s", project_info)
         if cur_th is not None:
             if cur_th.is_alive():
+                logger.warning("interrupting previous offline read thread still alive")
                 self._interrupted = True
-                logger.warning("joining previous offline read thread")
-            cur_th.join()
+            cur_th.join(3)
+            if cur_th.is_alive():
+                logger.critical("Previous feeder thread still alive, but continuing")
         self._cur_project_info = project_info
         self._live_requested = False
         self._interrupted = False
@@ -118,15 +149,17 @@ class OfflineInputProcess:
         self._cur_buffer_r = self._cur_buffer_w = self._buffer1
         self._cur_cams_buffer_idx = [0] * self._nr_cams
         self._cur_put_frame_idx = 0
-        sema_miss = self._sema_ready._value
+        # following ensure the semaphores are cleared/set to what we want for start,
+        # whatever was their previous state.
+        sema_miss = self._sema_ready.count
         logger.debug("acquiring sema_ready %s times", sema_miss)
         for _ in range(sema_miss):
             self._sema_ready.acquire()
-        sema_miss = self._sema_free._value
+        sema_miss = self._sema_free.count
         logger.debug("releasing sema_free %s times", sema_miss)
         for _ in range(3 - sema_miss):  # 3 == current nbr of batch buffers we use (buffer1+2+3)
             self._sema_free.release()
-        logger.verbose("sema_ready=%s sema_free=%s", self._sema_ready._value, self._sema_free._value)
+        logger.verbose("sema_ready=%s sema_free=%s", self._sema_ready.count, self._sema_free.count)
         self._cur_batch_nr = 0
         cur_th = self._cur_thread = threading.Thread(
             target=self._feed_intersession_analysis,

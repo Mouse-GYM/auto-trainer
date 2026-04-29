@@ -98,7 +98,6 @@ class PoseProcess(Process):
         self._model_location = model_location
 
         self._live_input_queue = live_queue
-        self._offline_input: Optional[OfflineInputProcess] = None
         self._cmd_queue = cmd_queue
         self._cmd_queue_ack = cmd_queue_ack
         self._msg_queue = msg_queue
@@ -160,7 +159,7 @@ class PoseProcess(Process):
 
         #
         input_q = self._live_input_queue
-        offline_input = self._offline_input = OfflineInputProcess(
+        offline_input = OfflineInputProcess(
             stop_recorded=self._stop_recorded_event,
             frame_shape=input_q.shape,
             frames_per_cam=input_q.frames_per_camera,
@@ -171,10 +170,11 @@ class PoseProcess(Process):
         try:
             should_process = self._wait_for_start()
             if should_process:
-                thread = threading.Thread(target=self._handle_cmd_queue, daemon=True, name="CmdQueueHandler")
+                thread = threading.Thread(target=self._handle_cmd_queue, args=(offline_input,),
+                                          daemon=True, name="CmdQueueHandler")
                 thread.start()
                 logger.info("entering pose_predict")
-                self._process()
+                self._process(offline_input)
         except Exception as err:
             logger.exception("Error during processing: %s", err)
         finally:
@@ -223,7 +223,7 @@ class PoseProcess(Process):
 
         return True
 
-    def _handle_cmd_queue(self):
+    def _handle_cmd_queue(self, offline_input: OfflineInputProcess):
         while True:
             try:
                 cmd, context = self._cmd_queue.get(timeout=1)
@@ -237,11 +237,11 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.ProcessLive:
                     self._set_process_live(reason=str(cmd))
                 elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
-                    self._offline_input.set_live(True)
+                    offline_input.set_live(True)
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     self._set_process_offline()
                     prj, wait_stop_recorded = context
-                    self._offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
+                    offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
                 # elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
                 #     self._set_process_offline()
                 #     self._offline_input.set_project_info(context)
@@ -255,7 +255,7 @@ class PoseProcess(Process):
             finally:
                 self._cmd_queue_ack.set()
 
-    def _process(self):
+    def _process(self, offline_input: OfflineInputProcess):
         # import tensorflow as tf
         # gpus = tf.config.experimental.list_physical_devices('GPU')
         # for gpu in gpus:
@@ -278,7 +278,6 @@ class PoseProcess(Process):
         empty_zero_pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
 
         # use a pre-allocated copy for outputting the frames indices:
-        frames_indices_out = frames_indices.copy()
         prev_mode = None
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
@@ -286,9 +285,6 @@ class PoseProcess(Process):
         perf_add_c = self._perf_monitor.add_cycle
 
         live_input = self._live_input_queue
-        offline_input = self._offline_input
-        if offline_input is None:
-            raise RuntimeError("offline_input not configured")
 
         # always begin with live input:
         i_q: Optional[FixedArrayMultiQueue] = live_input
@@ -403,11 +399,15 @@ class PoseProcess(Process):
                 pose = empty_zero_pose
                 # that will anyway be skipped in the consumer when needed
 
-            frames_indices_out[:] = frames_indices
+            # ensure we make a copy of the frames_indices:
+            frames_indices_out = frames_indices.copy()
             # getting frame indices corruption in reader side without this.
             # It could be eventually explained if the serialization
             # of the frames_indices numpy array happens after the return of the queue put()..
             # which is not totally impossible.
+
+            # reminder: on the other side: we don't copy the pose_data output, given we assume
+            # it's already a new array from the inner call to predict.
 
             # better after copy frames_indices, but before put to output data queue
             actual_release_output()
