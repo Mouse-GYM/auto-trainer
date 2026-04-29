@@ -10,7 +10,7 @@ import time
 from itertools import chain
 from multiprocessing import synchronize
 from pathlib import Path
-from typing import Optional, Dict, List, TextIO, Tuple
+from typing import Optional, Dict, List, TextIO, Tuple, Literal, Union
 
 import h5py
 import numpy
@@ -68,6 +68,43 @@ def _open_h5_file(file_path: Path):
     logger.debug("%s: %s entries", file_path, len(datasets))
     return datasets
 
+
+def _write_h5_batch(
+    dst_path: Path,
+    data_list: List,
+    indices_list: List,
+    *,
+    columns: List[str],
+    mode: Literal["a", "w"] = "a",
+) -> float:
+    """Write the given data to the dst_path using the given columns and mode"""
+    t0 = time.perf_counter()
+    if len(data_list) > 0:
+        arr = numpy.vstack(data_list)
+        index = list(range(arr.shape[0]))
+    else:
+        arr = index = []
+    df_xyp = pandas.DataFrame(arr, columns=columns, index=index)
+    # also store the frame idx with the results:
+    df_xyp["frame_idx"] = list(indices_list)
+    #
+    df_xyp.to_hdf(
+        dst_path,
+        "df_with_missing",
+        format="table",
+        mode=mode,
+        append=mode == "a",  # required as well for really concat
+    )
+    data_list.clear()
+    indices_list.clear()
+    # logger.debug("cleared lists %s and %s",
+    #              object.__repr__(data_list), object.__repr__(indices_list))
+    t1 = time.perf_counter()
+    d = t1 - t0
+    logger.debug(
+        "wrote h5 batch (%s) in %sms to %s", len(df_xyp), int(d * 1000), dst_path
+    )
+    return d
 
 #
 
@@ -382,32 +419,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 skip_next_pose_data = 0
             return next_pose_data, next_mode, next_frames_indices
 
-        def write_h5_batch(dst_path, data_list, indices_list):
-            t0 = time.perf_counter()
-            arr = numpy.vstack(data_list)
-            index = list(range(arr.shape[0]))
-            df_xyp = pandas.DataFrame(arr,
-                                      columns=pose_algo.pose_result_columns, index=index)
-            df_xyp["frame_idx"] = list(indices_list)  # also store the frame idx with the results
-            logger.spam("Writing batch to %s", dst_path)
-            # logger.verbose("writing h5 batch (%s/%s entries): indices=%s to %s (prev-exists: %s)",
-            #                len(df_xyp), len(arr), indices_list, dst_path, os.path.exists(dst_path))
-            df_xyp.to_hdf(dst_path,
-                          "df_with_missing",
-                          format="table",
-                          mode="a",
-                          append=True,  # required as well for really concat
-                          )
-            data_list.clear()
-            indices_list.clear()
-            # logger.debug("cleared lists %s and %s",
-            #              object.__repr__(data_list), object.__repr__(indices_list))
-            t1 = time.perf_counter()
-            d = t1 - t0
-            logger.debug("wrote h5 batch (%s) in %sms to %s",
-                           len(df_xyp), int(d * 1000), dst_path)
-            writes_h5_live_durations.append(d)
-
         # main loop
         while self._is_running:
 
@@ -502,6 +513,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     cams_frame_idx_fhs.append(Path(p_indices).open("w"))
                     pose_path = Path(
                         cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
+                    # ensure live data files are not reused from eventual previous trial,
+                    # although that would be an issue of project/session reuse then.
+                    _write_h5_batch(pose_path, [], [],
+                                    columns=pose_algo.pose_result_columns, mode="w")
                     pose_paths.append(pose_path)
 
             elif recording_in_progress and frames_indices is not None:
@@ -517,7 +532,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     for cam_pose_path, cam_indices, cam_h5_live in zip(pose_paths, cur_cams_indices, cur_h5_live_batch):
                         if len(cam_h5_live) == 0:
                             continue
-                        write_h5_batch(cam_pose_path, cam_h5_live, cam_indices)
+                        write_duration = _write_h5_batch(cam_pose_path, cam_h5_live, cam_indices,
+                                                         columns=pose_algo.pose_result_columns)
+                        writes_h5_live_durations.append(write_duration)
                     #
                     logger.debug("setting stop recorded")
                     self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
@@ -552,7 +569,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             cam_h5_live.append(cur)
                             cam_indices.extend(filter(lambda ix: ix >= 0, cam_fr_indices))
                             if len(cam_h5_live) * frames_per_batch >= self._recording_live_batch:
-                                write_h5_batch(cam_pose_path, cam_h5_live, cam_indices)
+                                write_duration = _write_h5_batch(cam_pose_path, cam_h5_live, cam_indices,
+                                                                 columns=pose_algo.pose_result_columns)
+                                writes_h5_live_durations.append(write_duration)
 
                     if skip_next_pose_data > 0:
                         skip_next_pose_data -= 1
@@ -661,8 +680,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                     logger.spam("cam-%s : fx=%s got negative frame idx: %s",
                                                  cdx, fx, cam_fr_indices)
                                     continue
-                                    # break
-                                while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2]:
+                                # NB: in cur_h5_dss[cur_h5_ix][2][0]:
+                                #   [2] access the frame index column,
+                                #   and [0] extract the frame index from the scalar value.
+                                while cur_h5_ix < len(cur_h5_dss) and frame_idx > cur_h5_dss[cur_h5_ix][2][0]:
                                     ix = cur_h5_dss[cur_h5_ix][2][0]
                                     f = cur_h5_dss[cur_h5_ix][1]
                                     if __debug__ and _local_do_debug:
