@@ -278,7 +278,6 @@ class PoseProcess(Process):
         empty_zero_pose = [np.asarray([0] * 3 * len(self._pose_model.body_parts))] * frames_indices.size
 
         # use a pre-allocated copy for outputting the frames indices:
-        frames_indices_out = frames_indices.copy()
         prev_mode = None
         logger.info("%s: starting processing ..", self)
         d_q_put = self._data_queue.put
@@ -400,11 +399,15 @@ class PoseProcess(Process):
                 pose = empty_zero_pose
                 # that will anyway be skipped in the consumer when needed
 
-            frames_indices_out[:] = frames_indices
+            # ensure we make a copy of the frames_indices:
+            frames_indices_out = frames_indices.copy()
             # getting frame indices corruption in reader side without this.
             # It could be eventually explained if the serialization
             # of the frames_indices numpy array happens after the return of the queue put()..
             # which is not totally impossible.
+
+            # reminder: on the other side: we don't copy the pose_data output, given we assume
+            # it's already a new array from the inner call to predict.
 
             # better after copy frames_indices, but before put to output data queue
             actual_release_output()
