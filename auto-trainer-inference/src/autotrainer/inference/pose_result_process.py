@@ -189,16 +189,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         prev = self._process_pool
         if prev is None:
             return
-        logger.verbose("Closing previous process pool %s", prev)
+        logger.verbose("Terminating previous process pool %s", prev)
+        self._process_pool = None
         try:
-            prev.close()
-            # prev.terminate()
+            # prev.close()
+            prev.terminate()
             prev.join()
         except Exception as err:
             logger.error("Error closing previous pool: %s", err)
         else:
             logger.debug("previous pool closed")
-        self._process_pool = None
 
     def _init_process_pool(self, pose_algo):
         self._close_process_pool()
@@ -370,7 +370,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         perf_c_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
 
-        async_data_tasks = []  # for pose_algo.process async work tasks
+        async_data_tasks: List[multiprocessing.pool.ApplyResult] = []  # for pose_algo.process async work tasks
 
         def get_next_pose_data(timeout: Optional[float] = 0.05):
             nonlocal pose_data
@@ -436,10 +436,14 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
             # purge current ready async results from waiting list:
             while len(async_data_tasks) > 0:
-                older_async_res = async_data_tasks[0]  # type: multiprocessing.pool.ApplyResult
+                older_async_res = async_data_tasks[0]
                 if not older_async_res.ready():
                     break
                 del async_data_tasks[0]
+                try:
+                    older_async_res.get()
+                except Exception as err:
+                    logger.exception("Async result error: %s", err)
 
             prev_mode = next_prev_mode  # don't forget
 
