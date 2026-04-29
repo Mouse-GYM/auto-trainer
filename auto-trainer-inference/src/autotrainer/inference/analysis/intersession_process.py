@@ -30,7 +30,7 @@ def intersession_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
-    frame_rate: int = 150,  # TODO: pass from video camera settings/parameters
+    frame_rate: int = 150,
     debug_level: int = _segment_reach_debug,
 ) -> IntersessionResponse:
     """
@@ -53,7 +53,8 @@ def intersession_process(
     dlc_seg = "_raw2D"
     center_method = (1, SceneElement.Diamond)
     #
-    df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method)
+    df_lr, centered_df_3d = process_raw_data(location, vid_tag, dlc_seg, calib_src_dir, center_method,
+                                             frame_rate=frame_rate)
     #
     results_dict = segment_reaches(
         project_info=project,

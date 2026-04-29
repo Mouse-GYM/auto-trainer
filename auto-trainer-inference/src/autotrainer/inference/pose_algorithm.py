@@ -170,6 +170,7 @@ class PoseAlgorithm:
         self._cam_names = cam_names
         self._square_size = square_size
         self._cam_offsets = cam_offsets
+        self._frame_rate: Optional[int] = None
         #
         axis_labels = ['x', 'y', 'likelihood']
         self._hand_base_names = ['H_flat', 'H_spread', 'H_grab']
@@ -194,6 +195,14 @@ class PoseAlgorithm:
             [self._measure_offset_parts, axis_labels],
             names=["bodyparts", "coords"]
         )
+
+    @property
+    def frame_rate(self):
+        return self._frame_rate
+
+    @frame_rate.setter
+    def frame_rate(self, frame_rate):
+        self._frame_rate = frame_rate
 
     @property
     def stereo_params(self):
@@ -305,7 +314,7 @@ class PoseAlgorithm:
             df_3d=df_3d,
             stereo_file=stereo_params.as_pickle_dict(),
             center_method=center_method,
-            frame_rate=150,  # could be todo: allow configure/set from camera fps itself
+            frame_rate=self._frame_rate,
             bpts=self._measure_offset_parts,
             calib_metadata=self._calib_metadata,
             cam_names=self._cam_names,

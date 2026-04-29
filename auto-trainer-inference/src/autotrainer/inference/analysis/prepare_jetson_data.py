@@ -831,9 +831,10 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
-    session, vid_tag, dlc_seg, calib_src_dir, center_method
+    session, vid_tag, dlc_seg, calib_src_dir, center_method,
+    *,
+    frame_rate: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:  # df_LR, df_3D
-    frame_rate = 150
     p_thresh = 0.9  # confidence threshold for DLC raw output
     min_cluster = 10  # maximum allowed interpolation
 
