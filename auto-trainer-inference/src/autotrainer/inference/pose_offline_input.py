@@ -23,14 +23,16 @@ class InferenceIncorrectStatus(RuntimeError):
     """For when in analysis but inference change status"""
 
 
-def check_frame_count(file_path: Path):
+def _check_frame_count(file_path: Path) -> Optional[int]:
     capture = cv2.VideoCapture(file_path.as_posix())
+    if not capture.isOpened():
+        return None
     count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    capture.release()
     if count < 1:
-        capture.release()
-        return None, None
+        return None
     logger.verbose("Opened %s: tot_frames=%s size=%s", file_path.name, count, file_path.stat().st_size)
-    return capture, count
+    return count
 
 
 
@@ -296,9 +298,9 @@ class OfflineInputProcess:
             check_correct_status()
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
-                    capture, frame_count = check_frame_count(video_paths[cdx])
-                    if capture is not None:
-                        captures_d[cdx] = capture
+                    frame_count = _check_frame_count(video_paths[cdx])
+                    if frame_count is not None:
+                        captures_d[cdx] = frame_count
                         videos_frame_count[cdx] = frame_count
             if len(captures_d) >= n_cams:
                 break
