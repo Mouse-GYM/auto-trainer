@@ -70,8 +70,14 @@ def _open_h5_file(file_path: Path):
 
 
 def _write_h5_batch(
-    dst_path, data_list, indices_list, *, columns, mode: Literal["a", "w"] = "a"
-):
+    dst_path: Path,
+    data_list: List,
+    indices_list: List,
+    *,
+    columns: List[str],
+    mode: Literal["a", "w"] = "a",
+) -> float:
+    """Write the given data to the dst_path using the given columns and mode"""
     t0 = time.perf_counter()
     if len(data_list) > 0:
         arr = numpy.vstack(data_list)
@@ -79,16 +85,15 @@ def _write_h5_batch(
     else:
         arr = index = []
     df_xyp = pandas.DataFrame(arr, columns=columns, index=index)
-    df_xyp["frame_idx"] = list(
-        indices_list
-    )  # also store the frame idx with the results
-    logger.debug("Writing batch (len=%s) to %s", len(df_xyp), dst_path)
+    # also store the frame idx with the results:
+    df_xyp["frame_idx"] = list(indices_list)
+    #
     df_xyp.to_hdf(
         dst_path,
         "df_with_missing",
         format="table",
         mode=mode,
-        append=True,  # required as well for really concat
+        append=mode == "a",  # required as well for really concat
     )
     data_list.clear()
     indices_list.clear()
