@@ -265,6 +265,22 @@ class PoseAlgorithm:
     def pose_result_columns(self) -> pandas.MultiIndex:
         return self._pose_result_columns
 
+    @staticmethod
+    def _take_most_likely(df):
+        # create dataframe with 1 row, all NaN values:
+        df_res = pandas.DataFrame(index=[0], columns=df.columns)
+        elems = set(df.columns.get_level_values(0))
+        # then for each elem fill with most likely:
+        for elem in elems:
+            most_likely = (
+                df[elem]
+                .sort_values(by="likelihood", ascending=False)
+                .iloc[0]
+            )
+            for c in ('x', 'y', 'likelihood'):
+                df_res[elem, c] = most_likely[c]
+        return df_res
+
     def _handle_offsets_pose_data(self,
         *per_cam_detection: numpy.ndarray
     ):
@@ -279,12 +295,12 @@ class PoseAlgorithm:
         frames_per_cam = len(per_cam_detection[0])
         #
         # reshape then sort by confidence/likelihood and takes most likely:
-        df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
+        columns = self._measure_offset_parts_columns
+        df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=columns)
+        df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=columns)
         if frames_per_cam > 1:
-            df0_2d = df0_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]
-        df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=self._measure_offset_parts_columns)
-        if frames_per_cam > 1:
-            df1_2d = df1_2d.sort_index(level="likelihood", ascending=False).reset_index(drop=True).iloc[0:1]
+            df0_2d = self._take_most_likely(df0_2d)
+            df1_2d = self._take_most_likely(df1_2d)
         #
         df_2d = pandas.DataFrame(
             numpy.concatenate([df0_2d.values, df1_2d.values]),
