@@ -48,6 +48,10 @@ class _InferenceProtocol(Protocol):
     def pose_algorithm(self) -> PoseAlgorithm:
         """Current associated pose_algo"""
 
+    @pose_algorithm.setter
+    def pose_algorithm(self, pose_algo) -> PoseAlgorithm:
+        """Set current associated pose_algo"""
+
     @property
     def is_enabled(self) -> bool:
         """Enabled or not"""

@@ -26,12 +26,14 @@ class _UnconfiguredCompleteAction:
 @dataclass
 class SegmentationConfiguration:
     project: ProjectInfo
+    frame_rate: Optional[int] = None
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
 @dataclass
 class DetectionConfiguration:
     project: ProjectInfo
+    frame_rate: Optional[int] = None
     complete: CompleteCallbackT = _UnconfiguredCompleteAction()
 
 
