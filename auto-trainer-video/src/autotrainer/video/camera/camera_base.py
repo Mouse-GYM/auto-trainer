@@ -33,6 +33,7 @@ class CameraBase:
         self._frame_count = 0
         self._capture_start = 0
         self._last_when = 0
+        self._last_frame_id = None
 
     @property
     def name(self) -> str:
@@ -78,6 +79,10 @@ class CameraBase:
     @property
     def is_primary(self) -> bool:
         return self._is_primary
+
+    @property
+    def frame_id(self) -> Optional[int]:
+        return self._last_frame_id
 
     def init(self) -> None:
         """ Actions that should be taken once after camera creation, but should not happen in the constructor.

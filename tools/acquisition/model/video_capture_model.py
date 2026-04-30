@@ -4,6 +4,11 @@ import pathlib
 import time
 import logging
 from multiprocessing.context import BaseContext
+from multiprocessing.sharedctypes import (
+    SynchronizedArray,
+    SynchronizedString,
+    Synchronized,
+)
 from typing import Optional, List, Tuple, Dict, Any
 from multiprocessing import synchronize
 from threading import Event
@@ -70,6 +75,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         mp_ctx: Optional[BaseContext] = None,
         msg_queue: Optional[multiprocessing.Queue] = None,
         presence_detection: Optional[PresenceDetectionAttrs] = None,
+        synced_cam_recording: Optional[Synchronized] = None,
+        synced_cam_frame_index: Optional[Synchronized] = None,
     ):
         super().__init__()
 
@@ -85,8 +92,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._preferences = preferences
         self._camera_index = camera_index
         self._presence_detection = presence_detection
+        self._synced_cam_recording = synced_cam_recording
+        self._synced_cam_frame_index = synced_cam_frame_index
+        
 
-        self._camera_source: Optional[CaptureCameraAttrs] = None
+        self._camera_source: CaptureCameraAttrs = CaptureCameraAttrs(name="", url="")
         self._camera_properties = {}
 
         self._video_capture: Optional[VideoCapture] = None
@@ -97,9 +107,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._msg_queue = msg_queue  # for sending "status" message(s) to main process
         self._video_command_queue = mp_ctx.Queue(maxsize=64)
         self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
-        self._video_frame_index = mp_ctx.Value("i", 0)
+        self._video_frame_index = mp_ctx.Value("i", -1)
         self._video_image_queue: Optional[FixedArrayQueue] = None
-        self._errors = mp_ctx.Array("c", bytes(512))
+        self._errors: SynchronizedString = mp_ctx.Array("c", bytes(512))
         self._shape = None
 
         self._cur_conf: CameraConfiguration = CameraConfiguration()
@@ -329,6 +339,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
                 record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
+                synced_cam_record_enabled=self._synced_cam_recording,
+                synced_cam_frame_index=self._synced_cam_frame_index,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
@@ -458,7 +470,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                                    record_mode=self._record_mode.value,
                                    is_still_image_capture_enabled=self._is_still_capture_enabled,
                                    still_image_capture_interval=self.still_image_capture_interval,
-                                   scheme=parsed.scheme, host=parsed.hostname, port=parsed.port or 0, path=path,
+                                   scheme=parsed.scheme, host=parsed.hostname or "", port=parsed.port or 0, path=path,
                                    params=params, record_prebuffer_duration=conf.record_prebuffer_duration)
 
     def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):

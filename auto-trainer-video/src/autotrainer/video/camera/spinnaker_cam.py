@@ -340,6 +340,7 @@ class SpinCam(CameraBase):
             raise RuntimeError(f"Incomplete spincam image on frame_idx={self._frame_count}")
 
         self._last_when = image_result.GetTimeStamp()
+        self._last_frame_id = image_result.GetFrameID()
 
         frame = orig_frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
         # image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
