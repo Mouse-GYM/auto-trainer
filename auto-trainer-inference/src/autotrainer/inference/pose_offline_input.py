@@ -23,12 +23,14 @@ class InferenceIncorrectStatus(RuntimeError):
     """For when in analysis but inference change status"""
 
 
-def check_frame_count(file_path: Path):
+def _check_frame_count(file_path: Path) -> Optional[Tuple[cv2.VideoCapture, int]]:
     capture = cv2.VideoCapture(file_path.as_posix())
+    if not capture.isOpened():
+        return None
     count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
     if count < 1:
         capture.release()
-        return None, None
+        return None
     logger.verbose("Opened %s: tot_frames=%s size=%s", file_path.name, count, file_path.stat().st_size)
     return capture, count
 
@@ -286,6 +288,7 @@ class OfflineInputProcess:
                 self._put_block(self._empty_frame, cdx, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
 
     def _feed_intersession_analysis_execute(self, project, wait_stop_recorded):
+        captures_d: Dict[int, cv2.VideoCapture] = {}
         cams = (project.camera_1, project.camera_2)
         n_cams = len(cams)
         cams_paths = [
@@ -294,17 +297,25 @@ class OfflineInputProcess:
         ]
         tot_skipped_frames = 0
 
+        def close_captures():
+            for cap in captures_d.values():
+                cap.release()
+
         def check_correct_status():
             if self._live_requested:
+                close_captures()
                 raise InferenceIncorrectStatus("live requested while feeding")
             if self._interrupted:
+                close_captures()
                 raise InferenceIncorrectStatus("feed interrupted")
         #
-        perf_timeout = get_perf_now() + 10  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         if wait_stop_recorded:
+            perf_timeout = (
+                get_perf_now() + 10
+            )  # default intersession_wait_time might be too small
             logger.debug("waiting stop_recorded on %s", self._stop_recorded)
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
@@ -313,30 +324,27 @@ class OfflineInputProcess:
             self._stop_recorded.clear()
             logger.notice("got stop_recorded")
 
-        # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
-        # so this small sleep, for them to get more chance to do it:
-        # time.sleep(0.5)
-        # This is to not get "moov-atom-not-found" in stderr output from opencv library.
+        # This is to double ensure to not get "moov-atom-not-found" in stderr output from opencv library.
         # NB: not anymore necessary since also controlling pose process + data_monitor with frames indices commands.
-        captures_d = {}
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)
         p_before = get_perf_now()
-        perf_timeout = p_before + 10
+        perf_timeout = p_before + 2
         count_loops = 0
         while True:
             check_correct_status()
             for cdx, cam in enumerate(cams):
                 if cdx not in captures_d:
-                    capture, frame_count = check_frame_count(video_paths[cdx])
-                    if capture is not None:
-                        captures_d[cdx] = capture
-                        videos_frame_count[cdx] = frame_count
+                    raw = _check_frame_count(video_paths[cdx])
+                    if raw is not None:
+                        captures_d[cdx] = raw[0]
+                        videos_frame_count[cdx] = raw[1]
             if len(captures_d) >= n_cams:
                 break
             count_loops += 1
             if get_perf_now() > perf_timeout:
+                close_captures()
                 raise RuntimeError(f"timeout waiting for intersession video files {video_paths}")
             time.sleep(0.1)  # overkill to immediately retry
 
@@ -455,6 +463,8 @@ class OfflineInputProcess:
 
             frame_idx += 1
         # end while frame_idx < tot_frames_to_process
+
+        close_captures()
 
         if __debug__ and _local_do_debug:
             for cdx in range(n_cams):
