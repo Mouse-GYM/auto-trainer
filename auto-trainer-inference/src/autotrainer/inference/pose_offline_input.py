@@ -66,6 +66,7 @@ class ConditionalSemaphore(object):
 
 
 class OfflineInputProcess:
+    """Dedicated internal class used for the pose-process offline processing/replay"""
 
     def __init__(
         self,
@@ -76,7 +77,6 @@ class OfflineInputProcess:
         nr_cams: int,
         msg_queue: multiprocessing.Queue,
     ):
-        self._project = None
         self._cur_project_info: Optional[ProjectInfo] = None
         self._live_requested = False
         self._interrupted = False
@@ -124,7 +124,7 @@ class OfflineInputProcess:
 
     def has_project_waiting(self):
         cur_th = self._cur_thread
-        return cur_th is not None and cur_th.is_alive() and self._project is not None
+        return cur_th is not None and cur_th.is_alive() and self._cur_project_info is not None
 
     def set_project_info(self, project_info: ProjectInfo, *, wait_stop_recorded: bool=True):
         cur_th = self._cur_thread
@@ -134,16 +134,16 @@ class OfflineInputProcess:
             return
         logger.info("Received new project to process: %s", project_info)
         if cur_th is not None:
+            # this can only happen if the main logic is somehow broken,
+            # given we set cur_thread to None at the end of the previous offline feed
             if cur_th.is_alive():
                 logger.warning("interrupting previous offline read thread still alive")
                 self._interrupted = True
             cur_th.join(3)
             if cur_th.is_alive():
                 logger.critical("Previous feeder thread still alive, but continuing")
-        self._cur_project_info = project_info
         self._live_requested = False
         self._interrupted = False
-        self._project = project_info
         for buff, idc in zip((self._buffer1, self._buffer2, self._buffer3),
                              (self._indices1, self._indices2, self._indices3)):
             buff[:] = 0
@@ -161,8 +161,10 @@ class OfflineInputProcess:
         logger.debug("releasing sema_free %s times", sema_miss)
         for _ in range(3 - sema_miss):  # 3 == current nbr of batch buffers we use (buffer1+2+3)
             self._sema_free.release()
-        logger.verbose("sema_ready=%s sema_free=%s", self._sema_ready.count, self._sema_free.count)
+        logger.debug("sema_ready=%s sema_free=%s", self._sema_ready.count, self._sema_free.count)
+        # NB: set _cur_project_info only after all "sema" are configured/everything is ready
         self._cur_batch_nr = 0
+        self._cur_project_info = project_info
         cur_th = self._cur_thread = threading.Thread(
             target=self._feed_intersession_analysis,
             args=(project_info, wait_stop_recorded),
