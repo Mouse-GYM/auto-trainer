@@ -330,7 +330,7 @@ def get_frame_rate(video_path):
             frame_rate_string = yaml_content.split('framerate:')[1].split()[0]
             frame_rate = int(''.join(filter(str.isdigit, frame_rate_string)))
     else:
-        print('change to systemdatya_copy for frame rate')
+        logger.warning('change to systemdatya_copy for frame rate')
     return frame_rate
 
 
@@ -589,7 +589,7 @@ def reorient_and_center_step1(
 
     if not cam_offsets:
         if center_method[0] == 0:
-            print('Warning: No offset file found. Offset will be zero.')
+            logger.warning('No offset file found. Offset will be zero.')
         cam_offsets = {
             'x_off': 0,
             'y_off': 0,
@@ -617,7 +617,7 @@ def reorient_and_center_step1(
             files_3D = glob.glob(os.path.join(path_centering, '*_filtered3D.h5'))
 
             if not files_3D:
-                print('No centering file found. Reverting to default center.')
+                logger.warning('No centering file found. Reverting to default center.')
                 center_len = 0
             else:
                 center_3d = pd.read_hdf(os.path.join(path_centering, files_3D[0]))
@@ -857,7 +857,7 @@ def process_raw_data(
         filt_name = Path(video_paths[ndx]).stem + '_filtered2D.h5'
         filt_path = os.path.join(vid_dir, filt_name)
         df.to_hdf(str(filt_path), "df_with_missing", format="table", mode="w")
-        # print(f"Saved dataframe to {filt_path}")
+        logger.info("Saved dataframe to %s", filt_path)
 
     if len(df_LR) == 0:
         raise RuntimeError(f"No tracking obtained for {session}")
