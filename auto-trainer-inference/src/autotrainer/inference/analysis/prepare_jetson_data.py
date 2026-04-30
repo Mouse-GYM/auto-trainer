@@ -26,8 +26,6 @@ from autotrainer.inference import calibration_FLIR as cal_flir
 
 logger = get_verbose_logger(__name__)
 
-video_write_ext = ".mp4" if sys.platform.startswith("linux") else ".mkv"
-
 
 DEFAULT_CAM_OFFSET_FILE_NAME = "camera_offsets.pkl"
 
@@ -57,7 +55,7 @@ def dict_almost_equal(d1, d2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 
-def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray[int]:
+def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray:
     """
     Identify dropped frames in a video based on inter-frame intervals.
 
@@ -268,7 +266,8 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
         newdf_interpolated = interpolate_coordinates(newdf.copy(), p_thresh)
 
         # Generate the dropped frame vector
-        timestamp_file = v_path.replace(video_write_ext, '_timestamps.txt')
+        v_path = Path(v_path)
+        timestamp_file = v_path.parent.joinpath(f"{v_path.stem}_timestamps.txt").as_posix()
         dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
 
         # # In cases where there are more timestamps than frames

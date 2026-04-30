@@ -4,8 +4,7 @@ from typing import Optional, Tuple
 
 import numpy
 
-from autotrainer.core import ProjectInfo, video_write_ext
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
+from autotrainer.core import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.reach_event import ReachEvent
@@ -49,7 +48,7 @@ def intersession_process(
     if not calib_src_dir.is_dir():
         logger.warning("calib_src_dir %s is not a directory",  calib_src_dir)
     calib_src_dir = calib_src_dir.as_posix()
-    vid_tag = "." + video_write_ext
+    vid_tag = "." + project.video_write_ext
     dlc_seg = "_raw2D"
     center_method = (1, SceneElement.Diamond)
     #
