@@ -142,7 +142,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._cmd_queue = cmd_queue
         self._cmd_ack_event = cmd_ack_event
         self._msg_queue = msg_queue
-        self._cams = (project.camera_1, project.camera_2)
         self._frames_per_camera = frames_per_cam
         self._recording_live_batch = int(os.getenv("INFERENCE_LIVE_BATCH", 150 * 5))  # 5s at 150 FPS
         self._monitored_parts_offsets = monitored_parts_offsets
@@ -240,8 +239,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def _intersession_offline_process(
         self,
         project_info: ProjectInfo,
-        perf_c_start_offline,
-        pose_algo,
+        perf_c_start_offline: float,
+        pose_algo: PoseAlgorithm,
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
     ):
         logger.notice("Processing intersession offline post-process on %s", project_info)
@@ -262,8 +261,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def _intersession_offline_process2(
         self,
         project_info: ProjectInfo,
-        perf_c_start_offline,
-        pose_algo,
+        perf_c_start_offline: float,
+        pose_algo: PoseAlgorithm,
         range_cams,
         ib_pose_data_list,
         ib_pose_data_dict,
@@ -301,7 +300,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         # current analysis code also require exact same frame number in all cameras,
         # let's trim what's necessary:
-        for cam in self._cams:
+        for cam in (project_info.camera_1, project_info.camera_2):
             paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
             ts_file = paths[1]
             lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
@@ -330,8 +329,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                       " now calling intersession_inference()",
                       min_nbr_pd, 2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline), final_pose_data.shape[0])
 
-        intersession_inference(final_pose_data, self._pose_algo.part_names,
-                               project_info)
+        intersession_inference(final_pose_data, pose_algo.part_names, project_info)
         logger.success("fully processed session-%s inference with %s total pose responses",
                        project_info.session, final_pose_data.shape[0])
         return final_pose_data.shape
