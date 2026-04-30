@@ -57,7 +57,7 @@ def dict_almost_equal(d1, d2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 
-def identify_dropped_frames(timestamp_file, frame_rate):
+def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray[int]:
     """
     Identify dropped frames in a video based on inter-frame intervals.
 
@@ -70,6 +70,8 @@ def identify_dropped_frames(timestamp_file, frame_rate):
     """
     # Load timestamps from the file
     timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c'])
+    if len(timestamps_df) == 0:
+        return np.asarray([], dtype=int)
     # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
     # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
     timestamps_ns = timestamps_df['frame_when_ns'].values  # Extract desired column
