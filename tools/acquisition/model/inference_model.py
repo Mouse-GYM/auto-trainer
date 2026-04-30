@@ -525,7 +525,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             async_res = pool.apply_async(
                 self._intersession_process_execute,
                 args=(det_cfg.project,),
-                kwds=dict(calib_dir=self._calib_dir),
+                kwds=dict(
+                    calib_dir=self._calib_dir,
+                    frame_rate=det_cfg.frame_rate,
+                ),
             )
             result = async_res.get()
         except Exception as err:

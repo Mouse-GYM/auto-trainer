@@ -50,6 +50,7 @@ class IntersessionMachine(StateMachine):
         self._inference = inference
         self._segmentation_configuration: Optional[SegmentationConfiguration] = None
         self._detection_configuration: Optional[DetectionConfiguration] = None
+        self._frame_rate: Optional[int] = None
 
     @property
     def events(self) -> IntersessionMachineEvents:  # to have correct type hint as well
@@ -60,9 +61,20 @@ class IntersessionMachine(StateMachine):
         self._segmentation_configuration = None
         self.state = IntersessionState.idle
 
+    @property
+    def frame_rate(self):
+        return self._frame_rate
+
+    @frame_rate.setter
+    def frame_rate(self, frame_rate):
+        self._frame_rate = frame_rate
+
     def after_enter_segmentation(self, project_info: ProjectInfo):
         logger.success("entering segmentation with %s", project_info)
-        segment_config = SegmentationConfiguration(project=project_info)
+        segment_config = SegmentationConfiguration(
+            project=project_info,
+            frame_rate=self._frame_rate,
+        )
         segment_config.complete = partial(self._segmentation_complete, segment_config=segment_config)
         self._segmentation_configuration = segment_config
         res = self._inference.perform_segmentation(segment_config)
@@ -77,6 +89,7 @@ class IntersessionMachine(StateMachine):
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
         detection_config = DetectionConfiguration(
             project=segment_config.project,
+            frame_rate=segment_config.frame_rate,
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)

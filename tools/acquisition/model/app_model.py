@@ -1294,8 +1294,17 @@ class AppModel(ObservableObject):
 
         prebuffer_duration = 0
 
+        frame_rate = None
         if (left_cam_cfg := configuration.get_camera(CameraId.Left)) is not None:
             prebuffer_duration = left_cam_cfg.record_prebuffer_duration
+            frame_rate = left_cam_cfg.params.get("fps")
+
+        pose_algo = self._pose_algorithm
+        pose_algo.frame_rate = frame_rate
+        # also reset it to inference:
+        self._inference.pose_algorithm = pose_algo
+        # which force a sync to pose-result process.
+        self._behavior.system_machine.intersession.frame_rate = frame_rate
 
         if (right_cam_cfg := configuration.get_camera(CameraId.Right)) is not None:
             prebuffer_duration = max(prebuffer_duration, right_cam_cfg.record_prebuffer_duration)

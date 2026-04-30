@@ -831,9 +831,10 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
-    session, vid_tag, dlc_seg, calib_src_dir, center_method
-) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:  # df_LR, df_3D
-    frame_rate = 150
+    session, vid_tag, dlc_seg, calib_src_dir, center_method,
+    *,
+    frame_rate: int,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:  # df_LR, df_3D
     p_thresh = 0.9  # confidence threshold for DLC raw output
     min_cluster = 10  # maximum allowed interpolation
 
@@ -846,8 +847,7 @@ def process_raw_data(
     video_paths = [video for key in videoOrder for video in videoList if key in video]
 
     if not video_paths:
-        print('No Videos found!\n')
-        return None
+        raise RuntimeError("No Videos found!")
 
     # Extract reach data, filter, prep for undistortion and triangulation
     df_LR, bodyparts = extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate)
@@ -860,8 +860,7 @@ def process_raw_data(
         # print(f"Saved dataframe to {filt_path}")
 
     if len(df_LR) == 0:
-        print('No tracking obtained for %s' % session)
-        return None
+        raise RuntimeError(f"No tracking obtained for {session}")
     #
     raw_path_3D = os.path.join(vid_dir, vid_name_base + '_filtered3D.h5')
     filtered_df_3d = triangulate_3D(df_LR, raw_path_3D, calib_src_dir, bodyparts, min_cluster, p_thresh)
