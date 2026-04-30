@@ -49,7 +49,7 @@ def find_last_placement(frmq, pellet_events):
 
 
 def get_ln():
-    """Prints the current line number."""
+    """Return the current line number."""
     return inspect.currentframe().f_back.f_lineno
 
 
@@ -88,13 +88,13 @@ def segment_reaches(
     ]
     video_paths = [video for key in videoOrder for video in videoList if key in video]
     if not video_paths:
-        print('No Videos found!\n')
+        logger.warning('No Videos found!')
         return results_dict
     vid_name_base, vid_dir = prep_jet.get_vid_name_base(video_paths[0])
 
     save_file_path = os.path.join(vid_dir, vid_name_base + '_eventSegmentation.pickle')
     if os.path.isfile(save_file_path) and not overwrite:
-        print('Previous analysis found for %s\n' % vid_name_base)
+        logger.notice('Previous analysis found for %s', vid_name_base)
         # TODO: read the file and returns its results dicts..
         return results_dict
 
@@ -109,7 +109,7 @@ def segment_reaches(
     )
 
     if debug >= 1:
-        print(f"segment_reaches_f1: events={pellet_events}")
+        logger.verbose("segment_reaches_f1: events=%s", pellet_events)
 
     pellets_consumed, pellets_presented, successful_reaches, total_reaches, rh_max_vp_list, reach_events = segment_reaches_f2(
         fps=frame_rate,
@@ -297,7 +297,7 @@ def segment_reaches_f2(
     confidence = 0.9
 
     if len(pellet_events) == 0:
-        print(f"Pellet never found for {vid_name_base}")
+        logger.warning("Pellet never found for %s", vid_name_base)
 
     for pellet_event in pellet_events:
         lost = pellet_event['lost']
@@ -309,7 +309,7 @@ def segment_reaches_f2(
             # print(pellet_event['placed'],end_search)
             if np.nanmin(Z_dist_p[pellet_event['placed']:end_search]) <= pellet_drop_dist:
                 if debug >= 2:
-                    print(f'DROP: Z dist at {get_ln()}')
+                    logger.debug('DROP: Z dist at %s', get_ln())
                 pellet_event['outcome'] = ReachEventOutcome.DROPPED
 
     pellet_dict = {
@@ -357,9 +357,9 @@ def segment_reaches_f2(
                 if search_status == 1:
                     if debug >= 2:
                         if not pellet_detected:
-                            print('No pellet detected')
+                            logger.debug('No pellet detected')
                         else:
-                            print('No (additional) reach detected')
+                            logger.debug('No (additional) reach detected')
                 break
             testA = np.sum(pellet_p[frame:frame+batch_frm] > confidence)/batch_frm > 0.75 # test if pellet is there
             if testA:
@@ -376,7 +376,7 @@ def segment_reaches_f2(
 
                         if testA and testB:
                             if debug >= 2:
-                                print('reach began at frame %d!' % frame)
+                                logger.debug('reach began at frame %d!', frame)
                             delay_since_presented = frame / fps
                             # for now considering presented moment as the video start itself, so frame / fps.
                             # eventual todo: this could otherwise be calculated as :
@@ -412,7 +412,7 @@ def segment_reaches_f2(
                 testB = np.mean(speed_hvh_init[frame:frame+batch_speed]) > reach_dirchange_speed
                 if testB:
                     if debug >= 2:
-                        print('reach max at frame %d!' % int(frame+3))
+                        logger.debug('reach max at frame %d!', int(frame+3))
                     # reach_events.append(('reachMax', int(frame+3)))
                     reach_dict['max'] = int(frame+3)
                     max_frm = frame+3
@@ -434,19 +434,19 @@ def segment_reaches_f2(
                     # print(np.sum(speed_seg > pellet_drop_speed))
                     food_was_dropped = True
                     if debug >= 2:
-                        print(f'DROP: speed drop - line {get_ln()} - frame {frame}')
+                        logger.debug('DROP: speed drop - line %s - frame %s', get_ln(), frame)
 
                 if np.any(Z_dist_p[frame:frame+position_window] < pellet_drop_dist): #food dropped if pellet is too low
                     z_dist_indices = np.where(Z_dist_p[frame:frame+position_window] < pellet_drop_dist)
                     testD = np.any(pellet_p[frame:frame+position_window].iloc[z_dist_indices] > confidence)
                     if testD:
                         food_was_dropped = True
-                        if debug:
-                          print(f'DROP: pellet too low - line {get_ln()} - frame {frame}')
+                        if debug >= 1:
+                            logger.verbose('DROP: pellet too low - line %s - frame %s', get_ln(), frame)
 
                 if testA and testC and not food_was_dropped: #and pellet_detected:
                     if debug >= 2:
-                        print('reach ended at frame %d!: NEW REACH' % int(frame-1))
+                        logger.debug('reach ended at frame %d!: NEW REACH', int(frame-1))
                     reach_dict['end'] = int(frame-1)
                     reach_dict['outcome'] = ReachEventOutcome.MISSED
                     # reach_events.append(('reachEnd_missed', int(frame-1)))
@@ -455,7 +455,7 @@ def segment_reaches_f2(
 
                 elif testD and testE and testF: # and not food_was_dropped:
                     if debug >= 2:
-                      print('reach stalled')
+                        logger.debug('reach stalled')
                     # reach_events.append(('reachEnd_stalled', int(frame+10)))
                     reach_dict['end'] = int(frame+10)
                     reach_dict['outcome'] = ReachEventOutcome.STALLED
@@ -466,7 +466,7 @@ def segment_reaches_f2(
                     pTest = np.mean(dist_p[frame:frame+batch_frm]) < 2 # pellet wasnt dropped and still in original position 
                     if food_was_dropped:
                         if debug >= 2:
-                            print ('reach ended at frame %d!: DROPPED' % int(frame+2))
+                            logger.debug('reach ended at frame %d!: DROPPED', int(frame+2))
                         # reach_events.append(('reachEnd_dropped', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
                         reach_dict['outcome'] = ReachEventOutcome.DROPPED
@@ -476,7 +476,7 @@ def segment_reaches_f2(
                         keep_looking = False
                     elif pellet_detected and pTest:
                         if debug >= 2:
-                            print('reach ended at frame %d!: MISSED' % int(frame+2))
+                            logger.debug('reach ended at frame %d!: MISSED', int(frame+2))
                         # reach_events.append(('reachEnd_missed', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
                         reach_dict['outcome'] = ReachEventOutcome.MISSED
@@ -485,7 +485,7 @@ def segment_reaches_f2(
                         search_status = 1  
                     else:
                         if debug >= 2:
-                            print('reach ended at frame %d!: GRABBED' % int(frame+2)) #alt: pellet position close to hand(within some threshold)
+                            logger.debug('reach ended at frame %d!: GRABBED', int(frame+2)) #alt: pellet position close to hand(within some threshold)
                         # reach_events.append(('reachEnd_grabbed', int(frame+2)))
                         reach_dict['end'] = int(frame+2)
                         reach_dict['outcome'] = ReachEventOutcome.GRABBED
@@ -519,7 +519,7 @@ def segment_reaches_f2(
         pickle.dump(pellet_events, f)
     
     if debug >= 1:
-        print(pellet_events)
+        logger.verbose("pellet_events=%s", pellet_events)
 
     pellets_presented = len(pellet_events) - 1
     total_reaches = 0
@@ -554,6 +554,6 @@ def segment_reaches_f2(
             rh_max_vp_list.append(o)
 
     if debug >= 1:
-        print(reach_events)
+        logger.verbose("reach_events=%s", reach_events)
 
     return pellets_consumed, pellets_presented, successful_reaches, total_reaches, rh_max_vp_list, reach_events
