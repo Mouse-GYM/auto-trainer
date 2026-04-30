@@ -309,11 +309,13 @@ class OfflineInputProcess:
                 close_captures()
                 raise InferenceIncorrectStatus("feed interrupted")
         #
-        perf_timeout = get_perf_now() + 10  # intersession_wait_time is too small
         # the pose process and data monitor thread have some delay between them,
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         if wait_stop_recorded:
+            perf_timeout = (
+                get_perf_now() + 10
+            )  # default intersession_wait_time might be too small
             logger.debug("waiting stop_recorded on %s", self._stop_recorded)
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
@@ -322,16 +324,13 @@ class OfflineInputProcess:
             self._stop_recorded.clear()
             logger.notice("got stop_recorded")
 
-        # NB: we are not waiting for the capture threads to close their writing side to the video file(s)
-        # so this small sleep, for them to get more chance to do it:
-        # time.sleep(0.5)
-        # This is to not get "moov-atom-not-found" in stderr output from opencv library.
+        # This is to double ensure to not get "moov-atom-not-found" in stderr output from opencv library.
         # NB: not anymore necessary since also controlling pose process + data_monitor with frames indices commands.
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)
         p_before = get_perf_now()
-        perf_timeout = p_before + 10
+        perf_timeout = p_before + 2
         count_loops = 0
         while True:
             check_correct_status()
