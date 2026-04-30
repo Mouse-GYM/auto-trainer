@@ -142,7 +142,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._cmd_queue = cmd_queue
         self._cmd_ack_event = cmd_ack_event
         self._msg_queue = msg_queue
-        self._cams = (project.camera_1, project.camera_2)
         self._frames_per_camera = frames_per_cam
         self._recording_live_batch = int(os.getenv("INFERENCE_LIVE_BATCH", 150 * 5))  # 5s at 150 FPS
         self._monitored_parts_offsets = monitored_parts_offsets
@@ -301,7 +300,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         # current analysis code also require exact same frame number in all cameras,
         # let's trim what's necessary:
-        for cam in self._cams:
+        for cam in (project_info.camera_1, project_info.camera_2):
             paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
             ts_file = paths[1]
             lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
