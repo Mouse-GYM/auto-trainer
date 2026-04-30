@@ -296,7 +296,7 @@ from .frame_index import FrameIndexCategory
 from .fixed_array_multiqueue import FixedArrayMultiQueue
 from .fixed_array_queue import FixedArrayQueue
 
-from .project import ProjectInfo, ProjectInterval, video_write_ext
+from .project import ProjectInfo, ProjectInterval
 from .animal import AnimalSubject
 
 from .perf_monitor import PerfMonitor

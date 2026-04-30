@@ -82,8 +82,6 @@ def _ensure_location(location: str):
         raise
 
 
-# Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
-video_write_ext = "mp4" if sys.platform.startswith("linux") else "mkv"
 
 
 # NB: so that we can easily patch from test
@@ -101,6 +99,11 @@ class _ProjectInfo:
     If `when` is provided but not `session` then `session` defaults to 1.
     Providing `session` but not `when` is an error.
     """
+
+    # Windows does not like .mp4 extension when opencv is technically saving to an mkv container.
+    video_write_ext: ClassVar[str] = (
+        "mp4" if sys.platform.startswith("linux") else "mkv"
+    )
 
     root: str = ""
     device_id: str = ""
@@ -331,13 +334,13 @@ class ProjectInfo(_ProjectInfo):
         """Get the 3-tuple of video paths for given arguments"""
         vid_path = self.get_source_path(name, interval=interval, session=session)
 
-        file_name = f"{vid_path.full_path}.{video_write_ext}"
+        file_name = f"{vid_path.full_path}.{self.video_write_ext}"
         index = 0
 
         if not allow_overwrite:
             while os.path.exists(file_name):
                 index += 1
-                file_name = f"{vid_path.full_path}_{index}.{video_write_ext}"
+                file_name = f"{vid_path.full_path}_{index}.{self.video_write_ext}"
 
         modifier = "" if index == 0 else "_" + str(index)
 
