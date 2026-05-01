@@ -77,11 +77,9 @@ class OpenCVCam(CameraBase):
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
         super().capture()
-
         ret, frame = self._video_capture.read()
         if ret:
             self._last_when = time.time_ns()
-
         return frame, self._last_when
 
     def _refresh_height_width(self):

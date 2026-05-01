@@ -33,7 +33,7 @@ class CameraBase:
         self._frame_count = 0
         self._capture_start = 0
         self._last_when = 0
-        self._last_frame_id = None
+        self._last_frame_id = -1
 
     @property
     def name(self) -> str:
@@ -81,7 +81,8 @@ class CameraBase:
         return self._is_primary
 
     @property
-    def frame_id(self) -> Optional[int]:
+    def frame_id(self) -> int:
+        """Returns the last frame id (frame counter)"""
         return self._last_frame_id
 
     def init(self) -> None:
@@ -119,6 +120,7 @@ class CameraBase:
         self._last_when = time.time_ns()
 
         self._frame_count += 1
+        self._last_frame_id += 1
 
         return None, self._last_when
 
