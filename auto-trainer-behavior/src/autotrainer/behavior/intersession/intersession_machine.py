@@ -128,6 +128,7 @@ class IntersessionMachine(StateMachine):
                     can_do_detection, p, i, d, s)
         return can_do_detection
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _segmentation_complete(self, success: bool, *,
                                segment_config: SegmentationConfiguration, error: str="NA"):
         logger.verbose("segmentation_complete: success=%s config=%s ; error=%s",
@@ -146,6 +147,7 @@ class IntersessionMachine(StateMachine):
             self.end_analysis(project, False)
         self._segmentation_configuration = None
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _detection_complete(self, success: bool, *,
                             detection_config: DetectionConfiguration, error: str="NA"):
         if not success:

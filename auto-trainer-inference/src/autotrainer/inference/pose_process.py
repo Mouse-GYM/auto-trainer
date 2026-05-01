@@ -77,6 +77,7 @@ class PoseProcess(Process):
         cmd_queue_ack: synchronize.Event,
         msg_queue: Queue,
         stop_recorded_event: synchronize.Event,
+        offline_input_event_cb_ack: synchronize.Event,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -93,7 +94,6 @@ class PoseProcess(Process):
             kwargs=dict(log_dict_config=log_dict_config),
             daemon=True,
         )
-
         self._pose_model: PoseModel
         self._model_location = model_location
 
@@ -103,6 +103,7 @@ class PoseProcess(Process):
         self._msg_queue = msg_queue
         self._data_queue = data_queue
         self._stop_recorded_event = stop_recorded_event
+        self._offline_input_event_cb_ack = offline_input_event_cb_ack
 
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
@@ -165,6 +166,7 @@ class PoseProcess(Process):
             frames_per_cam=input_q.frames_per_camera,
             nr_cams=input_q.camera_count,
             msg_queue=self._msg_queue,
+            event_cb_ack=self._offline_input_event_cb_ack,
         )
 
         try:

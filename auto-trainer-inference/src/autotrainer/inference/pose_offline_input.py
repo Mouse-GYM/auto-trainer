@@ -13,6 +13,8 @@ import numpy
 import numpy as np
 
 from autotrainer.core import ProjectInfo, FrameIndexCategory, get_perf_now, get_verbose_logger
+from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.inference import InferenceMonitorDataMsg
 
 _local_do_debug = True
 
@@ -76,6 +78,7 @@ class OfflineInputProcess:
         frames_per_cam: int,
         nr_cams: int,
         msg_queue: multiprocessing.Queue,
+        event_cb_ack: multiprocessing.Event,
     ):
         self._cur_project_info: Optional[ProjectInfo] = None
         self._live_requested = False
@@ -86,6 +89,7 @@ class OfflineInputProcess:
         self._frames_per_batch = frames_per_cam * nr_cams
         self._msg_queue = msg_queue
         self._stop_recorded = stop_recorded
+        self._event_cb_ack = event_cb_ack
         # NB: using 3 entire different frame buffers,
         # to allow the consumer/reader (pose itself) to process 1 such buffer,
         # while this writer has at least 1 other free buffer to write into at will.
@@ -271,10 +275,20 @@ class OfflineInputProcess:
         #
         success = got_error is None
         if not success:
-            # TODO: how to forward to main process sync ?
             logger.error("feed_intersession_analysis stopped given error=%s prj=%s", got_error, project)
         else:
             logger.info("feed intersession finished. trial_project=%s", project)
+        #
+        # set/send the feed intersession result via synced messaged to the main process:
+        self._event_cb_ack.clear()
+        self._send_msg(
+            InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT,
+            (
+                (project, None if success else str(got_error)),  # args
+                dict(event=self._event_cb_ack),  # kwargs
+            ),
+        )
+        self._event_cb_ack.wait(1)
         #
         for cdx in range(self._nr_cams):
             missing_for_batch = (
@@ -475,11 +489,6 @@ class OfflineInputProcess:
 
         # total frame count: taking the min of all saved videos frame count:
         # intersession_block.frame_count = min(videos_frame_count.values())
-
-        # ProcessLiveWhenReady is async vs EOF_OFFLINE_PROCESSING just send before
-        # it's not anymore actually used by pose process, but we still deliver it, for log purpose mainly.
-        # self._send_message(InferenceCommandMessageKind.ProcessLiveWhenReady)
-        # TODO
 
         logger.success("passed %s frames per camera frame_count=%s ; "
                        "tot_skipped_frames=%s cams_frame_idx=%s cams_sent_frame_count=%s",
