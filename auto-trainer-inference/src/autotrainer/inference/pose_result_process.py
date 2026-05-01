@@ -74,7 +74,7 @@ def _write_h5_batch(
     data_list: List,
     indices_list: List,
     *,
-    columns: List[str],
+    columns: pandas.MultiIndex,
     mode: Literal["a", "w"] = "a",
 ) -> float:
     """Write the given data to the dst_path using the given columns and mode"""
@@ -150,6 +150,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
+        self._feed_intersession_project: Optional[ProjectInfo] = None
+        self._feed_intersession_error: Optional[str] = None
 
     @property
     def stop_recorded(self) -> synchronize.Event:
@@ -224,13 +226,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 self._pose_algo = pose_algo
             elif cmd is self.Msg.SET_PROJECT_INFO:
                 self._project = args[0]
-            elif cmd is self.Msg.START_NEW_INTERSESSION_BATCH_ITEM:
-                # Without session batching the stop-recorded event is normally set via the data handler thread,
-                # when it receives the EOF_RECORDING which is initially sent by the camera capture processes to the
-                # main pose/inference thread-process itself.
-                # While with session batching we have to set it "explicitly", after enter intersession.
-                logger.debug("setting stop recorded")
-                self._stop_recorded.set()  # so here it is.
+            elif cmd is self.Msg.SET_FEED_INTERSESSION_RESULT:
+                project, error = args
+                self._feed_intersession_project = project
+                self._feed_intersession_error = error
             self._cmd_ack_event.set()
 
     def _send_msg(self, msg, *args, **kwargs):
@@ -243,8 +242,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         pose_algo: PoseAlgorithm,
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
     ):
-        logger.notice("Processing intersession offline post-process on %s", project_info)
+        feed_prj = self._feed_intersession_project
         try:
+            if feed_prj != project_info:
+                raise RuntimeError(f"Projects mismatch: feed={feed_prj} pose_data_process={project_info}")
+            feed_error = self._feed_intersession_error
+            if feed_error is not None:
+                raise RuntimeError(f"feed analysis failed with {feed_error}")
+            logger.notice(
+                "Processing intersession offline post-process on %s", project_info
+            )
             shape = self._intersession_offline_process2(
                 project_info, perf_c_start_offline, pose_algo, range_cams,
                 ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
@@ -416,6 +423,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 nonlocal skip_next_pose_data
                 skip_next_pose_data = 0
             return next_pose_data, next_mode, next_frames_indices
+
+        cur_local_prj = self._project
 
         # main loop
         while self._is_running:
@@ -631,7 +640,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
                     if pose_data is None:
                         # end of intersession/offline replay
-                        cur_local_prj = self._project.to_local_value()
+                        # cur_local_prj = self._project.to_local_value()
                         logger.info("detected end of inference offline processing ; project=%s",
                                        cur_local_prj)
                         # we can reset the offline queue here, it's safe :
@@ -642,7 +651,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         cams_frame_idx_fhs = None
                         if thread_post_process is not None:
                             logger.debug("joining previous thread_post_process")
-                            thread_post_process.join()
+                            thread_post_process.join(1)
+                            if thread_post_process.is_alive():
+                                # should not happen
+                                logger.error("previous post_process thread still alive: %s",
+                                             thread_post_process)
+                            thread_post_process = None
                         thread_post_process = threading.Thread(
                             name="OfflineProcess",
                             target=self._intersession_offline_process,

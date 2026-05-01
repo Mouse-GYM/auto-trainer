@@ -4,6 +4,7 @@ import queue
 import signal
 import threading
 import time
+from multiprocessing import synchronize
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
@@ -21,7 +22,7 @@ from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
 from autotrainer.inference.analysis import intersession_process, IntersessionResponse
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
-    InferenceProtocol, IntersessionBlock, IntersessionDetection
+    InferenceProtocol, IntersessionBlock, IntersessionDetection, BehaviorAlgorithm
 
 
 logger = get_verbose_logger(__name__)
@@ -273,6 +274,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             msg_queue=self._notif_msg_queue,
             model_location=self._model_location,
             stop_recorded_event=data_monitor_proc.stop_recorded,
+            offline_input_event_cb_ack=self._mp_manager.Event(),
         )
 
         self._pose_process.start()
@@ -339,11 +341,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._intersession_detection = None
         # finally:
         self._set_status(InferenceStatus.stopped)
-
-    def put_to_data_handler(self, msg):
-        self._data_monitor_cmd_ack_event.clear()
-        self._data_monitor_cmd_queue.put((msg, None, None))
-        self._data_monitor_cmd_ack_event.wait()
 
     def terminate(self, *, timeout: float = 5):
         logger.debug("terminating..")
@@ -430,6 +427,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)
         self.segmentation_finished(prj, success, error=error)
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _cb_on_intersession_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         if success:
             self._event_manager.post_event_content(
@@ -438,6 +436,16 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             self._event_manager.post_event_content(
                 ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error))
         self._handle_segmentation_finished(project, success, error=error)
+
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _cb_on_set_feed_intersession_result(self, project: ProjectInfo, error: Optional[str],
+                                            *, event: Optional[synchronize.Event]=None):
+        logger.verbose("Got feed error cb: prj=%s err=%s", project, error)
+        self._data_monitor_cmd_ack_event.clear()
+        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT, (project, error), None))
+        self._data_monitor_cmd_ack_event.wait(1)
+        if event is not None:
+            event.set()
 
     def _handle_monitor_data_proc_msg(self, msg, ctx):
         args, kwargs = ctx
@@ -462,6 +470,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         elif msg is InferenceMonitorDataMsg.INTERSESSION_SEGMENTATION_FINISHED:
             self._cb_on_intersession_segmentation_finished(*args, **kwargs)
+
+        elif msg is InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT:
+            self._cb_on_set_feed_intersession_result(*args, **kwargs)
+
         else:
             logger.warning("unknown monitor proc data: %s - ctx=%s", msg, ctx)
 
