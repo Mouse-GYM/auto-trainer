@@ -310,10 +310,10 @@ class VideoCapture(Process):
         is_primary = attrs.is_primary
         prim_cam_record_enabled = attrs.synced_cam_record_enabled
         prim_cam_synced_frame_idx = attrs.synced_cam_frame_index
-        synced_frame_idx = None
+        synced_frame_idx: Optional[int] = None
         msg_q = attrs.msg_queue  # message queue to main process
         net_q = self._network_queue  # net_q to pose-process
-        record_start_frame_idx = None
+        record_start_frame_idx: Optional[int] = None
         next_t_image_q = time.perf_counter()
         img_q = self._image_queue  # image queue to main/GUI process view
         record_q_list = self._record_queue_list
@@ -459,6 +459,7 @@ class VideoCapture(Process):
                     # for secondary synced cams we don't have other choice than to read
                     # the primary cam recording enabled shared flag on each frame read:
                     is_record_active = prim_cam_record_enabled.value
+                    # other possibility is to use a synchronized/acked message from primary to all secondary cams.
 
                 # record queue goes to video save to disk/file
                 if is_record_active and record_start_frame_idx is None:
@@ -512,6 +513,7 @@ class VideoCapture(Process):
                         #
                         if len(frames_prebuffer_list) > 0:
                             record_q.put(
+                                # ( frame, frame_when, frame_perf_now )
                                 [(f, fw, p) for f, fw, _, p, _ in frames_prebuffer_list]
                             )
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
