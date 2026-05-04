@@ -271,6 +271,7 @@ class EventManager:
             else:
                 if is_same:
                     repeat_event_count += 1
+                    last_event_info = info
                     continue
             try:
                 if last_event_info is not None and repeat_event_count > 0:
