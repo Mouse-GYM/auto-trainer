@@ -85,6 +85,8 @@ class OpenCVCam(CameraBase):
         prev_frame_id = self._last_frame_id
         super().capture()
         vc = self._video_capture
+        if vc is None:
+            raise RuntimeError("video_capture not open")
         ret, frame = vc.read()
         if not ret:
             raise RuntimeError(f"failed read frame {prev_frame_id + 1} on {vc}")
