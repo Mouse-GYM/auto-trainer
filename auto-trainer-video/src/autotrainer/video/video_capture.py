@@ -305,7 +305,7 @@ class VideoCapture(Process):
         cnt_net_q_put = 0
         is_record_active = False
         cam_frame_id = -1
-        when_secs = None
+        when_secs = math.nan
         attrs = self._attrs
         is_primary = attrs.is_primary
         prim_cam_record_enabled = attrs.synced_cam_record_enabled
@@ -424,7 +424,8 @@ class VideoCapture(Process):
                 ):
                     effective_frame_dropped = cam_frame_id - prev_frame_id - 1
                     logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s diff=%.4f prev_when=%.5f frame_when=%.5f",
-                                    cam_frame_id, prev_frame_id, effective_frame_dropped, when_secs - prev_frame_when_secs,
+                                    cam_frame_id, prev_frame_id, effective_frame_dropped,
+                                   when_secs - prev_frame_when_secs,
                                    prev_frame_when_secs, when_secs)
 
                 if cam_frame_id < 300:
