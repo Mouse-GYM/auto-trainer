@@ -1,7 +1,6 @@
-from dataclasses import asdict
 from typing import Optional
 
-from autotrainer.api import ApiOptions, RpcService, create_api_service, ApiTopic
+from autotrainer.api import ApiOptions, RpcService, create_api_service
 
 from ..logging import get_verbose_logger
 from ..project import ProjectInfo
@@ -45,7 +44,7 @@ class ApiEventPlugin(EventManagerPlugin):
     def process_event(self, info: EventInfo, repeat_count: int) -> None:
         svc = self._service
         if svc is not None:
-            svc.send_dict(ApiTopic.EVENT, asdict(info))
+            svc.send_event(info)
 
     def flush(self) -> None:
         pass

@@ -20,11 +20,10 @@ from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protoco
 
 import yaml
 
-from autotrainer.api import ApiSystemStatus, ApiDetectorKind, \
-    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiHeadFixStatus, ApiPelletStatus, ApiTrainingMode, \
+from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
+    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
-from autotrainer.api.api_status import ProjectStatus
-from autotrainer.behavior.pellet import PelletState
+from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
 from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
                               CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
@@ -75,7 +74,6 @@ from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
 
-
 # allow be patched from tests
 _recording_age_enough_timer = make_daemon_timer
 _daily_timer = make_daemon_timer
@@ -83,7 +81,6 @@ _daily_timer = make_daemon_timer
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
-
 
 
 class InvalidTargetAppModelStatus(Exception):
@@ -100,7 +97,6 @@ def app_status_to_api_app_mode(self: AppModelStatus) -> ApiApplicationMode:
 
 def app_status_to_behavior_algo_status(self: AppModelStatus) -> Optional[BehaviorAlgoStatus]:
     return _to_behavior_algo_status.get(self, None)
-
 
 
 _app_model_status_2_api_app_mode = {
@@ -139,7 +135,6 @@ _app_model_status_valid_targets = {
     AppModelStatus.CALIBRATION_DCS: {AppModelStatus.ACQUIRING, AppModelStatus.IDLE},
 }
 
-
 _to_behavior_algo_status = {
     AppModelStatus.IDLE: BehaviorAlgoStatus.IDLE,
     AppModelStatus.ACQUIRING: BehaviorAlgoStatus.ACQUIRING,
@@ -163,7 +158,6 @@ class TrainingPlanDeserializedEvent(Protocol):
 
 
 class AppModelEvents:
-
     # NB: events "definition/typehint" are forwarded *into* AppModel below,
     # so we *assign* them here (=), but we'll typehint (:) in AppModel.
 
@@ -173,7 +167,6 @@ class AppModelEvents:
 
 
 class AppModel(ObservableObject):
-
     status_file_path: ClassVar[Path] = Path("~/.config/Colorado/autotrainer_running_status.env")
 
     configuration_loaded_event: AppModelEvents.configuration_loaded_event
@@ -199,20 +192,21 @@ class AppModel(ObservableObject):
         TRAINING_PHASE_PROP = 'training_phase_prop'
 
     def __init__(
-        self,
-        preferences: UserPreferences,
-        *,
-        config_file: Optional[Path] = None,
-        calib_dir: Optional[Path] = None,
-        sensor_analysis: Optional[SensorAnalysis] = None,
-        inference_model: Optional[InferenceProtocol] = None,
-        system_message_handler: Optional[SystemMessageHandler] = None,
-        system_machine: Optional[SystemMachine] = None,
+            self,
+            preferences: UserPreferences,
+            *,
+            config_file: Optional[Path] = None,
+            calib_dir: Optional[Path] = None,
+            sensor_analysis: Optional[SensorAnalysis] = None,
+            inference_model: Optional[InferenceProtocol] = None,
+            system_message_handler: Optional[SystemMessageHandler] = None,
+            system_machine: Optional[SystemMachine] = None,
     ):
         event_names = tuple(filter(lambda n: not n.startswith('_'), dir(AppModelEvents)))
         super().__init__(event_names)
 
         self._app_version = app_version
+
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
 
         def log_on_error(title, msg):
@@ -296,7 +290,7 @@ class AppModel(ObservableObject):
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
         )
-        
+
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
                                              presence_detection=self._top_camera_presence_detection,
@@ -331,9 +325,9 @@ class AppModel(ObservableObject):
         self.reload_calib(calib_dir)
         #
         inference = self._inference = InferenceModel(self._pose_algorithm,
-                                         calib_dir=calib_dir,
-                                         mp_manager=self._mp_manager,
-                                         ) if inference_model is None else inference_model
+                                                     calib_dir=calib_dir,
+                                                     mp_manager=self._mp_manager,
+                                                     ) if inference_model is None else inference_model
         #
 
         self._training_plans: List[PlanInfo] = []
@@ -387,12 +381,14 @@ class AppModel(ObservableObject):
         sensor_analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
 
         self._timer_send_status = no_op_timer
+
         def send_system_status_and_reschedule():
             self._send_api_system_status()
             delay = 60
             timer = self._timer_send_status = make_daemon_timer(delay, send_system_status_and_reschedule)
             timer.start()
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
+
         send_system_status_and_reschedule()
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -718,7 +714,7 @@ class AppModel(ObservableObject):
             ApiEventKind.animalSelected,
             data=dict(animal_id=None if animal is None else animal.id,
                       properties=None if animal is None else dataclasses.asdict(animal)
-        ))
+                      ))
         logger.success("Switched to animal %s", animal)
 
     @property
@@ -995,10 +991,10 @@ class AppModel(ObservableObject):
         return self.capture_stop(**kwargs)
 
     def capture_start(
-        self,
-        *,
-        target_status: AppModelStatus = AppModelStatus.ACQUIRING,
-        wait_connected: bool = True,
+            self,
+            *,
+            target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+            wait_connected: bool = True,
     ) -> bool:
         """Request to start the acquisition"""
         with self.app_lock:
@@ -1206,7 +1202,7 @@ class AppModel(ObservableObject):
 
         return True
 
-    def capture_stop(self, force: bool=False):
+    def capture_stop(self, force: bool = False):
         logger.debug("AppModel.capture_stop")
         with self.app_lock:
             if not self._acquisition_started and not force:
@@ -1374,7 +1370,7 @@ class AppModel(ObservableObject):
 
         return True
 
-    def reload_training_plans(self, *, refresh: bool=False, reraise_on_error: bool=False):
+    def reload_training_plans(self, *, refresh: bool = False, reraise_on_error: bool = False):
         if self._acquisition_started or self._status != AppModelStatus.IDLE:
             logger.notice("delaying reload training plans given acquisition started(%s) or status not idle: %s",
                           self._acquisition_started, self._status)
@@ -1418,8 +1414,8 @@ class AppModel(ObservableObject):
         now = datetime.now()
         today = self._current_day = now.date()
         delay = (
-            datetime.combine(today, datetime.min.time()) + timedelta(days=1, seconds=1)
-            - now
+                datetime.combine(today, datetime.min.time()) + timedelta(days=1, seconds=1)
+                - now
         ).total_seconds()
         prev = self._timer_daily
         prev.cancel()
@@ -1432,9 +1428,9 @@ class AppModel(ObservableObject):
         logger.debug("AppModel.on_close")
 
         for timer in (
-            self._timer_send_status,
-            self._timer_recording_age_enough,
-            self._timer_daily,
+                self._timer_send_status,
+                self._timer_recording_age_enough,
+                self._timer_daily,
         ):
             logger.debug("stopping timer %s", timer)
             timer.cancel()
@@ -1698,7 +1694,7 @@ class AppModel(ObservableObject):
             self._triggered_bad_diamond_coord = False
         #
         if (p_now - self._p_inference_live_begin > delay_inference_begin
-            and p_now - self._prev_valid_diamond_perf_c > min_check_delay
+                and p_now - self._prev_valid_diamond_perf_c > min_check_delay
         ):
             if not self._triggered_bad_diamond_coord:
                 self._triggered_bad_diamond_coord = True
@@ -1769,7 +1765,7 @@ class AppModel(ObservableObject):
         logger.debug("phase prop: %s -> %s", name, value)
         self.property_changed(self.Props.TRAINING_PHASE_PROP, (name, value), _)
 
-    def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str="na"):
+    def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str = "na"):
         prev_animals = self._animals  # in case _animals content is copied, we reset it to current animal
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
@@ -1850,7 +1846,8 @@ class AppModel(ObservableObject):
                 return dataclasses.replace(rsp, command=request.command, nonce=request.nonce)
             if isinstance(rsp, ApiCommandRequestResult):
                 result = rsp
-            elif any(map(lambda x: rsp is x, (None, True, False))):  # to not have to create/return it for all possible request
+            elif any(map(lambda x: rsp is x,
+                         (None, True, False))):  # to not have to create/return it for all possible request
                 if rsp is not False:
                     result = ApiCommandRequestResult.SUCCESS
                 else:
@@ -1907,7 +1904,7 @@ class AppModel(ObservableObject):
                 error_code=error_code,
                 error_message=error_message,
             )
-            rpc.send_dict(ApiTopic.COMMAND_RESULT, message=dataclasses.asdict(message))
+            rpc.send_command_result(message)
 
         #
         th = threading.Thread(target=execute, daemon=True, name=f"Handle-{func}")
@@ -1996,12 +1993,12 @@ class AppModel(ObservableObject):
             ApiDetectorStatus(
                 detector_id=ApiDetectorKind.frontDoor,
                 is_enabled=doors_mon.running,
-                is_active=doors_state.front.open,
+                is_active=doors_state.front.open or False,
             ),
             ApiDetectorStatus(
                 detector_id=ApiDetectorKind.slidingDoor,
                 is_enabled=doors_mon.running,
-                is_active=doors_state.sliding.open,
+                is_active=doors_state.sliding.open or False,
             ),
             ApiDetectorStatus(
                 detector_id=ApiDetectorKind.loadCellThrash,
@@ -2051,21 +2048,24 @@ class AppModel(ObservableObject):
             application_mode=app_status_to_api_app_mode(self._status),
             training_mode=training_mode_to_api_training_mode(self._training_mode),
             animal_id=None if animal is None else animal.id,
-            project=ProjectStatus(
+            project=ApiProjectStatus(
                 day_path=project.get_day_path()[0],
                 session_index=project.session,
             ),
             detectors=detectors,
             alarms=alarms,
-            pellet=ApiPelletStatus(
-                send_x=send_xyz.x,
-                send_y=send_xyz.y,
-                send_z=send_xyz.z,
+            pellet_device=ApiPelletDeviceStatus(
+                dcs_send_x=send_xyz.x,
+                dcs_send_y=send_xyz.y,
+                dcs_send_z=send_xyz.z
             ),
-            headfix=ApiHeadFixStatus(
-                currentMagnetIntensity=magnet_intensity,
-                baselineMagnetIntensity=algo.baseline_intensity,
+            tunnel_device=ApiTunnelDeviceStatus(
+                magnet_intensity=magnet_intensity
             ),
+            behavior=ApiBehaviorStatus(
+                baseline_magnet_intensity=algo.baseline_intensity,
+                reaches=ApiReachStatus()
+            )
         )
         return system_status
 
@@ -2097,8 +2097,8 @@ class AppModel(ObservableObject):
                      status, recent, selected)
         if (
                 selected is not None
-            and recent
-            and status == AppModelStatus.ANIMAL_IN_TRAINING
+                and recent
+                and status == AppModelStatus.ANIMAL_IN_TRAINING
         ):
             algo.increase_pellets_presented(1)
             # now recopy the values from algo:
