@@ -95,6 +95,7 @@ class OpenCVCam(CameraBase):
             estimated_drop = int((perf_now - self._prev_frame_perf_now - self._frame_half_period) * self._fps)
             if estimated_drop > 0:
                 self._last_frame_id += estimated_drop
+                logger.debug("corrected frame_id to %s due to estimated_drop=%s", self._last_frame_id, estimated_drop)
         self._prev_frame_perf_now = perf_now
         return frame, self._last_when
 
