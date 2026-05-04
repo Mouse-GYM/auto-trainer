@@ -8,13 +8,14 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, List
 
 import cv2
-import h5py
 import numpy
 import numpy as np
 
 from autotrainer.core import ProjectInfo, FrameIndexCategory, get_perf_now, get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import InferenceMonitorDataMsg
+
+from autotrainer.inference.h5_tools import get_h5_frame_index, open_h5_file, close_h5_fhs
 
 _local_do_debug = True
 
@@ -382,15 +383,15 @@ class OfflineInputProcess:
             for fh in cams_processed_fhs
         ]
         if __debug__ and _local_do_debug:
-            cams_already_processed_idx2 = [
-                [
-                    lst[2][0]  # the third row contains the associated frame index in h5 file ([0] to extract it from array)
-                    for lst in h5py.File(
-                        project.get_intersession_pose_path(cam, suffix="_live")
-                    )["df_with_missing"]["table"]
-                ]
-                for cdx, cam in enumerate(cams)
-            ]
+            cams_already_processed_idx2 = []
+            h5files = []
+            try:
+                for cdx, cam in enumerate(cams):
+                    h5fh, h5dss = open_h5_file(project.get_intersession_pose_path(cam, suffix="_live"))
+                    h5files.append(h5fh)
+                    cams_already_processed_idx2.append([get_h5_frame_index(h5row) for h5row in h5dss])
+            finally:
+                close_h5_fhs(h5files)
             if cams_already_processed_idx_list != cams_already_processed_idx2:
                 for cdx in range(len(cams_already_processed_idx_list)):
                     left = cams_already_processed_idx_list[cdx]
