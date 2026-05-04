@@ -92,7 +92,7 @@ class OpenCVCam(CameraBase):
             raise RuntimeError(f"failed read frame {prev_frame_id + 1} on {vc}")
         perf_now = time.perf_counter()
         if prev_frame_id > -1:  # not first frame
-            estimated_drop = int((perf_now - self._prev_frame_perf_now - self._frame_half_period) / self._fps)
+            estimated_drop = int((perf_now - self._prev_frame_perf_now - self._frame_half_period) * self._fps)
             if estimated_drop > 0:
                 self._last_frame_id += estimated_drop
         self._prev_frame_perf_now = perf_now
