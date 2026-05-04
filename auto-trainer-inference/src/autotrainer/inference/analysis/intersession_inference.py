@@ -1,5 +1,5 @@
-import logging
-import typing
+
+from typing import List
 
 import pandas
 from numpy import ndarray
@@ -9,7 +9,7 @@ from autotrainer.core import ProjectInfo, get_verbose_logger
 logger = get_verbose_logger(__name__)
 
 
-def intersession_inference(pose_data: ndarray, part_names: typing.List[str], project: ProjectInfo) -> None:
+def intersession_inference(pose_data: ndarray, part_names: List[str], project: ProjectInfo) -> None:
     """
     Called once for pose data from all video frames passed to the pellet model.
 

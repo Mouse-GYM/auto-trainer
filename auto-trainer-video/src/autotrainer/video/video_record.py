@@ -30,20 +30,28 @@ class VideoRecordMode(IntEnum):
 
 @dataclass
 class VideoRecordProperties:
+
     project_info: Optional[ProjectInfo] = None
     """Information to determine file names and directories."""
+
     name: str = "camera"
     """Name used as part of video file names and image capture directory."""
+
     frame_size: Tuple[int, int] = (0, 0)
     """Expected shape of video frames.  Not required for image-only capture."""
+
     fps: int = 30
     """Expected FPS of video feed.  Not required for image-only capture."""
+
     record_mode: VideoRecordMode = VideoRecordMode.NONE
     """Continuous or triggered mode for video and image capture. NONE to disabled video recording."""
+
     video_rotate_interval: int = -1
     """Interval in seconds to rotate the video file.  0 to never rotate. Negative to disabled video recording."""
-    image_interval: int = 0
+
+    image_interval: float = 0
     """Interval in seconds to capture images.  Values <= 0 disable image capture."""
+
     queue_batch_size = 60
     """Number of frames to batch for passing between capture and record queues."""
 

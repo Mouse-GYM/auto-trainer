@@ -20,7 +20,7 @@ class PlaybackCam(CameraBase):
         self._video_capture = None
         self._make_precise_timestamps = True
         # make_precise_timestamps:
-        # used to bypass/workaround analyse code only being able to handle very precise timestamps
+        # used to bypass/workaround analyze code only being able to handle very precise timestamps
         self._video_frame_count = -1
 
     def init(self):

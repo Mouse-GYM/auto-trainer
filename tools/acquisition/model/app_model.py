@@ -276,11 +276,27 @@ class AppModel(ObservableObject):
         self._timer_recording_age_enough = no_op_timer
         # end not sure
 
-        self._left_camera = VideoCaptureModel("left", self._preferences, 0,
-                                              msg_queue=proc_msg_queue, cam_id=CameraId.Left)
-        self._right_camera = VideoCaptureModel("right", self._preferences, 1,
-                                               msg_queue=proc_msg_queue, cam_id=CameraId.Right)
+        # this is used to sync the start record frame of both cameras:
+        self._cams_record_enabled = mp_ctx.Value("b", False)
+        self._cams_synced_frame_index = mp_ctx.Value("i", -1)
 
+        self._left_camera = VideoCaptureModel(
+            "left", self._preferences, 0,
+            msg_queue=proc_msg_queue, cam_id=CameraId.Left,
+            synced_cam_frame_index=self._cams_synced_frame_index,
+            synced_cam_recording=self._cams_record_enabled,
+        )
+
+        self._right_camera = VideoCaptureModel(
+            "right",
+            self._preferences,
+            1,
+            msg_queue=proc_msg_queue,
+            cam_id=CameraId.Right,
+            synced_cam_frame_index=self._cams_synced_frame_index,
+            synced_cam_recording=self._cams_record_enabled,
+        )
+        
         self._top_camera_presence_detection = PresenceDetectionAttrs()
         self._top_camera = VideoCaptureModel("web", self._preferences, -1,
                                              presence_detection=self._top_camera_presence_detection,
@@ -1036,7 +1052,7 @@ class AppModel(ObservableObject):
                     mp_ctx=get_mp_ctx(),
                 )
             else:
-                logger.warning("pellet disabled: left and right camera frame sizes do not match")
+                logger.warning("inference disabled: left and right camera frame sizes do not match")
         else:
             self._inference_queue = None
 
@@ -1096,6 +1112,9 @@ class AppModel(ObservableObject):
                 if camera.is_primary and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
+
+        # sleep, relatively a bit, to give more time to synced cameras to start together
+        time.sleep(1.5)
 
         # 5) remaining non-synced camera(s)
         camera = self._top_camera

@@ -69,9 +69,6 @@ class _InferenceProtocol(Protocol):
     def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
         """Send an InferenceCommandMessageKind to the inference process"""
 
-    def put_to_data_handler(self, msg: InferenceMonitorDataMsg):
-        """Put msg to data handler process"""
-
 
 class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentProtocol):
 
