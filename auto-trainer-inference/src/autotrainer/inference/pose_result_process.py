@@ -314,10 +314,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             # not the best way to do this,
             # maybe inspecting the video file for total frames is faster.
             # we must also have the info somewhere in active memory during this run/session
-            if len(lines) > min_nbr_pd:
-                logger.warning("%s: trimming raw data to %s entries", cam, min_nbr_pd)
-                _shorten_text_file(lines, ts_file, min_nbr_pd)
+            if len(lines) != min_nbr_pd:
+                logger.warning("%s: raw data unexpected number of entries. %s vs %s expected",
+                               cam, len(lines), min_nbr_pd)
                 # normally not necessary:
+                # _shorten_text_file(lines, ts_file, min_nbr_pd)
                 # _short_vid_file(paths[0], min_nbr_pd)
                 # _shorten_text_file(paths[2], min_nbr_pd)
 
