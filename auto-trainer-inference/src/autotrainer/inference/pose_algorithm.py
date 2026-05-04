@@ -402,9 +402,10 @@ class PoseAlgorithm:
         if self.process_frames_select_frames_method == "last_one":
             cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
             selected_cams_frames = cams_last_frame
-        else:
-            assert self.process_frames_select_frames_method == "all_most_likely"
+        elif self.process_frames_select_frames_method == "all_most_likely":
             selected_cams_frames = per_cam_frames
+        else:
+            raise RuntimeError(f"unexpected select_frames_method: {self.process_frames_select_frames_method}")
 
         gpi = self.get_part_index
         #
