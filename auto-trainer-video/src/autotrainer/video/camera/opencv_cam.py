@@ -6,9 +6,11 @@ from typing import Tuple, Optional
 import cv2
 import numpy
 
+from autotrainer.core.logging import get_verbose_logger
+
 from .camera_base import CameraBase
 
-logger = logging.getLogger(__name__)
+logger = get_verbose_logger(__name__)
 
 
 class OpenCVCam(CameraBase):
@@ -92,10 +94,16 @@ class OpenCVCam(CameraBase):
             raise RuntimeError(f"failed read frame {prev_frame_id + 1} on {vc}")
         perf_now = time.perf_counter()
         if prev_frame_id > -1:  # not first frame
-            estimated_drop = int((perf_now - self._prev_frame_perf_now - self._frame_half_period) * self._fps)
+            diff_prev = perf_now - self._prev_frame_perf_now
+            estimated_drop = int((diff_prev - self._frame_half_period) * self._fps)
             if estimated_drop > 0:
                 self._last_frame_id += estimated_drop
-                logger.debug("corrected frame_id to %s due to estimated_drop=%s", self._last_frame_id, estimated_drop)
+                # current topcam process apparently cannot keep aligned with the current FPS very often,
+                # so only log with more than 1 frame drop:
+                if estimated_drop > 1:
+                    logger.verbose(  # keeping as verbose instead of warning for now
+                        "corrected frame_id to %s due to estimated_drop=%s. diff=%.4f prev_frame_perf=%.3f frame_perf=%.3f",
+                        self._last_frame_id, estimated_drop, diff_prev, self._prev_frame_perf_now, perf_now)
         self._prev_frame_perf_now = perf_now
         return frame, self._last_when
 
