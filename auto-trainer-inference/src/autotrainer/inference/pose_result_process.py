@@ -22,7 +22,13 @@ from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, s
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
-from .h5_tools import get_h5_pose_data, get_h5_frame_index, open_h5_file, write_h5_batch
+from .h5_tools import (
+    get_h5_pose_data,
+    get_h5_frame_index,
+    open_h5_file,
+    write_h5_batch,
+    close_h5_fhs,
+)
 from .pose_result_live_process import pool_init_process_pose_data, pool_process_pose_data
 
 logger = get_verbose_logger(__name__)
@@ -209,6 +215,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         else:
             success = True
             error = None
+        close_h5_fhs(cams_read_h5_dss)
         self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, error=error)
 
     def _intersession_offline_process2(

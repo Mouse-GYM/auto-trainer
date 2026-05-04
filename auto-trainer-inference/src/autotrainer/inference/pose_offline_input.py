@@ -15,8 +15,7 @@ from autotrainer.core import ProjectInfo, FrameIndexCategory, get_perf_now, get_
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import InferenceMonitorDataMsg
 
-from autotrainer.inference.h5_tools import get_h5_frame_index, open_h5_file
-
+from autotrainer.inference.h5_tools import get_h5_frame_index, open_h5_file, close_h5_fhs
 
 _local_do_debug = True
 
@@ -384,15 +383,15 @@ class OfflineInputProcess:
             for fh in cams_processed_fhs
         ]
         if __debug__ and _local_do_debug:
-            cams_already_processed_idx2 = [
-                [
-                    get_h5_frame_index(h5row)
-                    for h5row in open_h5_file(
-                        project.get_intersession_pose_path(cam, suffix="_live")
-                    )
-                ]
-                for cdx, cam in enumerate(cams)
-            ]
+            cams_already_processed_idx2 = []
+            h5files = []
+            try:
+                for cdx, cam in enumerate(cams):
+                    h5fh = open_h5_file(project.get_intersession_pose_path(cam, suffix="_live"))
+                    h5files.append(h5fh)
+                    cams_already_processed_idx2.append([get_h5_frame_index(h5row) for h5row in h5fh])
+            finally:
+                close_h5_fhs(h5files)
             if cams_already_processed_idx_list != cams_already_processed_idx2:
                 for cdx in range(len(cams_already_processed_idx_list)):
                     left = cams_already_processed_idx_list[cdx]

@@ -30,8 +30,6 @@ def close_h5_fhs(fhs: List[Optional[h5py.File]]):
     for idx, fh in enumerate(fhs or []):
         if fh is not None:
             logger.info("closing %s", fh.name)
-            # fh.flush()
-            fh.__exit__(None, None, None)
             fh.close()
             fhs[idx] = None
 
