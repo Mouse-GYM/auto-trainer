@@ -416,18 +416,15 @@ class VideoCapture(Process):
                 # using time.time() and .perf_counter() for precision :
                 frame_perf_now = time.perf_counter()
                 frame_time = time.time()
-
                 #
                 when_secs = when / 1e9
-                estimate_dropped = 0 if prev_frame_when_secs is None else int(
-                    (when_secs - prev_frame_when_secs - 0.5 * frame_period) / frame_period
-                )
                 if (
                     net_q is not None
-                    and (estimate_dropped > 0 or cam_frame_id != prev_frame_id + 1)
+                    and cam_frame_id != prev_frame_id + 1
                 ):
+                    effective_frame_dropped = cam_frame_id - prev_frame_id - 1
                     logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s diff=%.4f prev_when=%.5f frame_when=%.5f",
-                                    cam_frame_id, prev_frame_id, estimate_dropped, when_secs - prev_frame_when_secs,
+                                    cam_frame_id, prev_frame_id, effective_frame_dropped, when_secs - prev_frame_when_secs,
                                    prev_frame_when_secs, when_secs)
 
                 if cam_frame_id < 300:
