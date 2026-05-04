@@ -29,15 +29,17 @@ def get_h5_frame_index(h5row) -> int:
 def close_h5_fhs(fhs: List[Optional[h5py.File]]):
     for idx, fh in enumerate(fhs or []):
         if fh is not None:
-            logger.info("closing %s", fh.name)
+            logger.info("closing %s", fh)  # h5py.File.name attribute only says "/"
             fh.close()
             fhs[idx] = None
 
 
 def open_h5_file(file_path: Path):
-    datasets = h5py.File(file_path)["df_with_missing"]["table"]
+    """Open for reading only"""
+    h5fh = h5py.File(file_path)
+    datasets = h5fh["df_with_missing"]["table"]
     logger.debug("%s: %s entries", file_path, len(datasets))
-    return datasets
+    return h5fh, datasets
 
 
 def write_h5_batch(

@@ -387,9 +387,9 @@ class OfflineInputProcess:
             h5files = []
             try:
                 for cdx, cam in enumerate(cams):
-                    h5fh = open_h5_file(project.get_intersession_pose_path(cam, suffix="_live"))
+                    h5fh, h5dss = open_h5_file(project.get_intersession_pose_path(cam, suffix="_live"))
                     h5files.append(h5fh)
-                    cams_already_processed_idx2.append([get_h5_frame_index(h5row) for h5row in h5fh])
+                    cams_already_processed_idx2.append([get_h5_frame_index(h5row) for h5row in h5dss])
             finally:
                 close_h5_fhs(h5files)
             if cams_already_processed_idx_list != cams_already_processed_idx2:

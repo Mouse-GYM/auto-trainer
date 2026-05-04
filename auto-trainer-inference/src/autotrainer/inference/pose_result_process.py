@@ -192,7 +192,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         project_info: ProjectInfo,
         perf_c_start_offline: float,
         pose_algo: PoseAlgorithm,
-        range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss,
+        range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx,
+        cams_read_h5_dss, cams_read_h5_fhs,
     ):
         feed_prj = self._feed_intersession_project
         try:
@@ -215,7 +216,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         else:
             success = True
             error = None
-        close_h5_fhs(cams_read_h5_dss)
+        close_h5_fhs(cams_read_h5_fhs)
         self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, error=error)
 
     def _intersession_offline_process2(
@@ -582,10 +583,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             Path(cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
                             for cam in cams
                         ]
-                        cams_read_h5_dss = [
-                            open_h5_file(cam_pose_path)
-                            for cam_pose_path in pose_paths
-                        ]
+                        cams_read_h5_dss = []
+                        cams_read_h5_fhs = []
+                        for cam_pose_path in pose_paths:
+                            f5fh, f5dss = open_h5_file(cam_pose_path)
+                            cams_read_h5_fhs.append(f5fh)
+                            cams_read_h5_dss.append(f5dss)
                         cams_read_h5_idx = [0] * n_cams
                         ib_pose_data_list = [[] for _ in range_cams]
                         ib_pose_data_dict = []
@@ -624,11 +627,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                 ib_pose_data_dict,
                                 cams_read_h5_idx,
                                 cams_read_h5_dss,
+                                cams_read_h5_fhs,
                             ),
                             daemon=True,
                         )
                         thread_post_process.start()
                         cams_read_h5_dss = []
+                        cams_read_h5_fhs = []
                         ib_pose_data_list = [[] for _ in range_cams]
                         ib_pose_data_dict = []
                     else:
