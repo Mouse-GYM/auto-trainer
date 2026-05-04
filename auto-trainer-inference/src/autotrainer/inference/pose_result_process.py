@@ -376,8 +376,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             tot_flushed = 0
             if prev_pose_data is None:
                 cur_qsize = self._data_queue.qsize()
-                assert prev_mode == InferenceMode.Offline
-                assert recording_in_progress is False
+                if prev_mode != InferenceMode.Offline or recording_in_progress:
+                    logger.warning("unexpected state: prev_pose_data is None"
+                                   " but prev_mode=%s or recording_in_progress=%s",
+                                   prev_mode, recording_in_progress)
                 # ensure we won't try flush again if the queue is actually empty on first try:
                 pose_data = []
             else:
@@ -663,7 +665,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         ib_pose_data_list = [[] for _ in range_cams]
                         ib_pose_data_dict = []
                     else:
-                        assert pose_data is not None
                         if (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).all():
                             # happens for EOF_OFFLINE_PROCESSING
                             continue
