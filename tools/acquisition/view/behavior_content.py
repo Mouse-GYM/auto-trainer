@@ -250,6 +250,7 @@ class BehaviorContent(ContentWidget):
 
     def _make_position_baseline(self):
         self._behavior_model.use_current_head_magnet_position_as_baseline()
+        self._app_model.save_configuration()
 
     @invoke_method
     def _algorithm_property_changed(self, name, value, _):
