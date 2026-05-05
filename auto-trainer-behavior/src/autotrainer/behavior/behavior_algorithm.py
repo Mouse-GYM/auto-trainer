@@ -1075,11 +1075,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
+        self._event_manager.post_event_content(
+            ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
         self.session_capture_ending(reason)
         self._event_manager.flush()
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
-        self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
