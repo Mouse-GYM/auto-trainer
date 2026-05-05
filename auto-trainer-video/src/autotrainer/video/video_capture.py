@@ -358,7 +358,7 @@ class VideoCapture(Process):
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx
                 prim_cam_record_enabled.value = enabled
-            logger.debug("Set target frame idx=%s ; frame_idx=%s", target_idx, frame_idx)
+            logger.verbose("Set target frame idx=%s ; frame_idx=%s", target_idx, frame_idx)
 
         def secondary_acquire():
             nonlocal synced_frame_idx
@@ -368,7 +368,8 @@ class VideoCapture(Process):
             if not is_primary:
                 with prim_cam_record_enabled:
                     synced_frame_idx = prim_cam_synced_frame_idx.value
-                logger.debug("got synced frame idx=%s", synced_frame_idx)
+                logger.verbose("got synced frame idx=%s ; frame_idx=%s",
+                               synced_frame_idx, prev_frame_id)
 
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
@@ -402,7 +403,8 @@ class VideoCapture(Process):
                 if is_record_active and record_start_frame_idx is None:
                     primary_acquire(prev_frame_id + 1, enabled=True)
                 elif not is_record_active and record_start_frame_idx is not None:
-                    primary_acquire(prev_frame_id + 1, enabled=False)
+                    primary_acquire(prev_frame_id + 2, enabled=False)
+                    # NB: use + 2: to ensure synced secondary cams will get same
 
                 # camera capture:
                 frame, when = capture()
@@ -538,15 +540,21 @@ class VideoCapture(Process):
                     secondary_acquire()
                     # stop recording requested
                     if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
+                        cut_over = cam_frame_id - synced_frame_idx
                         record_start_frame_idx = None
                         synced_frame_idx = None
-
+                    else:
+                        cut_over = 0
+                    #
                     if record_start_frame_idx is None:
                         record_q_list = self._record_queue_list
+                        if cut_over > 0:
+                            logger.debug("cut record_q_list by %s, len=%s", cut_over, len(record_q_list))
+                            del record_q_list[-cut_over:]
                         if len(record_q_list) > 0:
                             record_q.put(record_q_list)
                             record_q_list = self._record_queue_list = []
-                        record_q.put([])
+                        record_q.put([])  # empty list is mark for EOR for recorder thread
 
                         if net_q is not None:
                             # we might eventually have written some extra frame(s) vs the other camera(s) used in
@@ -569,7 +577,7 @@ class VideoCapture(Process):
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
                                        (self._camera_idx, CaptureProcessStatus.RUNNING)))
 
-                elif is_record_active and record_start_frame_idx is not None:
+                elif record_start_frame_idx is not None:
                     # normal recording case in progress
                     record_q_list.append((frame, when, frame_perf_now))
                     if len(record_q_list) >= self._record_batch_size:
