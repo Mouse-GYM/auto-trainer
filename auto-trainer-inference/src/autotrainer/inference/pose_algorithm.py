@@ -3,6 +3,7 @@ import dataclasses
 import itertools
 import math
 import operator
+import warnings
 from typing import List, Dict, Optional, Tuple, Literal
 from collections import namedtuple, defaultdict
 from dataclasses import dataclass
@@ -130,6 +131,20 @@ class PoseResponse:
             value = tuple(map(operator.neg, value))
         return Offset3DTuple(value)
 
+    def round(self, ndigits: int=1):
+        return self.__class__(
+            sequence=self.sequence,
+            perf_c=self.perf_c,
+            parts_flags=self.parts_flags,
+            locations=self.locations,
+            locations_3d=dict((n, loc.round(ndigits)) for n, loc in self.locations_3d.items()),
+            raw_loc_3d=dict((n, loc.round(ndigits)) for n, loc in self.raw_loc_3d.items()),
+            parts_3d_offsets=dict(
+                (k1, dict((k2, o.round(ndigits)) for k2, o in d1.items()))
+                for k1, d1 in self.parts_3d_offsets.items()
+            )
+        )
+
 
 class PoseAlgorithm:
     """
@@ -199,6 +214,14 @@ class PoseAlgorithm:
             [self._measure_offset_parts, axis_labels],
             names=["bodyparts", "coords"]
         )
+        self._3d_axis_labels = ("x", "y", "z", "p")
+        self._3d_names = ["bodyparts", "coords"]
+        self._columns_3d = pandas.MultiIndex.from_product(
+            [self._measure_offset_parts, self._3d_axis_labels],
+            names=self._3d_names,
+        )
+        empty_3d_columns = pandas.MultiIndex.from_product([[], self._3d_axis_labels], names=self._3d_names)
+        self._empty_3d = pandas.DataFrame(index=[0], columns=empty_3d_columns)
 
     @property
     def frame_rate(self):
@@ -279,31 +302,38 @@ class PoseAlgorithm:
         return self._pose_result_columns
 
     @staticmethod
-    def _combine_frames_likelihood(frames):
-        return sum(frame["likelihood"] for frame in frames)
+    def _combine_frames_likelihood(frames_gen):
+        return sum(frame["likelihood"] for frame in frames_gen)
 
-    def _take_pair_most_likely(self, *dfs):
+    def _take_cams_most_likely(self, *dfs):
+        """Returns the most likely cameras frame data for each element"""
         df0 = dfs[0]
         # create a df_res with len(dfs) entries with all NaNs :
-        df_res = pandas.DataFrame(index=list(range(len(dfs))), columns=df0.columns)
+        no_result = (math.nan, math.nan, 0)  # x, y, p
+        df_res = pandas.DataFrame(index=list(range(len(dfs))), columns=self._measure_offset_parts_columns)
+        min_combined_score = len(dfs) * self.MIN_CONFIDENCE_PRESENT_THRESHOLD
         for elem in df0.columns.levels[0]:
             combined = [
                 (idx, self._combine_frames_likelihood(frames.loc[idx, elem] for frames in dfs))
                 for idx in range(len(df0))
             ]
             # NB: this sorted, if it's equal to other(s), keeps the most recent last, so we take the last one [-1]:
-            best_frame_idx = sorted(combined, key=lambda e: e[1])[-1][0]
+            best_frame_idx, best_frame_score = sorted(combined, key=lambda e: e[1])[-1]
             for idx in range(len(dfs)):
-                df_res.loc[idx, elem] = dfs[idx].loc[best_frame_idx, elem].values
+                vals = (no_result if best_frame_score < min_combined_score
+                        else dfs[idx].loc[best_frame_idx, elem].values)
+                df_res.loc[idx, elem] = vals
         return df_res
 
-    def _handle_offsets_pose_data(self,
+    def _handle_3d_triangulate(
+        self,
         *per_cam_detection: numpy.ndarray
     ):
         """Handle pose data offsets"""
         stereo_params = self._stereo_params
         if stereo_params is None:
-            raise RuntimeError("stereo_params must be set with a valid calib src dir")
+            warnings.warn("no stereo params available, can't 3d-triangulate", UserWarning, stacklevel=3)
+            return self._empty_3d, self._empty_3d
         p_thresh = 0.9  # confidence threshold for DLC raw output
         min_cluster = 10  # maximum allowed interpolation
         # not sure min_cluster change anything for when nbr frames == 1 (per cam)
@@ -315,24 +345,32 @@ class PoseAlgorithm:
         df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=columns)
         df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=columns)
         #
-        df_2d = self._take_pair_most_likely(df0_2d, df1_2d)
+        df_2d = self._take_cams_most_likely(df0_2d, df1_2d)
+        confident_parts = [
+            part
+            for part in df_2d.columns.levels[0]
+            if all(df_2d[part]["likelihood"] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD)
+        ]
+        confident_df = df_2d[confident_parts]
+        if len(confident_parts) == 0:
+            return self._empty_3d, self._empty_3d
         # df_2d = interpolate_coordinates(df_2d, p_thresh)  # not required probably
-        df_3d = triangulate_3d_with_params(
-            [df_2d.iloc[0:1], df_2d.iloc[1:2]],
-            body_parts=self._measure_offset_parts,
+        raw_df_3d = triangulate_3d_with_params(
+            # [df_2d.iloc[0:1][confident_parts], df_2d.iloc[1:2]],
+            [confident_df.iloc[0:1], confident_df.iloc[1:2]],
+            body_parts=confident_parts,  # self._measure_offset_parts,
             stereo_params=self._stereo_params,
             p_thresh=p_thresh,
             min_cluster=min_cluster,
         )
-        raw_df_3d = df_3d
         # but reorient and center looks required:
         center_method = (1, SceneElement.Diamond)
         df_3d = reorient_and_center_step1(
-            df_3d=df_3d,
+            df_3d=raw_df_3d,
             stereo_file=stereo_params.as_pickle_dict(),
             center_method=center_method,
             frame_rate=self._frame_rate,
-            bpts=self._measure_offset_parts,
+            bpts=confident_parts,  # self._measure_offset_parts,
             calib_metadata=self._calib_metadata,
             cam_names=self._cam_names,
             cam_offsets=self._cam_offsets,
@@ -448,35 +486,35 @@ class PoseAlgorithm:
                     locations_1[elem] = PoseLocation(-1, *v0[_xy_col_names])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_2[elem] = PoseLocation(-1, *v1[_xy_col_names])
-
+        #
         locations_3d = {}
-        raw_3d = {}
+        raw_3d_loc = {}
+        raw_df_3d, df_3d = self._handle_3d_triangulate(*(
+            numpy.asarray([
+                [frame[gpi(p)] for p in self._measure_offset_parts]
+                for frame in frames
+            ])
+            for frames in selected_cams_frames
+        ))
+        #
+        df_3d_row = df_3d.iloc[0]  # there is only a single result in the df_3d
+        raw_df_3d_row = raw_df_3d.iloc[0]
+        for part in df_3d.columns.levels[0]:
+            p_3d = df_3d_row[part]
+            r_p_3d = raw_df_3d_row[part]
+            if r_p_3d["p"] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                raw_3d_loc[part] = Offset3DTuple(r_p_3d[0:3])
+                locations_3d[part] = Offset3DTuple(p_3d[0:3])  # 3 first columns (x, y, z)
+        #
         parts_3d_offsets = defaultdict(dict)
         if len(pairs_3d_offsets) > 0:
-            raw_df_3d, df_3d = self._handle_offsets_pose_data(*(
-                numpy.asarray([
-                    [frame[gpi(p)] for p in self._measure_offset_parts]
-                    for frame in frames
-                ])
-                for frames in selected_cams_frames
-            ))
-            df_3d_row = df_3d.iloc[0]  # there is only a single result in the df_3d
-            raw_df_3d_row = raw_df_3d.iloc[0]
             for part1, part2 in pairs_3d_offsets:
-                p1_3d = df_3d_row[part1]
-                r_p1_3d = raw_df_3d_row[part1]
-                if p1_3d['p'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    raw_3d[part1] = Offset3DTuple(r_p1_3d[0:3])
-                    loc1 = locations_3d[part1] = Offset3DTuple(p1_3d[0:3])  # 3 first columns (x, y, z)
-                else:
-                    loc1 = None
-                p2_3d = df_3d_row[part2]
-                r_p2_3d = raw_df_3d_row[part2]
-                if p2_3d['p'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    raw_3d[part2] = Offset3DTuple(r_p2_3d[0:3])
-                    loc2 = locations_3d[part2] = Offset3DTuple(p2_3d[0:3])
-                    if loc1 is not None:
-                        parts_3d_offsets[part1][part2] = tuple(loc2 - loc1)
+                loc1 = None
+                if part1 in locations_3d:
+                    loc1 = locations_3d[part1]
+                    if part2 in locations_3d:
+                        loc2 = locations_3d[part2]
+                        parts_3d_offsets[part1][part2] = Offset3DTuple(loc2 - loc1)
 
         response = PoseResponse(
             sequence=self._sequence,
@@ -484,7 +522,7 @@ class PoseAlgorithm:
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),
             locations_3d=locations_3d,
-            raw_loc_3d=raw_3d,
+            raw_loc_3d=raw_3d_loc,
         )
         return response
 

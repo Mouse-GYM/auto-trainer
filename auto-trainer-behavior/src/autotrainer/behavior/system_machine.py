@@ -772,7 +772,7 @@ class SystemMachine(StateMachine):
             t_last = getattr(self, "_last_pose_changed_logged", 0)
             p_now = get_perf_now()
             if p_now - t_last >= 30:
-                logger.debug("pose_changed: %s", response)
+                logger.debug("pose_changed: %s", response.round(2))
                 self._last_pose_changed_logged = p_now
         #
         pellet_3d = response.locations_3d.get(SceneElement.Pellet)

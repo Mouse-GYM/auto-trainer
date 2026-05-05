@@ -279,10 +279,15 @@ def test_pose_algo_process_frames_agx001_20251015_15(initialized_pose_algo, agx0
         parts_3d_offsets={'Triangle': {'Diamond': Offset3DTuple(3.787355193687686, -10.697681145835073, 12.135112451315234)}},
         locations_3d={
             'Diamond': Offset3DTuple(4.474496892621784, -17.238484450625435, 9.131630112545981),
-            'Triangle': Offset3DTuple(0.6871416989340975, -6.540803304790362, -3.0034823387692535)},
+            'Triangle': Offset3DTuple(0.6871416989340975, -6.540803304790362, -3.0034823387692535),
+            'Pellet': Offset3DTuple(-2.954824682334811, -7.975617408647363, 0.7642527423619532),
+            'Star': Offset3DTuple(-11.670798738119466, -3.898139789569786, 3.753484237927467),
+        },
         raw_loc_3d={
             'Diamond': Offset3DTuple(7.031130763628839, -2.0526320986506033, 23.23216593822239),
             'Triangle': Offset3DTuple(7.8992932916520004, 1.9640348717618656, 22.627585513107295),
+            'Pellet': Offset3DTuple(8.860241076555408, 1.0752954692133985, 22.99038576300894),
+            'Star': Offset3DTuple(11.376611800930563, 1.1454202017616602, 22.89788346589098),
         })
 
     assert_pose_response_almost_equal(res, expected)
