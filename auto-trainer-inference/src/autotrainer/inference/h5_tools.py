@@ -47,7 +47,7 @@ def write_h5_batch(
     data_list: List,
     indices_list: List,
     *,
-    columns: List[str],
+    columns: pandas.MultiIndex,
     mode: Literal["a", "w"] = "a",
 ) -> float:
     """Write the given data to the dst_path using the given columns and mode"""

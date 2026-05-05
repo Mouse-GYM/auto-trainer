@@ -555,9 +555,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         continue
 
                     async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
-                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
-                        mid_async_res = async_data_tasks[len(async_data_tasks) // 2]  # type: multiprocessing.pool.ApplyResult
-                        logger.warning("too many pending async processing data, waiting middle one..")
+                    n_tasks = len(async_data_tasks)
+                    if n_tasks > 8:  # reminder: we have 4 workers atm.
+                        logger.warning(
+                            "too many (%s) pending async processing data, waiting middle one..",
+                            n_tasks,
+                        )
+                        # to prevent continuing put async tasks while there are too many already:
+                        skip_next_pose_data = 2
+                        mid_async_res = async_data_tasks[n_tasks // 2]
                         try:
                             mid_async_res.wait()
                         except Exception as err:
