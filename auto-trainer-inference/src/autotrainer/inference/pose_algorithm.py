@@ -25,6 +25,9 @@ logger = get_verbose_logger(__name__)
 PoseTuple = namedtuple("PoseTuple", ["x", "y"])
 
 
+_xy_col_names = ['x', 'y']
+
+
 @dataclass(frozen=True)
 class PoseLocation:
     index: int
@@ -146,7 +149,8 @@ class PoseAlgorithm:
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
-    process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
+    # could eventually be re-used at some point:
+    # process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
 
     def __init__(
         self,
@@ -275,19 +279,22 @@ class PoseAlgorithm:
         return self._pose_result_columns
 
     @staticmethod
-    def _take_most_likely(df):
-        # create dataframe with 1 row, all NaN values:
-        df_res = pandas.DataFrame(index=[0], columns=df.columns)
-        elems = set(df.columns.get_level_values(0))
-        # then for each elem fill with most likely:
-        for elem in elems:
-            most_likely = (
-                df[elem]
-                .sort_values(by="likelihood", ascending=False)
-                .iloc[0]
-            )
-            for c in ('x', 'y', 'likelihood'):
-                df_res[elem, c] = most_likely[c]
+    def _combine_frames_likelihood(frames):
+        return sum(frame["likelihood"] for frame in frames)
+
+    def _take_pair_most_likely(self, *dfs):
+        df0 = dfs[0]
+        # create a df_res with len(dfs) entries with all NaNs :
+        df_res = pandas.DataFrame(index=list(range(len(dfs))), columns=df0.columns)
+        for elem in df0.columns.levels[0]:
+            combined = [
+                (idx, self._combine_frames_likelihood(frames.loc[idx, elem] for frames in dfs))
+                for idx in range(len(df0))
+            ]
+            # NB: this sorted, if it's equal to other(s), keeps the most recent last, so we take the last one [-1]:
+            best_frame_idx = sorted(combined, key=lambda e: e[1])[-1][0]
+            for idx in range(len(dfs)):
+                df_res.loc[idx, elem] = dfs[idx].loc[best_frame_idx, elem].values
         return df_res
 
     def _handle_offsets_pose_data(self,
@@ -307,14 +314,8 @@ class PoseAlgorithm:
         columns = self._measure_offset_parts_columns
         df0_2d = pandas.DataFrame(per_cam_detection[0].reshape(frames_per_cam, -1), columns=columns)
         df1_2d = pandas.DataFrame(per_cam_detection[1].reshape(frames_per_cam, -1), columns=columns)
-        if frames_per_cam > 1:
-            df0_2d = self._take_most_likely(df0_2d)
-            df1_2d = self._take_most_likely(df1_2d)
         #
-        df_2d = pandas.DataFrame(
-            numpy.concatenate([df0_2d.values, df1_2d.values]),
-            columns=self._measure_offset_parts_columns,
-        )
+        df_2d = self._take_pair_most_likely(df0_2d, df1_2d)
         # df_2d = interpolate_coordinates(df_2d, p_thresh)  # not required probably
         df_3d = triangulate_3d_with_params(
             [df_2d.iloc[0:1], df_2d.iloc[1:2]],
@@ -399,13 +400,14 @@ class PoseAlgorithm:
                     if maybe_dual:
                         parts_flag_3[part] = True
 
-        if self.process_frames_select_frames_method == "last_one":
-            cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
-            selected_cams_frames = cams_last_frame
-        elif self.process_frames_select_frames_method == "all_most_likely":
-            selected_cams_frames = per_cam_frames
-        else:
-            raise RuntimeError(f"unexpected select_frames_method: {self.process_frames_select_frames_method}")
+        selected_cams_frames = per_cam_frames
+        # if self.process_frames_select_frames_method == "last_one":
+        #     cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
+        #     selected_cams_frames = cams_last_frame
+        # elif self.process_frames_select_frames_method == "all_most_likely":
+        #     selected_cams_frames = per_cam_frames
+        # else:
+        #     raise RuntimeError(f"unexpected select_frames_method: {self.process_frames_select_frames_method}")
 
         gpi = self.get_part_index
         #
@@ -435,18 +437,17 @@ class PoseAlgorithm:
                 if __debug__ and elem not in process_hands_results.columns:
                     logger.warning("%s not present in hands results", elem)
                     continue
-                # uses last(most recent) one:
-                if self.process_frames_select_frames_method == "last_one":
-                    v0 = v0_raw[elem].iloc[-1]
-                    v1 = v1_raw[elem].iloc[-1]
-                else:
-                    # but if want uses most likelihood, then:
-                    v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
-                    v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                # if self.process_frames_select_frames_method == "last_one":
+                #     v0 = v0_raw[elem].iloc[-1]
+                #     v1 = v1_raw[elem].iloc[-1]
+                # else:
+                # but if want uses most likelihood, then:
+                v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_1[elem] = PoseLocation(-1, v0['x'], v0['y'])
+                    locations_1[elem] = PoseLocation(-1, *v0[_xy_col_names])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_2[elem] = PoseLocation(-1, v1['x'], v1['y'])
+                    locations_2[elem] = PoseLocation(-1, *v1[_xy_col_names])
 
         locations_3d = {}
         raw_3d = {}
@@ -459,16 +460,21 @@ class PoseAlgorithm:
                 ])
                 for frames in selected_cams_frames
             ))
+            df_3d_row = df_3d.iloc[0]  # there is only a single result in the df_3d
+            raw_df_3d_row = raw_df_3d.iloc[0]
             for part1, part2 in pairs_3d_offsets:
-                if parts_flag_3.get(part1):
-                    raw_3d[part1] = Offset3DTuple(raw_df_3d[part1].iloc[-1, 0:3])
-                    loc1 = locations_3d[part1] = Offset3DTuple(
-                        df_3d[part1].iloc[-1, 0:3])  # last frame, 3 first columns (x, y, z)
+                p1_3d = df_3d_row[part1]
+                r_p1_3d = raw_df_3d_row[part1]
+                if p1_3d['p'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    raw_3d[part1] = Offset3DTuple(r_p1_3d[0:3])
+                    loc1 = locations_3d[part1] = Offset3DTuple(p1_3d[0:3])  # 3 first columns (x, y, z)
                 else:
                     loc1 = None
-                if parts_flag_3.get(part2):
-                    raw_3d[part2] = Offset3DTuple(raw_df_3d[part2].iloc[-1, 0:3])
-                    loc2 = locations_3d[part2] = Offset3DTuple(df_3d[part2].iloc[-1, 0:3])
+                p2_3d = df_3d_row[part2]
+                r_p2_3d = raw_df_3d_row[part2]
+                if p2_3d['p'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                    raw_3d[part2] = Offset3DTuple(r_p2_3d[0:3])
+                    loc2 = locations_3d[part2] = Offset3DTuple(p2_3d[0:3])
                     if loc1 is not None:
                         parts_3d_offsets[part1][part2] = tuple(loc2 - loc1)
 
