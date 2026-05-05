@@ -149,7 +149,8 @@ class PoseAlgorithm:
     MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
     MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
-    process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
+    # could eventually be re-used at some point:
+    # process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
 
     def __init__(
         self,
@@ -399,13 +400,14 @@ class PoseAlgorithm:
                     if maybe_dual:
                         parts_flag_3[part] = True
 
-        if self.process_frames_select_frames_method == "last_one":
-            cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
-            selected_cams_frames = cams_last_frame
-        elif self.process_frames_select_frames_method == "all_most_likely":
-            selected_cams_frames = per_cam_frames
-        else:
-            raise RuntimeError(f"unexpected select_frames_method: {self.process_frames_select_frames_method}")
+        selected_cams_frames = per_cam_frames
+        # if self.process_frames_select_frames_method == "last_one":
+        #     cams_last_frame = [[cam_frames[-1]] for cam_frames in per_cam_frames]
+        #     selected_cams_frames = cams_last_frame
+        # elif self.process_frames_select_frames_method == "all_most_likely":
+        #     selected_cams_frames = per_cam_frames
+        # else:
+        #     raise RuntimeError(f"unexpected select_frames_method: {self.process_frames_select_frames_method}")
 
         gpi = self.get_part_index
         #
@@ -435,14 +437,13 @@ class PoseAlgorithm:
                 if __debug__ and elem not in process_hands_results.columns:
                     logger.warning("%s not present in hands results", elem)
                     continue
-                # uses last(most recent) one:
-                if self.process_frames_select_frames_method == "last_one":
-                    v0 = v0_raw[elem].iloc[-1]
-                    v1 = v1_raw[elem].iloc[-1]
-                else:
-                    # but if want uses most likelihood, then:
-                    v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
-                    v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                # if self.process_frames_select_frames_method == "last_one":
+                #     v0 = v0_raw[elem].iloc[-1]
+                #     v1 = v1_raw[elem].iloc[-1]
+                # else:
+                # but if want uses most likelihood, then:
+                v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
+                v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
                     locations_1[elem] = PoseLocation(-1, *v0[_xy_col_names])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
