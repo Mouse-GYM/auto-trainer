@@ -183,9 +183,13 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def use_current_head_magnet_position_as_baseline(self):
         head_magnet_intensity = self._hardware_model.head_magnet_intensity
         if head_magnet_intensity is not None:
+            algo = self._system_machine.algorithm
+            algo.baseline_intensity = head_magnet_intensity
+            # NB: behavior_algo.baseline_intensity is currently not connected to config value,
+            # but we want save it here:
+            algo.active_config.head_clamp.baseline_intensity = head_magnet_intensity
             post_api_event_content(ApiEventKind.headfixBaselineChanged,
                                    data=dict(baseline=head_magnet_intensity))
-            self._system_machine.algorithm.baseline_intensity = head_magnet_intensity
 
     @property
     def source_emergency(self) -> Optional[str]:
