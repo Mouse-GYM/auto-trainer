@@ -804,12 +804,12 @@ class MainWindow(QMainWindow):
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
-        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Right))
         action.triggered.connect(self.on_next_plan_phase)
 
         action = self.previous_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-left")), "Previous Phase", self)
         action.setVisible(False)
-        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_R))
+        action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Left))
         action.triggered.connect(self.on_previous_plan_phase)
 
         self._diamond_triangle_calib_run = None
