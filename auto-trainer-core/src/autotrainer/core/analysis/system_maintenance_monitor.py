@@ -58,7 +58,7 @@ class SystemMaintenanceMonitor(BaseDetector):
         prev, self._max_consecutive_failed_load_engaged = self._max_consecutive_failed_load_engaged, value
         self._on_property_changed(self.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED, value, prev)
         if value != prev:
-            self.post_detector_event(ApiDetectorKind.consectivePelletLoadFailureExceeded, value,
+            self.post_detector_event(ApiDetectorKind.consecutivePelletLoadFailureExceeded, value,
                                      self._config.use_max_consecutive_failed_load)
             self.check_state_if_not_detector_thread()
 
