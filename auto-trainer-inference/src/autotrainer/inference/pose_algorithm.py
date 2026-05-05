@@ -25,6 +25,9 @@ logger = get_verbose_logger(__name__)
 PoseTuple = namedtuple("PoseTuple", ["x", "y"])
 
 
+_xy_col_names = ['x', 'y']
+
+
 @dataclass(frozen=True)
 class PoseLocation:
     index: int
@@ -441,9 +444,9 @@ class PoseAlgorithm:
                     v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                     v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_1[elem] = PoseLocation(-1, v0['x'], v0['y'])
+                    locations_1[elem] = PoseLocation(-1, *v0[_xy_col_names])
                 if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
-                    locations_2[elem] = PoseLocation(-1, v1['x'], v1['y'])
+                    locations_2[elem] = PoseLocation(-1, *v1[_xy_col_names])
 
         locations_3d = {}
         raw_3d = {}
