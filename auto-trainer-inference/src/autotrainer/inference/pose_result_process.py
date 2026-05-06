@@ -225,7 +225,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         perf_c_start_offline: float,
         pose_algo: PoseAlgorithm,
         range_cams,
-        ib_pose_data_list,
+        ib_pose_data_list: List[List],
         ib_pose_data_dict,
         cams_read_h5_idx,
         cams_read_h5_dss,
@@ -257,39 +257,44 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         #         with open(str(p) + ".idx_monitor_data_q.txt", "w") as fh:
         #             fh.write("\n".join(chain(map(str, sorted(ib_pose_data_dict[cdx])), [''])))
 
+        # we must ensure same number of data for each sub-list:
         min_nbr_pd = min(map(len, ib_pose_data_list))
+        for idx, lst in enumerate(ib_pose_data_list):
+            cut = len(lst) - min_nbr_pd
+            if cut > 0:
+                logger.verbose("cut ib_pose_data_list[%s] to %s", idx, cut)
+                del lst[-cut:]
 
-        # current analysis code also require exact same frame number in all cameras,
-        # let's trim what's necessary:
-        for cam in (project_info.camera_1, project_info.camera_2):
-            paths = list(map(Path, project_info.get_video_path(cam, allow_overwrite=True)))
-            ts_file = paths[1]
-            lines = [v for v in ts_file.read_text().split('\n') if v.strip()]
-            # not the best way to do this,
-            # maybe inspecting the video file for total frames is faster.
-            # we must also have the info somewhere in active memory during this run/session
-            if len(lines) != min_nbr_pd:
-                logger.warning("%s: raw data unexpected number of entries. %s vs %s expected",
-                               cam, len(lines), min_nbr_pd)
-                # normally not necessary:
-                # _shorten_text_file(lines, ts_file, min_nbr_pd)
-                # _short_vid_file(paths[0], min_nbr_pd)
-                # _shorten_text_file(paths[2], min_nbr_pd)
+        final_pose_data = numpy.stack(
+            (ib_pose_data_list[0], ib_pose_data_list[1]),
+            axis=1,
+        ).reshape(-1, pose_algo.part_count * 3)
 
-        ib_pose_data = numpy.empty((0, pose_algo.part_count * 3), dtype=numpy.float32)
-        final_pose_data = numpy.vstack(
-            list(chain(
-                [ib_pose_data],  # supposed the empty init array
-                (
-                    pdl[ix]
-                    for ix in range(min_nbr_pd)
-                    for pdl in ib_pose_data_list
-                )
-            ))
-        )
-        logger.notice("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
-                      " now calling intersession_inference()",
-                      min_nbr_pd, 2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline), final_pose_data.shape[0])
+        if False and __debug__:  # flip False to True to ensure same vs previous:
+            ib_pose_data = numpy.empty(
+                (0, pose_algo.part_count * 3), dtype=numpy.float32
+            )
+            final_pose_data_prev = numpy.vstack(
+                list(chain(
+                    [ib_pose_data],  # supposed the empty init array
+                    (
+                        pdl[ix]
+                        for ix in range(min_nbr_pd)
+                        for pdl in ib_pose_data_list
+                    )
+                ))
+            )
+            is_same = (final_pose_data == final_pose_data_prev)
+            if isinstance(is_same, numpy.ndarray):
+                is_same = is_same.all()
+            logger.verbose("check same previous: %s, shape=%s prev=%s",
+                           is_same, final_pose_data.shape, final_pose_data_prev.shape)
+
+        logger.info("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
+                  " now calling intersession_inference() ; shape=%s",
+                  min_nbr_pd,
+                   2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline),
+                   final_pose_data.shape[0], final_pose_data.shape)
 
         intersession_inference(final_pose_data, pose_algo.part_names, project_info)
         logger.success("fully processed session-%s inference with %s total pose responses",
