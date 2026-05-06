@@ -3,7 +3,6 @@ import enum
 import json
 import logging
 import math
-import multiprocessing
 import os
 import pickle
 import queue
@@ -30,7 +29,6 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
-from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -56,7 +54,6 @@ from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
     IntersessionMachine
-from autotrainer.core.interfaces import CaptureAnalysisResult
 
 from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
 
@@ -65,7 +62,6 @@ from autotrainer.api import (
     ApiCommandRequest,
     ApiCommandRequestResponse,
     ApiCommandRequestResult,
-    ApiTopic,
     ApiEventKind,
 )
 
@@ -717,10 +713,7 @@ class AppModel(ObservableObject):
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
         self._event_manager.post_event_content(
-            ApiEventKind.animalSelected,
-            data=dict(animal_id=None if animal is None else animal.id,
-                      properties=None if animal is None else dataclasses.asdict(animal)
-                      ))
+            ApiEventKind.animalSelected, None if animal is None else animal.to_api_status())
         logger.success("Switched to animal %s", animal)
 
     @property
@@ -952,8 +945,7 @@ class AppModel(ObservableObject):
             animal = AnimalSubject(name=name)
             self._save_animal_metadata(animal, sender="add_animal")
             self._event_manager.post_event_content(
-                ApiEventKind.animalCreated,
-                data=dict(animal_id=animal.id, properties=dataclasses.asdict(animal)),
+                ApiEventKind.animalCreated, animal.to_api_status(),
             )
 
             # Ensure property change events for listeners
@@ -1610,10 +1602,7 @@ class AppModel(ObservableObject):
             if prev != value:
                 self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
                 self._event_manager.post_event_content(
-                    ApiEventKind.animalUpdated, data=dict(
-                        animal_id=animal.id,
-                        properties=dict(name="target_y_limit", prev=prev, value=value)
-                    ))
+                    ApiEventKind.animalUpdated, animal.to_api_status())
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal
@@ -1744,13 +1733,7 @@ class AppModel(ObservableObject):
         if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
             self._save_animal_metadata(animal, sender="detection_result_ready")
             self._event_manager.post_event_content(
-                ApiEventKind.animalUpdated,
-                data=dict(
-                    animal_id=animal.id,
-                    properties=dict(name="pellet_counts",
-                                    day=animal.pellet_counts_day, total=animal.pellet_counts_total),
-                ),
-            )
+                ApiEventKind.animalUpdated, animal.to_api_status())
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
@@ -2060,7 +2043,7 @@ class AppModel(ObservableObject):
         system_status = ApiSystemStatus(
             application_mode=app_status_to_api_app_mode(self._status),
             training_mode=training_mode_to_api_training_mode(self._training_mode),
-            animal_id=None if animal is None else animal.id,
+            animal=None if animal is None else animal.to_api_status(),
             project=ApiProjectStatus(
                 day_path=project.get_day_path()[0],
                 session_index=project.session,
