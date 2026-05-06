@@ -49,24 +49,26 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
-        self._analysis = analysis
-
-        system_machine = self._system_machine = SystemMachine(
-            msg_handler=msg_handler,
-            analysis=analysis,
-            tunnel_device=hardware_model,
-            pellet_device=hardware_model,
-            inference=inference,
-            topcam_presence=topcam_presence,
-        ) if system_machine is None else system_machine
-
         self._project: Optional[ProjectInfo] = None
+
+        self._analysis = analysis
+        if system_machine is None:
+            system_machine = SystemMachine(
+                msg_handler=msg_handler,
+                analysis=analysis,
+                tunnel_device=hardware_model,
+                pellet_device=hardware_model,
+                inference=inference,
+                topcam_presence=topcam_presence,
+            )
+        self._system_machine: SystemMachine = system_machine
         self._hardware_model = hardware_model
         #
         self._source_emergency: Optional[str] = None
         #
-        system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
-            f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
+        # system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
+        #     f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
+        # actually unused event (pellet.state)
 
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
 
@@ -82,9 +84,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
                     valid_reasons = {EmergencyReason.DOORS_OPEN,
                                      EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
-                                     EmergencyReason.GLOBAL_ANIMAL_PRESENCE}
+                                     EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
+                                     EmergencyReason.SYSTEM_MAINTENANCE}
                 else:
-                    valid_reasons = list()
+                    valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE}
                 reasons = alarm_mon.engaged_reasons
                 value = any(val in valid_reasons for val in reasons)
                 if value:

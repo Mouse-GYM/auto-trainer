@@ -1,7 +1,7 @@
-import datetime
 import logging
 import platform
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional, Union
 
@@ -41,6 +41,7 @@ class UserPreferences(ObservableObject):
     MEASUREMENT_GRAPH = "measurement_graph"
     PELLET_LOAD_COUNT_TOTAL = "pellet_load_count_total"
     PELLET_LOAD_COUNT_DAY = "pellet_load_count_day"
+    CAGE_CLEAN_PREVIOUS_DAY = "cage_clean_previous_day"
 
     def __init__(self, *, settings_file_path: Optional[Path] = None):
         super().__init__()
@@ -84,7 +85,7 @@ class UserPreferences(ObservableObject):
 
         self._pellet_load_count_total: int = settings.value("system/pellet_load_count_total", 0, int)  # noqa
         self._pellet_load_count_day: int = settings.value("system/pellet_load_count_day", 0, int)  # noqa
-        today = self._cur_day = datetime.date.today()
+        today = self._cur_day = date.today()
         today_str = today.strftime(_date_format)
         prev_pellet_day = settings.value("system/pellet_load_count_day_date", "", str)
         if today_str != prev_pellet_day:
@@ -93,6 +94,19 @@ class UserPreferences(ObservableObject):
             self._pellet_load_count_day = 0
             settings.setValue("system/pellet_load_count_day", 0)
             settings.setValue("system/pellet_load_count_day_date", today_str)
+
+        cage_clean_prev_day_str = settings.value("system/cage_clean_previous_day", "", str)
+        if cage_clean_prev_day_str != "":
+            try:
+                cage_clean_prev_day = datetime.strptime(cage_clean_prev_day_str, _date_format).date()
+            except Exception:
+                logger.verbose("Invalid date for cage_clean_previous_day: %s ; corrected to today", cage_clean_prev_day_str)
+                cage_clean_prev_day = today
+                settings.setValue("system/cage_clean_previous_day", today_str)
+        else:
+            cage_clean_prev_day = today
+            settings.setValue("system/cage_clean_previous_day", today_str)
+        self._cage_clean_prev_day = cage_clean_prev_day
 
         self._live_feed_refresh_rate: int = settings.value("display/refresh_rate", 15, int)  # noqa
         self._measurement_graph: str = settings.value("ui/measurement_graph", "")  # noqa
@@ -239,7 +253,7 @@ class UserPreferences(ObservableObject):
 
     @property
     def pellet_load_count_day(self) -> int:
-        today = datetime.date.today()
+        today = date.today()
         if today != self._cur_day:
             self._cur_day = today
             self.pellet_load_count_day = 0
@@ -248,10 +262,20 @@ class UserPreferences(ObservableObject):
 
     @pellet_load_count_day.setter
     def pellet_load_count_day(self, value: int):
-        today = datetime.date.today()
+        today = date.today()
         if today != self._cur_day:
             self._cur_day = today
             self._settings.setValue("system/pellet_load_count_day_date", today.strftime(_date_format))
         prev, self._pellet_load_count_day = self._pellet_load_count_day, value
         self._settings.setValue("system/pellet_load_count_day", value)
         self._on_property_changed(self.PELLET_LOAD_COUNT_DAY, value, prev)
+
+    @property
+    def cage_clean_previous_day(self) -> date:
+        return self._cage_clean_prev_day
+
+    @cage_clean_previous_day.setter
+    def cage_clean_previous_day(self, value: date):
+        prev, self._cage_clean_prev_day = self._cage_clean_prev_day, value
+        self._settings.setValue("system/cage_clean_previous_day", value.strftime(_date_format))
+        self._on_property_changed(self.CAGE_CLEAN_PREVIOUS_DAY, value, prev)

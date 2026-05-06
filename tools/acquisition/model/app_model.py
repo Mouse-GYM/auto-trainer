@@ -29,6 +29,7 @@ from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandl
                               NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
                               Offset3DTuple)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
+from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -672,6 +673,14 @@ class AppModel(ObservableObject):
             if animal.id == animal_id:
                 return animal
         return None
+
+    def get_days_before_cage_clean(self) -> int:
+        pref = self._preferences
+        cfg = self._behavior.algorithm.active_config.cage_cleaning
+        return (
+            cfg.clean_days_interval
+            - (date.today() - pref.cage_clean_previous_day).days
+        )
 
     @property
     def selected_animal(self) -> Optional[AnimalSubject]:
@@ -1359,7 +1368,9 @@ class AppModel(ObservableObject):
         # and:
         self._load_animals()
 
-        self._analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
+        analysis = self._analysis
+        analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
+        self._refresh_cage_clean_data()
 
         dev_ack_timeout = configuration.hardware.min_ack_timeout
         self._hardware.set_device_ack_timeout(dev_ack_timeout)
@@ -1566,15 +1577,23 @@ class AppModel(ObservableObject):
             #   pellet_m.send_pellet(force=True)
             # yet, it will be done by pellet-machine automatically if/when status goes to animal-in-training
 
-    def _on_preferences_property_changed(self, name: str, new_value, old_value):
+    def _refresh_cage_clean_data(self):
+        self._analysis.system_maintenance_monitor.set_cage_clean_next_day(
+            self._preferences.cage_clean_previous_day
+            + timedelta(days=self._behavior.algorithm.active_config.cage_cleaning.clean_days_interval)
+        )
+
+    def _on_preferences_property_changed(self, name: str, value, old_value):
         prefs = UserPreferences
         if name == prefs.SELECTED_ANIMAL:
             for animal in self._animals:
-                if animal.name == new_value:
+                if animal.name == value:
                     self.selected_animal = animal
                     break
         elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
             self.check_max_pellet_loaded()
+        elif name == prefs.CAGE_CLEAN_PREVIOUS_DAY:
+            self._refresh_cage_clean_data()
 
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
@@ -1603,6 +1622,9 @@ class AppModel(ObservableObject):
                 self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
                 self._event_manager.post_event_content(
                     ApiEventKind.animalUpdated, animal.to_api_status())
+
+        elif name == props.CAGE_CLEAN_CONFIG:
+            self._refresh_cage_clean_data()
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal

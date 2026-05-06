@@ -4,6 +4,7 @@ import itertools
 import logging
 import math
 import platform
+from datetime import date
 
 import verboselogs
 from PySide6 import QtCore
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
                                QLayout, QSizePolicy, QMessageBox)
 
 from autotrainer.api import ApiAlarmKind
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration, \
@@ -895,7 +897,7 @@ class PreferencesContent(QWidget):
         analysis = app_model.analysis
         prefs = app_model.preferences
         load_cell_monitor = analysis.load_cell_monitor
-        algo_cfg = app_model.behavior.algorithm.active_config
+        algo = app_model.behavior.algorithm
 
         top_layout = QHBoxLayout()
 
@@ -1078,7 +1080,24 @@ class PreferencesContent(QWidget):
         #
         label = QLabel(f"{prefs.pellet_load_count_total}")
         right_layout.addRow("Current count:", label)
-
+        #
+        cage_clean_cfg = algo.active_config.cage_cleaning
+        spinbox = QSpinBox()
+        spinbox.setRange(1, 30)
+        spinbox.setValue(cage_clean_cfg.clean_days_interval)
+        right_layout.addRow("<b>Cage Cleaning Days Interval</b>", spinbox)
+        def cage_clean_days_interval_changed(value):
+            cfg = algo.active_config.cage_cleaning
+            cfg.clean_days_interval = value
+            set_cage_clean_before_label()
+            algo.property_changed(BehaviorAlgoProps.CAGE_CLEAN_CONFIG, cfg, None)
+        spinbox.valueChanged.connect(cage_clean_days_interval_changed)
+        def set_cage_clean_before_label():
+            self._cage_clean_days_before_label.setText(f"{app_model.get_days_before_cage_clean()}")
+        label = self._cage_clean_days_before_label = QLabel("")
+        set_cage_clean_before_label()
+        right_layout.addRow("Days before required cleaning:", label)
+        #
         spinbox = QSpinBox()
         spinbox.setRange(1, 99999)
         spinbox.setValue(maint_cfg.max_consecutive_failed_loaded)

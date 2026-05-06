@@ -335,7 +335,9 @@ class AlarmContent(ContentWidget):
     @invoke_method
     def _system_maint_mon_property_changed(self, name, value, _):
         mon = self._app_model.analysis.system_maintenance_monitor
-        if name == mon.MAX_PELLET_LOADED_ENGAGED:
+        if name == mon.IS_ENGAGED:
+            self._system_maintenance_status.setStatus(value)
+        elif name == mon.MAX_PELLET_LOADED_ENGAGED:
             self._pellets_before_refill_status.setStatus(value)
         elif name == mon.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED:
             self._consecutive_failed_loads_status.setStatus(value)

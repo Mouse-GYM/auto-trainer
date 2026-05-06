@@ -79,6 +79,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
         super().__init__()
+        self._running = True  # always
         self._all_scene_parts_ctx = ScenePartsPresenceContext()  # both/all cams seen
         self._config = config
         self._load_cell_monitor = load_cell_monitor
@@ -108,6 +109,10 @@ class EmergencyAlarmMonitor(BaseDetector):
         global_animal_presence_monitor.property_changed += self._on_global_animal_presence_prop_changed
         system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
         system_fault_monitor.property_changed += self._on_system_fault_prop_changed
+
+    def stop(self):
+        super().stop()
+        self._running = True  # keep
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context

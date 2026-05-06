@@ -5,7 +5,7 @@ import threading
 import time
 import math
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 from functools import partial
 from itertools import chain
 from pathlib import Path
@@ -34,7 +34,7 @@ from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 
 from autotrainer.behavior import TrainingMode
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus, BehaviorAlgoProps
 from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
@@ -150,18 +150,23 @@ class MainWindow(QMainWindow):
         except Exception as err:
             tb = traceback.format_exc()
             app_model.on_error("Failed load configuration",
-                               f"\nConfiguration file {config_file.as_posix()!r} has issue,\n\n"
+                               f"\nConfiguration file {config_file} has issue,\n\n"
                                f"please check and fix following error:\n\n{err}\n\n{tb}")
             # app_model.on_close()
             # raise RuntimeError(f"Could not load config: {err}") from err
 
-        analysis = app_model.analysis
         self._set_reset_vat_text()
+        self._set_reset_cage_clean_text()
 
         app_model.property_changed += self._on_app_model_property_changed
-        app_model.inference.property_changed += self._on_inference_property_changed
         app_model.hardware.property_changed += self._on_hardware_property_changed
+        app_model.inference.property_changed += self._on_inference_property_changed
+        app_model.inference.detection_result_ready += self._on_inference_analysis_result_ready
+        app_model.behavior.algorithm.property_changed += self._on_behavior_algo_property_changed
+
         user_preferences.property_changed += self._on_preferences_property_changed
+
+        analysis = app_model.analysis
         analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
         analysis.system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
 
@@ -169,7 +174,6 @@ class MainWindow(QMainWindow):
         #
         self._reload_animals(self._app_model.animals)
         #
-        app_model.inference.detection_result_ready += self._on_inference_analysis_result_ready
 
     @property
     def app_model(self) -> AppModel:
@@ -324,6 +328,11 @@ class MainWindow(QMainWindow):
         prefs = self._preferences
         prefs.pellet_load_count_total = prefs.pellet_load_count_day = 0
         self._app_model.check_max_pellet_loaded()
+
+    def on_reset_cage_clean(self):
+        prefs = self._preferences
+        prefs.cage_clean_previous_day = date.today()
+        prefs.save()
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
@@ -773,6 +782,14 @@ class MainWindow(QMainWindow):
         )
         self._reset_pellet_loaded_count_action.setToolTip(txt)
 
+    def _set_reset_cage_clean_text(self):
+        n_days = self._app_model.get_days_before_cage_clean()
+        txt = (
+            f"Mark the cage as cleaned.\n"
+            f"{n_days} days until next required cleaning"
+        )
+        self._reset_cage_clean_action.setToolTip(txt)
+
     def _create_actions(self):
         action = self.edit_camera_settings_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Camera Settings", self)
         action.setToolTip("Edit Camera Settings")
@@ -801,6 +818,9 @@ class MainWindow(QMainWindow):
 
         action = self._reset_pellet_loaded_count_action = QAction(QIcon(qta.icon("fa5s.fill")), "", self)
         action.triggered.connect(self.on_reset_pellet_loaded_count)
+
+        action = self._reset_cage_clean_action = QAction(QIcon(qta.icon("fa5s.broom")), "", self)
+        action.triggered.connect(self.on_reset_cage_clean)
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
@@ -930,6 +950,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addAction(self.show_reach_event_action)
         toolbar.addAction(self._reset_pellet_loaded_count_action)
+        toolbar.addAction(self._reset_cage_clean_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
@@ -1517,6 +1538,12 @@ class MainWindow(QMainWindow):
         elif property_name in {hard.POS_XYZ, hard.SEND_X, hard.SEND_Y, hard.SEND_Z}:
             self._status_label_pos.update_coordinate(hard.last_dcs_position)
             self._status_label_send_pos.update_coordinate(hard.last_dcs_set_position)
+
+    @invoke_method
+    def _on_behavior_algo_property_changed(self, name: str, value, _):
+        props = BehaviorAlgoProps
+        if name == props.CAGE_CLEAN_CONFIG:
+            self._set_reset_cage_clean_text()
 
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):
