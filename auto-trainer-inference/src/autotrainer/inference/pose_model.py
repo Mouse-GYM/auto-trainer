@@ -19,6 +19,11 @@ class PoseModel:
         self._body_part_categories = []
         self._body_parts_by_category = {}
 
+    @classmethod
+    def pre_validate(cls, location: str):
+        """Class level pre-validation for a model location"""
+        raise RuntimeError("Must be implemented by subclass")
+
     @property
     def body_parts(self):
         return self._body_parts

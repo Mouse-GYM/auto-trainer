@@ -43,12 +43,20 @@ class DlcPoseModel(PoseModel):
 
         self._predict = None
 
-    def is_valid(self) -> bool:
-        configuration_file = os.path.join(self._source, "config.yaml")
-
+    @classmethod
+    def pre_validate(cls, location: str):
+        configuration_file = os.path.join(location, "config.yaml")
         if not os.path.isfile(configuration_file):
-            return False
+            raise FileNotFoundError(f"{configuration_file!r} does not exist")
+        # eventual to-do : could extend check with try load config and further sub-checks,
+        # like
 
+    def is_valid(self) -> bool:
+        try:
+            self.pre_validate(self._source)
+        except Exception as err:
+            logger.error("source: %s, validation failed: %s", self._source, err)
+            return False
         return True
 
     def load(self):
@@ -57,15 +65,12 @@ class DlcPoseModel(PoseModel):
         from deeplabcut.utils import auxiliaryfunctions
 
         configuration_file = os.path.join(self._source, "config.yaml")
-
-        self._predict = predict
-
-        self._sys_configuration = auxiliaryfunctions.read_config(configuration_file)
-
         logger.debug(f"using {configuration_file}")
 
-        cfg_body_parts = self._sys_configuration[self.BODY_PARTS_KEY]
+        self._predict = predict
+        self._sys_configuration = auxiliaryfunctions.read_config(configuration_file)
 
+        cfg_body_parts = self._sys_configuration[self.BODY_PARTS_KEY]
         if isinstance(cfg_body_parts, dict):
             for cat in cfg_body_parts.keys():
                 self._body_part_categories.append(cat)
@@ -80,9 +85,10 @@ class DlcPoseModel(PoseModel):
             for part in cfg_body_parts:
                 self._body_parts.append(part)
                 self._body_parts_by_category[self.DEFAULT_BODY_PART_CATEGORY].append(part)
+        else:
+            raise TypeError(f"Unhandled cfg_body_parts type: {type(cfg_body_parts)}. value={cfg_body_parts}")
 
         self._body_parts_count = len(self._body_parts)
-
         logger.debug(f"loaded {self._body_parts_count} body parts")
 
         self._training_fraction = self._sys_configuration[self.TRAINING_FRACTION_KEY][self._training_index]

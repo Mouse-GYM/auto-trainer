@@ -40,7 +40,13 @@ from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 
-from autotrainer.inference import PoseAlgorithm, InferenceStatus, PoseResponse, calibration_FLIR
+from autotrainer.inference import (
+    PoseAlgorithm,
+    InferenceStatus,
+    PoseResponse,
+    calibration_FLIR,
+    DlcPoseModel,
+)
 from autotrainer.inference.analysis import IntersessionResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
@@ -1652,15 +1658,22 @@ class AppModel(ObservableObject):
             if changed:
                 self._save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
 
-    def _on_inference_property_changed(self, name: str, new_value, _):
+    def _on_inference_property_changed(self, name: str, value, _):
         if name == InferenceModel.STATUS:
-            new_is_live = new_value == InferenceStatus.live
+            new_is_live = value == InferenceStatus.live
             if new_is_live:
                 self._p_inference_live_begin = time.perf_counter()
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
             self._update_status_text_overlay()
+        elif name == InferenceModel.MODEL_LOCATION:
+            if value:
+                try:
+                    DlcPoseModel.pre_validate(value)
+                except Exception as err:
+                    self.on_error("DlcPoseModel pre_validate failed",
+                                  f"\nModel at {value} failed pre-validate:\n\n{err}")
 
     def _on_pose_response_ready(self, response: PoseResponse):
         # TODO: move to behavior algo or analysis (as BaseDetector subclass)

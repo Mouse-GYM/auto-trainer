@@ -11,10 +11,13 @@ class MemoryPoseModel(PoseModel):
     """
     def __init__(self, batchsize: int = 2):
         super().__init__()
-
         self._batchsize = batchsize
-
         self.use_random = False
+
+    @classmethod
+    def pre_validate(cls, location: str):
+        if location != "":
+            raise ValueError(f"Expected empty location but got {location!r}")
 
     def is_valid(self) -> bool:
         return True
