@@ -1,7 +1,6 @@
 import dataclasses
 import datetime
 import json
-import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -10,7 +9,9 @@ from tempfile import NamedTemporaryFile
 from typing import Optional, Dict, Any, List, Type
 from typing_extensions import Self
 
-from autotrainer.core import Offset3DTuple, get_verbose_logger
+from autotrainer.api.api_system_status import ApiAnimalStatus, ApiReachStatus
+
+from .. import Offset3DTuple, get_verbose_logger
 
 logger = get_verbose_logger(__name__)
 
@@ -165,6 +166,28 @@ class AnimalSubject(_AnimalSubject):
                      animal.training.current_protocol)
 
         return animal
+
+    def to_api_status(self) -> ApiAnimalStatus:
+        return ApiAnimalStatus(
+            identifier=self.id,
+            name=self.name,
+            dcs_send_x=self.pellet_x,
+            dcs_send_y=self.pellet_y,
+            dcs_send_z=self.pellet_z,
+            target_y_limit=self.target_y_limit,
+            reach_status_total=ApiReachStatus(
+                pellets_presented=self.pellet_counts_total.presented,
+                pellets_consumed=self.pellet_counts_total.consumed,
+                reaches=self.pellet_counts_total.reaches,
+                successful_reaches=self.pellet_counts_total.success_reaches
+            ),
+            reach_status_day=ApiReachStatus(
+                pellets_presented=self.pellet_counts_day.presented,
+                pellets_consumed=self.pellet_counts_day.consumed,
+                reaches=self.pellet_counts_day.reaches,
+                successful_reaches=self.pellet_counts_day.success_reaches
+            )
+        )
 
     def to_file(self, file_path: Path):
         reach: Dict[str, Any] = {}
