@@ -125,7 +125,7 @@ class BehaviorAlgoProps(str, enum.Enum):
     # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
-
+    CAGE_CLEAN_CONFIG = 'cage_clean_config'
 
 
 #

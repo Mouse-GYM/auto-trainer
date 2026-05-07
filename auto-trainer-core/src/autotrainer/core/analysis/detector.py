@@ -84,9 +84,9 @@ class BaseDetector(ObservableObject):
         if th_q is None or threading.current_thread() != th_q[0]:
             self.check_state()
 
-    def check_state(self):
+    def check_state(self, *, force: bool=False):
         with self._lock:
-            if not self._running:
+            if not self._running and not force:
                 return None
             next_delay = self._check_state()
             if next_delay is None:

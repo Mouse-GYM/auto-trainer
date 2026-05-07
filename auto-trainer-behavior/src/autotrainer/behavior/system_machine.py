@@ -951,12 +951,14 @@ class SystemMachine(StateMachine):
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
                         algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
-                tunnel_dev.open_tunnel_gate()
-                self._update_magnet_position(0)
-                self._pellet_machine.move_home(force=True)
+                if algo.status != BehaviorAlgoStatus.IDLE:
+                    tunnel_dev.open_tunnel_gate()
+                    self._update_magnet_position(0)
+                    self._pellet_machine.move_home(force=True)
             else:
-                tunnel_dev.open_tunnel_gate()
-                self._update_magnet_position(algo.baseline_intensity)
+                if algo.status != BehaviorAlgoStatus.IDLE:
+                    tunnel_dev.open_tunnel_gate()
+                    self._update_magnet_position(algo.baseline_intensity)
                 # No need of pellet_dev.send_pellet() :
                 # pellet-machine will resume whatever operation needs to be, like going from home -> send-pellet,
                 # or load-pellet, depending on live conditions.

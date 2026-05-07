@@ -1,27 +1,38 @@
 from typing import Optional, Set, List
 
-import psutil
+from datetime import date, datetime, timedelta
+
+from autotrainer.api import ApiDetectorKind
+
+from autotrainer.core.logging import get_verbose_logger
 
 from .detector import BaseDetector
-from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
-from ...api import ApiDetectorKind
+
+
+logger = get_verbose_logger(__name__)
 
 
 class SystemMaintenanceMonitor(BaseDetector):
+
+    use_daemon = True
+    default_timer_delay = 60  # do really not need precise, but once every minute is quite good.
 
     CONFIG = "config"
 
     MAX_PELLET_LOADED_ENGAGED = "max_pellet_loaded_engaged"
     MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED = "max_consecutive_failed_load_engaged"
+    CAGE_NEED_CLEAN_ENGAGED = "cage_need_clean_engaged"
 
     def __init__(self, *, config: SystemMaintenanceConfig):
         super().__init__()
         self._config = config
+        self._engaged_reasons: Set[str] = set()
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
-        self._engaged_reasons: Set[str] = set()
+        self._cage_need_clean_engaged = False
+        self._cage_clean_next_day: date = date.today() + timedelta(days=1)
 
     @property
     def config(self) -> SystemMaintenanceConfig:
@@ -62,20 +73,51 @@ class SystemMaintenanceMonitor(BaseDetector):
                                      self._config.use_max_consecutive_failed_load)
             self.check_state_if_not_detector_thread()
 
+    def set_cage_clean_next_day(self, day: date):
+        self._cage_clean_next_day = day
+        self.check_state()
+
+    @property
+    def cage_need_clean_engaged(self):
+        return self._cage_need_clean_engaged
+
+    @cage_need_clean_engaged.setter
+    def cage_need_clean_engaged(self, value):
+        prev, self._cage_need_clean_engaged = self._cage_need_clean_engaged, value
+        self._on_property_changed(self.CAGE_NEED_CLEAN_ENGAGED, value, prev)
+        if value != prev:
+            self.post_detector_event(ApiDetectorKind.cageCleaningRequired, value,
+                                     self._config.use_cage_need_clean)
+            self.check_state_if_not_detector_thread()
+
+    def _check_cage_need_clean(self):
+        check_date = (
+            datetime.now()
+            + timedelta(hours=self._config.cage_need_clean_look_ahead_hours)
+        ).date()
+        triggered = check_date >= self._cage_clean_next_day
+        self.cage_need_clean_engaged = triggered
+
     def _check_state(self) -> Optional[float]:
+        logger.spam("checking state")
         cfg = self._config
         reasons = set()
+        #
+        self._check_cage_need_clean()
+        #
         for reason, use, engaged in (
             (self.MAX_PELLET_LOADED_ENGAGED, cfg.use_max_pellet_loaded, self._max_pellet_loaded_engaged),
             (self.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED, cfg.use_max_consecutive_failed_load, self._max_consecutive_failed_load_engaged),
+            (self.CAGE_NEED_CLEAN_ENGAGED, cfg.use_cage_need_clean, self._cage_need_clean_engaged),
         ):
             if use and engaged:
                 reasons.add(reason)
         self._engaged_reasons = reasons
         prev_engaged = self._is_engaged
-        self.is_engaged = len(reasons) > 0
-        if not prev_engaged and self._is_engaged:
+        new_engaged = len(reasons) > 0
+        if not prev_engaged and new_engaged:
             self._logger.notice("Engaging with %s", reasons)
+        self.is_engaged = new_engaged
 
     def update_pellet_loaded(self, loaded: int):
         cfg = self._config

@@ -1,5 +1,6 @@
 import dataclasses
 import enum
+from datetime import date
 from dataclasses import dataclass, field
 from typing import Type, Optional, Dict
 from typing_extensions import Self
@@ -197,6 +198,12 @@ class BatchSessionRecordingConfiguration:
 
 
 @dataclass
+class CageCleaningConfig:
+
+    clean_days_interval: int = 14
+
+
+@dataclass
 class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
     pellet_uncover: PelletUncoverConfiguration = field(default_factory=PelletUncoverConfiguration)
@@ -217,6 +224,7 @@ class _BehaviorConfiguration:
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
     system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
     system_fault: SystemFaultConfig = field(default_factory=SystemFaultConfig)
+    cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -293,6 +301,7 @@ _cls_2_tag = {
     ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
     SystemMaintenanceConfig: "SystemMaintenanceConfig",
     SystemFaultConfig: "SystemFaultConfig",
+    CageCleaningConfig: "CageCleaningConfig",
 }
 
 

@@ -2,11 +2,12 @@ from typing import Optional, Set, List
 
 import psutil
 
+from autotrainer.api import ApiDetectorKind
+
 from .detector import BaseDetector
 from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_fault_config import SystemFaultConfig
 from ..event import post_api_detector_event_content
-from ...api import ApiDetectorKind
 
 
 class SystemFaultMonitor(BaseDetector):
