@@ -9,7 +9,7 @@ from datetime import datetime, date
 from functools import partial
 from itertools import chain
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple, Callable, Union
+from typing import List, Optional, Dict, Tuple, Callable, Union, Literal
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
 from PySide6.QtGui import QAction, QIcon
@@ -39,7 +39,7 @@ from autotrainer.behavior.pellet import PelletState
 
 from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
-from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult
+from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult, TrainingPhase
 
 from autotrainer.pyside.xyz_label import XYZQLabel
 
@@ -336,11 +336,35 @@ class MainWindow(QMainWindow):
         prefs.save()
         self._set_reset_cage_clean_text()
 
+    def _check_target_next_or_previous_plan_phase(
+        self,
+        method: Literal["advance", "fallback"],
+        target_phase: TrainingPhase,
+    ):
+        attempts = target_phase.progress.phase_attempts
+        if attempts == 0:
+            return True
+        m_cap = method.capitalize()
+        box = QMessageBox()
+        box.setWindowTitle("Phase Progress Reset")
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setText(f"{m_cap} to Phase {target_phase.name} will reset progress for the phase")
+        button = box.addButton(f"{m_cap}", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.show()
+        box.exec()
+        return box.clickedButton() == button
+
     def on_previous_plan_phase(self):
         app_model = self._app_model
         plan = app_model.attached_plan
         if plan is None:
             return
+        phase_idx = plan.phases.index(plan.current_phase)
+        if phase_idx > 0:
+            target = plan.phases[phase_idx - 1]
+            if not self._check_target_next_or_previous_plan_phase("fallback", target):
+                return
         logger.info("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
         plan.fallback()
         self._refresh_prev_next_phases()
@@ -351,6 +375,11 @@ class MainWindow(QMainWindow):
         plan = app_model.attached_plan
         if plan is None:
             return
+        phase_idx = plan.phases.index(plan.current_phase)
+        if 0 <= phase_idx <= len(plan.phases) - 1:
+            target = plan.phases[phase_idx + 1]
+            if not self._check_target_next_or_previous_plan_phase("advance", target):
+                return
         logger.info("advance on plan %s (%s)", plan.plan_id, hex(id(plan)))
         plan.advance()
         self._refresh_prev_next_phases()
