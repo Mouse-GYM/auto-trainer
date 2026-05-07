@@ -784,10 +784,11 @@ class MainWindow(QMainWindow):
 
     def _set_reset_cage_clean_text(self):
         n_days = self._app_model.get_days_before_cage_clean()
-        txt = (
-            f"Mark the cage as cleaned.\n"
-            f"{n_days} days until next required cleaning"
-        )
+        if n_days < 0:
+            msg = f"Cage cleaning is overdue by {-n_days} days"
+        else:
+            msg = f"{n_days} days until next required cleaning"
+        txt = f"Mark the cage as cleaned.\n{msg}"
         self._reset_cage_clean_action.setToolTip(txt)
 
     def _create_actions(self):

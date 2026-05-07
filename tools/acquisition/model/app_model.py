@@ -411,6 +411,7 @@ class AppModel(ObservableObject):
         self.set_log_location(new_log_path)
         #
         self._current_day = new_day
+        #
         delay = (today_midnight + timedelta(days=1) - datetime.now()).total_seconds()
         # delay = 30  # uncomment for manual testing purpose
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
@@ -1180,7 +1181,7 @@ class AppModel(ObservableObject):
             self._inference.start(self._inference_queue)
 
         if not algo.algo_paused:
-            analysis.start()
+            analysis.restart()
 
         animal = self._selected_animal
         plan = (
@@ -1250,9 +1251,6 @@ class AppModel(ObservableObject):
     def _capture_stop(self):
 
         self._detach_training_plan()  # always
-
-        analysis = self._analysis
-        analysis.stop()
 
         self._inference.stop()
         self.hardware.disconnect()
@@ -1432,6 +1430,7 @@ class AppModel(ObservableObject):
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
         logger.notice("Created new daily timer in %.1f seconds", delay)
+        self._analysis.start()
 
     def on_close(self):
         logger.debug("AppModel.on_close")
@@ -1443,6 +1442,8 @@ class AppModel(ObservableObject):
         ):
             logger.debug("stopping timer %s", timer)
             timer.cancel()
+
+        self._analysis.stop()
 
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
         self.capture_stop()

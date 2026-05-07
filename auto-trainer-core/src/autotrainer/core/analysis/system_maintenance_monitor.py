@@ -4,8 +4,13 @@ from datetime import date, datetime, timedelta
 
 from autotrainer.api import ApiDetectorKind
 
+from autotrainer.core.logging import get_verbose_logger
+
 from .detector import BaseDetector
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
+
+
+logger = get_verbose_logger(__name__)
 
 
 class SystemMaintenanceMonitor(BaseDetector):
@@ -28,11 +33,6 @@ class SystemMaintenanceMonitor(BaseDetector):
         self._free_disk_space_engaged = False
         self._cage_need_clean_engaged = False
         self._cage_clean_next_day: date = date.today() + timedelta(days=1)
-        self._running = True  # force system maintenance monitor always "running"
-
-    def stop(self):
-        super().stop()
-        self._running = True  # keep
 
     @property
     def config(self) -> SystemMaintenanceConfig:
@@ -99,6 +99,7 @@ class SystemMaintenanceMonitor(BaseDetector):
         self.cage_need_clean_engaged = triggered
 
     def _check_state(self) -> Optional[float]:
+        logger.spam("checking state")
         cfg = self._config
         reasons = set()
         #
