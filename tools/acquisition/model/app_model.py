@@ -168,6 +168,8 @@ class AppModelEvents:
     on_error = Callable[[str, str], None]
     training_plan_deserialized = TrainingPlanDeserializedEvent
 
+    current_day_changed = Callable[[date], None]
+
 
 class AppModel(ObservableObject):
     status_file_path: ClassVar[Path] = Path("~/.config/Colorado/autotrainer_running_status.env")
@@ -176,6 +178,8 @@ class AppModel(ObservableObject):
     on_error: AppModelEvents.on_error
 
     training_plan_deserialized: AppModelEvents.training_plan_deserialized
+
+    current_day_changed: AppModelEvents.current_day_changed
 
     class Props(str, enum.Enum):
 
@@ -417,6 +421,7 @@ class AppModel(ObservableObject):
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
         logger.verbose("Created new daily timer in %.1f seconds", delay)
+        self.current_day_changed(new_day)
 
     def check_max_pellet_loaded(self):
         mon = self._analysis.system_maintenance_monitor

@@ -159,6 +159,7 @@ class MainWindow(QMainWindow):
         self._set_reset_cage_clean_text()
 
         app_model.property_changed += self._on_app_model_property_changed
+        app_model.current_day_changed += self._on_day_changed
         app_model.hardware.property_changed += self._on_hardware_property_changed
         app_model.inference.property_changed += self._on_inference_property_changed
         app_model.inference.detection_result_ready += self._on_inference_analysis_result_ready
@@ -333,6 +334,7 @@ class MainWindow(QMainWindow):
         prefs = self._preferences
         prefs.cage_clean_previous_day = date.today()
         prefs.save()
+        self._set_reset_cage_clean_text()
 
     def on_previous_plan_phase(self):
         app_model = self._app_model
@@ -698,7 +700,6 @@ class MainWindow(QMainWindow):
     def _check_diamond_triangle_config(self):
         if self._warned_invalid_dcs_config:
             return
-        algo = self._app_model.behavior.algorithm
         if not self.has_fully_valid_dcs:
             self._warned_invalid_dcs_config = True
             title = "Missing, or invalid, Diamond-Triangle config"
@@ -1349,6 +1350,10 @@ class MainWindow(QMainWindow):
             name = f"fa5s.arrow-alt-circle-{direction}"
             action.setIcon(qta.icon(name))
             action.setEnabled(can_do)
+
+    @invoke_method
+    def _on_day_changed(self, day: date):
+        self._set_reset_cage_clean_text()
 
     @invoke_method
     def _on_app_model_property_changed(self, name: str, value, prev_value):
