@@ -15,6 +15,7 @@ from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core.perf_monitor import PerfMonitor
 from autotrainer.core.observable_object import ObservableObject
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from .watchdog_monitor import WatchdogMonitor
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
 from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
@@ -91,8 +92,11 @@ class SensorAnalysis(ObservableObject):
             pellet_misplaced_detector=self._pellet_misplaced_monitor,
         )
 
+        self._watchdog_monitor = WatchdogMonitor()
+
         self._system_maintenance_monitor = SystemMaintenanceMonitor(config=SystemMaintenanceConfig())
-        self._system_fault_monitor = SystemFaultMonitor(config=SystemFaultConfig())
+        self._system_fault_monitor = SystemFaultMonitor(
+            config=SystemFaultConfig(), watchdog_monitor=self._watchdog_monitor)
 
         self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
@@ -119,6 +123,7 @@ class SensorAnalysis(ObservableObject):
             self._auto_tunnel_sweep_monitor,
             self._system_maintenance_monitor,
             self._system_fault_monitor,
+            self._watchdog_monitor,
         ]
 
     @property
@@ -210,6 +215,12 @@ class SensorAnalysis(ObservableObject):
     @property
     def system_fault_monitor(self) -> SystemFaultMonitor:
         return self._system_fault_monitor
+
+    @property
+    def watchdog_monitor(self) -> WatchdogMonitor:
+        return self._watchdog_monitor
+
+    #
 
     @property
     def is_headbar_switch_engaged(self):

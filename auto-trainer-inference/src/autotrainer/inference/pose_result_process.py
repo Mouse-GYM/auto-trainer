@@ -9,13 +9,14 @@ import threading
 import time
 from itertools import chain
 from multiprocessing import synchronize
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, TextIO, Tuple
 
 import h5py
 import numpy
 
-from autotrainer.core import ProjectInfo
+from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
@@ -75,6 +76,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
         mp_manager=None,
+        watchdog_perf_c: Synchronized,
     ):
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         log_dict_config = make_log_dict_config()
@@ -99,6 +101,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._monitored_parts_offsets = monitored_parts_offsets
         self._parts_offsets = 0
         self._stop_recorded = mp_ctx.Event()
+        self._watchdog_perf_c = watchdog_perf_c
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
@@ -392,6 +395,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         while self._is_running:
 
             perf_now = time.perf_counter()
+            self._watchdog_perf_c.value = perf_now
+
             if perf_now > perf_c_log_counters:
                 perf_c_log_counters = perf_now + 15
                 if logger.isEnabledFor(logging.DEBUG):

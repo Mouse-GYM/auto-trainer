@@ -55,6 +55,13 @@ def get_current_simulate_perf_now():
 
 def increase_simulate_perf_now(delay: float = 60):
     global fake_perf_now
+    if delay > 1:
+        # eventually try to help mitigate possible issue with background thread(s) doing sleep and
+        # checking get_perf_now() vs some previous saved perf_now.
+        while delay > 1:
+            fake_perf_now += 0.5
+            delay -= 0.5
+            # but this does not really solve the issue, this is more for emphase it
     fake_perf_now += delay
 
 

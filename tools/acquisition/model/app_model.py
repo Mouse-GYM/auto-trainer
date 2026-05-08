@@ -171,6 +171,14 @@ class AppModelEvents:
     current_day_changed = Callable[[date], None]
 
 
+class WatchdogItems(str, enum.Enum):
+
+    DEVICE_READER = "device_reader"
+    DEVICE_WRITER = "device_writer"
+    POSE_PROCESS = "pose_process"
+    POSE_DATA_MONITOR_PROC = "pose_data_monitor_proc"
+
+
 class AppModel(ObservableObject):
     status_file_path: ClassVar[Path] = Path("~/.config/Colorado/autotrainer_running_status.env")
 
@@ -386,6 +394,7 @@ class AppModel(ObservableObject):
 
         sensor_analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
         sensor_analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
+        sensor_analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
 
         self._timer_send_status = no_op_timer
 
@@ -1004,12 +1013,14 @@ class AppModel(ObservableObject):
         return self.capture_stop(**kwargs)
 
     def capture_start(
-            self,
-            *,
-            target_status: AppModelStatus = AppModelStatus.ACQUIRING,
-            wait_connected: bool = True,
+        self,
+        *,
+        target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+        wait_connected: bool = True,
     ) -> bool:
         """Request to start the acquisition"""
+        if target_status == AppModelStatus.IDLE:
+            raise ValueError("AppModelStatus.IDLE not accepted as target for capture_start")
         with self.app_lock:
             before_status = self._status
             if target_status == before_status:
@@ -1152,7 +1163,9 @@ class AppModel(ObservableObject):
         hard.connect(self._system_message_handler.input_queue)
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
-            timeout = 5
+            timeout = 3
+            # full establishement of connection to/from device should be very fast actually, but not immediate,
+            # so this timeout.
             p_end = time.perf_counter() + timeout
             while True:
                 for tok in hard.pending_tokens:
@@ -1174,6 +1187,20 @@ class AppModel(ObservableObject):
                     return False
                 time.sleep(0.05)
         logger.info("finished connecting hardware")
+        #
+        watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog
+        watchdog_mon_register(WatchdogItems.DEVICE_READER, lambda: self._hardware.watchdog_reader_perf_c)
+        watchdog_mon_register(WatchdogItems.DEVICE_WRITER, lambda: self._hardware.watchdog_writer_perf_c)
+        
+        for cam in self._cameras:
+            if cam.is_enabled:
+                watchdog_mon_register(f"camera.{cam.name}", lambda cam=cam: cam.watchdog_capture_perf_c)
+
+        if __debug__ and os.getenv("_AUTOTRAINER_TEST_WATCHDOG") == "1":
+            def fake_watchdog(t_end):
+                return t_end
+            watchdog_mon_register("test-watchdog", lambda t=time.perf_counter() + 180: fake_watchdog(t))
+
         # we always be/go at home on acquisition start, so:
         self._behavior.system_machine.pellet.move_home(force=True)
 
@@ -1184,6 +1211,8 @@ class AppModel(ObservableObject):
         if self._inference.is_enabled:
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
+            watchdog_mon_register(WatchdogItems.POSE_DATA_MONITOR_PROC,
+                                  lambda: self._inference.watchdog_monitor_data_proc_perf_c)
 
         if not algo.algo_paused:
             analysis.restart()
@@ -1255,12 +1284,16 @@ class AppModel(ObservableObject):
 
     def _capture_stop(self):
 
-        self._detach_training_plan()  # always
+        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
+        for item in WatchdogItems:
+            watchdog_mon_unregister(item)
 
         self._inference.stop()
         self.hardware.disconnect()
 
         for camera in self._cameras:
+            watchdog_mon_unregister(f"camera.{camera.name}")
+
             if not camera.is_primary:
                 logger.verbose("notifying end to %s", camera.name)
                 camera.on_capture_notify_end()
@@ -1315,7 +1348,7 @@ class AppModel(ObservableObject):
         if location is None:
             location = self.get_config_location()
 
-        configuration = self.get_config_from_location(location)
+        configuration: SystemConfiguration = self.get_config_from_location(location)
 
         prebuffer_duration = 0
 
@@ -1359,6 +1392,8 @@ class AppModel(ObservableObject):
 
         self.inference.load_configuration(configuration.inference)
         self.behavior.load_configuration(configuration.behavior)
+
+        self._analysis.watchdog_monitor.config = configuration.watchdog
 
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
@@ -1609,6 +1644,16 @@ class AppModel(ObservableObject):
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()
 
+    def _on_watchdog_property_changed(self, name, value, old_value):
+        wd_mon = self._analysis.watchdog_monitor
+        if name == wd_mon.IS_ENGAGED:
+            engaged_d = wd_mon.engaged_watchdogs
+            if value and not old_value:  # watchd.is_engaged:
+                self.on_error("Watchdog timeout",
+                              f"Fatal error: element(s) timedout:\n\n"
+                              f"{engaged_d}\n\n"
+                              f"Application shall be restarted fully.")
+
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
@@ -1680,6 +1725,13 @@ class AppModel(ObservableObject):
             new_is_live = value == InferenceStatus.live
             if new_is_live:
                 self._p_inference_live_begin = time.perf_counter()
+
+            if new_is_live or value == InferenceStatus.intersession:
+                self._analysis.watchdog_monitor.register_watchdog(
+                    WatchdogItems.POSE_PROCESS, lambda: self._inference.watchdog_pose_process_perf_c)
+            else:
+                self._analysis.watchdog_monitor.unregister_watchdog(WatchdogItems.POSE_PROCESS)
+
             left_cam = self._left_camera
             left_cam.display_dots_detection = new_is_live
             self._right_camera.display_dots_detection = new_is_live
@@ -2120,9 +2172,9 @@ class AppModel(ObservableObject):
         logger.debug("on_pellet_sent: status=%s pellet_recently_seen=%s sel=%s",
                      status, recent, selected)
         if (
-                selected is not None
-                and recent
-                and status == AppModelStatus.ANIMAL_IN_TRAINING
+            selected is not None
+            and recent
+            and status == AppModelStatus.ANIMAL_IN_TRAINING
         ):
             algo.increase_pellets_presented(1)
             # now recopy the values from algo:

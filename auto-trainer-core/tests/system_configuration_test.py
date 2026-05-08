@@ -158,6 +158,7 @@ def _fill_v0():
     for k, v in behavior_default_config_dict['head_clamp'].items():
         if k not in v0_headclamp:
             v0_headclamp[k] = copy.deepcopy(v)
+    v0_expected_result_config["watchdog"] = current_default_config_dict["watchdog"]
 
 _fill_v0()
 
@@ -267,6 +268,7 @@ def test_load_version_1():
         'inference': {'is_enabled': True,
                       'pose_model_location': '/pose_model_path'},
         'persistence': {'output_location': '/output_location_path'},
+        'watchdog': current_default_config_dict["watchdog"],
         'version': SystemConfiguration.version}
 
 

@@ -12,6 +12,19 @@ logger = get_verbose_logger(__name__)
 class DeviceConnectionProtocol(Protocol):
 
     @property
+    def watchdog_perf_c(self) -> float:
+        """The alive/watchdog perf-counter of the related device"""
+        return min(self.watchdog_reader_perf_c, self.watchdog_writer_perf_c)
+
+    @property
+    def watchdog_reader_perf_c(self) -> float:
+        """The last alive/watchdog perf-counter of the related device reader thread"""
+
+    @property
+    def watchdog_writer_perf_c(self) -> float:
+        """The last alive/watchdog perf-counter of the related device writer thread"""
+
+    @property
     def device(self) -> Device:
         """Get the associated physical device"""
         raise NotImplementedError

@@ -1,6 +1,8 @@
+import ctypes
 import multiprocessing.pool
 import os
 import queue
+import math
 import signal
 import threading
 import time
@@ -68,9 +70,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._pose_parts: List[str] = []
         self._calib_dir = calib_dir
 
-        self._msg_thread = None
+        self._msg_thread: Optional[threading.Thread] = None
+
+        self._data_monitor_watchdog_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
         self._data_monitor_proc: Optional[InferenceMonitorDataProc] = None
 
+        self._pose_process_watchdog_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
         self._pose_process: Optional[PoseProcess] = None
         self._is_predict_enabled = True
         self._status = InferenceStatus.stopped
@@ -93,6 +98,20 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             },
         }
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
+
+    @property
+    def watchdog_pose_process_perf_c(self) -> float:
+        pose_proc = self._pose_process
+        if pose_proc is not None:
+            return self._pose_process_watchdog_perf_c.value
+        return math.nan
+
+    @property
+    def watchdog_monitor_data_proc_perf_c(self) -> float:
+        proc = self._data_monitor_proc
+        if proc is not None:
+            return self._data_monitor_watchdog_perf_c.value
+        return math.nan
 
     @property
     def project(self) -> ProjectInfo:
@@ -231,13 +250,15 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             )
 
         if self._msg_thread is None:
-            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
-            self._msg_thread.start()
+            thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
+            thread.start()
+            self._msg_thread = thread
 
         data_monitor_proc = self._data_monitor_proc
         if data_monitor_proc is not None and not data_monitor_proc.is_alive():
             data_monitor_proc.join(3)
             data_monitor_proc = None
+
         if data_monitor_proc is None:
             data_monitor_proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
@@ -247,6 +268,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 cmd_ack_event=self._data_monitor_cmd_ack_event,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
+                watchdog_perf_c=self._data_monitor_watchdog_perf_c,
                 mp_manager=self._mp_manager,
             )
             data_monitor_proc.start()
@@ -263,6 +285,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             model_location=self._model_location,
             stop_recorded_event=data_monitor_proc.stop_recorded,
             offline_input_event_cb_ack=self._mp_manager.Event(),
+            watchdog_perf_c=self._pose_process_watchdog_perf_c,
         )
 
         self._pose_process.start()

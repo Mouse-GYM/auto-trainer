@@ -1,11 +1,11 @@
+import ctypes
+import math
 import multiprocessing
 import os
 import pathlib
 import time
-import logging
 from multiprocessing.context import BaseContext
 from multiprocessing.sharedctypes import (
-    SynchronizedArray,
     SynchronizedString,
     Synchronized,
 )
@@ -19,7 +19,8 @@ import numpy
 from numpy import ndarray
 
 from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
-    CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger
+    CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger, \
+    get_perf_now
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -94,7 +95,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._presence_detection = presence_detection
         self._synced_cam_recording = synced_cam_recording
         self._synced_cam_frame_index = synced_cam_frame_index
-        
 
         self._camera_source: CaptureCameraAttrs = CaptureCameraAttrs(name="", url="")
         self._camera_properties = {}
@@ -106,10 +106,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
         self._msg_queue = msg_queue  # for sending "status" message(s) to main process
         self._video_command_queue = mp_ctx.Queue(maxsize=64)
-        self._video_status = mp_ctx.Value("i", CaptureProcessStatus.UNKNOWN)
-        self._video_frame_index = mp_ctx.Value("i", -1)
+        self._video_status = mp_ctx.Value(ctypes.c_int, CaptureProcessStatus.UNKNOWN)
+        self._video_frame_index = mp_ctx.Value(ctypes.c_int64, -1)
         self._video_image_queue: Optional[FixedArrayQueue] = None
-        self._errors: SynchronizedString = mp_ctx.Array("c", bytes(512))
+        self._errors: SynchronizedString = mp_ctx.Array(ctypes.c_char, bytes(512))
+        self._watchdog_capture_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
         self._shape = None
 
         self._cur_conf: CameraConfiguration = CameraConfiguration()
@@ -140,6 +141,13 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
+
+    @property
+    def watchdog_capture_perf_c(self) -> float:
+        proc = self._video_capture
+        if proc is None:
+            return math.nan
+        return self._watchdog_capture_perf_c.value
 
     @property
     def capture_process_status(self) -> CaptureProcessStatus:
@@ -339,6 +347,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                 is_primary=self._is_primary,
                 msg_queue=self._msg_queue,
                 record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
+                watchdog_perf_c=self._watchdog_capture_perf_c,
                 synced_cam_record_enabled=self._synced_cam_recording,
                 synced_cam_frame_index=self._synced_cam_frame_index,
             )
@@ -348,10 +357,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
                                                       image_interval=image_interval)
-            self._video_capture = VideoCapture(capture_attrs, record_properties,
-                                               project_info=self._project)
-
-            self._video_capture.start()
+            self._watchdog_capture_perf_c.value = time.perf_counter()  # get_perf_now()
+            vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
+                                                             project_info=self._project)
+            vid_capture.start()
 
         return True
 

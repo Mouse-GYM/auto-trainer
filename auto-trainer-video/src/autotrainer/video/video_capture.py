@@ -15,7 +15,7 @@ from typing import Callable, Dict, Union, Optional, List, Tuple
 
 import numpy
 
-from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind
+from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind, get_perf_now
 from autotrainer.core.logging import get_verbose_logger, set_logger_level, make_log_dict_config, setup_logging, install_log_exception_hook
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.fixed_array_queue import BufferResult
@@ -106,10 +106,13 @@ class CaptureAttrs:
     """Camera attributes for the capture process"""
 
     errors: SynchronizedString
-    """Multiprocessing string value for communicating errors - value is read-only to callers"""
+    """Shared string value for communicating errors - value is read-only to callers"""
+
+    watchdog_perf_c: Optional[Synchronized[float]] = None
+    """Watchdog shared perf counter"""
 
     synced_cam_record_enabled: Optional[Synchronized[bool]] = None
-    """Multiprocessing bool value for communicating recording enabled from primary cam to secondary cam(s)"""
+    """Shared bool value for communicating recording enabled from primary cam to secondary cam(s)"""
 
     synced_cam_frame_index: Optional[Synchronized[int]] = None
     """Multiprocessing int value for communicating synced frame index between cameras"""
@@ -320,13 +323,22 @@ class VideoCapture(Process):
         record_q_list = self._record_queue_list
         record_q = self._record_queue  # record queue to file
         capture = camera.capture
-        frame_period = 1 / camera.fps
         net_q_put = None if net_q is None else net_q.put
         net_q_idx = None if net_q_put is None else attrs.inference.index  # although is same than self._camera_idx
         image_queue_delay = self._image_queue_frame_delay
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         vid_detection = self._video_detection
-
+        p_prev_watchdog = -math.inf
+        if attrs.watchdog_perf_c is not None:
+            def set_watchdog(value):
+                nonlocal p_prev_watchdog
+                if value - p_prev_watchdog > 0.1:
+                    attrs.watchdog_perf_c.value = value
+                    p_prev_watchdog = value
+        else:
+            def set_watchdog(_):
+                """Void set_watchdog without shared value"""
+        #
         frames_prebuffer_list: List[Tuple[numpy.ndarray, Union[int, float], float, float, int]] = []
         #                           frame, frame_when, time, perf_now, frame-idx
         def update_frames_prebuffer(f, fw, t, p, fidx):
@@ -373,6 +385,7 @@ class VideoCapture(Process):
 
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
+        set_watchdog(time.perf_counter())
 
         while self._is_running:
             prev_frame_when_secs = when_secs
@@ -390,7 +403,9 @@ class VideoCapture(Process):
                 is_record_active = self._is_record_active
                 # secondary cam reads this value from the primary cam shared flag below.
 
-            t_perf_now = time.perf_counter()
+            perf_now = time.perf_counter()
+            set_watchdog(perf_now)
+
             try:
                 if not self._is_capturing:
                     time.sleep(0.001)
@@ -448,9 +463,9 @@ class VideoCapture(Process):
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
-                    if t_perf_now >= next_t_image_q:
+                    if perf_now >= next_t_image_q:
                         if image_queue_delay is not None:
-                            next_t_image_q = t_perf_now + image_queue_delay
+                            next_t_image_q = perf_now + image_queue_delay
                         if len(numpy.shape(frame)) < 3:
                             img_q.put(frame)
                         else:
