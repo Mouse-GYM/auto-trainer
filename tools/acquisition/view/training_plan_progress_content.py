@@ -25,7 +25,12 @@ class TrainingPlanProgressContent(CardWidget):
     phase_desc_truncate_length = 92
 
     def __init__(self):
-        super().__init__(title="Protocol Progress")
+        header_right_layout = QHBoxLayout()
+        header_right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        header_right_layout.setContentsMargins(0, 0, 0, 0)
+        self._header_cur_phase_label = QLabel("")
+        header_right_layout.addWidget(self._header_cur_phase_label)
+        super().__init__(title="Protocol Progress", header_right_layout=header_right_layout)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._plan_card_by_plan_id: Dict[str, Tuple[CardWidget, QScrollArea]] = {}
         self._plans_by_plan_id: Dict[str, TrainingPlan] = {}
@@ -103,6 +108,7 @@ class TrainingPlanProgressContent(CardWidget):
         logger.verbose("Setting training plan progress to %s", plan)
         if plan is None:
             for label in (
+                self._header_cur_phase_label,
                 self._started_label,
                 self._time_in_training_label,
                 self._sessions_label,
@@ -113,6 +119,14 @@ class TrainingPlanProgressContent(CardWidget):
             ):
                 label.setText("")
             return
+        #
+        cur_phase = plan.current_phase
+        if cur_phase is None:
+            cur_phase_nr = "NA"
+        else:
+            cur_phase_nr = 1 + plan.phases.index(cur_phase)
+        self._header_cur_phase_label.setText(f"Phase {cur_phase_nr} of {len(plan.phases)}")
+        #
         value = plan.training_start_timestamp
         self._started_label.setText(
             "NA" if value is None

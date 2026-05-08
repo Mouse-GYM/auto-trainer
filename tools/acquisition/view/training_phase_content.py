@@ -21,10 +21,14 @@ some_light_gray = "#C7C5C5"
 
 class TrainingPhaseCard(CardWidget):
 
+    # TODO: the constructor takes the current phase: convert to constructor without phase,
+    #  and add a set_training_phase method to allow update in-place,
+    #  instead of having to fully reconstruct always the card.
+
     def __init__(self, phase: TrainingPhase):
         super().__init__(title="Current Phase")
-        self._phase = phase
-        label = QLabel(phase.name)
+
+        label = self._header_right_label = QLabel(phase.name)
         self.header.setRightContent(label)
 
         widget = QWidget()
@@ -36,7 +40,7 @@ class TrainingPhaseCard(CardWidget):
         layout.setContentsMargins(6, 4, 2, 0)
         layout.setSpacing(4)
 
-        label = QLabel(phase.description)
+        label = self._description_label = QLabel(phase.description)
         label.setContentsMargins(0, 0, 0, 0)
         label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         label.setStyleSheet("color: gray")
@@ -112,21 +116,26 @@ class TrainingPhaseCard(CardWidget):
 
         r = c = 0
         grid.addWidget(QLabel("Pellet Delivery"), r, c)
-        grid.addWidget(QLabel("On" if phase.is_pellet_delivery_enabled else "Off"), r, c + 1)
+        label = self._device_pellet_delivery_enabled_label = QLabel("On" if phase.is_pellet_delivery_enabled else "Off")
+        grid.addWidget(label, r, c + 1)
         r += 1
 
         if phase.is_pellet_delivery_enabled:
             grid.addWidget(QLabel("Pellet Cover"), r, c)
-            grid.addWidget(QLabel("On" if phase.is_pellet_cover_enabled else "Off"), r, c + 1)
+            label = self._device_pellet_cover_enabled_label = QLabel("On" if phase.is_pellet_cover_enabled else "Off")
+            grid.addWidget(label, r, c + 1)
             r += 1
 
-        grid.addWidget(QLabel("Magnet Starting Intensity"), r, c)
-        hbox = QHBoxLayout()
-        hbox.addWidget(QLabel(str(phase.magnet_intensity)))
-        hbox.addWidget(self._make_unit_label("%"))
-        hbox.setStretch(0, 1)
-        grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
-        r += 1
+        magnet_intensity = phase.magnet_intensity
+        if not phase.use_magnet_baseline_intensity and magnet_intensity is not None:
+            grid.addWidget(QLabel("Magnet Intensity"), r, c)
+            hbox = QHBoxLayout()
+            label = self._device_magnet_start_intensity_label = QLabel(str(magnet_intensity))
+            hbox.addWidget(label)
+            hbox.addWidget(self._make_unit_label("%"))
+            hbox.setStretch(0, 1)
+            grid.addLayout(hbox, r, c + 1, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+            r += 1
 
         for coord, value in zip("XYZ", (phase.send_x, phase.send_y, phase.send_z)):
             if value is not None:
@@ -183,11 +192,15 @@ class TrainingPhaseCard(CardWidget):
         layout.addLayout(grid)
         r = c = 0
         #
-        r += 1
+        if phase.use_magnet_baseline_intensity:
+            grid.addWidget(QLabel("Use Baseline Intensity"), r, c)
+            grid.addWidget(QLabel("On"), r, c + 1)
+            r += 1
+        #
         grid.addWidget(QLabel("Pellet Shift"), r, c)
         grid.addWidget(QLabel("On" if phase.is_pellet_shift_enabled else "Off"), r, c + 1)
         r += 1
-
+        #
         grid.addWidget(QLabel("Auto-Clamp"), r, c)
         grid.addWidget(QLabel("On" if phase.is_auto_clamp_enabled else "Off"), r, c + 1)
         r += 1
@@ -228,6 +241,9 @@ class TrainingPhaseContent(StackedWidget):
         if phase is None:
             self.setCurrentWidget(self._empty_card)
             return
+
+        phase.use_magnet_baseline_intensity
+        phase.magnet_intensity
 
         card = self._phase_card_by_phase_id.get(phase.phase_id)
         if card is not None and not force_refresh:

@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 from PySide6 import QtCore
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QGridLayout, QLayout, QSizePolicy, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QLayout, QBoxLayout, QVBoxLayout
 
 from .CardFooter import CardFooter
 from .CardHeader import CardHeader
@@ -14,13 +14,14 @@ _DEFAULT_STYLE = "border-color: #ddd; border-width: 1px; border-style: solid; bo
 
 
 class CardWidget(QWidget):
+
     def __init__(
         self,
         background_color: str = "white",
         title: str = "",
         header_background_color: Optional[str] = None,
         content_layout: Optional[QLayout] = None,
-        header_right_layout: Optional[Union[QWidget, QLayout]] = None,
+        header_right_layout: Optional[Union[QWidget, QLayout, QBoxLayout]] = None,
     ):
         super().__init__()
 
