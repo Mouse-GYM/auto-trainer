@@ -1,4 +1,5 @@
 import logging.config
+from multiprocessing.sharedctypes import Synchronized
 import queue
 import signal
 import threading
@@ -78,6 +79,7 @@ class PoseProcess(Process):
         msg_queue: Queue,
         stop_recorded_event: synchronize.Event,
         offline_input_event_cb_ack: synchronize.Event,
+        watchdog: Synchronized,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -104,6 +106,7 @@ class PoseProcess(Process):
         self._data_queue = data_queue
         self._stop_recorded_event = stop_recorded_event
         self._offline_input_event_cb_ack = offline_input_event_cb_ack
+        self._watchdog = watchdog
 
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
@@ -292,13 +295,13 @@ class PoseProcess(Process):
         i_q: Optional[FixedArrayMultiQueue] = live_input
 
         def get_live_input():
-            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.01)
+            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.25)
             return res
 
         def get_offline_input():
             nonlocal frame_buffer, frames_indices
             try:
-                frame_buffer, frames_indices = offline_input.get_output(timeout=0.1)
+                frame_buffer, frames_indices = offline_input.get_output(timeout=0.25)
             except queue.Empty:
                 if offline_input.live_requested:
                     self._set_process_live(reason="live-requested")
@@ -339,6 +342,8 @@ class PoseProcess(Process):
 
         while self._is_running:
             p_now = get_perf_now()
+
+            self._watchdog.value = p_now
 
             if prev_mode != self._mode:
                 logger.verbose("Detected change of mode: %s", self._mode)

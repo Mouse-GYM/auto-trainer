@@ -244,6 +244,7 @@ class CanDevice(Device):
 
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
+        self._commands_handler_watchdog_perf_c = -math.inf
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
         self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
@@ -493,6 +494,10 @@ class CanDevice(Device):
             Acknowledge: self._handle_ack,
         }
 
+    @property
+    def writer_watchdog_perf_c(self) -> float:
+        return self._commands_handler_watchdog_perf_c
+
     def _put_to_cmd_queue(self, obj):
         cmd_thread = self._commands_handler_thread
         # cmd thread is started on connect()
@@ -555,11 +560,18 @@ class CanDevice(Device):
             if not success:
                 raise RuntimeError("too many failure trying _perform_next_compound_step")
 
+        p_before_loop = get_perf_now()
         while True:
             if has_read_from_queue:
                 input_q.task_done()
                 has_read_from_queue = False
-            p_now = time.perf_counter()
+
+            p_now = get_perf_now()
+            if __debug__ and os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH") == "1":
+                if p_now > p_before_loop + int(os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH_TIMEOUT", "180")):
+                    1 / 0
+
+            self._commands_handler_watchdog_perf_c = p_now
             # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
                 timeout = 0.5
