@@ -37,7 +37,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     IS_ENABLED = "is_enabled"
     IS_PREDICT_ENABLED = "is_predict_enabled"
     MODEL_LOCATION = "model_location"
-    INTERSESSION_WAIT_TIME = "intersession_wait_time"
 
     def __init__(self,
         pose_algorithm: PoseAlgorithm,
@@ -55,7 +54,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._cmd_queue_lock = threading.Lock()  # to ensure ack are correct respectively
         self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
         self._cmd_queue_ack = mp_ctx.Event()
-        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)
+        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)  # msg queue for messages from pose-process and from data-monitor process to main process
         self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
         self._data_monitor_cmd_ack_event = mp_ctx.Event()
 
@@ -79,8 +78,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frames_per_camera = 0
         self._frame_width = 1
         self._frame_height = 1
-
-        self._intersession_wait_time: float = 1.0
 
         self._project: Optional[ProjectInfo] = None
         self._intersession_block: Optional[IntersessionBlock] = None
@@ -148,15 +145,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def model_location(self, value: str):
         prev, self._model_location = self._model_location, value
         self._on_property_changed(self.MODEL_LOCATION, value, prev)
-
-    @property
-    def intersession_wait_time(self) -> float:
-        return self._intersession_wait_time
-
-    @intersession_wait_time.setter
-    def intersession_wait_time(self, value: float):
-        prev, self._intersession_wait_time = self._intersession_wait_time, value
-        self._on_property_changed(self.INTERSESSION_WAIT_TIME, value, prev)
 
     @property
     def status(self) -> InferenceStatus:
@@ -389,13 +377,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def load_configuration(self, configuration: InferenceConfiguration):
         self.model_location = configuration.pose_model_location
         self.is_enabled = configuration.is_enabled
-        self.intersession_wait_time = configuration.intersession_wait_time
 
     def save_configuration(self) -> InferenceConfiguration:
         return InferenceConfiguration(
             pose_model_location=self.model_location,
             is_enabled=self.is_enabled,
-            intersession_wait_time=self.intersession_wait_time
         )
 
     def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):

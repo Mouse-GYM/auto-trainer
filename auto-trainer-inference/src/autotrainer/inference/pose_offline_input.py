@@ -330,9 +330,7 @@ class OfflineInputProcess:
         # sometimes up to several seconds (4-5).
         # wait that we get the event from monitor data queue closing its write side to live files:
         if wait_stop_recorded:
-            perf_timeout = (
-                get_perf_now() + 10
-            )  # default intersession_wait_time might be too small
+            perf_timeout = get_perf_now() + 10
             logger.debug("waiting stop_recorded on %s", self._stop_recorded)
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
