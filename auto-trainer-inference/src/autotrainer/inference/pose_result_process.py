@@ -426,6 +426,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 continue
 
+
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s",
                                mode, frames_indices.tolist())
@@ -551,8 +552,17 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                                                 columns=pose_algo.pose_result_columns)
                                 writes_h5_live_durations.append(write_duration)
 
-                    if skip_next_pose_data > 0:
+                    if skip_next_pose_data > 0 and cnt_data_received % 2 == 0:
                         skip_next_pose_data -= 1
+                        continue
+
+                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
+                        # mid_async_res = async_data_tasks[len(async_data_tasks) // 2]  # type: multiprocessing.pool.ApplyResult
+                        logger.warning(
+                            "too many pending async processing data %s",
+                            len(async_data_tasks),
+                        )
+                        skip_next_pose_data += 3
                         continue
 
                     if skip_update:
@@ -565,13 +575,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         continue
 
                     async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
-                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
-                        mid_async_res = async_data_tasks[len(async_data_tasks) // 2]  # type: multiprocessing.pool.ApplyResult
-                        logger.warning("too many pending async processing data, waiting middle one..")
-                        try:
-                            mid_async_res.wait()
-                        except Exception as err:
-                            logger.exception("Error on wait async res: %s", err)
 
                 elif mode == InferenceMode.Offline:
 
