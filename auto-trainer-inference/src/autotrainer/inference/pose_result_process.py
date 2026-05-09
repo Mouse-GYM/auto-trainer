@@ -440,12 +440,18 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
-                    skip_update = data_queue_size > 3
+                    async_size = len(async_data_tasks)
+                    skip_update = data_queue_size > 3 or async_size > 6
                     if skip_update:
-                        logger.warning("data queue size=%s ; skip_update", data_queue_size)
+                        skip_next_pose_data += 1 + async_size // 3
+                        logger.warning("data queue size=%s async=%s ; skip_next=%s",
+                                       data_queue_size, len(async_data_tasks), skip_next_pose_data)
                     t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
+                else:
+                    skip_update = False
             else:
                 skip_update = False
+                skip_next_pose_data = 0
 
             next_prev_mode = mode
 
@@ -557,11 +563,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         continue
 
                     if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
-                        # mid_async_res = async_data_tasks[len(async_data_tasks) // 2]  # type: multiprocessing.pool.ApplyResult
-                        logger.warning(
-                            "too many pending async processing data %s",
-                            len(async_data_tasks),
-                        )
                         skip_next_pose_data += 3
                         continue
 
