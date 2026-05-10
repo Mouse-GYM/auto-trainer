@@ -156,7 +156,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         else:
             logger.debug("previous pool closed")
 
-    def _init_process_pool(self, pose_algo):
+    def _init_process_pool(self, pose_algo: PoseAlgorithm):
         self._close_process_pool()
         logger.notice("Initializing new workers process pool")
         self._process_pool = get_mp_ctx().Pool(
@@ -441,12 +441,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
                     async_size = len(async_data_tasks)
-                    skip_update = data_queue_size > 3 or async_size > 6
+                    skip_update = data_queue_size > 2 or async_size > 6 or data_queue_size + async_size > 5
                     if skip_update:
-                        skip_next_pose_data += 1 + async_size // 3
+                        skip_next_pose_data = 2 + (data_queue_size + async_size) // 3
                         logger.warning("data queue size=%s async=%s ; skip_next=%s",
                                        data_queue_size, len(async_data_tasks), skip_next_pose_data)
-                    t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
+                    t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 2.5)
                 else:
                     skip_update = False
             else:
@@ -558,15 +558,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                                                 columns=pose_algo.pose_result_columns)
                                 writes_h5_live_durations.append(write_duration)
 
+                    if skip_update:
+                        continue
+
                     if skip_next_pose_data > 0 and cnt_data_received % 2 == 0:
                         skip_next_pose_data -= 1
-                        continue
-
-                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
-                        skip_next_pose_data += 3
-                        continue
-
-                    if skip_update:
                         continue
 
                     if (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).any():

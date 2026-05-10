@@ -202,6 +202,7 @@ class PoseAlgorithm:
             [self._hands_input_parts, axis_labels], names=['bodyparts', 'coordinates']
         )
         #
+        self._3d_names = ["bodyparts", "coords"]
         self._measure_offset_parts = [
             SceneElement.Star,
             SceneElement.Triangle,
@@ -212,10 +213,9 @@ class PoseAlgorithm:
         ]
         self._measure_offset_parts_columns = pandas.MultiIndex.from_product(
             [self._measure_offset_parts, axis_labels],
-            names=["bodyparts", "coords"]
+            names=self._3d_names,
         )
         self._3d_axis_labels = ("x", "y", "z", "p")
-        self._3d_names = ["bodyparts", "coords"]
         self._columns_3d = pandas.MultiIndex.from_product(
             [self._measure_offset_parts, self._3d_axis_labels],
             names=self._3d_names,
