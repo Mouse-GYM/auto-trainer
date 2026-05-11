@@ -571,10 +571,14 @@ class CanDevice(Device):
                 if p_now > p_before_loop + int(os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH_TIMEOUT", "180")):
                     1 / 0
 
-            self._commands_handler_watchdog_perf_c = time.perf_counter()  # p_now
+            # always update watchdog_perf_c:
+            # NB: not using "p_now" but real time.perf_counter on purpose,
+            # otherwise tests can fail because of patched/simulated one which is used.
+            self._commands_handler_watchdog_perf_c = time.perf_counter()
+
             # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
-                timeout = 0.5
+                timeout = 0.25
             else:
                 timeout = 0.001  # there might be next-compound to execute, or wait for uuid-ack
             # what can anyway unblocks, is receiving anything, including _uuid_ack, in this input_q:
