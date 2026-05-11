@@ -683,7 +683,7 @@ class CanDevice(Device):
                 assert found_board_with_uuid_ack is not None
                 steps = found_board_with_uuid_ack.compound_steps
                 if steps:
-                    target_board = boards_pending_ctx[self._find_steps_next_board(steps)]
+                    target_board = boards_pending_ctx[self._find_steps_next_board(kind, steps)]
                     if target_board is not found_board_with_uuid_ack and not target_board.is_available():
                         # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
@@ -909,11 +909,12 @@ class CanDevice(Device):
         return self._perform_next_compound_step(move_steps)
 
     def _find_step_board(self, step):
-        if 'x' in step or 'y' in step or 'z' in step:
-            motor = (
-                Motor.PELLET_X_MOTOR if 'x' in step
-                else Motor.PELLET_Y_MOTOR if 'y' in step
-                else Motor.PELLET_Z_MOTOR)
+        if 'x' in step:
+            motor = Motor.PELLET_X_MOTOR
+        elif 'y' in step:
+            motor = Motor.PELLET_Y_MOTOR
+        elif 'z' in step:
+            motor = Motor.PELLET_Z_MOTOR
         elif 'load_arm' in step:
             motor = Motor.PELLET_LOAD_SERVO
         elif 'barrier_arm' in step:
@@ -951,22 +952,24 @@ class CanDevice(Device):
             return None
         return target_of_motor(motor)
 
-    def _find_steps_next_board(self, steps):
+    def _find_steps_next_board(self, kind, steps) -> Optional[Target]:
+        if len(steps) == 0:
+            return None
         for step in steps:
             tgt = self._find_step_board(step)
             if tgt is not None:
                 return tgt
-        raise ValueError(f"Found no target board for steps: {steps}")
+        raise ValueError(f"Found no target board for kind={kind} steps: {steps}")
 
     def _find_command_next_board(self, kind, data) -> Optional[Target]:
         # NB: following is kind of fragile:
         # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
             kind, steps = data
-            return self._find_steps_next_board(steps)
+            return self._find_steps_next_board(kind, steps)
         elif kind is _retry_compound:
             kind, step, steps = data
-            return self._find_steps_next_board([step] + steps)
+            return self._find_steps_next_board(kind, [step] + steps)
         elif kind is _retry_full:
             kind, data = data
             return self._find_command_next_board(kind, data)
@@ -1334,6 +1337,7 @@ class CanDevice(Device):
                     {'home': m}
                     for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
                 ]
+                logger.debug("initiated home steps: %s", compound_movements)
                 success = self._interface.stepper_home(motor)
 
             else:
