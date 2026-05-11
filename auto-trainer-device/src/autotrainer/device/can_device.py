@@ -960,7 +960,7 @@ class CanDevice(Device):
             tgt = self._find_step_board(step)
             if tgt is not None:
                 return tgt
-        raise ValueError(f"Found no target board for steps: {steps}")
+        raise ValueError("Found no target board for steps")
 
     def _find_command_next_board(self, kind, data) -> Optional[Target]:
         # NB: following is kind of fragile:
