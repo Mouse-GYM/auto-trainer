@@ -804,7 +804,6 @@ class CanDevice(Device):
                     logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
                 #
                 prev_command = self._prev_command
-                self._prev_command = None
                 if prev_command is None:  # given compound step do set it itself
                     prev_command = (_retry_full, (kind, data), ctx)
                 else:
