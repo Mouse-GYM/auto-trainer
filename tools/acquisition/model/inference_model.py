@@ -246,7 +246,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 processes=1,  # we only need 1 atm
                 initializer=self._pool_init,
                 initargs=(make_log_dict_config(),),
-                maxtasksperchild=int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
+                maxtasksperchild=int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 64)),
             )
 
         if self._msg_thread is None:

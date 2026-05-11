@@ -163,9 +163,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             processes=4,
             initializer=pool_init_process_pose_data,
             initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
-            maxtasksperchild=150 * 60 * 60,  # there is max 150/s atm ;
-                # but we do less given inference speed, anyway: this gives us 1h of processing at max input speed.
-                # but given we do less: this will last longer, at least ~3-4 more
+            maxtasksperchild=256,  # pose output rate is ~18-20 results / sec
+            # given processes=4 atm, then that gives about xxx seconds of runtime
         )
 
     def _monitor_cmd_queue(self):
@@ -464,6 +463,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             pose_algo = self._pose_algo
             if pose_algo is None:
                 continue
+            pose_algo: PoseAlgorithm
             if pose_algo is not prev_pose_algo:
                 # this is for when pose_algo is changed
                 async_data_tasks.clear()
