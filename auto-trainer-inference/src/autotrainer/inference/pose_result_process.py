@@ -163,8 +163,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             processes=4,
             initializer=pool_init_process_pose_data,
             initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
-            maxtasksperchild=256,  # pose output rate is ~18-20 results / sec
-            # given processes=4 atm, then that gives about xxx seconds of runtime
+            maxtasksperchild=4096,  # pose output rate is ~18-20 results / sec
+            # given processes=4 atm, then that gives about ~15 minutes of runtime for each task worker
         )
 
     def _monitor_cmd_queue(self):
@@ -442,10 +442,17 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     async_size = len(async_data_tasks)
                     skip_update = data_queue_size > 2 or async_size > 6 or data_queue_size + async_size > 5
                     if skip_update:
-                        skip_next_pose_data = 2 + (data_queue_size + async_size) // 3
+                        skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
                         logger.warning("data queue size=%s async=%s ; skip_next=%s",
                                        data_queue_size, len(async_data_tasks), skip_next_pose_data)
-                    t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 2.5)
+                    if async_size >= 16:
+                        pass
+                        # keep current t_perf_live_check_data_queue_size
+                        # so that next turn will also get skip_update=True,
+                        # if still too high number of output async tasks in progress.
+                    else:
+                        t_perf_live_check_data_queue_size = perf_now + (0.1 if skip_update else 2.5)
+
                 else:
                     skip_update = False
             else:
