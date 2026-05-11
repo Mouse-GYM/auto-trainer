@@ -163,8 +163,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             processes=4,
             initializer=pool_init_process_pose_data,
             initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
-            maxtasksperchild=4096,  # pose output rate is ~18-20 results / sec
-            # given processes=4 atm, then that gives about ~15 minutes of runtime for each task worker
+            maxtasksperchild=4 * 4096,  # pose output rate is ~18-20 results / sec
+            # given processes=4 atm, then that gives about ~1 hour of runtime for each task worker
         )
 
     def _monitor_cmd_queue(self):
