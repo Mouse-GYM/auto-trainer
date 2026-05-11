@@ -191,7 +191,7 @@ class PoseAlgorithm:
         self._cam_offsets = cam_offsets
         self._frame_rate: Optional[int] = None
         #
-        axis_labels = ['x', 'y', 'likelihood']
+        axis_labels = self._2d_axis_labels = ['x', 'y', 'likelihood']
         self._hand_base_names = ['H_flat', 'H_spread', 'H_grab']
         self._hand_options = ['R', 'L']
         self._hands_columns = pandas.MultiIndex.from_product([
@@ -288,7 +288,7 @@ class PoseAlgorithm:
             self._default_parts_flag[part] = False
             self._default_locations.append(None)
 
-        axis_labels = ("x", "y", "likelihood")
+        axis_labels = self._2d_axis_labels
         columns = pandas.MultiIndex.from_product([self._parts_list, axis_labels],
                                                  names=["bodyparts", "coords"])
         self._pose_result_columns = columns
