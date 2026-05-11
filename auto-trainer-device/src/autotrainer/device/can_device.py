@@ -913,7 +913,7 @@ class CanDevice(Device):
         self._compound_movement = move_steps
         return self._perform_next_compound_step(move_steps)
 
-    def _find_step_board(self, step) -> Optional[Target]:
+    def _find_step_board(self, step):
         if 'x' in step:
             motor = Motor.PELLET_X_MOTOR
         elif 'y' in step:
