@@ -65,7 +65,9 @@ class WatchdogMonitor(BaseDetector):
         logger.spam("checking %s watchdogs", len(self._watchdogs))
         for key, watchdog in self._watchdogs.items():
             watch_perf_c = watchdog()
-            if math.isnan(watch_perf_c):
+            if watch_perf_c is None:
+                logger.warning("watchdog %s None", key)
+            if watch_perf_c is None or math.isnan(watch_perf_c):
                 continue
             delay = p_now - watch_perf_c
             if delay > cfg.timeout_trigger_delay:

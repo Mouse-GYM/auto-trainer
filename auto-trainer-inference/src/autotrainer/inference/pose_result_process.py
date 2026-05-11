@@ -339,7 +339,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         async_data_tasks: List[multiprocessing.pool.ApplyResult] = []  # for pose_algo.process async work tasks
 
-        def get_next_pose_data(timeout: Optional[float] = 0.05):
+        def get_next_pose_data(timeout: Optional[float] = 0.25):
             nonlocal pose_data
             prev_pose_data = pose_data
             tot_flushed = 0
@@ -424,7 +424,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 (pose_data, mode, frames_indices) = get_next_pose_data()
             except queue.Empty:
                 continue
-
 
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s",
