@@ -32,7 +32,11 @@ class SystemMaintenanceMonitor(BaseDetector):
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
         self._cage_need_clean_engaged = False
-        self._cage_clean_next_day: date = date.today() + timedelta(days=1)
+        self._cage_clean_next_day: date = date.today() + timedelta(days=7)
+        # NB: default cage_clean_next_day must be at least after tomorrow,
+        # otherwise, given default cage_need_clean_look_ahead_hours of 4h,
+        # if some test case are executed after 20h localtime,
+        # then that breaks some test with cage_need_clean engaged.
 
     @property
     def config(self) -> SystemMaintenanceConfig:
