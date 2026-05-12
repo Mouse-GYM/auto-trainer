@@ -91,11 +91,15 @@ class SystemMaintenanceMonitor(BaseDetector):
             self.check_state_if_not_detector_thread()
 
     def _check_cage_need_clean(self):
+        cfg = self._config
         check_date = (
             datetime.now()
-            + timedelta(hours=self._config.cage_need_clean_look_ahead_hours)
+            + timedelta(hours=cfg.cage_need_clean_look_ahead_hours)
         ).date()
         triggered = check_date >= self._cage_clean_next_day
+        if triggered != self._cage_need_clean_engaged:
+            logger.notice("Cage need clean: check_date=%s cage_clean_next_day=%s cfg=%s",
+                          check_date, self._cage_clean_next_day, cfg)
         self.cage_need_clean_engaged = triggered
 
     def _check_state(self) -> Optional[float]:

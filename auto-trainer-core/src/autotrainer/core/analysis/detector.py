@@ -32,6 +32,7 @@ class BaseDetector(ObservableObject):
         self._cur_timer = no_op_timer
         self._thread_queue: Optional[Tuple[threading.Thread, queue.Queue]] = None
         self._lock = threading.RLock()
+        self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
 
@@ -86,9 +87,15 @@ class BaseDetector(ObservableObject):
 
     def check_state(self, *, force: bool=False):
         with self._lock:
+            if self._checking_state:
+                return None
+            self._checking_state = True
             if not self._running and not force:
                 return None
-            next_delay = self._check_state()
+            try:
+                next_delay = self._check_state()
+            finally:
+                self._checking_state = False
             if next_delay is None:
                 next_delay = self.default_timer_delay
             if next_delay is not None and not self.use_daemon:
