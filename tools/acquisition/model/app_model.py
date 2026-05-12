@@ -2048,16 +2048,20 @@ class AppModel(ObservableObject):
         alarms = [
             ApiAlarmStatus(alarm_id=ApiAlarmKind.externalDoors,
                            is_enabled=alarm_cfg.use_external_doors_open,
-                           is_active=alarm_mon.ext_doors_open_engaged),
+                           is_active=alarm_mon.ext_doors_open_engaged,
+                           is_auto_resume_enabled=alarm_cfg.auto_resume_on_external_doors_close),
             ApiAlarmStatus(alarm_id=ApiAlarmKind.animalMissing,
                            is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
-                           is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged),
+                           is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged,
+                           is_auto_resume_enabled=alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel),
             ApiAlarmStatus(alarm_id=ApiAlarmKind.animalImmobile,
                            is_enabled=alarm_cfg.use_global_animal_presence,
-                           is_active=alarm_mon.global_animal_presence_engaged),
+                           is_active=alarm_mon.global_animal_presence_engaged,
+                           is_auto_resume_enabled=alarm_cfg.auto_resume_on_global_animal_presence),
             ApiAlarmStatus(alarm_id=ApiAlarmKind.thrashing,
                            is_enabled=alarm_cfg.use_audio_load_cell_thrash,
-                           is_active=alarm_mon.audio_load_cell_thrashing_engaged),
+                           is_active=alarm_mon.audio_load_cell_thrashing_engaged,
+                           is_auto_resume_enabled=alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume),
         ]
 
         dcs_cfg = algo.diamond_triangle_config
