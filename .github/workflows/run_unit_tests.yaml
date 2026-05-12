@@ -1,5 +1,9 @@
 name: Run unit tests
 on:
+  schedule:
+    # Runs, on default branch only, every 90 minutes, starting at midnight
+    - cron: '0 */3 * * *'
+    - cron: '30 1-23/3 * * *'
   push:
     branches:
       - main
