@@ -123,6 +123,12 @@ def apply_system_command_with_data_args(func, data):
     return func(*args, **kwargs)
 
 
+MotorStatusCacheT = Dict[
+    SystemStatusMessageKind,
+    Tuple[float, float],  # data, perf_c
+]
+
+
 @dataclasses.dataclass
 class _BoardPendingContext:
     uuid_ack_timeout_engaged_property_name: str  # but actually unused
@@ -222,7 +228,8 @@ class CanDevice(Device):
             Motor.PELLET_Y_MOTOR: None,
             Motor.PELLET_Z_MOTOR: None,
         }
-        self._last_pos = Offset3DTuple(math.nan, math.nan, math.nan)
+        self._last_pellet_pos = Offset3DTuple(math.nan, math.nan, math.nan)
+        # looks like actually only used for logging
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
@@ -235,6 +242,8 @@ class CanDevice(Device):
         for m in {Motor.TUNNEL_GATE_SERVO, Motor.TUNNEL_FAN_SERVO, Motor.TUNNEL_MAGNET_SERVO,
                   Motor.PELLET_COVER_SERVO, Motor.PELLET_LOAD_SERVO}:
             self._motor_configs[m] = ServoConfig()
+        # NB: these are the config possibly written/set to the motors.
+        # Not the config reported by the motor themselves.
 
         self._init_handlers()
 
@@ -247,8 +256,9 @@ class CanDevice(Device):
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
         self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
-        self._previous_stepper_status_perf_c = {}  # (None, -math.inf)
-        self._previous_servo_status_perf_c = {}  # (None, -math.inf)
+        self._previous_stepper_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
+        self._previous_servo_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
+        self._prev_tunnel_gate_open_perf_c: Tuple[bool, float] = (None, -math.inf)
 
     def _init_handlers(self):
 
@@ -480,7 +490,7 @@ class CanDevice(Device):
 
             StepperStatus: self._report_stepper_status,
 
-            ServoStatus: lambda message: self._report_servo_status(message.motor, message.position),
+            ServoStatus: self._report_servo_status,
 
             StepperConfig: handle_motor_config,
             ServoConfig: handle_motor_config,
@@ -1123,7 +1133,7 @@ class CanDevice(Device):
         """
         if message.motor in self._motor_to_coordinate_idx:
             prev_limit_switch = self._last_limit_switch[message.motor]
-            last_pos = self._last_pos[self._motor_to_coordinate_idx[message.motor]]
+            last_pos = self._last_pellet_pos[self._motor_to_coordinate_idx[message.motor]]
             if message.is_at_limit != prev_limit_switch:
                 logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f (last=%.02f) send_pos=%.02f",
                               message.motor, prev_limit_switch, message.is_at_limit,
@@ -1131,17 +1141,17 @@ class CanDevice(Device):
                 self._last_limit_switch[message.motor] = message.is_at_limit
         coord_char = self._motor_to_coordinate_char.get(message.motor, None)
         if coord_char is not None:
-            self._last_pos = self._last_pos.replace(**{coord_char: message.position})
+            self._last_pellet_pos = self._last_pellet_pos.replace(**{coord_char: message.position})
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
         if self._api is not None and kind is not None:
-            prev_data, prev_perf_c = self._previous_stepper_status_perf_c.get(kind, (None, -math.inf))
+            prev_data, prev_perf_c = self._previous_stepper_status_pos_perf_c.get(kind, (None, -math.inf))
             perf_now = get_perf_now()
             data = (message.position, message.send_position, message.is_at_limit, message.position_error)
             if data != prev_data or perf_now - prev_perf_c > self.same_data_refresh_delay:
-                self._previous_stepper_status_perf_c[kind] = (data, perf_now)
+                self._previous_stepper_status_pos_perf_c[kind] = (data, perf_now)
                 self.api.send_message(kind, message)
 
-    def _report_servo_status(self, motor, position):
+    def _report_servo_status(self, message: ServoStatus):
         """
         Report servo status to the API.
 
@@ -1149,15 +1159,25 @@ class CanDevice(Device):
             motor: The motor that has reported its status
             position: The current position of the motor
         """
+        motor = message.motor
+        position = message.position
         kind = CanDevice._motor_to_status_kind.get(motor, None)
         if kind is None:
             return
+        api = self._api
         # if self._api is not None and kind is not None:
-        prev_data, prev_perf_c = self._previous_servo_status_perf_c.get(kind, (None, -math.inf))
+        prev_data, prev_perf_c = self._previous_servo_status_pos_perf_c.get(kind, (None, -math.inf))
         perf_now = get_perf_now()
         if prev_data != position or perf_now - prev_perf_c > self.same_data_refresh_delay:
-            self._previous_servo_status_perf_c[kind] = (position, perf_now)
-            self.api.send_message(kind, position)
+            self._previous_servo_status_pos_perf_c[kind] = (position, perf_now)
+            api.send_message(kind, position)
+        if motor == Motor.TUNNEL_GATE_SERVO:
+            gate_cfg = self._motor_configs[motor]
+            new_open = math.isclose(position, gate_cfg.minimum_position)
+            prev_open, prev_perf_c = self._prev_tunnel_gate_open_perf_c
+            if new_open != prev_open or perf_now - prev_perf_c > self.same_data_refresh_delay:
+                self._prev_tunnel_gate_open_perf_c = (new_open, perf_now)
+                api.send_message(SystemStatusMessageKind.TUNNEL_GATE_OPEN_STATUS, new_open)
 
     #
 

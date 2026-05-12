@@ -2012,6 +2012,7 @@ class AppModel(ObservableObject):
         audio_mon = analysis.audio_thrashing_monitor
         presence_mon = analysis.global_animal_presence_monitor
         misplaced_mon = analysis.pellet_misplaced_monitor
+        animal = self._selected_animal
 
         detectors = [
             ApiDetectorStatus(
@@ -2064,13 +2065,23 @@ class AppModel(ObservableObject):
                            is_auto_resume_enabled=alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume),
         ]
 
-        dcs_cfg = algo.diamond_triangle_config
-        if dcs_cfg is not None and dcs_cfg.fully_valid:
-            send_xyz = dcs_cfg.motor_to_diamond(hard.motor_send_coordinates)
-        else:
-            send_xyz = Offset3DTuple.get_nan()
+        dcs_pos_xyz = hard.last_dcs_position
+        dcs_send_xyz = hard.last_dcs_set_position
+        if dcs_pos_xyz is None or any(map(math.isnan, dcs_pos_xyz)):
+            dcs_pos_xyz = Offset3DTuple.get_nan()
+        if dcs_send_xyz is None or any(map(math.isnan, dcs_send_xyz)):
+            dcs_send_xyz = Offset3DTuple.get_nan()
 
-        animal = self._selected_animal
+        if animal is None:
+            reach_status = ApiReachStatus()
+        else:
+            animal_count = animal.pellet_counts_total
+            reach_status = ApiReachStatus(
+                pellets_presented=animal_count.presented,
+                pellets_consumed=animal_count.consumed,
+                reaches=animal_count.reaches,
+                successful_reaches=animal_count.success_reaches,
+            )
 
         system_status = ApiSystemStatus(
             application_mode=app_status_to_api_app_mode(self._status),
@@ -2083,17 +2094,22 @@ class AppModel(ObservableObject):
             detectors=detectors,
             alarms=alarms,
             pellet_device=ApiPelletDeviceStatus(
-                dcs_send_x=send_xyz.x,
-                dcs_send_y=send_xyz.y,
-                dcs_send_z=send_xyz.z
+                dcs_x=dcs_pos_xyz.x,
+                dcs_y=dcs_pos_xyz.y,
+                dcs_z=dcs_pos_xyz.z,
+                dcs_send_x=dcs_send_xyz.x,
+                dcs_send_y=dcs_send_xyz.y,
+                dcs_send_z=dcs_send_xyz.z,
+                load_arm=hard.load_arm_position,
+                barrier_arm=hard.cover_arm_position,
             ),
             tunnel_device=ApiTunnelDeviceStatus(
                 magnet_intensity=magnet_intensity,
-                gate_open=hard.is_tunnel_gate_opened,
+                gate_open=hard.tunnel_gate_open_status,
             ),
             behavior=ApiBehaviorStatus(
                 baseline_magnet_intensity=algo.baseline_intensity,
-                reaches=ApiReachStatus()
+                reaches=reach_status,
             )
         )
         return system_status
