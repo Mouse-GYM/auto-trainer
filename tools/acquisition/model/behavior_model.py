@@ -204,7 +204,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def source_emergency(self) -> Optional[str]:
         return self._source_emergency
 
-    @BehaviorAlgorithm.relay_func(wait=False)
+    @BehaviorAlgorithm.relay_func()
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
@@ -219,7 +219,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             data=dict(reason=source, active_alarms=api_alarm_kinds))
         self.emergency_stopped(source)
 
-    @BehaviorAlgorithm.relay_func(wait=False)
+    @BehaviorAlgorithm.relay_func()
     def emergency_resume(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
