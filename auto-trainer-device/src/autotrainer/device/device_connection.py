@@ -81,7 +81,8 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     @property
     def watchdog_reader_perf_c(self) -> float:
-        return self._current_thread_watchdog_perf_c
+        thread = self._current_thread
+        return math.nan if (thread is None or not thread.is_alive()) else self._current_thread_watchdog_perf_c
 
     @property
     def watchdog_writer_perf_c(self) -> float:
@@ -249,7 +250,7 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _run_unconnected(self) -> bool:
         logger.info("running unconnected")
         while True:
-            self._current_thread_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+            self._current_thread_watchdog_perf_c = time.perf_counter()
             try:
                 cmd, data, context = self._cmd_queue.get(timeout=0.25)
                 self._cmd_queue.task_done()
@@ -287,8 +288,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.info("running connected")
         t_next_cmd_queue_read = time.perf_counter()
         while True:
-            perf_now = get_perf_now()
-            self._current_thread_watchdog_perf_c = time.perf_counter()  # perf_now
+            self._current_thread_watchdog_perf_c = time.perf_counter()
 
             # Data from the device for the device listener to process.
             if self._interface.can_read():
