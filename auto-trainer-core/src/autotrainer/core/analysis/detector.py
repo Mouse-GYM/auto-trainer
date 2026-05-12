@@ -89,9 +89,9 @@ class BaseDetector(ObservableObject):
         with self._lock:
             if self._checking_state:
                 return None
-            self._checking_state = True
             if not self._running and not force:
                 return None
+            self._checking_state = True
             try:
                 next_delay = self._check_state()
             finally:
