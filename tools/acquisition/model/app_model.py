@@ -1191,7 +1191,7 @@ class AppModel(ObservableObject):
         watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog
         watchdog_mon_register(WatchdogItems.DEVICE_READER, lambda: self._hardware.watchdog_reader_perf_c)
         watchdog_mon_register(WatchdogItems.DEVICE_WRITER, lambda: self._hardware.watchdog_writer_perf_c)
-        
+
         for cam in self._cameras:
             if cam.is_enabled:
                 watchdog_mon_register(f"camera.{cam.name}", lambda cam=cam: cam.watchdog_capture_perf_c)
