@@ -77,22 +77,43 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         if name == EmergencyAlarmMonitor.IS_ENGAGED:
             alarm_mon = self._analysis.emergency_alarm_monitor
+            alarm_cfg = alarm_mon.config
             algo_status = self._system_machine.algorithm.status
             if value:
                 if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     valid_reasons = list(EmergencyReason)
                 elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
-                    valid_reasons = {EmergencyReason.DOORS_OPEN,
-                                     EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
-                                     EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
-                                     EmergencyReason.SYSTEM_MAINTENANCE}
-                else:
-                    valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE}
+                    valid_reasons = {
+                        EmergencyReason.DOORS_OPEN,
+                        EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
+                        EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
+                        EmergencyReason.SYSTEM_FAULT,
+                        EmergencyReason.SYSTEM_MAINTENANCE,
+                    }
+                else:  # idle or acquiring (== running)
+                    valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE, EmergencyReason.SYSTEM_FAULT}
                 reasons = alarm_mon.engaged_reasons
                 value = any(val in valid_reasons for val in reasons)
                 if value:
-                    reasons = " ".join(reason.name for reason in reasons)
-                    self.emergency_stop(f"alarm-monitor: {reasons}")
+                    # at least one possible reason engaged, now check is_emergency_stop_condition
+                    map_reason_to_is_stop_condition = {
+                        EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
+                        EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
+                        EmergencyReason.SYSTEM_MAINTENANCE: alarm_cfg.system_maintenance_is_emergency_stop_condition,
+                        EmergencyReason.SYSTEM_FAULT: alarm_cfg.system_fault_is_emergency_stop_condition,
+                        EmergencyReason.MOUSE_THRASHING: alarm_cfg.audio_load_cell_is_emergency_stop_condition,
+                        EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: alarm_cfg.presence_missing_is_emergency_stop_condition,
+                        EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
+                    }
+                    is_stop_condition_reasons = []
+                    for reason in reasons:
+                        if map_reason_to_is_stop_condition[reason]:
+                            is_stop_condition_reasons.append(reason)
+                    if len(is_stop_condition_reasons) > 0:
+                        reasons = " ".join(reason.name for reason in is_stop_condition_reasons)
+                        self.emergency_stop(f"alarm-monitor: {reasons}")
+                    else:
+                        logger.notice("Not doing emergency_stop, given none alarm reason are stop condition: %s", reasons)
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
                                    algo_status, reasons)
