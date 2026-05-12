@@ -32,7 +32,11 @@ class SystemMaintenanceMonitor(BaseDetector):
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
         self._cage_need_clean_engaged = False
-        self._cage_clean_next_day: date = date.today() + timedelta(days=1)
+        self._cage_clean_next_day: date = date.today() + timedelta(days=7)
+        # NB: default cage_clean_next_day must be at least after tomorrow,
+        # otherwise, given default cage_need_clean_look_ahead_hours of 4h,
+        # if some test case are executed after 20h localtime,
+        # then that breaks some test with cage_need_clean engaged.
 
     @property
     def config(self) -> SystemMaintenanceConfig:
@@ -91,12 +95,16 @@ class SystemMaintenanceMonitor(BaseDetector):
             self.check_state_if_not_detector_thread()
 
     def _check_cage_need_clean(self):
+        cfg = self._config
         check_date = (
             datetime.now()
-            + timedelta(hours=self._config.cage_need_clean_look_ahead_hours)
+            + timedelta(hours=cfg.cage_need_clean_look_ahead_hours)
         ).date()
-        triggered = check_date >= self._cage_clean_next_day
-        self.cage_need_clean_engaged = triggered
+        engaged = check_date >= self._cage_clean_next_day
+        if engaged != self._cage_need_clean_engaged:
+            logger.notice("Cage need clean: engaged -> %s check_date=%s cage_clean_next_day=%s cfg=%s",
+                          engaged, check_date, self._cage_clean_next_day, cfg)
+        self.cage_need_clean_engaged = engaged
 
     def _check_state(self) -> Optional[float]:
         logger.spam("checking state")
