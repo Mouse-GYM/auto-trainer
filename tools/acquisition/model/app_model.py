@@ -2088,7 +2088,8 @@ class AppModel(ObservableObject):
                 dcs_send_z=send_xyz.z
             ),
             tunnel_device=ApiTunnelDeviceStatus(
-                magnet_intensity=magnet_intensity
+                magnet_intensity=magnet_intensity,
+                gate_open=hard.is_tunnel_gate_opened,
             ),
             behavior=ApiBehaviorStatus(
                 baseline_magnet_intensity=algo.baseline_intensity,

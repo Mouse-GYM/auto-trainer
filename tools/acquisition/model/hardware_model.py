@@ -59,6 +59,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SET_Z = "set_z"
 
     HEAD_MAGNET_INTENSITY = "head_magnet_intensity"
+    TUNNEL_GATE_POSITION = "tunnel_gate_position"
 
     def __init__(
         self,
@@ -85,6 +86,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         message_handler.ack_received += self._ack_received
 
         self._head_magnet_position: Optional[float] = None
+        self._tunnel_gate_position: float = math.nan
 
         self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
         # Support for relative x, y, z movements and whether they are persistent as the Send position various between
@@ -267,6 +269,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                          value)
         logger.debug("head magnet currently already at pos %.3f", value)
         return None
+
+    @property
+    def is_tunnel_gate_opened(self) -> bool:
+        return math.isclose(self._tunnel_gate_position, 0)
 
     def open_tunnel_gate(self) -> Optional[UUID]:
         return self._send_with_token(self._device, SystemCommandKind.OPEN_TUNNEL_GATE)
@@ -519,6 +525,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if name == props.HEAD_MAGNET_INTENSITY_PROPERTY:
             prev, self._head_magnet_position = self._head_magnet_position, value
             self._on_property_changed(self.HEAD_MAGNET_INTENSITY, value, prev)
+
+        elif name == props.HEAD_GATE_PROPERTY:
+            logger.verbose("HEAD_GATE_PROPERTY: %s ; old=%s", value, old_value)
+            prev, self._tunnel_gate_position = self._tunnel_gate_position, value
+            self._on_property_changed(self.TUNNEL_GATE_POSITION, value, prev)
 
         elif name == props.STEPPER_X_PROPERTY:
             prev = self._last_motor_coordinates
