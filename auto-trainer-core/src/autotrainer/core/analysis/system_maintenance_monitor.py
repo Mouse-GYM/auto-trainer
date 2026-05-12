@@ -100,11 +100,11 @@ class SystemMaintenanceMonitor(BaseDetector):
             datetime.now()
             + timedelta(hours=cfg.cage_need_clean_look_ahead_hours)
         ).date()
-        triggered = check_date >= self._cage_clean_next_day
-        if triggered != self._cage_need_clean_engaged:
-            logger.notice("Cage need clean: check_date=%s cage_clean_next_day=%s cfg=%s",
-                          check_date, self._cage_clean_next_day, cfg)
-        self.cage_need_clean_engaged = triggered
+        engaged = check_date >= self._cage_clean_next_day
+        if engaged != self._cage_need_clean_engaged:
+            logger.notice("Cage need clean: engaged -> %s check_date=%s cage_clean_next_day=%s cfg=%s",
+                          engaged, check_date, self._cage_clean_next_day, cfg)
+        self.cage_need_clean_engaged = engaged
 
     def _check_state(self) -> Optional[float]:
         logger.spam("checking state")
