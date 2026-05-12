@@ -1173,7 +1173,7 @@ class CanDevice(Device):
             api.send_message(kind, position)
         if motor == Motor.TUNNEL_GATE_SERVO:
             gate_cfg = self._motor_configs[motor]
-            new_open = math.isclose(position, gate_cfg.minimum_position)
+            new_open = math.isclose(position, gate_cfg.minimum_position, abs_tol=0.5)
             prev_open, prev_perf_c = self._prev_tunnel_gate_open_perf_c
             if new_open != prev_open or perf_now - prev_perf_c > self.same_data_refresh_delay:
                 self._prev_tunnel_gate_open_perf_c = (new_open, perf_now)
