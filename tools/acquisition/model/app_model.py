@@ -1284,6 +1284,8 @@ class AppModel(ObservableObject):
 
     def _capture_stop(self):
 
+        self._detach_training_plan()  # always
+
         watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
         for item in WatchdogItems:
             watchdog_mon_unregister(item)
