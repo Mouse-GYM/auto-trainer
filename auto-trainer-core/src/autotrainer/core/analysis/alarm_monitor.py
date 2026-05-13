@@ -44,7 +44,9 @@ _map_emergency_reason_2_api_alarm_kind = {
     EmergencyReason.DEVICE_COMM_ERROR: ApiAlarmKind.deviceCommunication,
     EmergencyReason.SYSTEM_FAULT: ApiAlarmKind.systemFault,
     EmergencyReason.SYSTEM_MAINTENANCE: ApiAlarmKind.systemMaintenance,
+    EmergencyReason.DOORS_OPEN: ApiAlarmKind.externalDoors,
 }
+
 
 def emergency_reason_2_api_alarm_kind(reason: EmergencyReason) -> ApiAlarmKind:
     return _map_emergency_reason_2_api_alarm_kind[reason]
