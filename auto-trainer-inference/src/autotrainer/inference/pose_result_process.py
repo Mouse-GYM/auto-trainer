@@ -439,7 +439,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
                     async_size = len(async_data_tasks)
-                    skip_update = data_queue_size > 2 or async_size > 6 or data_queue_size + async_size > 5
+                    skip_update = data_queue_size > 2 or async_size > 6 or data_queue_size + async_size > 8
                     if skip_update:
                         skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
                         logger.warning("data queue size=%s async=%s ; skip_next=%s",
