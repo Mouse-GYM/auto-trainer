@@ -93,9 +93,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 else:  # idle or acquiring (== running)
                     valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE, EmergencyReason.SYSTEM_FAULT}
                 reasons = alarm_mon.engaged_reasons
-                value = any(val in valid_reasons for val in reasons)
-                if value:
-                    # at least one possible reason engaged, now check is_emergency_stop_condition
+                filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, reasons))
+                if len(filtered_valid_reasons) > 0:
+                    # at least one possible valid reason engaged, now check is_emergency_stop_condition
                     map_reason_to_is_stop_condition = {
                         EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
                         EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
@@ -106,14 +106,17 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                         EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
                     }
                     is_stop_condition_reasons = []
-                    for reason in reasons:
+                    for reason in filtered_valid_reasons:
                         if map_reason_to_is_stop_condition[reason]:
                             is_stop_condition_reasons.append(reason)
+                    logger.verbose("filtered_reasons=%s is_stop_condition_reasons=%s map=%s",
+                                   filtered_valid_reasons, is_stop_condition_reasons, map_reason_to_is_stop_condition)
                     if len(is_stop_condition_reasons) > 0:
                         reasons = " ".join(reason.name for reason in is_stop_condition_reasons)
                         self.emergency_stop(f"alarm-monitor: {reasons}")
                     else:
-                        logger.notice("Not doing emergency_stop, given none alarm reason are stop condition: %s", reasons)
+                        logger.notice("Not doing emergency_stop, given none alarm reason are stop condition: %s",
+                                      reasons)
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
                                    algo_status, reasons)
