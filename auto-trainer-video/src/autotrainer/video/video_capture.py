@@ -584,7 +584,7 @@ class VideoCapture(Process):
                                 "last frame_id: %s when=%.4f perf=%.4f",
                                 cam_frame_id, when / 1e9, frame_perf_now)
                             net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
-                                                           cam_idx=net_q_idx, timeout=1)
+                                                           cam_idx=net_q_idx, timeout=5)
 
                         self._set_status(CaptureProcessStatus.RUNNING)
 
