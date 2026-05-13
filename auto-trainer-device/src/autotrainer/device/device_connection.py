@@ -313,7 +313,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                         assert False,  f"should not be needed anymore but got unknown {cmd}"
                         # we should simply make the request disconnect be handled differently,
                         # and have the senders of these cmd/data/context directly put to the device
-                        self._device_conn.notify_message(cmd, data, context)
+                        self._device.notify_message(cmd, data, context)
                         self._cmd_queue.task_done()
 
         if self._interface.is_open:
