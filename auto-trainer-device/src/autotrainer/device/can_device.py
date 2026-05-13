@@ -158,7 +158,7 @@ class CanDevice(Device):
     and elapsed time since last one is smaller than this delay: skip data update.
     """
 
-    default_device_status_timeout_delay: float = 3  # seconds
+    default_device_status_timeout_delay: float = 8  # seconds
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
