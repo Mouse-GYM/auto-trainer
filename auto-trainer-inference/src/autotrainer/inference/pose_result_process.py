@@ -425,17 +425,19 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 continue
 
+            perf_now = time.perf_counter()
+
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s",
                                mode, frames_indices.tolist())
                 if mode == InferenceMode.Live:
                     skip_next_pose_data = 3
+                    t_perf_live_check_data_queue_size = perf_now + 0.5
                     # skip next 3 pose data to flush anything remaining
                     # NB: this looks necessary/required to ensure the inference gives back "reliable" result,
                     # with skip=2, for instance, we ~always get a first result without all visible elements detected.
 
             if mode == InferenceMode.Live:
-                perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
                     async_size = len(async_data_tasks)
@@ -444,13 +446,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
                         logger.warning("data queue size=%s async=%s ; skip_next=%s",
                                        data_queue_size, len(async_data_tasks), skip_next_pose_data)
+                    else:
+                        skip_next_pose_data = 0
                     if async_size >= 16:
                         pass
                         # keep current t_perf_live_check_data_queue_size
                         # so that next turn will also get skip_update=True,
                         # if still too high number of output async tasks in progress.
                     else:
-                        t_perf_live_check_data_queue_size = perf_now + (0.1 if skip_update else 2.5)
+                        t_perf_live_check_data_queue_size = perf_now + (0.1 if skip_update else 1)
 
                 else:
                     skip_update = False
