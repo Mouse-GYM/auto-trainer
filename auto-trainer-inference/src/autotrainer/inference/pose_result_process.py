@@ -441,7 +441,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
                     async_size = len(async_data_tasks)
-                    skip_update = data_queue_size > 2 or async_size > 6 or data_queue_size + async_size > 8
+                    skip_update = data_queue_size > 2 or async_size > 8 or data_queue_size + async_size > 12
                     if skip_update:
                         skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
                         logger.warning("data queue size=%s async=%s ; skip_next=%s",
@@ -454,7 +454,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         # so that next turn will also get skip_update=True,
                         # if still too high number of output async tasks in progress.
                     else:
-                        t_perf_live_check_data_queue_size = perf_now + (0.1 if skip_update else 1)
+                        t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
 
                 else:
                     skip_update = False
