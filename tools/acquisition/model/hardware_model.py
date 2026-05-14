@@ -71,6 +71,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._lock = threading.RLock()  # **required** re-entrant lock !!
 
         self._event_manager = EventManager.default()
+        self._board_status_timeout: Optional[float] = None
         self._device_ack_timeout_delay: Optional[float] = None
         self._device_conn: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
@@ -405,6 +406,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_OFF)
 
+    def load_config(self, config: HardwareConfiguration):
+        self.set_device_ack_timeout(config.min_ack_timeout)
+        self.set_board_status_timeout(config.board_status_timeout)
+
+    def set_board_status_timeout(self, timeout: Optional[float]):
+        self._board_status_timeout = timeout
+        can_dev = self._can_device
+        if can_dev is None:
+            return
+        if timeout is None:
+            timeout = CanDevice.default_board_status_timeout_delay
+        can_dev.default_board_status_timeout_delay = timeout
+
     def set_device_ack_timeout(self, delay: Optional[float]):
         self._device_ack_timeout_delay = delay
         can_dev = self._can_device
@@ -441,6 +455,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         #
         can_device = self._can_device = CanDevice(buffer_size=buffer_size)
         self.set_device_ack_timeout(self._device_ack_timeout_delay)  # ensure it's used
+        self.set_board_status_timeout(self._board_status_timeout)
+
         can_device.property_changed += self._can_device_property_changed
 
         device_conn = self._device_conn = DeviceConnection(can_device, cmd_queue, name="can-device")

@@ -158,7 +158,7 @@ class CanDevice(Device):
     and elapsed time since last one is smaller than this delay: skip data update.
     """
 
-    default_device_status_timeout_delay: float = 8  # seconds
+    default_board_status_timeout_delay: float = 15  # seconds
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
@@ -516,12 +516,13 @@ class CanDevice(Device):
         logger.verbose("running")
         while not self._want_exit.wait(1):  # no need check more often
             p_now = get_perf_now()
+            boards_timeout = self.default_board_status_timeout_delay  # re-read
             pellet_age = p_now - self._interface.pellet_status_perf_c
             tunnel_age = p_now - self._interface.tunnel_status_perf_c
-            if any(age > 1 for age in (pellet_age, tunnel_age)):
+            if any(age > boards_timeout / 2 for age in (pellet_age, tunnel_age)):
                 logger.verbose("pellet_status_age=%.1f tunnel_status_age=%.1f", pellet_age, tunnel_age)
-            self.pellet_status_timeout_engaged = pellet_age > self.default_device_status_timeout_delay
-            self.tunnel_status_timeout_engaged = tunnel_age > self.default_device_status_timeout_delay
+            self.pellet_status_timeout_engaged = pellet_age > boards_timeout
+            self.tunnel_status_timeout_engaged = tunnel_age > boards_timeout
         logger.verbose("exiting")
 
     def _command_handler(self):

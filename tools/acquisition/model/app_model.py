@@ -1412,8 +1412,7 @@ class AppModel(ObservableObject):
         analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
 
-        dev_ack_timeout = configuration.hardware.min_ack_timeout
-        self._hardware.set_device_ack_timeout(dev_ack_timeout)
+        self._hardware.load_config(configuration.hardware)
 
         self.configuration_loaded_event(configuration)
 
