@@ -190,7 +190,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     #
 
     _thread_locals: ClassVar[threading.local] = threading.local()
-    _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue]]] = (threading.current_thread(), None)
+    _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue], List]] = (threading.current_thread(), None, [])
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
     def __init__(
@@ -304,17 +304,30 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
         if cls._no_handler_thread:
             return
-        _, handler_queue = cls._handler_thread_queue
+        _, handler_queue, reentrant_list = cls._handler_thread_queue
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
             handler_queue = queue.Queue(maxsize=64)
+            # reentrant_list = []  # re-use the previous for now
             handler_thread = threading.Thread(
-                target=cls._handler_thread_run, args=(handler_queue, thread_lock),
+                target=cls._handler_thread_run, args=(handler_queue, thread_lock, reentrant_list),
                 daemon=True,
                 name="AlgoHandler",
             )
-            cls._handler_thread_queue = (handler_thread, handler_queue)  # noqa
+            cls._handler_thread_queue = (handler_thread, handler_queue, reentrant_list)  # noqa
             handler_thread.start()
+
+    @staticmethod
+    @contextlib.contextmanager
+    def set_allow_reentrant(allow: bool):
+        """Allow to set the re-entrant flag of algo handler thread, which is False by default"""
+        t_locals = BehaviorAlgorithm._thread_locals
+        prev = getattr(t_locals, "allow_reentrant", None)
+        t_locals.allow_reentrant = allow
+        try:
+            yield
+        finally:
+            t_locals.allow_reentrant = prev
 
     @staticmethod
     @contextlib.contextmanager
@@ -332,8 +345,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         t_locals = BehaviorAlgorithm._thread_locals
         prev = getattr(t_locals, "sync_call_mode", None)
         t_locals.sync_call_mode = wait
-        yield
-        t_locals.sync_call_mode = prev
+        try:
+            yield
+        finally:
+            t_locals.sync_call_mode = prev
 
     def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
@@ -342,7 +357,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return _relay_func(func, wait=wait)
 
     @classmethod
-    def _handler_thread_run(cls: "BehaviorAlgorithm", input_queue: queue.Queue, thread_lock):
+    def _handler_thread_run(
+        cls: "BehaviorAlgorithm",
+        input_queue: queue.Queue,
+        thread_lock: threading.RLock,
+        reentrant_list: List,
+    ):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         prev_perf_c_report = time.perf_counter()
         tot_msgs = 0
@@ -357,12 +377,18 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 else:
                     prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
-            try:
-                raw = input_queue.get(timeout=1)
-            except queue.Empty:
-                continue
+            # always consume re-entrant list before input_queue:
+            raw = None
+            if len(reentrant_list) > 0:
+                raw = reentrant_list.pop(0)
             if raw is None:
+                try:
+                    raw = input_queue.get(timeout=1)
+                except queue.Empty:
+                    continue
+                # we use eventual event from raw args below, so can task_done directly:
                 input_queue.task_done()
+            if raw is None:
                 break
             tot_msgs += 1
             func, args, kwargs, event = raw
@@ -377,7 +403,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 # actually this should even trigger a restart of the application.
             if event is not None:
                 event.set()
-            input_queue.task_done()
         logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
@@ -406,15 +431,35 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
         """
-        handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue
-        if threading.current_thread() is handler_thread or handler_queue is None or cls._no_handler_thread:
+        cur_thread = threading.current_thread()
+        handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
+        t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
+        # if handler_thread is cur_thread and t_allow_reentrant:
+        if (handler_queue is None
+            or cls._no_handler_thread
+            or (cur_thread is handler_thread and t_allow_reentrant)
+        ):
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
-            func(*args) if kwargs is None else func(*args, **kwargs)
+            cls._thread_locals.allow_reentrant = False
+            t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
+            cls._thread_locals.reentrant_count = t_reentrant_count + 1
+            try:
+                func(*args) if kwargs is None else func(*args, **kwargs)
+                if t_reentrant_count == 0 and handler_thread is None:
+                    while reentrant_list:
+                        func, args, kwargs, _ = reentrant_list.pop(0)
+                        func(*args) if kwargs is None else func(*args, **kwargs)
+            finally:
+                cls._thread_locals.reentrant_count = t_reentrant_count
+                cls._thread_locals.allow_reentrant = t_allow_reentrant
         else:
             t_local_sync: Optional[bool] = getattr(cls._thread_locals, "sync_call_mode", None)
             if t_local_sync is not None:
                 wait = t_local_sync
             # logger.debug("%s: relaying to system msg handler thread", func)
+            if cur_thread is handler_thread:
+                reentrant_list.append((func, args, kwargs, None))
+                return
             if wait:
                 event = getattr(cls._thread_locals, "event", None)
                 if event is None:
@@ -1460,9 +1505,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @staticmethod
     def close_algorithm_handler(*, timeout: float=3):
-        handler_thread, handler_queue = BehaviorAlgorithm._handler_thread_queue  # noqa
+        handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue  # noqa
+        if reentrant_list:
+            logger.warning("close_algorithm_handler: reentrant_list not empty: %s", reentrant_list)
         if handler_queue is not None:
-            BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None)
+            BehaviorAlgorithm._handler_thread_queue = (threading.main_thread(), None, [])
             if handler_thread.is_alive():
                 handler_queue.put(None)
             logger.debug("joining algo handler thread")

@@ -164,7 +164,7 @@ class CanDevice(Device):
     and elapsed time since last one is smaller than this delay: skip data update.
     """
 
-    default_device_status_timeout_delay: float = 3  # seconds
+    default_board_status_timeout_delay: float = 15  # seconds
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
@@ -253,6 +253,7 @@ class CanDevice(Device):
 
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
+        self._commands_handler_watchdog_perf_c = math.nan
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
         self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
@@ -503,6 +504,10 @@ class CanDevice(Device):
             Acknowledge: self._handle_ack,
         }
 
+    @property
+    def writer_watchdog_perf_c(self) -> float:
+        return self._commands_handler_watchdog_perf_c
+
     def _put_to_cmd_queue(self, obj):
         cmd_thread = self._commands_handler_thread
         # cmd thread is started on connect()
@@ -521,12 +526,13 @@ class CanDevice(Device):
         logger.verbose("running")
         while not self._want_exit.wait(1):  # no need check more often
             p_now = get_perf_now()
+            boards_timeout = self.default_board_status_timeout_delay  # re-read
             pellet_age = p_now - self._interface.pellet_status_perf_c
             tunnel_age = p_now - self._interface.tunnel_status_perf_c
-            if any(age > 1 for age in (pellet_age, tunnel_age)):
+            if any(age > boards_timeout / 2 for age in (pellet_age, tunnel_age)):
                 logger.verbose("pellet_status_age=%.1f tunnel_status_age=%.1f", pellet_age, tunnel_age)
-            self.pellet_status_timeout_engaged = pellet_age > self.default_device_status_timeout_delay
-            self.tunnel_status_timeout_engaged = tunnel_age > self.default_device_status_timeout_delay
+            self.pellet_status_timeout_engaged = pellet_age > boards_timeout
+            self.tunnel_status_timeout_engaged = tunnel_age > boards_timeout
         logger.verbose("exiting")
 
     def _command_handler(self):
@@ -565,14 +571,25 @@ class CanDevice(Device):
             if not success:
                 raise RuntimeError("too many failure trying _perform_next_compound_step")
 
+        p_before_loop = get_perf_now()
         while True:
             if has_read_from_queue:
                 input_q.task_done()
                 has_read_from_queue = False
-            p_now = time.perf_counter()
+
+            p_now = get_perf_now()
+            if __debug__ and os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH") == "1":
+                if p_now > p_before_loop + int(os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH_TIMEOUT", "180")):
+                    1 / 0
+
+            # always update watchdog_perf_c:
+            # NB: not using "p_now" but real time.perf_counter on purpose,
+            # otherwise tests can fail because of patched/simulated one which is used.
+            self._commands_handler_watchdog_perf_c = time.perf_counter()
+
             # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
-                timeout = 0.5
+                timeout = 0.25
             else:
                 timeout = 0.001  # there might be next-compound to execute, or wait for uuid-ack
             # what can anyway unblocks, is receiving anything, including _uuid_ack, in this input_q:
@@ -681,7 +698,7 @@ class CanDevice(Device):
                 assert found_board_with_uuid_ack is not None
                 steps = found_board_with_uuid_ack.compound_steps
                 if steps:
-                    target_board = boards_pending_ctx[self._find_steps_next_board(steps)]
+                    target_board = boards_pending_ctx[self._find_steps_next_board(found_board_with_uuid_ack.kind, steps)]
                     if target_board is not found_board_with_uuid_ack and not target_board.is_available():
                         # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
@@ -798,6 +815,7 @@ class CanDevice(Device):
                     logger.warning("Unexpected uuid change count: before=%s after=%s", before_uuid, after_uuid)
                 #
                 prev_command = self._prev_command
+                self._prev_command = None
                 if prev_command is None:  # given compound step do set it itself
                     prev_command = (_retry_full, (kind, data), ctx)
                 else:
@@ -862,6 +880,7 @@ class CanDevice(Device):
             logger.verbose("CAN command Handler thread already alive")
         else:
             logger.info("Starting CanCommandHandler thread handler")
+            self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
             thread = threading.Thread(
                 target=self._command_handler, name="CanCommandHandler", daemon=True)
             thread.start()
@@ -905,12 +924,13 @@ class CanDevice(Device):
         self._compound_movement = move_steps
         return self._perform_next_compound_step(move_steps)
 
-    def _find_step_board(self, step):
-        if 'x' in step or 'y' in step or 'z' in step:
-            motor = (
-                Motor.PELLET_X_MOTOR if 'x' in step
-                else Motor.PELLET_Y_MOTOR if 'y' in step
-                else Motor.PELLET_Z_MOTOR)
+    def _find_step_board(self, step) -> Optional[Target]:
+        if 'x' in step:
+            motor = Motor.PELLET_X_MOTOR
+        elif 'y' in step:
+            motor = Motor.PELLET_Y_MOTOR
+        elif 'z' in step:
+            motor = Motor.PELLET_Z_MOTOR
         elif 'load_arm' in step:
             motor = Motor.PELLET_LOAD_SERVO
         elif 'barrier_arm' in step:
@@ -948,22 +968,25 @@ class CanDevice(Device):
             return None
         return target_of_motor(motor)
 
-    def _find_steps_next_board(self, steps):
+    def _find_steps_next_board(self, kind, steps) -> Optional[Target]:
+        if len(steps) == 0:
+            logger.warning("find_steps_next_board: got empty steps ; kind=%s", kind)
+            return None
         for step in steps:
             tgt = self._find_step_board(step)
             if tgt is not None:
                 return tgt
-        raise ValueError("Found no target board for steps")
+        raise ValueError(f"Found no target board for kind={kind} steps: {steps}")
 
     def _find_command_next_board(self, kind, data) -> Optional[Target]:
         # NB: following is kind of fragile:
         # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
             kind, steps = data
-            return self._find_steps_next_board(steps)
+            return self._find_steps_next_board(kind, steps)
         elif kind is _retry_compound:
             kind, step, steps = data
-            return self._find_steps_next_board([step] + steps)
+            return self._find_steps_next_board(kind, [step] + steps)
         elif kind is _retry_full:
             kind, data = data
             return self._find_command_next_board(kind, data)
@@ -1341,6 +1364,7 @@ class CanDevice(Device):
                     {'home': m}
                     for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
                 ]
+                logger.debug("initiated home steps: %s", compound_movements)
                 success = self._interface.stepper_home(motor)
 
             else:

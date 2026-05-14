@@ -24,7 +24,7 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
-from top_fixtures import MockSystemMachine
+from top_fixtures import MockSystemMachine, FifoExitStack
 
 this_dir = Path(__file__).parent.resolve()
 
@@ -312,7 +312,7 @@ class TestWithBatch(BaseTrainingPlan):
         def conc(ix):
             logger.info("concurrent %s", ix)
 
-        with contextlib.ExitStack() as stack:
+        with FifoExitStack() as stack:
             for idx in range(max_batch_size):
                 assert machine.state == SystemState.tunnel
                 self.mock_pose_response(pellet_seen=True, mouse_seen=True)

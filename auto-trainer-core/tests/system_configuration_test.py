@@ -95,6 +95,7 @@ v0_expected_result_config = {
         "tunnel_identifier": "COM24",
         "pellet_identifier": "COM28",
         "min_ack_timeout": None,
+        "board_status_timeout": None,
     },
     "inference": {
         "pose_model_location": "/home/autotrainer/models/current-model-2000-01-02",
@@ -158,6 +159,7 @@ def _fill_v0():
     for k, v in behavior_default_config_dict['head_clamp'].items():
         if k not in v0_headclamp:
             v0_headclamp[k] = copy.deepcopy(v)
+    v0_expected_result_config["watchdog"] = current_default_config_dict["watchdog"]
 
 _fill_v0()
 
@@ -263,10 +265,12 @@ def test_load_version_1():
                      'scheme': 'playback',
                      'still_image_capture_interval': 0.0}],
         'hardware': {'pellet_identifier': '/dev/ttyS31',
-                     'tunnel_identifier': '/dev/ttyS30', 'min_ack_timeout': None},
+                     'tunnel_identifier': '/dev/ttyS30',
+                     'min_ack_timeout': None, 'board_status_timeout': None},
         'inference': {'is_enabled': True,
                       'pose_model_location': '/pose_model_path'},
         'persistence': {'output_location': '/output_location_path'},
+        'watchdog': current_default_config_dict["watchdog"],
         'version': SystemConfiguration.version}
 
 

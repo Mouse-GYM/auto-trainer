@@ -13,6 +13,7 @@ import humps
 
 from autotrainer.core.logging import get_verbose_logger
 from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader
+from .watchdog_config import WatchdogConfig
 from .. import make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
@@ -43,13 +44,14 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 38
+    version: int = 39
 
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
     inference: InferenceConfiguration = field(default_factory=InferenceConfiguration)
     behavior: BehaviorConfiguration = field(default_factory=BehaviorConfiguration)
     persistence: PersistenceConfiguration = field(default_factory=PersistenceConfiguration)
+    watchdog: WatchdogConfig = field(default_factory=WatchdogConfig)
 
     _camera_map = None  # do not include in fields
 
@@ -194,6 +196,7 @@ SystemConfigurationDumper.add_representer(CameraConfiguration, camera_configurat
 SystemConfigurationDumper.add_representer(HardwareConfiguration, hardware_configuration_representer)
 SystemConfigurationDumper.add_representer(InferenceConfiguration, inference_configuration_representer)
 SystemConfigurationDumper.add_representer(PersistenceConfiguration, persistence_configuration_representer)
+SystemConfigurationDumper.add_representer(WatchdogConfig, make_camelize_representer("!WatchdogConfig"))
 add_behavior_configuration_representers(SystemConfigurationDumper)
 
 
@@ -208,4 +211,5 @@ for cls in SystemConfigurationLoader, :
     cls.add_constructor("!HardwareConfiguration", hardware_configuration_constructor)
     cls.add_constructor("!InferenceConfiguration", inference_configuration_constructor)
     cls.add_constructor("!PersistenceConfiguration", persistence_configuration_constructor)
+    cls.add_constructor("!WatchdogConfig", make_decamelize_constructor(WatchdogConfig))
     add_behavior_configuration_constructors(cls)
