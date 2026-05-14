@@ -329,7 +329,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             clear_queue(self._output_data_queue, name="inference_output_data_queue")
             clear_queue(self._notif_msg_queue, name="inference_notif_messages_queue")
             clear_queue(self._cmd_queue, name="inference_cmd_queue")
-            clear_queue(self._data_monitor_cmd_queue, name="inference_output_data_cmd_queue")
+
+        self._stop_data_monitor_proc()
+        clear_queue(
+            self._data_monitor_cmd_queue, name="data_monitor_cmd_queue"
+        )
 
         pool = self._process_pool
         if pool is not None:
@@ -355,28 +359,33 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         # finally:
         self._set_status(InferenceStatus.stopped)
 
+    def _stop_data_monitor_proc(self, timeout = 3):
+        data_proc = self._data_monitor_proc
+        if data_proc is None:
+            return
+        self._data_monitor_proc = None
+        logger.debug("joining data_monitor_proc")
+        data_monitor_cmd_queue = self._data_monitor_cmd_queue
+        if data_proc.is_alive():
+            data_monitor_cmd_queue.put(None)
+        data_proc.join(timeout)
+        if data_proc.exitcode is None:
+            logger.warning("sending interrupt to monitor data process")
+            os.kill(data_proc.pid, signal.SIGINT)
+            data_proc.join(2)
+            if data_proc.exitcode is None:
+                logger.warning("terminating to monitor data process")
+                data_proc.terminate()
+                data_proc.join(1)
+                if data_proc.exitcode is None:
+                    logger.warning("killing monitor data process")
+                    data_proc.kill()
+                    data_proc.join(1)
+        logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
+
     def terminate(self, *, timeout: float = 5):
         logger.debug("terminating..")
         self.stop()
-        data_proc = self._data_monitor_proc
-        data_monitor_cmd_queue = self._data_monitor_cmd_queue
-        if data_proc is not None:
-            logger.debug("joining data_monitor_proc")
-            data_monitor_cmd_queue.put(None)
-            data_proc.join(timeout)
-            if data_proc.exitcode is None:
-                logger.warning("sending interrupt to monitor data process")
-                os.kill(data_proc.pid, signal.SIGINT)
-                data_proc.join(3)
-                if data_proc.exitcode is None:
-                    logger.warning("terminating to monitor data process")
-                    data_proc.terminate()
-                    data_proc.join(1)
-                    if data_proc.exitcode is None:
-                        logger.warning("killing monitor data process")
-                        data_proc.kill()
-                        data_proc.join(2)
-            logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread
         msg_queue = self._notif_msg_queue
@@ -388,7 +397,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         logger.verbose("closing mp queues")
         for mp_q, name in (
-            (data_monitor_cmd_queue, "inference_data_monitor_cmd_queue"),
+            (self._data_monitor_cmd_queue, "data_monitor_cmd_queue"),
             (self._output_data_queue, "inference_output_data_queue"),
             (self._cmd_queue, "inference_cmd_queue"),
             (msg_queue, "inference_msg_queue"),
