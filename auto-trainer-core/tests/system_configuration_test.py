@@ -95,6 +95,7 @@ v0_expected_result_config = {
         "tunnel_identifier": "COM24",
         "pellet_identifier": "COM28",
         "min_ack_timeout": None,
+        "board_status_timeout": None,
     },
     "inference": {
         "pose_model_location": "/home/autotrainer/models/current-model-2000-01-02",
@@ -264,7 +265,8 @@ def test_load_version_1():
                      'scheme': 'playback',
                      'still_image_capture_interval': 0.0}],
         'hardware': {'pellet_identifier': '/dev/ttyS31',
-                     'tunnel_identifier': '/dev/ttyS30', 'min_ack_timeout': None},
+                     'tunnel_identifier': '/dev/ttyS30',
+                     'min_ack_timeout': None, 'board_status_timeout': None},
         'inference': {'is_enabled': True,
                       'pose_model_location': '/pose_model_path'},
         'persistence': {'output_location': '/output_location_path'},
