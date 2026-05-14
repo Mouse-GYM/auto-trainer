@@ -13,6 +13,12 @@ class HardwareConfiguration:
     pellet_identifier: str = ""
 
     min_ack_timeout: Optional[float] = None  # min device-ack-timeout
+    """CAN uuid ACK timeout, if not set here then default code value of 3s is used."""
+
+    board_status_timeout: Optional[float] = None
+    """If any of the boards sub-device misses its status message for more than this delay -> system fault.
+    If not set here then default code value of 15s is used.
+    """
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:

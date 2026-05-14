@@ -158,7 +158,7 @@ class CanDevice(Device):
     and elapsed time since last one is smaller than this delay: skip data update.
     """
 
-    default_device_status_timeout_delay: float = 3  # seconds
+    default_board_status_timeout_delay: float = 15  # seconds
 
     _motor_to_status_kind = {
         Motor.PELLET_X_MOTOR: SystemStatusMessageKind.PELLET_MOTOR_X,
@@ -244,6 +244,7 @@ class CanDevice(Device):
 
         self._commands_queue = queue.Queue()
         self._commands_handler_thread: Optional[threading.Thread] = None
+        self._commands_handler_watchdog_perf_c = math.nan
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
         self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
@@ -493,6 +494,10 @@ class CanDevice(Device):
             Acknowledge: self._handle_ack,
         }
 
+    @property
+    def writer_watchdog_perf_c(self) -> float:
+        return self._commands_handler_watchdog_perf_c
+
     def _put_to_cmd_queue(self, obj):
         cmd_thread = self._commands_handler_thread
         # cmd thread is started on connect()
@@ -511,12 +516,13 @@ class CanDevice(Device):
         logger.verbose("running")
         while not self._want_exit.wait(1):  # no need check more often
             p_now = get_perf_now()
+            boards_timeout = self.default_board_status_timeout_delay  # re-read
             pellet_age = p_now - self._interface.pellet_status_perf_c
             tunnel_age = p_now - self._interface.tunnel_status_perf_c
-            if any(age > 1 for age in (pellet_age, tunnel_age)):
+            if any(age > boards_timeout / 2 for age in (pellet_age, tunnel_age)):
                 logger.verbose("pellet_status_age=%.1f tunnel_status_age=%.1f", pellet_age, tunnel_age)
-            self.pellet_status_timeout_engaged = pellet_age > self.default_device_status_timeout_delay
-            self.tunnel_status_timeout_engaged = tunnel_age > self.default_device_status_timeout_delay
+            self.pellet_status_timeout_engaged = pellet_age > boards_timeout
+            self.tunnel_status_timeout_engaged = tunnel_age > boards_timeout
         logger.verbose("exiting")
 
     def _command_handler(self):
@@ -555,14 +561,25 @@ class CanDevice(Device):
             if not success:
                 raise RuntimeError("too many failure trying _perform_next_compound_step")
 
+        p_before_loop = get_perf_now()
         while True:
             if has_read_from_queue:
                 input_q.task_done()
                 has_read_from_queue = False
-            p_now = time.perf_counter()
+
+            p_now = get_perf_now()
+            if __debug__ and os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH") == "1":
+                if p_now > p_before_loop + int(os.getenv("_AUTOTRAINER_SIMULATE_CAN_WRITER_THREAD_CRASH_TIMEOUT", "180")):
+                    1 / 0
+
+            # always update watchdog_perf_c:
+            # NB: not using "p_now" but real time.perf_counter on purpose,
+            # otherwise tests can fail because of patched/simulated one which is used.
+            self._commands_handler_watchdog_perf_c = time.perf_counter()
+
             # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
-                timeout = 0.5
+                timeout = 0.25
             else:
                 timeout = 0.001  # there might be next-compound to execute, or wait for uuid-ack
             # what can anyway unblocks, is receiving anything, including _uuid_ack, in this input_q:
@@ -853,6 +870,7 @@ class CanDevice(Device):
             logger.verbose("CAN command Handler thread already alive")
         else:
             logger.info("Starting CanCommandHandler thread handler")
+            self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
             thread = threading.Thread(
                 target=self._command_handler, name="CanCommandHandler", daemon=True)
             thread.start()

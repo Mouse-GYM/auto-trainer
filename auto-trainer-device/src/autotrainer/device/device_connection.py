@@ -10,7 +10,12 @@ from typing import Callable, Union, Optional, Any, Set
 
 from autotrainer.api import ApiEventKind
 
-from autotrainer.core import MotorConfigurations, SystemCommandKind, SystemStatusMessageKind
+from autotrainer.core import (
+    MotorConfigurations,
+    SystemCommandKind,
+    SystemStatusMessageKind,
+    get_perf_now,
+)
 from autotrainer.core.event import post_api_event_content
 
 import autotrainer.device
@@ -71,6 +76,18 @@ class DeviceConnection(DeviceConnectionProtocol):
 
         # The means of providing non-blocking access to the device.
         self._current_thread: Optional[Thread] = None
+        self._current_thread_watchdog_perf_c = math.nan
+        # NB: this is simply the dedicated CAN bus reader thread
+
+    @property
+    def watchdog_reader_perf_c(self) -> float:
+        thread = self._current_thread
+        return math.nan if (thread is None or not thread.is_alive()) else self._current_thread_watchdog_perf_c
+
+    @property
+    def watchdog_writer_perf_c(self) -> float:
+        dev = self._device
+        return math.nan if dev is None else dev.writer_watchdog_perf_c
 
     @property
     def device(self) -> Device:
@@ -213,8 +230,10 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
             logger.verbose("Starting new reader thread for %s", self._name)
-            self._current_thread = Thread(target=self._run, name=self._name)
-            self._current_thread.start()
+            self._current_thread_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+            thread = Thread(target=self._run, name=self._name)
+            thread.start()
+            self._current_thread = thread
 
     def _run(self) -> None:
         logger.debug(f"<{self._name}> thread started")
@@ -231,8 +250,9 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _run_unconnected(self) -> bool:
         logger.info("running unconnected")
         while True:
+            self._current_thread_watchdog_perf_c = time.perf_counter()
             try:
-                cmd, data, context = self._cmd_queue.get(timeout=0.1)
+                cmd, data, context = self._cmd_queue.get(timeout=0.25)
                 self._cmd_queue.task_done()
             except Empty:
                 continue
@@ -268,20 +288,22 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.info("running connected")
         t_next_cmd_queue_read = time.perf_counter()
         while True:
+            self._current_thread_watchdog_perf_c = time.perf_counter()
+
             # Data from the device for the device listener to process.
             if self._interface.can_read():
                 messages = self._interface.read(self._read_limit, collect_ms=self._collect_ms)
                 if len(messages) > 0:
                     self._device.notify_data(messages)
 
-            t_perf_now = time.perf_counter()
-            if t_perf_now > t_next_cmd_queue_read:
+            perf_now = get_perf_now()
+            if perf_now > t_next_cmd_queue_read:
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
                     cmd, data, context = self._cmd_queue.get_nowait()
                 except Empty:
                     # no need check too often for request disconnect only
-                    t_next_cmd_queue_read = t_perf_now + 0.5
+                    t_next_cmd_queue_read = perf_now + 0.25
                 else:
                     if cmd == _REQUEST_DISCONNECT:
                         self._cmd_queue.task_done()

@@ -9,13 +9,14 @@ import threading
 import time
 from itertools import chain
 from multiprocessing import synchronize
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, TextIO, Tuple
 
 import h5py
 import numpy
 
-from autotrainer.core import ProjectInfo
+from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
@@ -75,6 +76,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
         mp_manager=None,
+        watchdog_perf_c: Synchronized,
     ):
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         log_dict_config = make_log_dict_config()
@@ -99,6 +101,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._monitored_parts_offsets = monitored_parts_offsets
         self._parts_offsets = 0
         self._stop_recorded = mp_ctx.Event()
+        self._watchdog_perf_c = watchdog_perf_c
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
@@ -153,16 +156,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         else:
             logger.debug("previous pool closed")
 
-    def _init_process_pool(self, pose_algo):
+    def _init_process_pool(self, pose_algo: PoseAlgorithm):
         self._close_process_pool()
         logger.notice("Initializing new workers process pool")
         self._process_pool = get_mp_ctx().Pool(
             processes=4,
             initializer=pool_init_process_pose_data,
             initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
-            maxtasksperchild=150 * 60 * 60,  # there is max 150/s atm ;
-                # but we do less given inference speed, anyway: this gives us 1h of processing at max input speed.
-                # but given we do less: this will last longer, at least ~3-4 more
+            maxtasksperchild=4 * 4096,  # pose output rate is ~18-20 results / sec
+            # given processes=4 atm, then that gives about ~1 hour of runtime for each task worker
         )
 
     def _monitor_cmd_queue(self):
@@ -337,7 +339,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         async_data_tasks: List[multiprocessing.pool.ApplyResult] = []  # for pose_algo.process async work tasks
 
-        def get_next_pose_data(timeout: Optional[float] = 0.05):
+        def get_next_pose_data(timeout: Optional[float] = 0.25):
             nonlocal pose_data
             prev_pose_data = pose_data
             tot_flushed = 0
@@ -392,6 +394,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         while self._is_running:
 
             perf_now = time.perf_counter()
+            self._watchdog_perf_c.value = perf_now
+
             if perf_now > perf_c_log_counters:
                 perf_c_log_counters = perf_now + 15
                 if logger.isEnabledFor(logging.DEBUG):
@@ -421,25 +425,42 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 continue
 
+            perf_now = time.perf_counter()
+
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s",
                                mode, frames_indices.tolist())
                 if mode == InferenceMode.Live:
                     skip_next_pose_data = 3
+                    t_perf_live_check_data_queue_size = perf_now + 0.5
                     # skip next 3 pose data to flush anything remaining
                     # NB: this looks necessary/required to ensure the inference gives back "reliable" result,
                     # with skip=2, for instance, we ~always get a first result without all visible elements detected.
 
             if mode == InferenceMode.Live:
-                perf_now = time.perf_counter()
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
-                    skip_update = data_queue_size > 3
+                    async_size = len(async_data_tasks)
+                    skip_update = data_queue_size > 2 or async_size > 8 or data_queue_size + async_size > 12
                     if skip_update:
-                        logger.warning("data queue size=%s ; skip_update", data_queue_size)
-                    t_perf_live_check_data_queue_size = perf_now + (0.5 if skip_update else 2.5)
+                        skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
+                        logger.warning("data queue size=%s async=%s ; skip_next=%s",
+                                       data_queue_size, len(async_data_tasks), skip_next_pose_data)
+                    else:
+                        skip_next_pose_data = 0
+                    if async_size >= 16:
+                        pass
+                        # keep current t_perf_live_check_data_queue_size
+                        # so that next turn will also get skip_update=True,
+                        # if still too high number of output async tasks in progress.
+                    else:
+                        t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
+
+                else:
+                    skip_update = False
             else:
                 skip_update = False
+                skip_next_pose_data = 0
 
             next_prev_mode = mode
 
@@ -452,6 +473,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             pose_algo = self._pose_algo
             if pose_algo is None:
                 continue
+            pose_algo: PoseAlgorithm
             if pose_algo is not prev_pose_algo:
                 # this is for when pose_algo is changed
                 async_data_tasks.clear()
@@ -546,11 +568,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                                                 columns=pose_algo.pose_result_columns)
                                 writes_h5_live_durations.append(write_duration)
 
-                    if skip_next_pose_data > 0:
-                        skip_next_pose_data -= 1
+                    if skip_update:
                         continue
 
-                    if skip_update:
+                    if skip_next_pose_data > 0 and cnt_data_received % 2 == 0:
+                        skip_next_pose_data -= 1
                         continue
 
                     if (frames_indices < FrameIndexCategory.ONLINE_NO_RECORDING).any():
@@ -560,13 +582,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         continue
 
                     async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
-                    if len(async_data_tasks) > 8:  # reminder: we have 4 workers atm.
-                        mid_async_res = async_data_tasks[len(async_data_tasks) // 2]  # type: multiprocessing.pool.ApplyResult
-                        logger.warning("too many pending async processing data, waiting middle one..")
-                        try:
-                            mid_async_res.wait()
-                        except Exception as err:
-                            logger.exception("Error on wait async res: %s", err)
 
                 elif mode == InferenceMode.Offline:
 

@@ -5,6 +5,7 @@ import psutil
 from autotrainer.api import ApiDetectorKind
 
 from .detector import BaseDetector
+from .watchdog_monitor import WatchdogMonitor
 from ..configuration.persistence_configuration import PersistenceConfiguration
 from ..configuration.system_fault_config import SystemFaultConfig
 from ..event import post_api_detector_event_content
@@ -18,8 +19,9 @@ class SystemFaultMonitor(BaseDetector):
     CONFIG = "config"
 
     FREE_DISK_SPACE_ENGAGED = "free_disk_space_engaged"
+    WATCHDOG_ENGAGED = "watchdog_engaged"
 
-    def __init__(self, *, config: SystemFaultConfig):
+    def __init__(self, *, config: SystemFaultConfig, watchdog_monitor: WatchdogMonitor):
         super().__init__()
         self._config = config
         self._max_pellet_loaded_engaged = False
@@ -27,6 +29,8 @@ class SystemFaultMonitor(BaseDetector):
         self._free_disk_space_engaged = False
         self._engaged_reasons: Set[str] = set()
         self._persistence_cfg = PersistenceConfiguration()
+        self._watchdog_mon = watchdog_monitor
+        watchdog_monitor.property_changed += self._on_watchdog_property_changed
 
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
@@ -72,6 +76,7 @@ class SystemFaultMonitor(BaseDetector):
         reasons = set()
         for reason, use, engaged in (
             (self.FREE_DISK_SPACE_ENGAGED, cfg.use_free_disk_space, self._free_disk_space_engaged),
+            (self.WATCHDOG_ENGAGED, cfg.use_watchdog, self._watchdog_mon.is_engaged),
         ):
             if use and engaged:
                 reasons.add(reason)
@@ -80,3 +85,7 @@ class SystemFaultMonitor(BaseDetector):
         self.is_engaged = len(reasons) > 0
         if not prev_engaged and self._is_engaged:
             self._logger.notice("Engaging with %s", reasons)
+
+    def _on_watchdog_property_changed(self, name, value, _):
+        if name == self._watchdog_mon.IS_ENGAGED:
+            self.check_state()

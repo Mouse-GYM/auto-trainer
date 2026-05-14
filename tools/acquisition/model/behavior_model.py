@@ -82,12 +82,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     valid_reasons = list(EmergencyReason)
                 elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
-                    valid_reasons = {EmergencyReason.DOORS_OPEN,
-                                     EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
-                                     EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
-                                     EmergencyReason.SYSTEM_MAINTENANCE}
+                    valid_reasons = {
+                        EmergencyReason.DOORS_OPEN,
+                        EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
+                        EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
+                        EmergencyReason.SYSTEM_MAINTENANCE,
+                        EmergencyReason.SYSTEM_FAULT,
+                    }
                 else:
-                    valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE}
+                    valid_reasons = {
+                        EmergencyReason.SYSTEM_MAINTENANCE,
+                        EmergencyReason.SYSTEM_FAULT,
+                    }
                 reasons = alarm_mon.engaged_reasons
                 value = any(val in valid_reasons for val in reasons)
                 if value:
