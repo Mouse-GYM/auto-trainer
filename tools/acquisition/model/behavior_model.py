@@ -76,7 +76,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def _alarm_monitor_property_changed(self, name, value, old_value):
         # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         alarm_mon = self._analysis.emergency_alarm_monitor
-        if alarm_mon.is_engaged_prop(name):
+        # if alarm_mon.is_engaged_prop(name):
+        if alarm_mon.IS_ENGAGED:  # only need check main one,
+            # it's force-republished whenever any config also changed,
+            # so that we can evaluate the is_stop_condition here:
             algo = self._system_machine.algorithm
             algo_status = algo.status
             alarm_cfg = alarm_mon.config

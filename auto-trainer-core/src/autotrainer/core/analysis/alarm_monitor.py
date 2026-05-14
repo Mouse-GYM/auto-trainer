@@ -77,8 +77,6 @@ class EmergencyAlarmMonitor(BaseDetector):
     })
 
     use_daemon = True
-    default_timer_delay = 3  # allow to react quickly on any config change,
-        # this is ok given check_state is ~fast
 
     def __init__(
         self,
@@ -116,6 +114,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._device_comm_error_engaged = False
         self._system_maintenance_engaged = False
         self._system_fault_engaged = False
+        self._prev_is_stop_condition = self.make_stop_condition_map(config)
         #
         load_cell_monitor.property_changed += self._on_load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._on_audio_prop_changed
@@ -377,6 +376,18 @@ class EmergencyAlarmMonitor(BaseDetector):
                 topcam.last_presence_start_perf_c, topcam.last_absence_start_perf_c)
         return engaged
 
+    @staticmethod
+    def make_stop_condition_map(alarm_cfg: EmergencyAlarmConfiguration):
+        return {
+            EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
+            EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
+            EmergencyReason.SYSTEM_MAINTENANCE: alarm_cfg.system_maintenance_is_emergency_stop_condition,
+            EmergencyReason.SYSTEM_FAULT: alarm_cfg.system_fault_is_emergency_stop_condition,
+            EmergencyReason.MOUSE_THRASHING: alarm_cfg.audio_load_cell_is_emergency_stop_condition,
+            EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: alarm_cfg.presence_missing_is_emergency_stop_condition,
+            EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
+        }
+
     def _check_state(self):
         topcam_attrs = self._topcam_presence_attrs
         load_cell = self._load_cell_monitor.context
@@ -441,6 +452,10 @@ class EmergencyAlarmMonitor(BaseDetector):
             EmergencyReason.SYSTEM_FAULT: cfg.auto_resume_on_system_fault,
         }
         #
+        prev_stop_map = self._prev_is_stop_condition
+        self._prev_is_stop_condition = self.make_stop_condition_map(cfg)
+        is_stop_cond_changed = prev_stop_map != self._prev_is_stop_condition
+        #
         if not is_emergency:
             prev_engaged = self._engaged_reasons
             check_reasons = prev_engaged.copy()
@@ -454,7 +469,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             if len(check_reasons) == 0:
                 self._is_engaged = None  # force refresh
                 self.is_engaged = False
-            elif check_reasons != prev_engaged:
+            elif check_reasons != prev_engaged or is_stop_cond_changed:
                 self._is_engaged = None  # force refresh
                 self.is_engaged = True
         else:
@@ -464,7 +479,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             for prev_r in list(check_reasons):
                 if not add_remove_map[prev_r]:
                     reasons.add(prev_r)
-            if reasons != self._engaged_reasons:
+            if reasons != self._engaged_reasons or is_stop_cond_changed:
                 self._is_engaged = None  # force trigger again, so that new reasons are seen
                 self._engaged_reasons = reasons
             self.is_engaged = True
