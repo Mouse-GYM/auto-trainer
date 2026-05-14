@@ -2065,6 +2065,7 @@ class AppModel(ObservableObject):
         audio_mon = analysis.audio_thrashing_monitor
         presence_mon = analysis.global_animal_presence_monitor
         misplaced_mon = analysis.pellet_misplaced_monitor
+        animal = self._selected_animal
 
         detectors = [
             ApiDetectorStatus(
@@ -2103,41 +2104,57 @@ class AppModel(ObservableObject):
                 alarm_id=ApiAlarmKind.externalDoors,
                 is_enabled=alarm_cfg.use_external_doors_open,
                 is_active=alarm_mon.ext_doors_open_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_external_doors_close,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.animalMissing,
                 is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
                 is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.animalImmobile,
                 is_enabled=alarm_cfg.use_global_animal_presence,
                 is_active=alarm_mon.global_animal_presence_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_global_animal_presence,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.thrashing,
                 is_enabled=alarm_cfg.use_audio_load_cell_thrash,
                 is_active=alarm_mon.audio_load_cell_thrashing_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.systemFault,
                 is_enabled=alarm_cfg.use_system_fault,
                 is_active=alarm_mon.system_fault_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_fault,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.systemMaintenance,
                 is_enabled=alarm_cfg.use_system_maintenance,
                 is_active=alarm_mon.system_maintenance_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_maintenance,
             ),
         ]
 
-        dcs_cfg = algo.diamond_triangle_config
-        if dcs_cfg is not None and dcs_cfg.fully_valid:
-            send_xyz = dcs_cfg.motor_to_diamond(hard.motor_send_coordinates)
-        else:
-            send_xyz = Offset3DTuple.get_nan()
+        dcs_pos_xyz = hard.last_dcs_position
+        dcs_send_xyz = hard.last_dcs_set_position
+        if dcs_pos_xyz is None or any(map(math.isnan, dcs_pos_xyz)):
+            dcs_pos_xyz = Offset3DTuple.get_nan()
+        if dcs_send_xyz is None or any(map(math.isnan, dcs_send_xyz)):
+            dcs_send_xyz = Offset3DTuple.get_nan()
 
-        animal = self._selected_animal
+        if animal is None:
+            reach_status = ApiReachStatus()
+        else:
+            animal_count = animal.pellet_counts_total
+            reach_status = ApiReachStatus(
+                pellets_presented=animal_count.presented,
+                pellets_consumed=animal_count.consumed,
+                reaches=animal_count.reaches,
+                successful_reaches=animal_count.success_reaches,
+            )
 
         system_status = ApiSystemStatus(
             application_mode=app_status_to_api_app_mode(self._status),
@@ -2150,16 +2167,22 @@ class AppModel(ObservableObject):
             detectors=detectors,
             alarms=alarms,
             pellet_device=ApiPelletDeviceStatus(
-                dcs_send_x=send_xyz.x,
-                dcs_send_y=send_xyz.y,
-                dcs_send_z=send_xyz.z
+                dcs_x=dcs_pos_xyz.x,
+                dcs_y=dcs_pos_xyz.y,
+                dcs_z=dcs_pos_xyz.z,
+                dcs_send_x=dcs_send_xyz.x,
+                dcs_send_y=dcs_send_xyz.y,
+                dcs_send_z=dcs_send_xyz.z,
+                load_arm=hard.load_arm_position,
+                barrier_arm=hard.cover_arm_position,
             ),
             tunnel_device=ApiTunnelDeviceStatus(
-                magnet_intensity=magnet_intensity
+                magnet_intensity=magnet_intensity,
+                gate_open=hard.tunnel_gate_open_status,
             ),
             behavior=ApiBehaviorStatus(
                 baseline_magnet_intensity=algo.baseline_intensity,
-                reaches=ApiReachStatus()
+                reaches=reach_status,
             )
         )
         return system_status
