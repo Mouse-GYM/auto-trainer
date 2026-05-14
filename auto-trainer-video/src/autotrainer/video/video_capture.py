@@ -661,8 +661,14 @@ class VideoCapture(Process):
         if handler is None:
             logger.warning("No handler for command %s", cmd)
         else:
-            args, kwargs = context
-            handler(*args, **kwargs)
+            if context is None:
+                args = ()
+                kwargs = None
+            else:
+                args, kwargs = context
+                args: Tuple
+                kwargs: Optional[Dict]
+            handler(*args) if kwargs is None else handler(*args, **kwargs)
             logger.debug("status: capturing=%s recording=%s", self._is_capturing, self._is_record_active)
 
     def _user_terminate(self):
