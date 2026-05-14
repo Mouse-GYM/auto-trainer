@@ -1,4 +1,5 @@
 import logging.config
+from multiprocessing.sharedctypes import Synchronized
 import queue
 import signal
 import threading
@@ -26,14 +27,14 @@ _local_do_debug = True
 
 
 class InferenceCommandMessageKind(IntEnum):
+    """Set of messages used to control inference processing"""
     Start = 0
     Terminate = 1
     ProcessLive = 2  # nb: not anymore used as command message.
     ProcessOffline = 3  # used for immediate 1 session/trial offline trigger
-    ForceProcessOffline = 4  # used for *batch* session/trial(s) offline trigger
-    SetOfflineToLive = 5  # used either after end-of-recording, or at end of analysis, to switch back to live
-    ProcessLiveWhenReady = -1  # not anymore used
+    SetOfflineToLive = 4  # used either after end-of-recording, or at end of analysis, to switch back to live
     SetLoggerLevel = 20
+
 
 class InferenceStatusMessageKind(IntEnum):
     Created = 0
@@ -78,6 +79,7 @@ class PoseProcess(Process):
         msg_queue: Queue,
         stop_recorded_event: synchronize.Event,
         offline_input_event_cb_ack: synchronize.Event,
+        watchdog_perf_c: Synchronized,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -104,6 +106,7 @@ class PoseProcess(Process):
         self._data_queue = data_queue
         self._stop_recorded_event = stop_recorded_event
         self._offline_input_event_cb_ack = offline_input_event_cb_ack
+        self._watchdog_perf_c = watchdog_perf_c
 
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
@@ -241,15 +244,8 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
                     offline_input.set_live(True)
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
-                    self._set_process_offline()
                     prj, wait_stop_recorded = context
                     offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
-                # elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
-                #     self._set_process_offline()
-                #     self._offline_input.set_project_info(context)
-                elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                    # NB: not anymore used, actually.
-                    self._process_live_when_ready = True
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Exception as err:
@@ -292,7 +288,7 @@ class PoseProcess(Process):
         i_q: Optional[FixedArrayMultiQueue] = live_input
 
         def get_live_input():
-            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.01)
+            res = live_input.get_output(frame_buffer1, frames_indices1, timeout=0.1)
             return res
 
         def get_offline_input():
@@ -339,6 +335,8 @@ class PoseProcess(Process):
 
         while self._is_running:
             p_now = get_perf_now()
+
+            self._watchdog_perf_c.value = time.perf_counter()  # p_now
 
             if prev_mode != self._mode:
                 logger.verbose("Detected change of mode: %s", self._mode)

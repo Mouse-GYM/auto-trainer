@@ -36,6 +36,10 @@ class Device(ObservableObject):
     def connected(self) -> bool:
         """Say if it's connected to device"""
 
+    @property
+    def writer_watchdog_perf_c(self) -> float:
+        """The writer command thread watchdog perf counter"""
+
     def connect(self):
         """Request connect to the device"""
 

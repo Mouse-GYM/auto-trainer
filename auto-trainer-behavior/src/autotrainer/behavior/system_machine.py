@@ -298,8 +298,7 @@ class SystemMachine(StateMachine):
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
-        kind = InferenceCommandMessageKind.ProcessOffline
-        self._inference.send_message(kind, (project_info, wait_stop_recorded))
+        self._inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):
@@ -952,9 +951,15 @@ class SystemMachine(StateMachine):
                     if algo.intersession_state == IntersessionState.idle:
                         algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
                 if algo.status != BehaviorAlgoStatus.IDLE:
-                    tunnel_dev.open_tunnel_gate()
-                    self._update_magnet_position(0)
-                    self._pellet_machine.move_home(force=True)
+                    for action_func in (
+                        tunnel_dev.open_tunnel_gate,
+                        lambda: self._update_magnet_position(0),
+                        lambda: self._pellet_machine.move_home(force=True),
+                    ):
+                        try:
+                            action_func()
+                        except Exception as err:
+                            logger.warning("%s failed: %s, but continuing", action_func, err)
             else:
                 if algo.status != BehaviorAlgoStatus.IDLE:
                     tunnel_dev.open_tunnel_gate()

@@ -91,7 +91,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                         EmergencyReason.SYSTEM_MAINTENANCE,
                     }
                 else:  # idle or acquiring (== running)
-                    valid_reasons = {EmergencyReason.SYSTEM_MAINTENANCE, EmergencyReason.SYSTEM_FAULT}
+                    valid_reasons = {
+                        EmergencyReason.SYSTEM_FAULT,
+                        EmergencyReason.SYSTEM_MAINTENANCE,
+                    }
                 reasons = alarm_mon.engaged_reasons
                 filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, reasons))
                 if len(filtered_valid_reasons) > 0:

@@ -1,6 +1,8 @@
+import ctypes
 import multiprocessing.pool
 import os
 import queue
+import math
 import signal
 import threading
 import time
@@ -68,9 +70,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._pose_parts: List[str] = []
         self._calib_dir = calib_dir
 
-        self._msg_thread = None
+        self._msg_thread: Optional[threading.Thread] = None
+
+        self._data_monitor_watchdog_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
         self._data_monitor_proc: Optional[InferenceMonitorDataProc] = None
 
+        self._pose_process_watchdog_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
         self._pose_process: Optional[PoseProcess] = None
         self._is_predict_enabled = True
         self._status = InferenceStatus.stopped
@@ -95,6 +100,20 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
 
     @property
+    def watchdog_pose_process_perf_c(self) -> float:
+        pose_proc = self._pose_process
+        if pose_proc is not None:
+            return self._pose_process_watchdog_perf_c.value
+        return math.nan
+
+    @property
+    def watchdog_monitor_data_proc_perf_c(self) -> float:
+        proc = self._data_monitor_proc
+        if proc is not None:
+            return self._data_monitor_watchdog_perf_c.value
+        return math.nan
+
+    @property
     def project(self) -> ProjectInfo:
         return self._project
 
@@ -110,10 +129,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.verbose("data_monitor_proc not yet started, won't wait ack event")
             # when it will start it will get the put project-info
         else:
-            assert cur_proc.is_alive()  # supposedly, if not then it's big issue
-            logger.debug("waiting ack, proc=%s", cur_proc)
-            self._data_monitor_cmd_ack_event.wait()
-            logger.debug("ack obtained")
+            # inference data monitor proc could have been killed/died unexpectedly,
+            # it can be started again with start.
+            if cur_proc.is_alive():
+                logger.debug("waiting ack, proc=%s", cur_proc)
+                self._data_monitor_cmd_ack_event.wait()
+                logger.debug("ack obtained")
 
     @property
     def pose_parts(self) -> List[str]:
@@ -227,18 +248,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 processes=1,  # we only need 1 atm
                 initializer=self._pool_init,
                 initargs=(make_log_dict_config(),),
-                maxtasksperchild=int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 4096)),
+                maxtasksperchild=int(os.getenv("INFERENCE_PROCESS_POOL_MAX_TASKS_PER_CHILD", 64)),
             )
 
         if self._msg_thread is None:
-            self._msg_thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
-            self._msg_thread.start()
+            thread = Thread(target=self._monitor_msg_queue, name="monitor_msg_queue", daemon=True)
+            thread.start()
+            self._msg_thread = thread
 
         data_monitor_proc = self._data_monitor_proc
         if data_monitor_proc is not None and not data_monitor_proc.is_alive():
             data_monitor_proc.join(3)
             data_monitor_proc = None
+
         if data_monitor_proc is None:
+            self._data_monitor_watchdog_perf_c.value = time.perf_counter()
             data_monitor_proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
                 pose_data_queue=self._output_data_queue,
@@ -247,6 +271,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 cmd_ack_event=self._data_monitor_cmd_ack_event,
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
+                watchdog_perf_c=self._data_monitor_watchdog_perf_c,
                 mp_manager=self._mp_manager,
             )
             data_monitor_proc.start()
@@ -254,7 +279,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frame_height, self._frame_width = live_queue.shape
         self._frames_per_camera = live_queue.frames_per_camera
 
-        self._pose_process = PoseProcess(
+        self._pose_process_watchdog_perf_c.value = time.perf_counter()
+        proc = self._pose_process = PoseProcess(
             live_queue,
             data_queue=self._output_data_queue,
             cmd_queue=self._cmd_queue,
@@ -263,9 +289,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             model_location=self._model_location,
             stop_recorded_event=data_monitor_proc.stop_recorded,
             offline_input_event_cb_ack=self._mp_manager.Event(),
+            watchdog_perf_c=self._pose_process_watchdog_perf_c,
         )
-
-        self._pose_process.start()
+        proc.start()
 
         return True
 
@@ -304,7 +330,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             clear_queue(self._output_data_queue, name="inference_output_data_queue")
             clear_queue(self._notif_msg_queue, name="inference_notif_messages_queue")
             clear_queue(self._cmd_queue, name="inference_cmd_queue")
-            clear_queue(self._data_monitor_cmd_queue, name="inference_output_data_cmd_queue")
+
+        self._stop_data_monitor_proc()
+        clear_queue(
+            self._data_monitor_cmd_queue, name="data_monitor_cmd_queue"
+        )
 
         pool = self._process_pool
         if pool is not None:
@@ -330,28 +360,33 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         # finally:
         self._set_status(InferenceStatus.stopped)
 
+    def _stop_data_monitor_proc(self, timeout = 3):
+        data_proc = self._data_monitor_proc
+        if data_proc is None:
+            return
+        self._data_monitor_proc = None
+        logger.debug("joining data_monitor_proc")
+        data_monitor_cmd_queue = self._data_monitor_cmd_queue
+        if data_proc.is_alive():
+            data_monitor_cmd_queue.put(None)
+        data_proc.join(timeout)
+        if data_proc.exitcode is None:
+            logger.warning("sending interrupt to monitor data process")
+            os.kill(data_proc.pid, signal.SIGINT)
+            data_proc.join(2)
+            if data_proc.exitcode is None:
+                logger.warning("terminating to monitor data process")
+                data_proc.terminate()
+                data_proc.join(1)
+                if data_proc.exitcode is None:
+                    logger.warning("killing monitor data process")
+                    data_proc.kill()
+                    data_proc.join(1)
+        logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
+
     def terminate(self, *, timeout: float = 5):
         logger.debug("terminating..")
         self.stop()
-        data_proc = self._data_monitor_proc
-        data_monitor_cmd_queue = self._data_monitor_cmd_queue
-        if data_proc is not None:
-            logger.debug("joining data_monitor_proc")
-            data_monitor_cmd_queue.put(None)
-            data_proc.join(timeout)
-            if data_proc.exitcode is None:
-                logger.warning("sending interrupt to monitor data process")
-                os.kill(data_proc.pid, signal.SIGINT)
-                data_proc.join(3)
-                if data_proc.exitcode is None:
-                    logger.warning("terminating to monitor data process")
-                    data_proc.terminate()
-                    data_proc.join(1)
-                    if data_proc.exitcode is None:
-                        logger.warning("killing monitor data process")
-                        data_proc.kill()
-                        data_proc.join(2)
-            logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
         msg_thread = self._msg_thread
         msg_queue = self._notif_msg_queue
@@ -363,7 +398,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         logger.verbose("closing mp queues")
         for mp_q, name in (
-            (data_monitor_cmd_queue, "inference_data_monitor_cmd_queue"),
+            (self._data_monitor_cmd_queue, "data_monitor_cmd_queue"),
             (self._output_data_queue, "inference_output_data_queue"),
             (self._cmd_queue, "inference_cmd_queue"),
             (msg_queue, "inference_msg_queue"),
