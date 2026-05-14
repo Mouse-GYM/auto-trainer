@@ -559,7 +559,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     def _send_command(self, cmd: CaptureCommandKind, *args, **kwargs):
         if self._video_command_queue is not None:
-            self._video_command_queue.put((cmd, (args, kwargs)))
+            data = (args, kwargs) if (args and kwargs) else (args, None) if args else ((), kwargs) if kwargs else None
+            self._video_command_queue.put((cmd, data))
         else:
             logger.warning("%s: _send_command: %s but video command queue is None", self._name, cmd)
 
