@@ -82,7 +82,7 @@ class SystemStatusMessageKind(IntEnum):
     MOTOR_CONFIGURATION = 501
 
     TUNNEL_GATE_OPEN_STATUS = 600
-    """Open status: bool for opened, closed otherwise"""
+    """Open status: True for opened, closed otherwise"""
 
     CAMERA_STATUS_CHANGE = 1001
 
