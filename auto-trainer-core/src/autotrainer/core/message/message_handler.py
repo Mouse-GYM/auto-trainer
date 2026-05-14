@@ -37,6 +37,7 @@ class MessageHandler(ObservableObject):
 
     HEAD_MAGNET_INTENSITY_PROPERTY = "head_magnet_intensity"
     HEAD_GATE_PROPERTY = "gate_angle"
+    TUNNEL_GATE_OPEN_STATUS = "tunnel_gate_open_status"
 
     DEVICE_X_PROPERTY = "device_x"
     DEVICE_Y_PROPERTY = "device_y"

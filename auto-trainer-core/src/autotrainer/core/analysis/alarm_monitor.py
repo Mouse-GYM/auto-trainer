@@ -121,13 +121,14 @@ class EmergencyAlarmMonitor(BaseDetector):
         super()._start()
         self._engaged_reasons.clear()
 
-    def post_alarm_event(self, detector_id: int, active: bool, enabled: bool):
+    def post_alarm_event(self, detector_id: int, active: bool, enabled: bool, auto_resume: bool):
         self._event_manager.post_event_content(
             ApiEventKind.alarmChanged,
             data={
                 "detector_id": detector_id,
                 "is_active": active,
                 "is_enabled": enabled,
+                "is_auto_resume_enabled": auto_resume,
             },
         )
 
@@ -154,7 +155,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.AUDIO_LOAD_CELL_THRASHING_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.thrashing, value, self._config.use_audio_load_cell_thrash)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.thrashing, value,
+                              cfg.use_audio_load_cell_thrash, cfg.auto_resume_on_audio_load_cell_thrash_resume)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -167,7 +170,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.animalMissing, value, self._config.use_presence_missing_after_exit_tunnel)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.animalMissing, value,
+                              cfg.use_presence_missing_after_exit_tunnel, cfg.auto_resume_on_presence_seen_after_exit_tunnel)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -180,7 +185,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.EXT_DOORS_OPEN_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.externalDoors, value, self._config.use_external_doors_open)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.externalDoors, value,
+                              cfg.use_external_doors_open, cfg.auto_resume_on_external_doors_close)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -193,7 +200,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.GLOBAL_ANIMAL_PRESENCE_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.animalImmobile, value, self._config.use_global_animal_presence)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.animalImmobile, value,
+                              cfg.use_global_animal_presence, cfg.auto_resume_on_global_animal_presence)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -207,7 +216,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.DEVICE_COMM_ERROR_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.deviceCommunication, value, self._config.use_device_comm_error)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.deviceCommunication, value,
+                              cfg.use_device_comm_error, cfg.auto_resume_on_device_comm_error)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -220,7 +231,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.SYSTEM_MAINTENANCE_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.systemMaintenance, value, self._config.use_system_maintenance)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.systemMaintenance, value,
+                              cfg.use_system_maintenance, cfg.auto_resume_on_system_maintenance)
         self.check_state_if_not_detector_thread()
 
     @property
@@ -233,7 +246,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         if value == prev:
             return
         self.property_changed(self.SYSTEM_FAULT_ENGAGED, value, prev)
-        self.post_alarm_event(ApiAlarmKind.systemFault, value, self._config.use_system_fault)
+        cfg = self._config
+        self.post_alarm_event(ApiAlarmKind.systemFault, value,
+                              cfg.use_system_fault, cfg.auto_resume_on_system_fault)
         self.check_state_if_not_detector_thread()
 
     #

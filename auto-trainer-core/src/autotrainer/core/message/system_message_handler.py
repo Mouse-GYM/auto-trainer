@@ -93,6 +93,9 @@ class SystemMessageHandler(MessageHandler):
         elif msg == SystemStatusMessageKind.TUNNEL_GATE_SERVO:
             self.property_changed(MessageHandler.HEAD_GATE_PROPERTY, data, None)
 
+        elif msg == SystemStatusMessageKind.TUNNEL_GATE_OPEN_STATUS:
+            self.property_changed(MessageHandler.TUNNEL_GATE_OPEN_STATUS, data, None)
+
         elif msg == SystemStatusMessageKind.TUNNEL_FAN:
             self.property_changed(MessageHandler.TUNNEL_FAN_PROPERTY, data, None)
 

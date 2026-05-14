@@ -429,7 +429,7 @@ class CanInterface(DeviceInterface):
 
         self._audio = AudioData()
 
-        self.load_cell_factor = 21053.0
+        self._load_cell_factor = 21053.0
 
         no_op = lambda msg: None
 

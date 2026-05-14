@@ -35,25 +35,25 @@ class SystemStatusMessageKind(IntEnum):
     """Message will contain the pellet Z motor status as a StepperStatusMessage."""
 
     PELLET_LOAD = 204
-    """Message will contain the pellet load arm servo status as a ServoStatusMessage."""
+    """Pellet load arm servo position"""
 
     PELLET_COVER = 205
-    """Message will contain the pellet cover arm servo status as a ServoStatusMessage."""
+    """Pellet cover arm servo position"""
 
     HEAD_MAGNET = 206
-    """Message will contain the head fixation magnet servo status as a ServoStatusMessage."""
+    """Tunnel head magnet servo position"""
 
     TUNNEL_GATE_SERVO = 207
-    """Message will contain the tunnel gate servo status as a ServoStatusMessage."""
+    """Tunnel gate servo position"""
 
     PELLET_X = 208
-    """Message will contain the pellet X motor position as a float."""
+    """Pellet X motor position as a float."""
 
     PELLET_Y = 209
-    """Message will contain the pellet Y motor position as a float."""
+    """Pellet Y motor position as a float."""
 
     PELLET_Z = 210
-    """Message will contain the pellet Z motor position as a float."""
+    """Pellet Z motor position as a float."""
 
     FRONT_DOOR = 301
     """Message will contain front door status as True (open) or False (closed)."""
@@ -81,6 +81,9 @@ class SystemStatusMessageKind(IntEnum):
 
     MOTOR_CONFIGURATION = 501
 
+    TUNNEL_GATE_OPEN_STATUS = 600
+    """Open status: True for opened, closed otherwise"""
+
     CAMERA_STATUS_CHANGE = 1001
 
     MEASUREMENT = -101
@@ -103,6 +106,7 @@ class StepperStatusMessage(Protocol):
 
 
 class ServoStatusMessage(Protocol):
+
     @property
     def location(self) -> float:
         """Current servo position in degrees."""

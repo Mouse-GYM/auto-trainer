@@ -60,6 +60,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SET_Z = "set_z"
 
     HEAD_MAGNET_INTENSITY = "head_magnet_intensity"
+    TUNNEL_GATE_POSITION = "tunnel_gate_position"
+    TUNNEL_GATE_OPEN_STATUS = "tunnel_gate_open_status"
 
     def __init__(
         self,
@@ -87,6 +89,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         message_handler.ack_received += self._ack_received
 
         self._head_magnet_position: Optional[float] = None
+        self._tunnel_gate_position: float = math.nan
+        self._tunnel_gate_open_status: bool = False
 
         self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
         # Support for relative x, y, z movements and whether they are persistent as the Send position various between
@@ -101,6 +105,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._front_door_open: bool = False
         self._slide_door_open: bool = False
+
+        self._cover_arm_position: float = math.nan
+        self._load_arm_position: float = math.nan
 
         self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
@@ -164,6 +171,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def set_diamond_triangle_config(self, config: Optional[DiamondTriangleOffsetConfig]):
         self._dcs_config = config
+
+    @property
+    def load_arm_position(self) -> float:
+        return self._load_arm_position
+
+    @property
+    def cover_arm_position(self) -> float:
+        return self._cover_arm_position
 
     @property
     def last_position(self) -> Optional[Offset3DTuple]:
@@ -283,6 +298,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                          value)
         logger.debug("head magnet currently already at pos %.3f", value)
         return None
+
+    @property
+    def tunnel_gate_open_status(self) -> bool:
+        return self._tunnel_gate_open_status
 
     def open_tunnel_gate(self) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.OPEN_TUNNEL_GATE)
@@ -551,6 +570,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             prev, self._head_magnet_position = self._head_magnet_position, value
             self._on_property_changed(self.HEAD_MAGNET_INTENSITY, value, prev)
 
+        elif name == props.HEAD_GATE_PROPERTY:
+            # logger.verbose("HEAD_GATE_PROPERTY: %s ; old=%s", value, old_value)
+            prev, self._tunnel_gate_position = self._tunnel_gate_position, value
+            self._on_property_changed(self.TUNNEL_GATE_POSITION, value, prev)
+
+        elif name == props.TUNNEL_GATE_OPEN_STATUS:
+            prev, self._tunnel_gate_open_status = self._tunnel_gate_open_status, value
+
         elif name == props.STEPPER_X_PROPERTY:
             prev = self._last_motor_coordinates
             new = prev.replace(x=value.position)
@@ -577,6 +604,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         elif name == props.DRAWER_DOOR_PROPERTY:
             self.slide_door_open = value
+
+        elif name == props.COVER_ARM_ANGLE_PROPERTY:
+            self._cover_arm_position = value
+
+        elif name == props.LOAD_ARM_ANGLE_PROPERTY:
+            self._load_arm_position = value
 
         elif name == props.FIRMWARE_VERSION_PROPERTY and value is not None:
             version = str(value).lower()
