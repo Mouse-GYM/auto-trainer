@@ -272,7 +272,8 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
 
         # # In cases where there are more timestamps than frames
         if len(df) != len(dropped_frame_vector):
-            logger.verbose("len(df)=%s vs len(dropped_frame_vector)=%s ; cutting to shortest")
+            logger.verbose("len(df)=%s vs len(dropped_frame_vector)=%s ; cutting to shortest",
+                           len(df), len(dropped_frame_vector))
             if len(df) > len(dropped_frame_vector):
                 n = len(dropped_frame_vector)
                 df = df[:n]
