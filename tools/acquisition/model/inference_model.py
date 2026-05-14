@@ -262,6 +262,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             data_monitor_proc = None
 
         if data_monitor_proc is None:
+            self._data_monitor_watchdog_perf_c.value = time.perf_counter()
             data_monitor_proc = self._data_monitor_proc = InferenceMonitorDataProc(
                 project=self._project,
                 pose_data_queue=self._output_data_queue,
@@ -278,7 +279,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frame_height, self._frame_width = live_queue.shape
         self._frames_per_camera = live_queue.frames_per_camera
 
-        self._pose_process = PoseProcess(
+        self._pose_process_watchdog_perf_c.value = time.perf_counter()
+        proc = self._pose_process = PoseProcess(
             live_queue,
             data_queue=self._output_data_queue,
             cmd_queue=self._cmd_queue,
@@ -289,8 +291,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             offline_input_event_cb_ack=self._mp_manager.Event(),
             watchdog_perf_c=self._pose_process_watchdog_perf_c,
         )
-
-        self._pose_process.start()
+        proc.start()
 
         return True
 
