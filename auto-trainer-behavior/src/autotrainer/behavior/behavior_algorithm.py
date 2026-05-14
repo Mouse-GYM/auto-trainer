@@ -324,8 +324,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         t_locals = BehaviorAlgorithm._thread_locals
         prev = getattr(t_locals, "allow_reentrant", None)
         t_locals.allow_reentrant = allow
-        yield
-        t_locals.allow_reentrant = prev
+        try:
+            yield
+        finally:
+            t_locals.allow_reentrant = prev
 
     @staticmethod
     @contextlib.contextmanager
@@ -343,8 +345,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         t_locals = BehaviorAlgorithm._thread_locals
         prev = getattr(t_locals, "sync_call_mode", None)
         t_locals.sync_call_mode = wait
-        yield
-        t_locals.sync_call_mode = prev
+        try:
+            yield
+        finally:
+            t_locals.sync_call_mode = prev
 
     def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
