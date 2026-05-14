@@ -298,8 +298,7 @@ class SystemMachine(StateMachine):
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
         intersession.perform_segmentation(project_info)
-        kind = InferenceCommandMessageKind.ProcessOffline
-        self._inference.send_message(kind, (project_info, wait_stop_recorded))
+        self._inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
     def after_exit_intersession(self):

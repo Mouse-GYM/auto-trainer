@@ -27,14 +27,14 @@ _local_do_debug = True
 
 
 class InferenceCommandMessageKind(IntEnum):
+    """Set of messages used to control inference processing"""
     Start = 0
     Terminate = 1
     ProcessLive = 2  # nb: not anymore used as command message.
     ProcessOffline = 3  # used for immediate 1 session/trial offline trigger
-    ForceProcessOffline = 4  # used for *batch* session/trial(s) offline trigger
-    SetOfflineToLive = 5  # used either after end-of-recording, or at end of analysis, to switch back to live
-    ProcessLiveWhenReady = -1  # not anymore used
+    SetOfflineToLive = 4  # used either after end-of-recording, or at end of analysis, to switch back to live
     SetLoggerLevel = 20
+
 
 class InferenceStatusMessageKind(IntEnum):
     Created = 0
@@ -244,15 +244,8 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
                     offline_input.set_live(True)
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
-                    self._set_process_offline()
                     prj, wait_stop_recorded = context
                     offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
-                # elif cmd == InferenceCommandMessageKind.ForceProcessOffline:
-                #     self._set_process_offline()
-                #     self._offline_input.set_project_info(context)
-                elif cmd == InferenceCommandMessageKind.ProcessLiveWhenReady:
-                    # NB: not anymore used, actually.
-                    self._process_live_when_ready = True
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Exception as err:
