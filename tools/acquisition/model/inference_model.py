@@ -129,10 +129,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             logger.verbose("data_monitor_proc not yet started, won't wait ack event")
             # when it will start it will get the put project-info
         else:
-            assert cur_proc.is_alive()  # supposedly, if not then it's big issue
-            logger.debug("waiting ack, proc=%s", cur_proc)
-            self._data_monitor_cmd_ack_event.wait()
-            logger.debug("ack obtained")
+            # inference data monitor proc could have been killed/died unexpectedly,
+            # it can be started again with start.
+            if cur_proc.is_alive():
+                logger.debug("waiting ack, proc=%s", cur_proc)
+                self._data_monitor_cmd_ack_event.wait()
+                logger.debug("ack obtained")
 
     @property
     def pose_parts(self) -> List[str]:
