@@ -2100,18 +2100,36 @@ class AppModel(ObservableObject):
             ),
         ]
         alarms = [
-            ApiAlarmStatus(alarm_id=ApiAlarmKind.externalDoors,
-                           is_enabled=alarm_cfg.use_external_doors_open,
-                           is_active=alarm_mon.ext_doors_open_engaged),
-            ApiAlarmStatus(alarm_id=ApiAlarmKind.animalMissing,
-                           is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
-                           is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged),
-            ApiAlarmStatus(alarm_id=ApiAlarmKind.animalImmobile,
-                           is_enabled=alarm_cfg.use_global_animal_presence,
-                           is_active=alarm_mon.global_animal_presence_engaged),
-            ApiAlarmStatus(alarm_id=ApiAlarmKind.thrashing,
-                           is_enabled=alarm_cfg.use_audio_load_cell_thrash,
-                           is_active=alarm_mon.audio_load_cell_thrashing_engaged),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.externalDoors,
+                is_enabled=alarm_cfg.use_external_doors_open,
+                is_active=alarm_mon.ext_doors_open_engaged,
+            ),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.animalMissing,
+                is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
+                is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged,
+            ),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.animalImmobile,
+                is_enabled=alarm_cfg.use_global_animal_presence,
+                is_active=alarm_mon.global_animal_presence_engaged,
+            ),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.thrashing,
+                is_enabled=alarm_cfg.use_audio_load_cell_thrash,
+                is_active=alarm_mon.audio_load_cell_thrashing_engaged,
+            ),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.systemFault,
+                is_enabled=alarm_cfg.use_system_fault,
+                is_active=alarm_mon.system_fault_engaged,
+            ),
+            ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.systemMaintenance,
+                is_enabled=alarm_cfg.use_system_maintenance,
+                is_active=alarm_mon.system_maintenance_engaged,
+            ),
         ]
 
         dcs_cfg = algo.diamond_triangle_config
