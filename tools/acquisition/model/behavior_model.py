@@ -91,10 +91,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     valid_reasons = list(EmergencyReason)
                 elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
-                    valid_reasons = {
+                    valid_reasons = {  # == all but mouse thrashing, should we include it ?
                         EmergencyReason.DOORS_OPEN,
-                        EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
                         EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
+                        EmergencyReason.DEVICE_COMM_ERROR,
                         EmergencyReason.SYSTEM_FAULT,
                         EmergencyReason.SYSTEM_MAINTENANCE,
                     }
@@ -102,6 +102,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                     valid_reasons = {
                         EmergencyReason.SYSTEM_FAULT,
                         EmergencyReason.SYSTEM_MAINTENANCE,
+                        EmergencyReason.DEVICE_COMM_ERROR,
                     }
                 #
                 map_reason_to_is_stop_condition = {
