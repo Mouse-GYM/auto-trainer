@@ -38,7 +38,7 @@ class VideoRecordProperties:
     """Name used as part of video file names and image capture directory."""
 
     frame_size: Tuple[int, int] = (0, 0)
-    """Expected shape of video frames.  Not required for image-only capture."""
+    """Expected shape (W, H) of video frames. Not required for image-only capture."""
 
     fps: int = 30
     """Expected FPS of video feed.  Not required for image-only capture."""
