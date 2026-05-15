@@ -242,7 +242,5 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             return
         algo.algo_paused = False
         self._source_emergency = None
-        # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
-        self._analysis.restart()
         post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         self.emergency_resumed(source)
