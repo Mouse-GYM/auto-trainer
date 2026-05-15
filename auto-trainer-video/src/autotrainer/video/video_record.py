@@ -253,8 +253,8 @@ class VideoRecord(Thread):
         logger.debug("preparing writers...")
         now = datetime.now()
         project = self._project_info
-        if project is None:
-            logger.warning("Cannot prepare writers with None project_info")
+        if project is None or not project.is_valid():
+            logger.warning("Cannot prepare writers with None project_info or not valid: %s", project)
             return
         self._interval_reference = project.get_interval(self._interval_mode, when=now)
         self._prepare_video_writer(project)
@@ -290,9 +290,12 @@ class VideoRecord(Thread):
         self._video_file = video_file
         logger.notice(f"<{self.name}>: video record to {video_file}")
 
-        self._video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps,
-                                             (self._width, self._height))
-        self._video_timestamp_file = open(timestamp_file, "a")
+        vid_writer = cv2.VideoWriter(
+            video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps, (self._width, self._height))
+        if not vid_writer.isOpened():
+            raise RuntimeError(f"Failed open {video_file} for writing")
+        self._video_writer = vid_writer
+        self._video_timestamp_file = open(timestamp_file, "w")
 
     def _close_video_writer(self):
         vid_writer = self._video_writer
