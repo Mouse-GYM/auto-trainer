@@ -689,8 +689,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     @baseline_intensity.setter
     def baseline_intensity(self, value: float):
         prev, self._baseline_intensity = self._baseline_intensity, value
-        if value != prev:
-            self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
+        self._on_property_changed(BehaviorAlgoProps.BASELINE_INTENSITY, value, prev)
 
     @property
     def head_clamp_config(self) -> HeadClampConfiguration:
@@ -1338,6 +1337,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._load_pellet_cfg(config.pellet_delivery)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
+        self.baseline_intensity = config.head_clamp.baseline_intensity
         self.reload_diamond_triangle_config()
         self._active_config = config  # set it as new active one only at the end,
         #   so that possible on_property_changed event can be relayed if some changed.
