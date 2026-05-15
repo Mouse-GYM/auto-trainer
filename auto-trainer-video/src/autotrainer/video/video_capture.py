@@ -240,7 +240,7 @@ class VideoCapture(Process):
         # if self._attrs.is_primary and msg_q is not None:
         #     msg_q.put(status)
 
-    def _set_error(self, error: Exception):
+    def _set_error(self, error: str):
         logger.error("set_error: %s", error)
         self._set_status(CaptureProcessStatus.FAILED)
         if self._errors:
@@ -250,53 +250,67 @@ class VideoCapture(Process):
         logger.info(f"<{self._name}> process started: %s", self._network_queue)
         try:
             if self._camera_url is None:
-                self._set_error(ValueError("camera_url not specified"))
+                self._set_error("camera_url not specified")
                 return False
 
             try:
                 camera = self._camera = VideoManager.create_camera(self._camera_url, self._name)
+                if camera is None:
+                    raise RuntimeError("VideoManager returned None")
             except BaseException as err:
-                self._set_error(RuntimeError(f"Could not create camera {self._name}: {err}"))
+                self._set_error(f"Could not create camera {self._name}: {err}")
                 return False
-            camera: CameraBase
+
             camera.prepare_capture()
 
-            rec_queue = queue.Queue()
+            rec_queue = queue.Queue(maxsize=128)
+            # NB: we put batch per batch (of self._record_batch_size) into the queue
             self._record_queue = rec_queue
             self._record_properties.name = self._name
             self._record_properties.frame_size = (camera.width, camera.height)
             self._record_properties.fps = camera.fps
 
-            self._record = VideoRecord(self._record_properties, rec_queue)
-            self._record.start()
+            vid_rec = self._record = VideoRecord(self._record_properties, rec_queue)
+            vid_rec.start()
 
             if self._detection_attrs is None or self._project_info is None:
                 self._video_detection = None
             else:
-                self._video_detection = VideoDetection(self._project_info, self._detection_attrs)
-                self._video_detection.start()
+                vid_det = self._video_detection = VideoDetection(self._project_info, self._detection_attrs)
+                vid_det.start()
 
             logger.verbose("%s: video_detection: %s", self._name, self._video_detection)
 
-            self._command_thread = threading.Thread(target=self._command_handler, daemon=True, name="CommandHandler")
-            self._command_thread.start()
+            thread = self._command_thread = threading.Thread(
+                target=self._command_handler, daemon=True, name="CommandHandler")
+            thread.start()
 
             return True
         except Exception as err:
             logger.exception("%s: Error during prepare to run: %s", self, err)
             self._set_status(CaptureProcessStatus.FAILED)
-            self._set_error(err)
+            self._set_error(str(err))
             return False
 
     def _command_handler(self):
         while True:
+            vid_rec = self._record
+            if vid_rec is not None and not vid_rec.is_alive():
+                logger.warning("VideoRecord not alive, terminating")
+                self._user_terminate()
+                self._set_error("video_record dead")
+                break
+            vid_det = self._video_detection
+            if vid_det is not None and not vid_det.is_alive():
+                logger.warning("Video Detection not alive, terminating")
+                self._user_terminate()
+                self._set_error("video_detection dead")
+                break
             try:
                 raw = self._command_queue.get(timeout=1)
             except queue.Empty:
                 continue
             if raw is None:
-                self._is_capturing = False
-                self._is_running = False
                 break
             try:
                 cmd, context = raw
@@ -393,7 +407,7 @@ class VideoCapture(Process):
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
-                self._set_error(RuntimeError("too many capture failure"))
+                self._set_error("too many capture failure")
                 self._end_capture()
                 self._user_terminate()
                 break
@@ -622,10 +636,12 @@ class VideoCapture(Process):
         # end while self._is_running
 
     def _terminate_capture_loop(self):
+        camera = self._camera
         try:
             logger.info(f"<{self._name}> capture loop ended")
 
-            self._camera.end_capture()
+            if camera is not None:
+                camera.end_capture()
 
             vid_rec = self._record
             if vid_rec is not None:
@@ -650,7 +666,7 @@ class VideoCapture(Process):
 
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
-            self._set_error(err)
+            self._set_error(str(err))
         finally:
             logger.debug("terminated")
             self._set_status(CaptureProcessStatus.TERMINATED)

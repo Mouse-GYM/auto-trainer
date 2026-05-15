@@ -56,8 +56,9 @@ class VideoRecordProperties:
     """Number of frames to batch for passing between capture and record queues."""
 
     def should_record(self, is_triggered: bool, *, is_from_start: bool = False) -> bool:
+        project = self.project_info
         any_active = (
-            self.project_info is not None
+            project is not None and project.is_valid()
             and (self.video_rotate_interval >= 0 or self.image_interval > 0)
         )
         logger.debug("should_record: vri=%s ii=%s any_active=%s is_from_start=%s",
