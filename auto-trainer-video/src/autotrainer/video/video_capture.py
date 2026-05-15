@@ -335,9 +335,8 @@ class VideoCapture(Process):
         if attrs.watchdog_perf_c is not None:
             def set_watchdog(value):
                 nonlocal p_prev_watchdog
-                if value - p_prev_watchdog > 0.1:
-                    attrs.watchdog_perf_c.value = value
-                    p_prev_watchdog = value
+                if value - p_prev_watchdog >= 0.2:
+                    p_prev_watchdog = attrs.watchdog_perf_c.value = value
         else:
             def set_watchdog(_):
                 """Void set_watchdog without shared value"""
@@ -386,11 +385,11 @@ class VideoCapture(Process):
                 logger.verbose("got synced frame idx=%s ; frame_idx=%s",
                                synced_frame_idx, prev_frame_id)
 
-        def perform_stop_recording():
+        def perform_stop_recording(force: bool=False):
             nonlocal record_start_frame_idx, synced_frame_idx, record_q_list
             nonlocal cnt_net_q_put
-            secondary_acquire()
-            # stop recording requested
+            if not force:
+                secondary_acquire()
             if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
                 cut_over = cam_frame_id - synced_frame_idx
                 record_start_frame_idx = None
@@ -431,19 +430,24 @@ class VideoCapture(Process):
 
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
-        set_watchdog(time.perf_counter())
 
-        while self._is_running:
+        while True:
+
+            if not self._is_running:
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id
+                    perform_stop_recording(force=True)
+                break
 
             prev_frame_when_secs = when_secs
             prev_frame_id = cam_frame_id
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
-                if record_start_frame_idx is not None:
-                    synced_frame_idx = cam_frame_id - 1
-                    perform_stop_recording()
                 self._set_error(RuntimeError("too many capture failure"))
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id
+                    perform_stop_recording(force=True)
                 self._end_capture()
                 self._user_terminate()
                 break
@@ -456,14 +460,14 @@ class VideoCapture(Process):
             perf_now = time.perf_counter()
             set_watchdog(perf_now)
 
-            try:
-                if not self._is_capturing:
-                    if record_start_frame_idx is not None:
-                        synced_frame_idx = cam_frame_id - 1  # ensure immediate stop
-                        perform_stop_recording()
-                    time.sleep(0.001)
-                    continue
+            if not self._is_capturing:
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id  # ensure immediate stop
+                    perform_stop_recording(force=True)
+                time.sleep(0.001)
+                continue
 
+            try:
                 # this eventually set/unset recording enabled on the primary cam, or on non-synced cam(s):
                 # + 1 because next frame will have that frame_id
                 if is_record_active and record_start_frame_idx is None:
