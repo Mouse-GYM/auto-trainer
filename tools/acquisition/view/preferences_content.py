@@ -1,4 +1,5 @@
 import ast
+import inspect
 import copy
 import itertools
 import logging
@@ -1130,6 +1131,39 @@ class PreferencesContent(QWidget):
             for r in states_refresh:
                 r()
 
+        def make_is_emegency_allow_autoresume(use_toggle, attr_is_emergency, attr_allow_autoresume):
+            nonlocal cur_row
+            # ensure both attributes exists before:
+            getattr(alarm_cfg, attr_is_emergency)
+            getattr(alarm_cfg, attr_allow_autoresume)
+            #
+            grid_layout.addWidget(QLabel("Emergency condition:"), cur_row, cur_col)
+            toggle_is_emergency = QSwitch()
+            add_enabled_state(lambda e=toggle_is_emergency: e.setEnabled(use_toggle.isChecked()))
+            toggle_is_emergency.setChecked(getattr(alarm_cfg, attr_is_emergency))
+            def is_emegency_changed(value):
+                toggled = value != 0
+                cfg = alarm_monitor.config
+                setattr(cfg, attr_is_emergency, toggled)
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+                refresh_enabled_states()
+            toggle_is_emergency.stateChanged.connect(is_emegency_changed)
+            grid_layout.addWidget(toggle_is_emergency, cur_row, cur_col + 1)
+            cur_row += 1
+            grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
+            toggle = QSwitch()
+            add_enabled_state(lambda e=toggle: e.setEnabled(use_toggle.isChecked() and toggle_is_emergency.isChecked()))
+            toggle.setChecked(getattr(alarm_cfg, attr_allow_autoresume))
+            def allow_autoresume_changed(value):
+                toggled = value != 0
+                cfg = alarm_monitor.config
+                setattr(cfg, attr_allow_autoresume, toggled)
+                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
+                refresh_enabled_states()
+            toggle.stateChanged.connect(allow_autoresume_changed)
+            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+            cur_row += 1
+
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
@@ -1171,18 +1205,11 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume)
-        def auto_resume_audio_load_cell_thrash_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_audio_load_cell_thrash_resume = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_audio_load_cell_thrash_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        make_is_emegency_allow_autoresume(
+            self._use_audio_load_cell_thrashing_toggle,
+            "audio_load_cell_is_emergency_stop_condition",
+            "auto_resume_on_audio_load_cell_thrash_resume",
+        )
 
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
@@ -1248,7 +1275,6 @@ class PreferencesContent(QWidget):
         toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
         toggle.setToolTip(tooltip_txt)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-
         def use_animal_missing_toggle_changed(value):
             toggled = value != 0
             refresh_enabled_states()
@@ -1265,18 +1291,11 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_animal_missing_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel)
-        def auto_resume_animal_missing_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_presence_seen_after_exit_tunnel = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_animal_missing_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        make_is_emegency_allow_autoresume(
+            self._use_animal_missing_toggle,
+            "presence_missing_is_emergency_stop_condition",
+            "auto_resume_on_presence_seen_after_exit_tunnel",
+        )
 
         grid_layout.addWidget(QLabel("Missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
@@ -1300,7 +1319,6 @@ class PreferencesContent(QWidget):
         toggle.setToolTip(tooltip_txt)
         toggle.setChecked(alarm_cfg.use_external_doors_open)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-
         def use_ext_doors_toggle_changed(value):
             toggled = value != 0
             refresh_enabled_states()
@@ -1317,18 +1335,11 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_external_doors_open_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_external_doors_close)
-        def auto_resume_ext_doors_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_external_doors_close = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_ext_doors_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        make_is_emegency_allow_autoresume(
+            self._use_external_doors_open_toggle,
+            "external_doors_open_is_emergency_stop_condition",
+            "auto_resume_on_external_doors_close",
+        )
 
         grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
@@ -1363,20 +1374,13 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.auto_resume_on_global_animal_presence)
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_global_presence_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_global_animal_presence)
-        def auto_resume_global_pres_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_global_animal_presence = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_global_pres_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
+        # (alarm_cfg.global_animal_presence_is_emergency_stop_condition,
+        #  alarm_cfg.auto_resume_on_global_animal_presence)
+        make_is_emegency_allow_autoresume(
+            self._use_global_presence_toggle,
+            "global_animal_presence_is_emergency_stop_condition",
+            "auto_resume_on_global_animal_presence",
+        )
         # Device comm. error
         grid_layout.addWidget(QLabel("<b>Use Device Comm. Error:</b>"), cur_row, cur_col)
         toggle = self._use_device_comm_error_toggle = QSwitch()
@@ -1392,18 +1396,13 @@ class PreferencesContent(QWidget):
         self._use_device_comm_error_toggle.stateChanged.connect(use_dev_comm_error_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_device_comm_error_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_device_comm_error)
-        def auto_resume_use_dev_comm_err_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_device_comm_error = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_use_dev_comm_err_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        # (alarm_cfg.device_comm_error_is_emergency_stop_condition,
+        #  alarm_cfg.auto_resume_on_device_comm_error)
+        make_is_emegency_allow_autoresume(
+            self._use_device_comm_error_toggle,
+            "device_comm_error_is_emergency_stop_condition",
+            "auto_resume_on_device_comm_error",
+        )
 
         # System maintenance
         grid_layout.addWidget(QLabel("<b>Use System Maintenance:</b>"), cur_row, cur_col)
@@ -1419,19 +1418,11 @@ class PreferencesContent(QWidget):
         self._use_system_maintenance_toggle.stateChanged.connect(use_system_maintenance_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_system_maintenance_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_system_maintenance)
-        toggle.setEnabled(alarm_cfg.use_system_maintenance)
-        def auto_resume_system_maintenance_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_system_maintenance = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_system_maintenance_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        make_is_emegency_allow_autoresume(
+            self._use_system_maintenance_toggle,
+            "system_maintenance_is_emergency_stop_condition",
+            "auto_resume_on_system_maintenance",
+        )
 
         # System fault
         grid_layout.addWidget(QLabel("<b>Use System Fault:</b>"), cur_row, cur_col)
@@ -1447,19 +1438,11 @@ class PreferencesContent(QWidget):
         self._use_system_fault_toggle.stateChanged.connect(use_system_fault_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
-        grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-        toggle = QSwitch()
-        add_enabled_state(lambda e=toggle: e.setEnabled(self._use_system_fault_toggle.isChecked()))
-        toggle.setChecked(alarm_cfg.auto_resume_on_system_fault)
-        toggle.setEnabled(alarm_cfg.use_system_fault)
-        def auto_resume_system_fault_toggle_changed(value):
-            toggled = value != 0
-            cfg = alarm_monitor.config
-            cfg.auto_resume_on_system_fault = toggled
-            alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        toggle.stateChanged.connect(auto_resume_system_fault_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        make_is_emegency_allow_autoresume(
+            self._use_system_fault_toggle,
+            "system_fault_is_emergency_stop_condition",
+            "auto_resume_on_system_fault",
+        )
 
         # finally
         refresh_enabled_states()

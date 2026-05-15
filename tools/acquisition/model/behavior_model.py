@@ -75,35 +75,64 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _alarm_monitor_property_changed(self, name, value, old_value):
         # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
-        if name == EmergencyAlarmMonitor.IS_ENGAGED:
-            alarm_mon = self._analysis.emergency_alarm_monitor
-            algo_status = self._system_machine.algorithm.status
-            if value:
+        alarm_mon = self._analysis.emergency_alarm_monitor
+        # if alarm_mon.is_engaged_prop(name):
+        if alarm_mon.IS_ENGAGED:  # only need check main one,
+            # it's force-republished whenever any config also changed,
+            # so that we can evaluate the is_stop_condition here:
+            algo = self._system_machine.algorithm
+            algo_status = algo.status
+            alarm_cfg = alarm_mon.config
+            if not alarm_mon.is_engaged:
+                # nothing engaged, all ok
+                if algo.algo_paused:
+                    self.emergency_resume("alarm-monitor-resumed")
+            else:
                 if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     valid_reasons = list(EmergencyReason)
                 elif algo_status is BehaviorAlgoStatus.ANIMAL_IN_DEVICE:
-                    valid_reasons = {
+                    valid_reasons = {  # == all but mouse thrashing, should we include it ?
                         EmergencyReason.DOORS_OPEN,
-                        EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL,
                         EmergencyReason.GLOBAL_ANIMAL_PRESENCE,
-                        EmergencyReason.SYSTEM_MAINTENANCE,
+                        EmergencyReason.DEVICE_COMM_ERROR,
                         EmergencyReason.SYSTEM_FAULT,
+                        EmergencyReason.SYSTEM_MAINTENANCE,
                     }
-                else:
+                else:  # idle or acquiring (== running)
                     valid_reasons = {
-                        EmergencyReason.SYSTEM_MAINTENANCE,
                         EmergencyReason.SYSTEM_FAULT,
+                        EmergencyReason.SYSTEM_MAINTENANCE,
+                        EmergencyReason.DEVICE_COMM_ERROR,
                     }
+                #
+                map_reason_to_is_stop_condition = {
+                    EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
+                    EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
+                    EmergencyReason.SYSTEM_MAINTENANCE: alarm_cfg.system_maintenance_is_emergency_stop_condition,
+                    EmergencyReason.SYSTEM_FAULT: alarm_cfg.system_fault_is_emergency_stop_condition,
+                    EmergencyReason.MOUSE_THRASHING: alarm_cfg.audio_load_cell_is_emergency_stop_condition,
+                    EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: alarm_cfg.presence_missing_is_emergency_stop_condition,
+                    EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
+                }
                 reasons = alarm_mon.engaged_reasons
-                value = any(val in valid_reasons for val in reasons)
-                if value:
-                    reasons = " ".join(reason.name for reason in reasons)
+                is_stop_condition_reasons = []
+                for reason in reasons:
+                    if map_reason_to_is_stop_condition[reason]:
+                        is_stop_condition_reasons.append(reason)
+                filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, is_stop_condition_reasons))
+                logger.verbose(
+                    "filtered_reasons=%s is_stop_condition_reasons=%s map=%s",
+                    filtered_valid_reasons, is_stop_condition_reasons, map_reason_to_is_stop_condition,
+                )
+                if len(filtered_valid_reasons) > 0:
+                    # at least one possible valid reason engaged with is_stop_condition=True
+                    reasons = " ".join(reason.name for reason in is_stop_condition_reasons)
                     self.emergency_stop(f"alarm-monitor: {reasons}")
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
                                    algo_status, reasons)
-            else:
-                self.emergency_resume("alarm-monitor-resumed")
+                    if len(is_stop_condition_reasons) == 0 and algo.algo_paused:
+                        self.emergency_resume("alarm-monitor-no-is-stop-condition-remaining")
 
     @property
     def analysis(self) -> SensorAnalysis:
