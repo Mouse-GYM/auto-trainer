@@ -73,7 +73,7 @@ class _EmergencyAlarmConfiguration:
     # 6th
     use_system_maintenance: bool = True
     auto_resume_on_system_maintenance: bool = True
-    system_maintenance_is_emergency_stop_condition: bool = True
+    system_maintenance_is_emergency_stop_condition: bool = False
 
     # 7th
     use_system_fault: bool = True
