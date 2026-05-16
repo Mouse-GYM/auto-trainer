@@ -433,11 +433,13 @@ class PelletMachine(StateMachine):
                         self.send_pellet()
 
         elif cur_state == PelletState.sending:
-            reason = "monitor_when_sent"
-            logit()
-            with BehaviorAlgorithm.set_allow_reentrant(True):
-                self.monitor_pellet()
-                self.environment_changed(pellet_seen, must_release, caller=caller, is_from_inference=is_from_inference)
+            if self.can_use_pellet_command():
+                reason = "monitor_when_sent"
+                logit()
+                with BehaviorAlgorithm.set_allow_reentrant(True):
+                    self.monitor_pellet()
+                    self.environment_changed(pellet_seen, must_release,
+                                             caller=caller, is_from_inference=is_from_inference)
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
             if self.can_send_pellet():
@@ -458,9 +460,6 @@ class PelletMachine(StateMachine):
                 logit()
                 with BehaviorAlgorithm.set_allow_reentrant(True):
                     self.send_pellet()
-                    self.monitor_pellet()
-                    self.environment_changed(pellet_seen, must_release,
-                                             caller=caller, is_from_inference=is_from_inference)
             else:
                 log_could_retry_shortly()
 
