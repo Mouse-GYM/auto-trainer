@@ -331,11 +331,14 @@ class VideoCapture(Process):
         synced_frame_idx: Optional[int] = None
         msg_q = attrs.msg_queue  # message queue to main process
         net_q = self._network_queue  # net_q to pose-process
+            # nb: is actually same than attrs.inference.queue
         record_start_frame_idx: Optional[int] = None
         next_t_image_q = time.perf_counter()
         img_q = self._image_queue  # image queue to main/GUI process view
         record_q_list = self._record_queue_list
-        record_q = self._record_queue  # record queue to file
+        record_q: queue.Queue = self._record_queue  # record queue to file
+        if record_q is None:
+            raise RuntimeError("supposed be created")
         capture = camera.capture
         net_q_put = None if net_q is None else net_q.put
         net_q_idx = None if net_q_put is None else attrs.inference.index  # although is same than self._camera_idx
@@ -346,9 +349,8 @@ class VideoCapture(Process):
         if attrs.watchdog_perf_c is not None:
             def set_watchdog(value):
                 nonlocal p_prev_watchdog
-                if value - p_prev_watchdog > 0.1:
-                    attrs.watchdog_perf_c.value = value
-                    p_prev_watchdog = value
+                if value - p_prev_watchdog >= 0.2:
+                    p_prev_watchdog = attrs.watchdog_perf_c.value = value
         else:
             def set_watchdog(_):
                 """Void set_watchdog without shared value"""
@@ -397,17 +399,69 @@ class VideoCapture(Process):
                 logger.verbose("got synced frame idx=%s ; frame_idx=%s",
                                synced_frame_idx, prev_frame_id)
 
+        def perform_stop_recording(force: bool=False):
+            nonlocal record_start_frame_idx, synced_frame_idx, record_q_list
+            nonlocal cnt_net_q_put
+            if not force:
+                secondary_acquire()
+            if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
+                cut_over = cam_frame_id - synced_frame_idx
+                record_start_frame_idx = None
+                synced_frame_idx = None
+            else:
+                cut_over = 0
+            #
+            if record_start_frame_idx is None:
+                record_q_list = self._record_queue_list
+                if cut_over > 0:
+                    logger.debug("cut record_q_list by %s, len=%s", cut_over, len(record_q_list))
+                    del record_q_list[-cut_over:]
+                if len(record_q_list) > 0:
+                    record_q.put(record_q_list)
+                    record_q_list = self._record_queue_list = []
+                record_q.put([])  # empty list is mark for EOR for recorder thread
+
+                if net_q is not None:
+                    # we might eventually have written some extra frame(s) vs the other camera(s) used in
+                    # the net_q, so this pad_to_batch_size :
+                    net_q.pad_to_batch_size(net_q_idx, empty_frame, cnt_net_q_put, timeout=5)
+                    # required: must set back to 0 given will now be same in all cams,
+                    # and also aligned with frames_per_camera_per_batch
+                    cnt_net_q_put = 0
+                    # now
+                    logger.info(
+                        "sending EOF_RECORDING batch frame indices to signify eof recording. "
+                        "last frame_id: %s when=%.4f perf=%.4f",
+                        cam_frame_id, when / 1e9, frame_perf_now)
+                    net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
+                                                   cam_idx=net_q_idx, timeout=5)
+
+                self._set_status(CaptureProcessStatus.RUNNING)
+
+                if is_primary and msg_q is not None:
+                    msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
+                               (self._camera_idx, CaptureProcessStatus.RUNNING)))
+
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
-        set_watchdog(time.perf_counter())
 
-        while self._is_running:
+        while True:
+
+            if not self._is_running:
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id
+                    perform_stop_recording(force=True)
+                break
+
             prev_frame_when_secs = when_secs
             prev_frame_id = cam_frame_id
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
                 self._set_error("too many capture failure")
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id
+                    perform_stop_recording(force=True)
                 self._end_capture()
                 self._user_terminate()
                 break
@@ -420,13 +474,14 @@ class VideoCapture(Process):
             perf_now = time.perf_counter()
             set_watchdog(perf_now)
 
-            try:
-                if not self._is_capturing:
-                    time.sleep(0.001)
-                    record_start_frame_idx = None
-                    record_q_list = self._record_queue_list = []
-                    continue
+            if not self._is_capturing:
+                if record_start_frame_idx is not None:
+                    synced_frame_idx = cam_frame_id  # ensure immediate stop
+                    perform_stop_recording(force=True)
+                time.sleep(0.001)
+                continue
 
+            try:
                 # this eventually set/unset recording enabled on the primary cam, or on non-synced cam(s):
                 # + 1 because next frame will have that frame_id
                 if is_record_active and record_start_frame_idx is None:
@@ -566,45 +621,7 @@ class VideoCapture(Process):
                                              " ; skipped put CaptureProcessStatus.RECORDING")
 
                 elif not is_record_active and record_start_frame_idx is not None:
-                    secondary_acquire()
-                    # stop recording requested
-                    if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
-                        cut_over = cam_frame_id - synced_frame_idx
-                        record_start_frame_idx = None
-                        synced_frame_idx = None
-                    else:
-                        cut_over = 0
-                    #
-                    if record_start_frame_idx is None:
-                        record_q_list = self._record_queue_list
-                        if cut_over > 0:
-                            logger.debug("cut record_q_list by %s, len=%s", cut_over, len(record_q_list))
-                            del record_q_list[-cut_over:]
-                        if len(record_q_list) > 0:
-                            record_q.put(record_q_list)
-                            record_q_list = self._record_queue_list = []
-                        record_q.put([])  # empty list is mark for EOR for recorder thread
-
-                        if net_q is not None:
-                            # we might eventually have written some extra frame(s) vs the other camera(s) used in
-                            # the net_q, so this pad_to_batch_size :
-                            net_q.pad_to_batch_size(net_q_idx, empty_frame, cnt_net_q_put, timeout=5)
-                            # required: must set back to 0 given will now be same in all cams,
-                            # and also aligned with frames_per_camera_per_batch
-                            cnt_net_q_put = 0
-                            # now
-                            logger.info(
-                                "sending EOF_RECORDING batch frame indices to signify eof recording. "
-                                "last frame_id: %s when=%.4f perf=%.4f",
-                                cam_frame_id, when / 1e9, frame_perf_now)
-                            net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
-                                                           cam_idx=net_q_idx, timeout=5)
-
-                        self._set_status(CaptureProcessStatus.RUNNING)
-
-                        if is_primary and msg_q is not None:
-                            msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
-                                       (self._camera_idx, CaptureProcessStatus.RUNNING)))
+                    perform_stop_recording()
 
                 elif record_start_frame_idx is not None:
                     # normal recording case in progress
