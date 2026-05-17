@@ -418,6 +418,10 @@ class AppModel(ObservableObject):
         # if prj is None:
         #     prj = self.make_project_info()
         new_day = prev_day + timedelta(days=1)
+        today = datetime.today().date()
+        if new_day != today:
+            logger.warning("detected time change: %s vs %s", new_day, today)
+            new_day = today
         today_midnight = datetime.combine(new_day, datetime.min.time())
         #
         new_log_path = prj.get_log_file_path(today_midnight)
@@ -429,7 +433,7 @@ class AppModel(ObservableObject):
         # delay = 30  # uncomment for manual testing purpose
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
-        logger.verbose("Created new daily timer in %.1f seconds", delay)
+        logger.verbose("Created new daily timer in %.1f seconds ; today=%s", delay, new_day)
         self.current_day_changed(new_day)
 
     def check_max_pellet_loaded(self):
@@ -1462,15 +1466,15 @@ class AppModel(ObservableObject):
         now = datetime.now()
         today = self._current_day = now.date()
         delay = (
-                datetime.combine(today, datetime.min.time()) + timedelta(days=1, seconds=1)
-                - now
+            datetime.combine(today, datetime.min.time()) + timedelta(days=1, seconds=1)
+            - now
         ).total_seconds()
         prev = self._timer_daily
         prev.cancel()
         # delay = 45  # uncomment for manual testing
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
-        logger.notice("Created new daily timer in %.1f seconds", delay)
+        logger.notice("Created daily timer in %.1f seconds ; today=%s", delay, today)
         self._analysis.start()
 
     def on_close(self):
