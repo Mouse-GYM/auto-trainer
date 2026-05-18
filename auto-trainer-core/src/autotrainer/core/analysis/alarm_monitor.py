@@ -141,7 +141,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._event_manager.post_event_content(
             ApiEventKind.alarmChanged,
             data={
-                "detector_id": detector_id,
+                "alarm_id": detector_id,
                 "is_active": active,
                 "is_enabled": enabled,
                 "is_auto_resume_enabled": auto_resume,
