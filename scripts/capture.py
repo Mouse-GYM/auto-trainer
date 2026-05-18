@@ -20,6 +20,8 @@ def capture_video(camera_url: str, frame_count: int, output_path: str, image_int
     logger.info(f"Output Path: {output_path}")
 
     camera = VideoManager.create_camera(camera_url, "capture_camera")
+    if camera is None:
+        raise RuntimeError(f"Could not create camera with url={camera_url!r}")
 
     camera.prepare_capture()
 
