@@ -139,8 +139,8 @@ class VideoRecord(Thread):
                 self._prepare_writers()
 
         prev_perf_now = prev_frame_when = None
-        check_count = 0
         tot_written = 0
+        consecutive_failures = 0
 
         while self._is_running:
 
@@ -218,21 +218,19 @@ class VideoRecord(Thread):
                             cv2.imwrite(img_loc.joinpath(img_name.format(when=when_str)),
                                         frame)
 
-                    check_count += 1
-
-                    # if check_count > self._fps:
-                    #     if trim_queue(self._input_queue, 5):
-                    #         logger.debug(f"<{self.name}>: queue trimmed")
-                    #     check_count = 0
-                    #     self._check_writers()
-
             except Exception as err:
-                logger.exception("%s: loop error: %s", self, err)
+                if consecutive_failures < 5:
+                    logger.exception("%s: loop error: %s", self, err)
+                consecutive_failures += 1
 
             try:
                 self._check_writers()
             except Exception as err:
-                logger.exception("%s: check writers error: %s", self, err)
+                if consecutive_failures < 5:
+                    logger.exception("%s: check writers error: %s", self, err)
+                consecutive_failures += 1
+            else:
+                consecutive_failures = 0
 
         logger.notice("%s: main loop exited", self)
 
@@ -286,16 +284,19 @@ class VideoRecord(Thread):
 
         video_file, timestamp_file, _ = project.get_video_path(
             self._name, interval=self._interval_mode, allow_overwrite=True)
-
-        self._video_file = video_file
-        logger.notice(f"<{self.name}>: video record to {video_file}")
+        logger.notice("<%s>: video record to %s", self.name, video_file)
 
         vid_writer = cv2.VideoWriter(
             video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps, (self._width, self._height))
         if not vid_writer.isOpened():
             raise RuntimeError(f"Failed open {video_file} for writing")
+        try:
+            self._video_timestamp_file = open(timestamp_file, "w")
+        except IOError as err:
+            vid_writer.release()
+            raise RuntimeError(f"Failed open {timestamp_file} for writing: {err}")
+        self._video_file = video_file
         self._video_writer = vid_writer
-        self._video_timestamp_file = open(timestamp_file, "w")
 
     def _close_video_writer(self):
         vid_writer = self._video_writer
