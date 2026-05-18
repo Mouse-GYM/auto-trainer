@@ -288,7 +288,7 @@ class AlarmContent(ContentWidget):
                 changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
                 changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
                 changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
-                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_maintenance_engaged, None)
+                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_fault_engaged, None)
 
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
