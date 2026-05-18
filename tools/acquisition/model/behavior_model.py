@@ -76,14 +76,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def _alarm_monitor_property_changed(self, name, value, old_value):
         # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         alarm_mon = self._analysis.emergency_alarm_monitor
-        # if alarm_mon.is_engaged_prop(name):
-        if alarm_mon.IS_ENGAGED:  # only need check main one,
-            # it's force-republished whenever any config also changed,
-            # so that we can evaluate the is_stop_condition here:
+        if name == alarm_mon.IS_ENGAGED:
             algo = self._system_machine.algorithm
             algo_status = algo.status
-            alarm_cfg = alarm_mon.config
-            if not alarm_mon.is_engaged:
+            if not value:
                 # nothing engaged, all ok
                 if algo.algo_paused:
                     self.emergency_resume("alarm-monitor-resumed")
@@ -105,34 +101,18 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                         EmergencyReason.DEVICE_COMM_ERROR,
                     }
                 #
-                map_reason_to_is_stop_condition = {
-                    EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
-                    EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
-                    EmergencyReason.SYSTEM_MAINTENANCE: alarm_cfg.system_maintenance_is_emergency_stop_condition,
-                    EmergencyReason.SYSTEM_FAULT: alarm_cfg.system_fault_is_emergency_stop_condition,
-                    EmergencyReason.MOUSE_THRASHING: alarm_cfg.audio_load_cell_is_emergency_stop_condition,
-                    EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: alarm_cfg.presence_missing_is_emergency_stop_condition,
-                    EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
-                }
-                reasons = alarm_mon.engaged_reasons
-                is_stop_condition_reasons = []
-                for reason in reasons:
-                    if map_reason_to_is_stop_condition[reason]:
-                        is_stop_condition_reasons.append(reason)
-                filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, is_stop_condition_reasons))
-                logger.verbose(
-                    "filtered_reasons=%s is_stop_condition_reasons=%s map=%s",
-                    filtered_valid_reasons, is_stop_condition_reasons, map_reason_to_is_stop_condition,
-                )
+                engaged_reasons = alarm_mon.engaged_reasons
+                filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, engaged_reasons))
+                logger.verbose("filtered_reasons=%s", filtered_valid_reasons)
                 if len(filtered_valid_reasons) > 0:
-                    # at least one possible valid reason engaged with is_stop_condition=True
-                    reasons = " ".join(reason.name for reason in is_stop_condition_reasons)
+                    # at least one possible valid reason engaged
+                    reasons = " ".join(reason.name for reason in engaged_reasons)
                     self.emergency_stop(f"alarm-monitor: {reasons}")
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
-                                   algo_status, reasons)
-                    if len(is_stop_condition_reasons) == 0 and algo.algo_paused:
-                        self.emergency_resume("alarm-monitor-no-is-stop-condition-remaining")
+                                   algo_status, engaged_reasons)
+                    if algo.algo_paused:
+                        self.emergency_resume("alarm-monitor-no-valid-condition-remaining")
 
     @property
     def analysis(self) -> SensorAnalysis:
@@ -259,7 +239,5 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             return
         algo.algo_paused = False
         self._source_emergency = None
-        # restart full analysis so that monitors/detectors counters/context are reset, as if app was just started:
-        self._analysis.restart()
         post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         self.emergency_resumed(source)
