@@ -76,10 +76,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def _alarm_monitor_property_changed(self, name, value, old_value):
         # logger.debug("alarm-mon: %s : %s -> %s", name, old_value, value)
         alarm_mon = self._analysis.emergency_alarm_monitor
-        # if alarm_mon.is_engaged_prop(name):
-        if name == alarm_mon.IS_ENGAGED:  # only need check main one,
-            # it's force-republished whenever any config also changed,
-            # so that we can evaluate the is_stop_condition here:
+        if name == alarm_mon.IS_ENGAGED:
             algo = self._system_machine.algorithm
             algo_status = algo.status
             if not value:
@@ -108,7 +105,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 filtered_valid_reasons = list(filter(lambda v: v in valid_reasons, engaged_reasons))
                 logger.verbose("filtered_reasons=%s", filtered_valid_reasons)
                 if len(filtered_valid_reasons) > 0:
-                    # at least one possible valid reason engaged with is_stop_condition=True
+                    # at least one possible valid reason engaged
                     reasons = " ".join(reason.name for reason in engaged_reasons)
                     self.emergency_stop(f"alarm-monitor: {reasons}")
                 else:

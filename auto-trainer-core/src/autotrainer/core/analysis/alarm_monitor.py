@@ -65,17 +65,6 @@ class EmergencyAlarmMonitor(BaseDetector):
     SYSTEM_MAINTENANCE_ENGAGED = "system_maintenance_engaged"
     SYSTEM_FAULT_ENGAGED = "system_fault_engaged"
 
-    _engaged_props = frozenset({
-        IS_ENGAGED,
-        PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED,
-        AUDIO_LOAD_CELL_THRASHING_ENGAGED,
-        EXT_DOORS_OPEN_ENGAGED,
-        GLOBAL_ANIMAL_PRESENCE_ENGAGED,
-        DEVICE_COMM_ERROR_ENGAGED,
-        SYSTEM_FAULT_ENGAGED,
-        SYSTEM_MAINTENANCE_ENGAGED,
-    })
-
     use_daemon = True
 
     def __init__(
@@ -121,10 +110,6 @@ class EmergencyAlarmMonitor(BaseDetector):
         global_animal_presence_monitor.property_changed += self._on_global_animal_presence_prop_changed
         system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
         system_fault_monitor.property_changed += self._on_system_fault_prop_changed
-
-    @classmethod
-    def is_engaged_prop(cls, name: str):
-        return name in cls._engaged_props
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context
