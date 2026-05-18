@@ -291,6 +291,11 @@ class AlarmContent(ContentWidget):
                 changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
                 changed(p.SYSTEM_FAULT_ENGAGED, mon.system_fault_engaged, None)
 
+        elif name == p.GLOBAL_ANIMAL_PRESENCE_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_global_animal_presence:
+                return
+            self.global_animal_presence_changed.emit(value)
+
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
                 return
