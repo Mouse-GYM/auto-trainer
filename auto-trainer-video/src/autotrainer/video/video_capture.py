@@ -315,6 +315,8 @@ class VideoCapture(Process):
                 logger.exception("Failure executing cmd %s: %s", raw, err)
 
     def _run_capture_loop(self, camera: CameraBase) -> None:
+        log_cam_frame_info_delay_frame_count = camera.fps * 5
+        frame_normal_delay = 1 / camera.fps
         fault_count = 0
         cnt_net_q_put = 0
         is_record_active = False
@@ -450,6 +452,8 @@ class VideoCapture(Process):
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
 
+        frame_perf_now = math.nan
+
         while True:
 
             if not self._is_running:
@@ -460,6 +464,7 @@ class VideoCapture(Process):
 
             prev_frame_when_secs = when_secs
             prev_frame_id = cam_frame_id
+            prev_frame_perf_now = frame_perf_now
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
@@ -510,24 +515,37 @@ class VideoCapture(Process):
                 frame_time = time.time()
                 #
                 when_secs = when / 1e9
+                perf_frame_dropped = (
+                    0
+                    if not math.isfinite(prev_frame_perf_now)
+                    else int((frame_perf_now - prev_frame_perf_now - 1.5 * frame_normal_delay) / frame_normal_delay)
+                )
                 if (
                     inference is not None
-                    and cam_frame_id != prev_frame_id + 1
+                    and (
+                        cam_frame_id != prev_frame_id + 1
+                        or perf_frame_dropped > 0
+                    )
                 ):
                     effective_frame_dropped = cam_frame_id - prev_frame_id - 1
-                    logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s diff=%.4f prev_when=%.5f frame_when=%.5f",
-                                    cam_frame_id, prev_frame_id, effective_frame_dropped,
+                    logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s (perf_dropped=%s) "
+                                   "diff_when=%.3f prev_when=%.3f frame_when=%.3f "
+                                   "diff_perf=%.3f prev_perf=%.3f frame_perf=%.3f",
+                                    cam_frame_id, prev_frame_id,
+                                   effective_frame_dropped, perf_frame_dropped,
                                    when_secs - prev_frame_when_secs,
-                                   prev_frame_when_secs, when_secs)
+                                   prev_frame_when_secs, when_secs,
+                                   frame_perf_now - prev_frame_perf_now, prev_frame_perf_now, frame_perf_now)
 
-                if cam_frame_id < 300:
+                if cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300:
                     if cam_frame_id == 0:
                         self._record.first_frame_time = frame_time
                         self._record.first_frame_when = when
                         logger.success("captured first frame id=%s ; cam_when=%.4f perf_now=%.4f",
                                        cam_frame_id, when_secs, frame_perf_now)
                     elif inference is not None and (
-                        (cam_frame_id < 300 and cam_frame_id % 64 == 0)
+                        cam_frame_id % log_cam_frame_info_delay_frame_count == 0
+                        or (cam_frame_id < 300 and cam_frame_id % 64 == 0)
                         or (cam_frame_id < 64 and cam_frame_id % 16 == 0)
                         or (cam_frame_id < 32 and cam_frame_id % 4 == 0)
                         or cam_frame_id < 4
