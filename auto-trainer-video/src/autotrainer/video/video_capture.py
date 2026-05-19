@@ -647,7 +647,7 @@ class VideoCapture(Process):
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)
-                self._set_error(err)
+                self._set_error(str(err))
                 fault_count += 1
 
         # end while self._is_running
