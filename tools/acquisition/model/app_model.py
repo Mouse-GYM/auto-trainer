@@ -1090,10 +1090,12 @@ class AppModel(ObservableObject):
                         self.on_error("Camera Process Failed",
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
-                    # 1.1) wait it's running
-                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                    # 1.1) wait it's running or failed
+                    if (
+                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                    ) or camera.video_status != CaptureProcessStatus.RUNNING:
                         did_start = False
-                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                        self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                         break
 
         # 2) prepare synced non-primary camera(s)
@@ -1114,9 +1116,10 @@ class AppModel(ObservableObject):
             for camera in synced_cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera.is_enabled:
-                    if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=p_timeout - p_now):
+                    if (not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=p_timeout - p_now)
+                        or camera.video_status != CaptureProcessStatus.RUNNING):
                         did_start = False
-                        self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                        self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                         break
                     logger.verbose("%s now running", camera.name)
 
@@ -1145,9 +1148,12 @@ class AppModel(ObservableObject):
                 self.on_error("Camera Process Failed",
                               _failed_camera_template(camera.name, camera.last_error))
             else:
-                if not camera.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5):
+                if (
+                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                    or camera.video_status != CaptureProcessStatus.RUNNING
+                ):
                     did_start = False
-                    self.on_error("Camera status failed", _failed_camera_template(camera.name, camera.last_error))
+                    self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                 else:
                     camera.on_capture_start()
 

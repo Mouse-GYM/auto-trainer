@@ -9,6 +9,7 @@ import threading
 import time
 from dataclasses import dataclass
 from enum import IntEnum
+from functools import partial
 from multiprocessing import Process
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedString
 from typing import Callable, Dict, Union, Optional, List, Tuple
@@ -80,7 +81,7 @@ class CaptureInferenceAttrs:
     index: int
         The index of this camera in the queue
     """
-    queue: Optional[FixedArrayMultiQueue]  # Union[Queue, FixedArrayMultiQueue]
+    queue: FixedArrayMultiQueue
     index: int
 
 
@@ -140,12 +141,10 @@ class VideoCapture(Process):
     """
     Process-based class for video capture and recording.
 
-    VideoCapture runs as a separate process for video capture and recording.  An optional image queue can be provided
-    to receive frames from the camera.  A separate, optional pellet queue can be provided to feed pellet models
-    or any other process.
+    VideoCapture runs as a separate process for video capture and recording.
+    An optional image queue can be provided to receive frames from the camera.
+    A separate, optional "network/process" queue can be provided to feed inference models or any other process.
     """
-
-    _network_queue: Optional[FixedArrayMultiQueue]
 
     def __init__(
         self,
@@ -153,6 +152,7 @@ class VideoCapture(Process):
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
     ):
+        logger.debug("project_info=%s", project_info)
         log_dict_config = make_log_dict_config()
         super().__init__(
             name=attrs.camera.name,
@@ -173,21 +173,13 @@ class VideoCapture(Process):
         self._image_queue: Optional[Union[queue.Queue, FixedArrayQueue]] = attrs.image_queue
         self._image_queue_frame_delay = None if attrs.fps_image_queue is None else 1 / attrs.fps_image_queue
 
-        self._network_queue: Optional[FixedArrayMultiQueue]
-        if attrs.inference is not None:
-            self._network_queue = attrs.inference.queue
-        else:
-            self._network_queue = None
-
         self._is_record_active = False
 
-        if record_properties is not None:
-            self._record_properties = record_properties
-            self._is_record_active = record_properties.should_record(False, is_from_start=True)
-            self._record_batch_size = record_properties.queue_batch_size
-        else:
-            self._record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
-            self._record_batch_size = 30
+        if record_properties is None:
+            record_properties = VideoRecordProperties(record_mode=VideoRecordMode.NONE)
+        self._record_properties = record_properties
+        self._is_record_active = record_properties.should_record(False, is_from_start=True)
+        self._record_batch_size = record_properties.queue_batch_size
 
         self._errors = attrs.errors
 
@@ -247,7 +239,8 @@ class VideoCapture(Process):
             self._errors.value = f"{error}"[:len(self._errors)].encode()
 
     def _prepare_to_run(self) -> bool:
-        logger.info(f"<{self._name}> process started: %s", self._network_queue)
+        logger.info("<%s> process started: %s", self._name, self._attrs.inference)
+        project = self._project_info
         try:
             if self._camera_url is None:
                 self._set_error("camera_url not specified")
@@ -264,7 +257,9 @@ class VideoCapture(Process):
             camera.prepare_capture()
 
             rec_queue = queue.Queue(maxsize=128)
-            # NB: we put batch per batch (of self._record_batch_size) into the queue
+            # NB: we put batch per batch (of self._record_batch_size) into the queue,
+            # so this makes actually space for 128 * record_batch_size frames,
+            # which is at the moment 60, so that's actually more than 45s at 150 FPS.
             self._record_queue = rec_queue
             self._record_properties.name = self._name
             self._record_properties.frame_size = (camera.width, camera.height)
@@ -273,14 +268,16 @@ class VideoCapture(Process):
             vid_rec = self._record = VideoRecord(self._record_properties, rec_queue)
             vid_rec.start()
 
-            if self._detection_attrs is None or self._project_info is None:
+            det_attrs = self._attrs.presence_detection_attrs
+            if project is None or det_attrs is None:
                 self._video_detection = None
             else:
-                vid_det = self._video_detection = VideoDetection(self._project_info, self._detection_attrs)
+                vid_det = self._video_detection = VideoDetection(project, det_attrs)
                 vid_det.start()
 
             logger.verbose("%s: video_detection: %s", self._name, self._video_detection)
 
+            # only start command handler thread after others before, given it's checking alive of them.
             thread = self._command_thread = threading.Thread(
                 target=self._command_handler, daemon=True, name="CommandHandler")
             thread.start()
@@ -288,7 +285,6 @@ class VideoCapture(Process):
             return True
         except Exception as err:
             logger.exception("%s: Error during prepare to run: %s", self, err)
-            self._set_status(CaptureProcessStatus.FAILED)
             self._set_error(str(err))
             return False
 
@@ -298,13 +294,13 @@ class VideoCapture(Process):
             if vid_rec is not None and not vid_rec.is_alive():
                 logger.warning("VideoRecord not alive, terminating")
                 self._user_terminate()
-                self._set_error("video_record dead")
+                self._set_error("video_record thread dead")
                 break
             vid_det = self._video_detection
             if vid_det is not None and not vid_det.is_alive():
                 logger.warning("Video Detection not alive, terminating")
                 self._user_terminate()
-                self._set_error("video_detection dead")
+                self._set_error("video_detection thread dead")
                 break
             try:
                 raw = self._command_queue.get(timeout=1)
@@ -330,18 +326,27 @@ class VideoCapture(Process):
         prim_cam_synced_frame_idx = attrs.synced_cam_frame_index
         synced_frame_idx: Optional[int] = None
         msg_q = attrs.msg_queue  # message queue to main process
-        net_q = self._network_queue  # net_q to pose-process
-            # nb: is actually same than attrs.inference.queue
         record_start_frame_idx: Optional[int] = None
         next_t_image_q = time.perf_counter()
         img_q = self._image_queue  # image queue to main/GUI process view
         record_q_list = self._record_queue_list
-        record_q: queue.Queue = self._record_queue  # record queue to file
+        record_q = self._record_queue  # record queue to file
         if record_q is None:
             raise RuntimeError("supposed be created")
-        capture = camera.capture
-        net_q_put = None if net_q is None else net_q.put
-        net_q_idx = None if net_q_put is None else attrs.inference.index  # although is same than self._camera_idx
+        rec_q_put = partial(record_q.put, timeout=3)
+        # using a ~small timeout on record_q put, to prevent deadlock if queue is full, given it has a maxsize.
+        # but the size is quite large + we write batch of frames, and command handler is supposed to detect possible
+        # exit of the record thread, and then trigger a full exit of the capture process.
+        # So this is extra protection to not hang the capture/main thread.
+        cam_capture = camera.capture
+        inference = attrs.inference
+        if inference is None:
+            net_q = net_q_idx = net_q_put = None
+        else:
+            net_q = inference.queue
+            net_q_put = net_q.put
+            net_q_idx = inference.index
+            # although is same than self._camera_idx
         image_queue_delay = self._image_queue_frame_delay
         empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
         vid_detection = self._video_detection
@@ -417,9 +422,9 @@ class VideoCapture(Process):
                     logger.debug("cut record_q_list by %s, len=%s", cut_over, len(record_q_list))
                     del record_q_list[-cut_over:]
                 if len(record_q_list) > 0:
-                    record_q.put(record_q_list)
+                    rec_q_put(record_q_list)
                     record_q_list = self._record_queue_list = []
-                record_q.put([])  # empty list is mark for EOR for recorder thread
+                rec_q_put([])  # empty list is mark for EOR for recorder thread
 
                 if net_q is not None:
                     # we might eventually have written some extra frame(s) vs the other camera(s) used in
@@ -491,7 +496,7 @@ class VideoCapture(Process):
                     # NB: use + 2: to ensure synced secondary cams will get same
 
                 # camera capture:
-                frame, when = capture()
+                frame, when = cam_capture()
                 if frame is None:
                     logger.error("Failed to capture a frame (frame = None) ; prev_frame_id=%s",
                                  prev_frame_id)
@@ -506,7 +511,7 @@ class VideoCapture(Process):
                 #
                 when_secs = when / 1e9
                 if (
-                    net_q is not None
+                    inference is not None
                     and cam_frame_id != prev_frame_id + 1
                 ):
                     effective_frame_dropped = cam_frame_id - prev_frame_id - 1
@@ -521,7 +526,7 @@ class VideoCapture(Process):
                         self._record.first_frame_when = when
                         logger.success("captured first frame id=%s ; cam_when=%.4f perf_now=%.4f",
                                        cam_frame_id, when_secs, frame_perf_now)
-                    elif net_q is not None and (
+                    elif inference is not None and (
                         (cam_frame_id < 300 and cam_frame_id % 64 == 0)
                         or (cam_frame_id < 64 and cam_frame_id % 16 == 0)
                         or (cam_frame_id < 32 and cam_frame_id % 4 == 0)
@@ -597,12 +602,12 @@ class VideoCapture(Process):
                         self._record.first_frame_time = first_frame_time
                         #
                         if len(frames_prebuffer_list) > 0:
-                            record_q.put(
+                            rec_q_put(
                                 # ( frame, frame_when, frame_perf_now )
                                 [(f, fw, p) for f, fw, _, p, _ in frames_prebuffer_list]
                             )
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
-                        record_q.put([(frame, when, frame_perf_now)])  # thread queue
+                        rec_q_put([(frame, when, frame_perf_now)])  # thread queue
                         record_q_list = (
                             self._record_queue_list
                         ) = []  # ensure we (re)start clean
@@ -627,7 +632,7 @@ class VideoCapture(Process):
                     # normal recording case in progress
                     record_q_list.append((frame, when, frame_perf_now))
                     if len(record_q_list) >= self._record_batch_size:
-                        record_q.put(record_q_list)
+                        rec_q_put(record_q_list)
                         record_q_list = self._record_queue_list = []
 
                 if net_q_put is not None:
@@ -684,9 +689,11 @@ class VideoCapture(Process):
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             self._set_error(str(err))
-        finally:
-            logger.debug("terminated")
+            # NB: _set_error does _set_status(FAILED)
+        else:
             self._set_status(CaptureProcessStatus.TERMINATED)
+        finally:
+            logger.debug("exiting")
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info("executing %s", cmd)
