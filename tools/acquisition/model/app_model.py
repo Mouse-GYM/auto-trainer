@@ -1130,6 +1130,8 @@ class AppModel(ObservableObject):
                 if not camera.is_primary and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
+            # small delay to ensure not-primary cam(s) are waiting on primary:
+            time.sleep(0.25)
             # 4.2) then on primary
             for camera in synced_cameras:
                 if camera.is_primary and camera.is_enabled:
