@@ -389,8 +389,7 @@ class VideoCapture(Process):
                 return
             if not is_primary:  # non-primary cams get synced via secondary_acquire()
                 return
-            target_idx = 1 + frame_idx - len(frames_prebuffer_list)
-            # use 1 more to ensure all secondary prebuffers are long enough too
+            target_idx = frame_idx - len(frames_prebuffer_list)
             with prim_cam_record_enabled:  # acquire lock
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx
@@ -412,20 +411,14 @@ class VideoCapture(Process):
         def perform_stop_recording(force: bool=False):
             nonlocal record_start_frame_idx, synced_frame_idx, record_q_list
             nonlocal cnt_net_q_put
-            if not force:
-                secondary_acquire()
+            if force:
+                synced_frame_idx = cam_frame_id
             if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
-                cut_over = cam_frame_id - synced_frame_idx
                 record_start_frame_idx = None
                 synced_frame_idx = None
-            else:
-                cut_over = 0
             #
             if record_start_frame_idx is None:
                 record_q_list = self._record_queue_list
-                if cut_over > 0:
-                    logger.debug("cut record_q_list by %s, len=%s", cut_over, len(record_q_list))
-                    del record_q_list[-cut_over:]
                 if len(record_q_list) > 0:
                     rec_q_put(record_q_list)
                     record_q_list = self._record_queue_list = []
@@ -496,12 +489,11 @@ class VideoCapture(Process):
 
             try:
                 # this eventually set/unset recording enabled on the primary cam, or on non-synced cam(s):
-                # + 1 because next frame will have that frame_id
-                if is_record_active and record_start_frame_idx is None:
+                if is_record_active and record_start_frame_idx is None and synced_frame_idx is None:
+                    # + 1 because next frame will have that frame_id
                     primary_acquire(prev_frame_id + 1, enabled=True)
-                elif not is_record_active and record_start_frame_idx is not None:
-                    primary_acquire(prev_frame_id + 2, enabled=False)
-                    # NB: use + 2: to ensure synced secondary cams will get same
+                elif not is_record_active and record_start_frame_idx is not None and synced_frame_idx is None:
+                    primary_acquire(prev_frame_id, enabled=False)
 
                 # camera capture:
                 frame, when = cam_capture()
@@ -647,7 +639,9 @@ class VideoCapture(Process):
                                              " ; skipped put CaptureProcessStatus.RECORDING")
 
                 elif not is_record_active and record_start_frame_idx is not None:
-                    perform_stop_recording()
+                    secondary_acquire()
+                    if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
+                        perform_stop_recording()
 
                 elif record_start_frame_idx is not None:
                     # normal recording case in progress
