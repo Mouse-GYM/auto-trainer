@@ -439,7 +439,7 @@ class VideoCapture(Process):
                     logger.info(
                         "sending EOF_RECORDING batch frame indices to signify eof recording. "
                         "last frame_id: %s when=%.4f perf=%.4f",
-                        cam_frame_id, when / 1e9, frame_perf_now)
+                        cam_frame_id, when_secs, frame_perf_now)
                     net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
                                                    cam_idx=net_q_idx, timeout=5)
 
@@ -537,13 +537,13 @@ class VideoCapture(Process):
                                    prev_frame_when_secs, when_secs,
                                    frame_perf_now - prev_frame_perf_now, prev_frame_perf_now, frame_perf_now)
 
-                if cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300:
-                    if cam_frame_id == 0:
-                        self._record.first_frame_time = frame_time
-                        self._record.first_frame_when = when
-                        logger.success("captured first frame id=%s ; cam_when=%.4f perf_now=%.4f",
-                                       cam_frame_id, when_secs, frame_perf_now)
-                    elif inference is not None and (
+                if cam_frame_id == 0:
+                    self._record.first_frame_time = frame_time
+                    self._record.first_frame_when = when
+                    logger.success("captured first frame id=%s ; cam_when=%.4f perf_now=%.4f",
+                                   cam_frame_id, when_secs, frame_perf_now)
+                elif inference is not None and (cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300):
+                    if (
                         cam_frame_id % log_cam_frame_info_delay_frame_count == 0
                         or (cam_frame_id < 300 and cam_frame_id % 64 == 0)
                         or (cam_frame_id < 64 and cam_frame_id % 16 == 0)
