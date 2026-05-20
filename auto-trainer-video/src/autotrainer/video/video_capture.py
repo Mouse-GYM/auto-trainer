@@ -420,13 +420,14 @@ class VideoCapture(Process):
                 record_q_list.append((cam_frame_id, frame, when, frame_perf_now))
             else:
                 record_q_list = self._record_queue_list
-                idx = 0
-                while idx < len(record_q_list):
-                    if record_q_list[idx][0] >= synced_frame_idx:
+                idx = len(record_q_list) - 1
+                while idx >= 0:
+                    if record_q_list[idx][0] > synced_frame_idx:
                         break
-                    idx += 1
-                logger.debug("cutted record_q_list at %s, len=%s", idx, len(record_q_list))
-                del record_q_list[idx:]
+                    idx -= 1
+                if idx >= 0:
+                    logger.debug("cutted record_q_list at %s, len=%s", idx, len(record_q_list))
+                    del record_q_list[idx + 1:]
                 if len(record_q_list) > 0:
                     rec_q_put(record_q_list)
                     record_q_list = self._record_queue_list = []
