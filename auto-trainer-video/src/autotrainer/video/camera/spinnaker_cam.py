@@ -94,7 +94,6 @@ class SpinCam(CameraBase):
 
     def __init__(self, serial_number, name: str = ""):
 
-        self._camera: Optional[PySpin.Camera] = None
         self._node_map = None
         self._node_map_tl_device = None
         self._start_frames = []
@@ -109,17 +108,17 @@ class SpinCam(CameraBase):
                 logger.verbose("No default for param %r", k)
             return v
 
-        self._exposure = get_def("exposure")
-        self._fps = get_def("fps")
-        self._horizontal_binning = get_def("hbin")
-        self._vertical_binning = get_def("vbin")
-        self._width = get_def("width")
-        self._height = get_def("height")
-        self._offset_x = get_def("offsetx")
-        self._offset_y = get_def("offsety")
+        self._exposure: float = get_def("exposure")
+        self._fps: int = get_def("fps")
+        self._horizontal_binning: int = get_def("hbin")
+        self._vertical_binning: int = get_def("vbin")
+        self._width: int = get_def("width")
+        self._height: int = get_def("height")
+        self._offset_x: int = get_def("offsetx")
+        self._offset_y: int = get_def("offsety")
 
-        self._gain: Optional[float] = get_def("gain")
-        self._gamma: Optional[float] = get_def("gamma")
+        self._gain: float = get_def("gain")
+        self._gamma: float = get_def("gamma")
 
         self._is_primary = False
         self._is_secondary = True
@@ -143,11 +142,11 @@ class SpinCam(CameraBase):
         self.end_capture()
 
     @property
-    def fps(self) -> float:
+    def fps(self) -> int:
         return self._fps
 
     @fps.setter
-    def fps(self, value: float) -> None:
+    def fps(self, value: int) -> None:
         self._fps = value
 
     @property
@@ -199,11 +198,11 @@ class SpinCam(CameraBase):
         self._vertical_binning = value
 
     @property
-    def exposure(self) -> int:
+    def exposure(self) -> float:
         return self._exposure
 
     @exposure.setter
-    def exposure(self, value: int) -> None:
+    def exposure(self, value: float) -> None:
         self._exposure = value
 
     def _reinit_cam(self):
@@ -256,27 +255,34 @@ class SpinCam(CameraBase):
             handling_mode_entry = handling_mode.GetEntryByName("OldestFirst")
             handling_mode.SetIntValue(handling_mode_entry.GetValue())
 
-        self._apply_settings()
+        # get buffer size (nbr of frames):
+        # node_buffer_count_mode = PySpin.CEnumerationPtr(s_node_map.GetNode("StreamBufferCountMode"))
+        # node_buffer_count_mode_manual = node_buffer_count_mode.GetEntryByName("Manual")
+        node_buffer_count_manual = PySpin.CIntegerPtr(s_node_map.GetNode("StreamBufferCountManual"))
+        current_buffer_count = node_buffer_count_manual.GetValue()
+        logger.success("Cam initialized. frames_buffer_size=%s", current_buffer_count)
 
-    def _apply_settings(self):
+        self._apply_settings(spincam)
+
+    def _apply_settings(self, cam: PySpin.Camera):
         # exposure first:
-        self._set_bounded_int_property_node(self._camera.ExposureTime, self._exposure)
+        self._set_bounded_int_property_node(cam.ExposureTime, self._exposure)
         # then FPS:
-        self._camera.AcquisitionFrameRateEnable.SetValue(True)
-        self._camera.AcquisitionFrameRate.SetValue(self._fps)
+        cam.AcquisitionFrameRateEnable.SetValue(True)
+        cam.AcquisitionFrameRate.SetValue(self._fps)
 
         # binning first
-        self._set_bounded_int_property_node(self._camera.BinningHorizontal, self._horizontal_binning)
-        self._set_bounded_int_property_node(self._camera.BinningVertical, self._vertical_binning)
+        self._set_bounded_int_property_node(cam.BinningHorizontal, self._horizontal_binning)
+        self._set_bounded_int_property_node(cam.BinningVertical, self._vertical_binning)
 
         # then size:
-        self._set_bounded_int_property_node(self._camera.Width, self._width)
-        self._set_bounded_int_property_node(self._camera.Height, self._height)
+        self._set_bounded_int_property_node(cam.Width, self._width)
+        self._set_bounded_int_property_node(cam.Height, self._height)
 
         # then offset:
         # self.offset_x = self._offset_x
-        self._set_bounded_int_property_node(self._camera.OffsetX, self._offset_x)
-        self._set_bounded_int_property_node(self._camera.OffsetY, self._offset_y)
+        self._set_bounded_int_property_node(cam.OffsetX, self._offset_x)
+        self._set_bounded_int_property_node(cam.OffsetY, self._offset_y)
 
         if self._gain is not None:
             self._set_bounded_float_property_node(self._camera.Gain, self._gain)
