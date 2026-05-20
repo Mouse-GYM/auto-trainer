@@ -1200,6 +1200,7 @@ class PreferencesContent(QWidget):
                     ApiAlarmKind.thrashing,
                     alarm_monitor.ext_doors_open_engaged, toggled,
                     cfg.auto_resume_on_audio_load_cell_thrash_resume,
+                    cfg.audio_load_cell_is_emergency_stop_condition,
                 )
         self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(use_audio_load_cell_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -1286,6 +1287,7 @@ class PreferencesContent(QWidget):
                     ApiAlarmKind.animalMissing,
                     alarm_monitor.presence_in_cage_after_exit_tunnel_engaged, toggled,
                     cfg.auto_resume_on_presence_seen_after_exit_tunnel,
+                    cfg.presence_missing_is_emergency_stop_condition,
                 )
         self._use_animal_missing_toggle.stateChanged.connect(use_animal_missing_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -1330,6 +1332,7 @@ class PreferencesContent(QWidget):
                     ApiAlarmKind.externalDoors,
                     alarm_monitor.ext_doors_open_engaged, toggled,
                     cfg.auto_resume_on_external_doors_close,
+                    cfg.external_doors_open_is_emergency_stop_condition,
                 )
         self._use_external_doors_open_toggle.stateChanged.connect(use_ext_doors_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -1369,6 +1372,7 @@ class PreferencesContent(QWidget):
                     ApiAlarmKind.animalImmobile,
                     alarm_monitor.global_animal_presence_engaged, toggled,
                     cfg.auto_resume_on_global_animal_presence,
+                    cfg.global_animal_presence_is_emergency_stop_condition,
                 )
         self._use_global_presence_toggle.stateChanged.connect(use_global_presence_toggle_changed)
         grid_layout.addWidget(toggle, cur_row, cur_col + 1)

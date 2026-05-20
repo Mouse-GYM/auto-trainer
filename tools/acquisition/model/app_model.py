@@ -2105,36 +2105,42 @@ class AppModel(ObservableObject):
                 is_enabled=alarm_cfg.use_external_doors_open,
                 is_active=alarm_mon.ext_doors_open_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_external_doors_close,
+                is_stop_condition=alarm_cfg.external_doors_open_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.animalMissing,
                 is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
                 is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel,
+                is_stop_condition=alarm_cfg.presence_missing_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.animalImmobile,
                 is_enabled=alarm_cfg.use_global_animal_presence,
                 is_active=alarm_mon.global_animal_presence_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_global_animal_presence,
+                is_stop_condition=alarm_cfg.global_animal_presence_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.thrashing,
                 is_enabled=alarm_cfg.use_audio_load_cell_thrash,
                 is_active=alarm_mon.audio_load_cell_thrashing_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume,
+                is_stop_condition=alarm_cfg.audio_load_cell_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.systemFault,
                 is_enabled=alarm_cfg.use_system_fault,
                 is_active=alarm_mon.system_fault_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_fault,
+                is_stop_condition=alarm_cfg.system_fault_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.systemMaintenance,
                 is_enabled=alarm_cfg.use_system_maintenance,
                 is_active=alarm_mon.system_maintenance_engaged,
                 is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_maintenance,
+                is_stop_condition=alarm_cfg.system_maintenance_is_emergency_stop_condition,
             ),
         ]
 
