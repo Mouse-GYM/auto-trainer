@@ -67,7 +67,8 @@ def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray:
         np.ndarray: A binary vector with 0 for successful frames and 1 for dropped frames.
     """
     # Load timestamps from the file
-    timestamps_df = pd.read_csv(timestamp_file, header=None, names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c'])
+    timestamps_df = pd.read_csv(timestamp_file, header=None,
+                                names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id'])
     if len(timestamps_df) == 0:
         return np.asarray([], dtype=int)
     # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
