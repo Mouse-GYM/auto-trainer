@@ -1337,6 +1337,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._load_pellet_cfg(config.pellet_delivery)
         if self._topcam_presence is not None:
             self._topcam_presence.load_config(config.topcam_presence_detection)
+        self.head_fixation_enabled = config.head_clamp.enabled
         self.baseline_intensity = config.head_clamp.baseline_intensity
         self.reload_diamond_triangle_config()
         self._active_config = config  # set it as new active one only at the end,

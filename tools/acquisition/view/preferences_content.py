@@ -506,6 +506,7 @@ class PreferencesContent(QWidget):
         def toggle_changed(value):
             enabled = value != 0
             algo.head_fixation_enabled = enabled
+            algo.active_config.head_clamp.enabled = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(toggle_changed)
         right_grid_layout.addWidget(toggle, cur_row, cur_col + 1)

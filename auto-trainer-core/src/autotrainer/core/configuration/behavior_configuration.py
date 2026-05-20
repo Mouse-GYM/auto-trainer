@@ -147,6 +147,7 @@ class HeadClampConfiguration:
     Behavior model options related to the head clamp magnet including standard intensity and auto-clamp actions.
     """
 
+    enabled: bool = False
     baseline_intensity: float = 0.0
     auto_clamp_intensity: float = 100.0
     auto_clamp_release_tone_freq: int = 7000
