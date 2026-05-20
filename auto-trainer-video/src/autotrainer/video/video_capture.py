@@ -422,7 +422,7 @@ class VideoCapture(Process):
                 record_q_list = self._record_queue_list
                 idx = len(record_q_list) - 1
                 while idx >= 0:
-                    if record_q_list[idx][0] > synced_frame_idx:
+                    if record_q_list[idx][0] <= synced_frame_idx:
                         break
                     idx -= 1
                 if idx >= 0:
