@@ -188,7 +188,9 @@ class VideoCapture(Process):
         self._camera = None
         self._record: Optional[VideoRecord] = None
         self._record_queue: Optional[queue.Queue] = None
-        self._record_queue_list: List = []
+        self._record_queue_list: List[
+                  # frame_id , frame, frame_when, frame_perf
+            Tuple[int, numpy.ndarray, float, float]] = []
 
         self._detection_attrs = attrs.presence_detection_attrs
         self._video_detection: Optional[VideoDetection] = None
@@ -393,7 +395,7 @@ class VideoCapture(Process):
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx
                 prim_cam_record_enabled.value = enabled
-            logger.verbose("Set target frame idx=%s ; frame_idx=%s", target_idx, frame_idx)
+            logger.verbose("Set start target frame_id=%s ; frame_idx=%s", target_idx, frame_idx)
 
         def secondary_acquire():
             nonlocal synced_frame_idx
@@ -402,16 +404,17 @@ class VideoCapture(Process):
             assert prim_cam_synced_frame_idx is not None
             if not is_primary:
                 with prim_cam_record_enabled:
-                    synced_frame_idx = prim_cam_synced_frame_idx.value
-                logger.verbose("got synced frame idx=%s ; frame_idx=%s",
-                               synced_frame_idx, prev_frame_id)
+                    requested_start_frame_idx = prim_cam_synced_frame_idx.value
+                    synced_frame_idx = requested_start_frame_idx
+                    logger.verbose("got synced frame_id=%s ; cur frame_id=%s",
+                                   synced_frame_idx, cam_frame_id)
 
         def perform_stop_recording(force: bool=False):
             nonlocal record_start_frame_idx, synced_frame_idx, record_q_list
             nonlocal cnt_net_q_put
             if not force:
                 secondary_acquire()
-            if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
+            if synced_frame_idx is not None:
                 cut_over = cam_frame_id - synced_frame_idx
                 record_start_frame_idx = None
                 synced_frame_idx = None
@@ -622,10 +625,10 @@ class VideoCapture(Process):
                         if len(frames_prebuffer_list) > 0:
                             rec_q_put(
                                 # ( frame, frame_when, frame_perf_now )
-                                [(f, fw, p) for f, fw, _, p, _ in frames_prebuffer_list]
+                                [(fix, f, fw, p) for f, fw, _, p, fix in frames_prebuffer_list]
                             )
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
-                        rec_q_put([(frame, when, frame_perf_now)])  # thread queue
+                        rec_q_put([(cam_frame_id, frame, when, frame_perf_now)])  # thread queue
                         record_q_list = (
                             self._record_queue_list
                         ) = []  # ensure we (re)start clean
@@ -648,7 +651,7 @@ class VideoCapture(Process):
 
                 elif record_start_frame_idx is not None:
                     # normal recording case in progress
-                    record_q_list.append((frame, when, frame_perf_now))
+                    record_q_list.append((cam_frame_id, frame, when, frame_perf_now))
                     if len(record_q_list) >= self._record_batch_size:
                         rec_q_put(record_q_list)
                         record_q_list = self._record_queue_list = []
