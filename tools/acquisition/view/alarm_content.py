@@ -283,12 +283,18 @@ class AlarmContent(ContentWidget):
             if not value:
                 mon = alarm_monitor
                 changed = self._alarm_monitor_property_changed
+                changed(p.GLOBAL_ANIMAL_PRESENCE_ENGAGED, mon.global_animal_presence_engaged, None)
                 changed(p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, mon.presence_in_cage_after_exit_tunnel_engaged, None)
                 changed(p.AUDIO_LOAD_CELL_THRASHING_ENGAGED, mon.audio_load_cell_thrashing_engaged, None)
                 changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
                 changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
                 changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
-                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_maintenance_engaged, None)
+                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_fault_engaged, None)
+
+        elif name == p.GLOBAL_ANIMAL_PRESENCE_ENGAGED:
+            if not value and is_pause_emergency and not cfg.auto_resume_on_global_animal_presence:
+                return
+            self.global_animal_presence_changed.emit(value)
 
         elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
             if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:

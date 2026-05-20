@@ -352,7 +352,7 @@ class VideoCapture(Process):
             net_q_idx = inference.index
             # although is same than self._camera_idx
         image_queue_delay = self._image_queue_frame_delay
-        empty_frame = numpy.zeros(self._record_properties.frame_size, dtype=numpy.uint8)
+        empty_frame = numpy.zeros((camera.height, camera.width), dtype=numpy.uint8)
         vid_detection = self._video_detection
         p_prev_watchdog = -math.inf
         if attrs.watchdog_perf_c is not None:

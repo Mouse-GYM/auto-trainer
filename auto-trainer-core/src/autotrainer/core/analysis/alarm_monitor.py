@@ -65,17 +65,6 @@ class EmergencyAlarmMonitor(BaseDetector):
     SYSTEM_MAINTENANCE_ENGAGED = "system_maintenance_engaged"
     SYSTEM_FAULT_ENGAGED = "system_fault_engaged"
 
-    _engaged_props = frozenset({
-        IS_ENGAGED,
-        PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED,
-        AUDIO_LOAD_CELL_THRASHING_ENGAGED,
-        EXT_DOORS_OPEN_ENGAGED,
-        GLOBAL_ANIMAL_PRESENCE_ENGAGED,
-        DEVICE_COMM_ERROR_ENGAGED,
-        SYSTEM_FAULT_ENGAGED,
-        SYSTEM_MAINTENANCE_ENGAGED,
-    })
-
     use_daemon = True
 
     def __init__(
@@ -114,7 +103,6 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._device_comm_error_engaged = False
         self._system_maintenance_engaged = False
         self._system_fault_engaged = False
-        self._prev_is_stop_condition = self.make_stop_condition_map(config)
         #
         load_cell_monitor.property_changed += self._on_load_cell_monitor_prop_changed
         audio_monitor.property_changed += self._on_audio_prop_changed
@@ -122,10 +110,6 @@ class EmergencyAlarmMonitor(BaseDetector):
         global_animal_presence_monitor.property_changed += self._on_global_animal_presence_prop_changed
         system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
         system_fault_monitor.property_changed += self._on_system_fault_prop_changed
-
-    @classmethod
-    def is_engaged_prop(cls, name: str):
-        return name in cls._engaged_props
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context
@@ -141,7 +125,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         self._event_manager.post_event_content(
             ApiEventKind.alarmChanged,
             data={
-                "detector_id": detector_id,
+                "alarm_id": detector_id,
                 "is_active": active,
                 "is_enabled": enabled,
                 "is_auto_resume_enabled": auto_resume,
@@ -377,15 +361,34 @@ class EmergencyAlarmMonitor(BaseDetector):
         return engaged
 
     @staticmethod
-    def make_stop_condition_map(alarm_cfg: EmergencyAlarmConfiguration):
+    def _make_use_for_engaged_map(alarm_cfg: EmergencyAlarmConfiguration):
         return {
-            EmergencyReason.GLOBAL_ANIMAL_PRESENCE: alarm_cfg.global_animal_presence_is_emergency_stop_condition,
-            EmergencyReason.DEVICE_COMM_ERROR: alarm_cfg.device_comm_error_is_emergency_stop_condition,
-            EmergencyReason.SYSTEM_MAINTENANCE: alarm_cfg.system_maintenance_is_emergency_stop_condition,
-            EmergencyReason.SYSTEM_FAULT: alarm_cfg.system_fault_is_emergency_stop_condition,
-            EmergencyReason.MOUSE_THRASHING: alarm_cfg.audio_load_cell_is_emergency_stop_condition,
-            EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: alarm_cfg.presence_missing_is_emergency_stop_condition,
-            EmergencyReason.DOORS_OPEN: alarm_cfg.external_doors_open_is_emergency_stop_condition,
+            EmergencyReason.GLOBAL_ANIMAL_PRESENCE: (
+                alarm_cfg.global_animal_presence_is_emergency_stop_condition
+                and alarm_cfg.use_global_animal_presence),
+            EmergencyReason.DEVICE_COMM_ERROR: (
+                alarm_cfg.device_comm_error_is_emergency_stop_condition
+                and alarm_cfg.use_device_comm_error),
+            EmergencyReason.SYSTEM_MAINTENANCE: (
+                alarm_cfg.system_maintenance_is_emergency_stop_condition
+                and alarm_cfg.use_system_maintenance
+            ),
+            EmergencyReason.SYSTEM_FAULT: (
+                alarm_cfg.system_fault_is_emergency_stop_condition
+                and alarm_cfg.use_system_fault
+            ),
+            EmergencyReason.MOUSE_THRASHING: (
+                alarm_cfg.audio_load_cell_is_emergency_stop_condition
+                and alarm_cfg.use_audio_load_cell_thrash
+            ),
+            EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: (
+                alarm_cfg.presence_missing_is_emergency_stop_condition
+                and alarm_cfg.use_presence_missing_after_exit_tunnel
+            ),
+            EmergencyReason.DOORS_OPEN: (
+                alarm_cfg.external_doors_open_is_emergency_stop_condition
+                and alarm_cfg.use_external_doors_open
+            ),
         }
 
     def _check_state(self):
@@ -394,34 +397,26 @@ class EmergencyAlarmMonitor(BaseDetector):
         cfg = self._config
         perf_now = get_perf_now()
         #
-        reasons = set()
-        #
         self.audio_load_cell_thrashing_engaged = self._check_audio_load_cell(perf_now)
-        if self._audio_load_cell_thrashing_engaged and cfg.use_audio_load_cell_thrash:
-            reasons.add(EmergencyReason.MOUSE_THRASHING)
-        #
         self.presence_in_cage_after_exit_tunnel_engaged = self._check_pres_after_exit_tunnel_missing(perf_now)
-        if self._presence_in_cage_after_exit_tunnel_engaged and cfg.use_presence_missing_after_exit_tunnel:
-            reasons.add(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL)
-        #
         self.ext_doors_open_engaged = self._external_doors_monitor.is_engaged
-        if self._ext_doors_open_engaged and cfg.use_external_doors_open:
-            reasons.add(EmergencyReason.DOORS_OPEN)
-        #
         self.global_animal_presence_engaged = self._global_animal_presence_monitor.is_engaged
-        if self._global_animal_presence_engaged and cfg.use_global_animal_presence:
-            reasons.add(EmergencyReason.GLOBAL_ANIMAL_PRESENCE)
-        #
-        if self._device_comm_error_engaged and cfg.use_device_comm_error:
-            reasons.add(EmergencyReason.DEVICE_COMM_ERROR)
-        #
         self.system_maintenance_engaged = self._system_maintenance_monitor.is_engaged
-        if self._system_maintenance_engaged and cfg.use_system_maintenance:
-            reasons.add(EmergencyReason.SYSTEM_MAINTENANCE)
-        #
         self.system_fault_engaged = self._system_fault_monitor.is_engaged
-        if self._system_fault_engaged and cfg.use_system_fault:
-            reasons.add(EmergencyReason.SYSTEM_FAULT)
+        #
+        reasons = set()
+        map_use_for_engaged = self._make_use_for_engaged_map(cfg)
+        for reason, engaged in (
+            (EmergencyReason.MOUSE_THRASHING, self._audio_load_cell_thrashing_engaged),
+            (EmergencyReason.DEVICE_COMM_ERROR, self._device_comm_error_engaged),
+            (EmergencyReason.DOORS_OPEN, self._ext_doors_open_engaged),
+            (EmergencyReason.SYSTEM_FAULT, self._system_fault_engaged),
+            (EmergencyReason.SYSTEM_MAINTENANCE, self._system_maintenance_engaged),
+            (EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL, self._presence_in_cage_after_exit_tunnel_engaged),
+            (EmergencyReason.GLOBAL_ANIMAL_PRESENCE, self._global_animal_presence_engaged),
+        ):
+            if engaged and map_use_for_engaged.get(reason):
+                reasons.add(reason)
         #
         is_emergency = len(reasons) > 0
         #
@@ -452,10 +447,6 @@ class EmergencyAlarmMonitor(BaseDetector):
             EmergencyReason.SYSTEM_FAULT: cfg.auto_resume_on_system_fault,
         }
         #
-        prev_stop_map = self._prev_is_stop_condition
-        self._prev_is_stop_condition = self.make_stop_condition_map(cfg)
-        is_stop_cond_changed = prev_stop_map != self._prev_is_stop_condition
-        #
         if not is_emergency:
             prev_engaged = self._engaged_reasons
             check_reasons = prev_engaged.copy()
@@ -466,10 +457,10 @@ class EmergencyAlarmMonitor(BaseDetector):
                     check_reasons.remove(prev_r)
             #
             self._engaged_reasons = check_reasons  # always reset with what remains in check_reasons.
-            if len(check_reasons) == 0:
+            if len(check_reasons) == 0 and len(prev_engaged) > 0:
                 self._is_engaged = None  # force refresh
                 self.is_engaged = False
-            elif check_reasons != prev_engaged or is_stop_cond_changed:
+            elif check_reasons != prev_engaged:
                 self._is_engaged = None  # force refresh
                 self.is_engaged = True
         else:
@@ -479,7 +470,7 @@ class EmergencyAlarmMonitor(BaseDetector):
             for prev_r in list(check_reasons):
                 if not add_remove_map[prev_r]:
                     reasons.add(prev_r)
-            if reasons != self._engaged_reasons or is_stop_cond_changed:
+            if reasons != self._engaged_reasons:
                 self._is_engaged = None  # force trigger again, so that new reasons are seen
                 self._engaged_reasons = reasons
             self.is_engaged = True
@@ -487,8 +478,6 @@ class EmergencyAlarmMonitor(BaseDetector):
 
     def _on_load_cell_monitor_prop_changed(self, name, value, _):
         if not self._running:
-            return
-        if not self._config.use_audio_load_cell_thrash:
             return
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             perf_now = get_perf_now()
@@ -504,8 +493,6 @@ class EmergencyAlarmMonitor(BaseDetector):
     def _on_audio_prop_changed(self, name, value, _):
         if not self._running:
             return
-        if not self._config.use_audio_load_cell_thrash:
-            return
         if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
             audio_monitor = self._audio_monitor
             with self._lock:
@@ -518,21 +505,21 @@ class EmergencyAlarmMonitor(BaseDetector):
     def _on_ext_doors_prop_changed(self, name, value, _):
         if not self._running:
             return
-        if not self._config.use_external_doors_open:
-            return
         if name == ExternalDoorsMonitor.IS_ENGAGED:
             self.check_state()
 
     def _on_global_animal_presence_prop_changed(self, name, value, _):
         if not self._running:
             return
-        if not self._config.use_global_animal_presence:
-            return
         if name == GlobalAnimalPresenceMonitor.IS_ENGAGED:
             self.check_state()
 
     def _on_system_maintenance_prop_changed(self, name, value, _):
+        if not self._running:
+            return
         self.check_state()
 
     def _on_system_fault_prop_changed(self, name, value, _):
+        if not self._running:
+            return
         self.check_state()
