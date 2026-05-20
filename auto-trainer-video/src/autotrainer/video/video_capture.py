@@ -414,7 +414,7 @@ class VideoCapture(Process):
             nonlocal cnt_net_q_put
             if not force:
                 secondary_acquire()
-            if synced_frame_idx is not None:
+            if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
                 cut_over = cam_frame_id - synced_frame_idx
                 record_start_frame_idx = None
                 synced_frame_idx = None
