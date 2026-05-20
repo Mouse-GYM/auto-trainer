@@ -575,7 +575,7 @@ class VideoCapture(Process):
                 # record queue goes to video save to disk/file
                 if is_record_active and record_start_frame_idx is None:
                     secondary_acquire()
-                    if synced_frame_idx is not None:
+                    if synced_frame_idx is not None and cam_frame_id >= synced_frame_idx:
                         record_start_frame_idx = synced_frame_idx
                         synced_frame_idx = None
                     if record_start_frame_idx is not None:
