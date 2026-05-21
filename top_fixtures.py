@@ -284,6 +284,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg.is_pellet_cover_enabled = True
     algo.pellet_uncover_delay = 0
     algo.pellet_uncover_y_dcs = -math.inf
+    algo.session_minimum_duration = 0  # needed for most current tests
     # might be needed to reset:
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
