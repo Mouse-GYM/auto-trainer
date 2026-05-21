@@ -108,7 +108,7 @@ class SpinCam(CameraBase):
                 logger.verbose("No default for param %r", k)
             return v
 
-        self._exposure: float = get_def("exposure")
+        self._exposure: int = get_def("exposure")
         self._fps: int = get_def("fps")
         self._horizontal_binning: int = get_def("hbin")
         self._vertical_binning: int = get_def("vbin")
@@ -280,7 +280,6 @@ class SpinCam(CameraBase):
         self._set_bounded_int_property_node(cam.Height, self._height)
 
         # then offset:
-        # self.offset_x = self._offset_x
         self._set_bounded_int_property_node(cam.OffsetX, self._offset_x)
         self._set_bounded_int_property_node(cam.OffsetY, self._offset_y)
 
@@ -301,11 +300,11 @@ class SpinCam(CameraBase):
             raise RuntimeError("Camera %s configured as both primary and secondary", self._name)
 
         if self._is_primary:
-            self._configure_as_primary()
+            self._configure_as_primary(self._camera)
             logger.info(f"<{self.name}> configured as primary")
 
         elif self._is_secondary:
-            self._configure_as_secondary()
+            self._configure_as_secondary(self._camera)
             logger.info(f"<{self.name}> configured as secondary")
 
     def end_capture(self):
@@ -330,12 +329,12 @@ class SpinCam(CameraBase):
         if not self._acquisition_started:
             self._acquisition_started = True
             first_capture = True
-            logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
             self._camera.BeginAcquisition()
             if self._is_primary:
                 self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
                 self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
                 self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+            logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
 
         expected_shape = (self._height, self._width)
 
@@ -417,27 +416,36 @@ class SpinCam(CameraBase):
 
         return True
 
-    def _configure_as_primary(self):
-        self._camera.CounterSelector.SetValue(PySpin.CounterSelector_Counter0)
-        self._camera.CounterEventSource.SetValue(PySpin.CounterEventSource_ExposureStart)
-        self._camera.CounterEventActivation.SetValue(PySpin.CounterEventActivation_RisingEdge)
-        self._camera.CounterTriggerSource.SetValue(PySpin.CounterTriggerSource_ExposureStart)
-        self._camera.CounterTriggerActivation.SetValue(PySpin.CounterTriggerActivation_RisingEdge)
-        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line2)
-        self._camera.V3_3Enable.SetValue(True)
-        self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
-        self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
-        self._camera.LineInverter.SetValue(False)
-        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
-        self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Software)
-        self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_Off)
-        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
+    def _configure_as_primary(self, cam: PySpin.Camera):
+        cam.CounterSelector.SetValue(PySpin.CounterSelector_Counter0)
+        cam.CounterEventSource.SetValue(PySpin.CounterEventSource_ExposureStart)
+        cam.CounterEventActivation.SetValue(PySpin.CounterEventActivation_RisingEdge)
+        cam.CounterTriggerSource.SetValue(PySpin.CounterTriggerSource_ExposureStart)
+        cam.CounterTriggerActivation.SetValue(PySpin.CounterTriggerActivation_RisingEdge)
+        cam.LineSelector.SetValue(PySpin.LineSelector_Line2)
+        cam.V3_3Enable.SetValue(True)
+        cam.LineSelector.SetValue(PySpin.LineSelector_Line1)
+        cam.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+        cam.LineInverter.SetValue(False)
+        cam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+        # set trigger selector to frame start when trigger mode is off
+        cam.TriggerSelector.SetValue(PySpin.TriggerSelector_FrameStart)
+        cam.TriggerSource.SetValue(PySpin.TriggerSource_Software)
+        cam.TriggerOverlap.SetValue(PySpin.TriggerOverlap_Off)
+        cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
+        # cam.TriggerActivation.SetValue(PySpin.TriggerActivation_AnyEdge)
+        # raise
+        # GenICam::AccessException= Node is not writable. :
+        # AccessException thrown in node 'TriggerActivation' while calling 'TriggerActivation.SetIntValue()' (file 'EnumerationT.h', line 83) [-2006]
 
-    def _configure_as_secondary(self):
-        self._camera.TriggerSource.SetValue(PySpin.TriggerSource_Line3)
-        self._camera.TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
-        self._camera.TriggerActivation.SetValue(PySpin.TriggerActivation_AnyEdge)
-        self._camera.TriggerMode.SetValue(PySpin.TriggerMode_On)
+    def _configure_as_secondary(self, cam: PySpin.Camera):
+        cam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+        cam.TriggerSelector.SetValue(PySpin.TriggerSelector_FrameStart)
+        cam.TriggerSource.SetValue(PySpin.TriggerSource_Line3)
+        cam.TriggerOverlap.SetValue(PySpin.TriggerOverlap_ReadOut)
+        cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
+        # using same trigger activation than primary
+        cam.TriggerActivation.SetValue(PySpin.TriggerActivation_AnyEdge)
 
     def _set_bounded_int_property_node(self, prop_node, value: int) -> int:
         return int(self._set_bounded_property(prop_node, value))

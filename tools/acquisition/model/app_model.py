@@ -1100,6 +1100,7 @@ class AppModel(ObservableObject):
 
         # 2) prepare synced non-primary camera(s)
         if did_start:
+            time.sleep(0.5)
             for camera in synced_cameras:
                 if not camera.is_primary and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
@@ -1131,7 +1132,7 @@ class AppModel(ObservableObject):
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
             # small delay to ensure not-primary cam(s) are waiting on primary:
-            time.sleep(0.25)
+            time.sleep(0.5)
             # 4.2) then on primary
             for camera in synced_cameras:
                 if camera.is_primary and camera.is_enabled:
