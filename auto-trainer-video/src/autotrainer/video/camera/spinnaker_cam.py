@@ -329,11 +329,11 @@ class SpinCam(CameraBase):
         if not self._acquisition_started:
             self._acquisition_started = True
             first_capture = True
-            self._camera.BeginAcquisition()
             if self._is_primary:
-                self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
-                self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+                # self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
+                # self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
                 self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+            self._camera.BeginAcquisition()
             logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
 
         expected_shape = (self._height, self._width)
@@ -424,6 +424,7 @@ class SpinCam(CameraBase):
         cam.CounterTriggerActivation.SetValue(PySpin.CounterTriggerActivation_RisingEdge)
         cam.LineSelector.SetValue(PySpin.LineSelector_Line2)
         cam.V3_3Enable.SetValue(True)
+        cam.AcquisitionFrameRateEnable.SetValue(True)
         cam.LineSelector.SetValue(PySpin.LineSelector_Line1)
         cam.LineSource.SetValue(PySpin.LineSource_Counter0Active)
         cam.LineInverter.SetValue(False)
