@@ -25,18 +25,26 @@ class OpenCVCam(CameraBase):
 
     def init(self):
         vc = self._video_capture = cv2.VideoCapture()
-        if not vc.open(self._device_idx) and vc.isOpened():
+        if not vc.open(self._device_idx) or not vc.isOpened():
             raise RuntimeError(f"Could not connect to video capture device {self._device_idx}")
-        self._apply_settings()
+        self._apply_settings(vc)
         # re-read:
-        self._refresh_height_width()
+        self._width = int(vc.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._height = int(vc.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if not (self._width > 0 and self._height > 0):
+            vc.release()
+            self._video_capture = None
+            raise RuntimeError(f"width or height non-positive: ({self._width}, {self._height})")
         requested_fps = self._fps
-        self._fps = self._video_capture.get(cv2.CAP_PROP_FPS)
-        logger.info("requested fps=%s ; obtained fps=%s", requested_fps, self._fps)
+        fps = self._fps = vc.get(cv2.CAP_PROP_FPS)
+        logger.info("requested fps=%s ; obtained fps=%s", requested_fps, fps)
+        if fps <= 0:
+            vc.release()
+            self._video_capture = None
+            raise RuntimeError("read fps from camera negative or zero")
         self._frame_half_period = 0.5 / self._fps
 
-    def _apply_settings(self):
-        vc = self._video_capture
+    def _apply_settings(self, vc: cv2.VideoCapture):
         vc.set(cv2.CAP_PROP_FPS, self._fps)
         vc.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
         vc.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
@@ -106,7 +114,3 @@ class OpenCVCam(CameraBase):
                         self._last_frame_id, estimated_drop, diff_prev, self._prev_frame_perf_now, perf_now)
         self._prev_frame_perf_now = perf_now
         return frame, self._last_when
-
-    def _refresh_height_width(self):
-        self._width = int(self._video_capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self._height = int(self._video_capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
