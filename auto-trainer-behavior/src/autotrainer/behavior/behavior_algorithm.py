@@ -23,6 +23,7 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual, ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.reach_event import ReachEvent
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
@@ -223,6 +224,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         # NB: not saved in config:
         self._recording_age_release_pellet_threshold = 0.25
+        self._sess_min_duration = 1.5  # could add to config
 
         self._recording_prebuffer_duration = 0
 
@@ -233,6 +235,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._session_started_perf_c = -math.inf
         self._start_session_reason = "NA"
         self._stop_session_reason = RecordingEndingReason.NA
+        self._timer_end_capture_session = no_op_timer
 
         self._session_mouse_seen = False
         self._pellet_hands_min_distance: float = math.inf
@@ -434,7 +437,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cur_thread = threading.current_thread()
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
-        # if handler_thread is cur_thread and t_allow_reentrant:
         if (handler_queue is None
             or cls._no_handler_thread
             or (cur_thread is handler_thread and t_allow_reentrant)
@@ -774,6 +776,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def record_prebuffer_duration(self, value):
         self._recording_prebuffer_duration = value
 
+    @property
+    def session_minimum_duration(self) -> float:
+        return self._sess_min_duration
+
+    @session_minimum_duration.setter
+    def session_minimum_duration(self, value: float):
+        self._sess_min_duration = value
+
     #
 
     @property
@@ -1098,6 +1108,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # but must be done after calculate next session index !!
         post_trigger_enable(self, True)
 
+        # here ideally we should wait all involved elements are in the session-recording-in-progress state,
+        # given it's an async task.
+
         self.session_starting()
 
         self._event_manager.post_event_content(ApiEventKind.trialStarted)
@@ -1112,6 +1125,17 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
+            return False
+        self._timer_end_capture_session.cancel()  # always
+        p_now = get_perf_now()
+        sess_duration = p_now - self._session_started_perf_c
+        miss_delay = self._sess_min_duration - sess_duration
+        if miss_delay > 0 and reason != RecordingEndingReason.ALGO_PAUSED:
+            logger.verbose("current trial record too short, delaying end_capture_session of %.1f",
+                           miss_delay)
+            timer = self._timer_end_capture_session = make_daemon_timer(
+                miss_delay, partial(self.end_capture_session, reason=reason))
+            timer.start()
             return False
         logger.success("%s: stopping session recording ; system_state=%s capture=%s intersession_state=%s",
                        reason, self._system_state, self._capture_status, self._intersession_state)
