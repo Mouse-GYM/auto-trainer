@@ -1134,7 +1134,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             logger.verbose("current trial record too short, delaying end_capture_session of %.1f",
                            miss_delay)
             timer = self._timer_end_capture_session = make_daemon_timer(
-                miss_delay, partial(self._end_capture_session, reason=reason))
+                miss_delay, partial(self.end_capture_session, reason=reason))
             timer.start()
             return False
         logger.success("%s: stopping session recording ; system_state=%s capture=%s intersession_state=%s",
