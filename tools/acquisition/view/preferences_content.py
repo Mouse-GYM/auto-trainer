@@ -1198,7 +1198,7 @@ class PreferencesContent(QWidget):
                 alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
                 alarm_monitor.post_alarm_event(
                     ApiAlarmKind.thrashing,
-                    alarm_monitor.ext_doors_open_engaged, toggled,
+                    alarm_monitor.audio_load_cell_thrashing_engaged, toggled,
                     cfg.auto_resume_on_audio_load_cell_thrash_resume,
                     cfg.audio_load_cell_is_emergency_stop_condition,
                 )

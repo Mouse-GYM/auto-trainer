@@ -2129,6 +2129,13 @@ class AppModel(ObservableObject):
                 is_stop_condition=alarm_cfg.audio_load_cell_is_emergency_stop_condition,
             ),
             ApiAlarmStatus(
+                alarm_id=ApiAlarmKind.deviceCommunication,
+                is_enabled=alarm_cfg.use_device_comm_error,
+                is_active=alarm_mon.device_comm_error_engaged,
+                is_auto_resume_enabled=alarm_cfg.auto_resume_on_device_comm_error,
+                is_stop_condition=alarm_cfg.device_comm_error_is_emergency_stop_condition,
+            ),
+            ApiAlarmStatus(
                 alarm_id=ApiAlarmKind.systemFault,
                 is_enabled=alarm_cfg.use_system_fault,
                 is_active=alarm_mon.system_fault_engaged,
