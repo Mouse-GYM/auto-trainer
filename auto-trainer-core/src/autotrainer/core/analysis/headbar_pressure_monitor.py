@@ -6,8 +6,12 @@ from typing_extensions import Self
 
 import numpy
 
+from .. import get_verbose_logger
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind, post_api_event_content
+
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclass
@@ -154,5 +158,6 @@ class HeadbarPressureMonitor(ObservableObject):
         """
         Primarily used for testing.  This will force the headbar pressure monitor to be engaged or not engaged.
         """
+        logger.notice("Setting force_engaged=%s", engaged)
         self._force_engaged = engaged
         self.is_engaged = engaged

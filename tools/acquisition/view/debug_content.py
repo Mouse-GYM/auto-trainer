@@ -1,8 +1,12 @@
+import inspect
+import textwrap
 import threading
 from io import StringIO
+from pprint import pformat
+from typing import get_type_hints
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QLabel, QCheckBox, QSizePolicy
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel, QCheckBox, QSizePolicy, QPushButton
 
 
 class DebugView(QDialog):
@@ -15,6 +19,13 @@ class DebugView(QDialog):
         self.setWindowTitle("AutoTrainer Debug View")
         self._main_window = main_window
         layout = QVBoxLayout()
+        vlayout = QHBoxLayout()
+        box = QPushButton("Clear output")
+        def on_clear_output():
+            self._output_label.setText("")
+        box.clicked.connect(on_clear_output)
+        vlayout.addWidget(box)
+        layout.addLayout(vlayout)
         widget = self._use_exec_box = QCheckBox()
         widget.setText("Use exec instead of eval")
         layout.addWidget(widget)
@@ -24,6 +35,7 @@ class DebugView(QDialog):
         widget.returnPressed.connect(self._on_cmd_return_pressed)
         layout.addWidget(widget)
         label = self._output_label = QLabel()
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         self._sig_output_text_changed.connect(label.setText)
         self._sig_append_output_text.connect(self._append_text)
@@ -37,12 +49,29 @@ class DebugView(QDialog):
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         # self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         # this is what can be used/referred to directly
+        app = main_window.app_model
+        print = self._print
         self._locals = {
             "w": main_window,
-            "app": main_window.app_model,
-            "print": self._print,
+            "app": app,
+            "print": print,
         }
-        label.setText("You can use 'w' for main_window or 'app' for app_model in command ..")
+        print("You can use 'w' for main_window or 'app' for app_model in command ..\n")
+        print(textwrap.dedent(
+            "To execute trials/sessions simulations, you can use:\n\n"
+            "w._simulate_sessions("
+            "n_sessions=1, "
+            "n_trials=1, "
+            "rand_mouse_seen=1, "
+            "rand_hands_near_pellet=1, "
+            "rand_headfix_trigger=0.75, "
+            "print=print,"
+            ")\n"
+        ))
+        print("_simulate_sessions signature:")
+        sig = inspect.signature(main_window._simulate_sessions)
+        for name, param in sig.parameters.items():
+            print(f"{name}: {getattr(param.annotation, '__name__', param.annotation)}={param.default},")
 
     def _append_text(self, txt: str):
         prev = self._output_label.text()
