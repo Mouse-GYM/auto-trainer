@@ -693,6 +693,9 @@ class VideoCapture(Process):
                 if save_err is not None:
                     save_err = str(err)
                 fault_count += 1
+            else:
+                save_err = None
+                fault_count = 0
 
         # end while self._is_running
         if save_err is not None:
@@ -730,14 +733,16 @@ class VideoCapture(Process):
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             if error is None:  # keep orig error
-                self._set_error(str(err))
+                error = str(err)
+        # set error if not already failed:
+        is_failed = CaptureProcessStatus(self._status.value) == CaptureProcessStatus.FAILED
+        if error is not None and not is_failed:
+            self._set_error(error)
         else:
-            if error is None and self._status.value != CaptureProcessStatus.FAILED:
+            # set terminated if not already failed:
+            if not is_failed:
                 self._set_status(CaptureProcessStatus.TERMINATED)
-            else:
-                self._set_error(error)  # also set status to FAILED
-        finally:
-            logger.debug("exiting")
+        logger.debug("exiting")
 
     def _handle_command(self, cmd: CaptureCommandKind, context: object):
         logger.info("executing %s", cmd)
