@@ -9,7 +9,7 @@ from multiprocessing.sharedctypes import (
     SynchronizedString,
     Synchronized,
 )
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
 from multiprocessing import synchronize
 from threading import Event
 import urllib
@@ -141,6 +141,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
+
+    @property
+    def video_status(self) -> CaptureProcessStatus:
+        return CaptureProcessStatus(self._video_status.value)
 
     @property
     def watchdog_capture_perf_c(self) -> float:
@@ -379,7 +383,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         video_capture = self._video_capture
         if video_capture is not None and video_capture.is_alive():
             self._send_command(CaptureCommandKind.TERMINATE)
-            if self.wait_for_capture_status(CaptureProcessStatus.TERMINATED, timeout=5):
+            if self.wait_for_capture_status(
+                    (CaptureProcessStatus.TERMINATED, CaptureProcessStatus.FAILED),
+                    timeout=5):
                 logger.debug(f"<{self._name}> video capture terminate acknowledged")
             else:
                 logger.error(f"<{self._name}> did not receive process terminates status")
@@ -482,14 +488,22 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                                    scheme=parsed.scheme, host=parsed.hostname or "", port=parsed.port or 0, path=path,
                                    params=params, record_prebuffer_duration=conf.record_prebuffer_duration)
 
-    def wait_for_capture_status(self, expected: CaptureProcessStatus, *, timeout: float):
+    def wait_for_capture_status(
+        self,
+        expected: Union[CaptureProcessStatus, Iterable[CaptureProcessStatus]],
+        *,
+        timeout: float,
+    ):
+        if isinstance(expected, CaptureProcessStatus):
+            expected = (expected,)
+        wait_status = set(expected)
         perf_timeout = time.perf_counter() + timeout
-        logger.debug("<%s> waiting for %s acknowledgement", self._name, expected)
-        while (cur_status := CaptureProcessStatus(self._video_status.value)) != expected:
+        logger.debug("<%s> waiting for %s acknowledgement", self._name, wait_status)
+        while (cur_status := CaptureProcessStatus(self._video_status.value)) not in wait_status:
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
-                logger.error("<%s> failed to receive %s acknowledgement ; current=%s", self._name, expected,
-                             cur_status)
+                logger.error("<%s> failed to receive %s acknowledgement ; current=%s",
+                             self._name, expected, cur_status)
                 return False
             time.sleep(0.001)
         return True

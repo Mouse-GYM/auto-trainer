@@ -56,8 +56,9 @@ class VideoRecordProperties:
     """Number of frames to batch for passing between capture and record queues."""
 
     def should_record(self, is_triggered: bool, *, is_from_start: bool = False) -> bool:
+        project = self.project_info
         any_active = (
-            self.project_info is not None
+            project is not None and project.is_valid()
             and (self.video_rotate_interval >= 0 or self.image_interval > 0)
         )
         logger.debug("should_record: vri=%s ii=%s any_active=%s is_from_start=%s",
@@ -160,7 +161,7 @@ class VideoRecord(Thread):
                     tot_written = 0
                     continue
 
-                for frame, frame_when, frame_perf_now in queue_list:
+                for frame_id, frame, frame_when, frame_perf_now in queue_list:
                     # NB: reminder: frame_when is really camera clock, which vary from camera to camera,
                     # reconstructing frame_time (based on first frame start ~time):
                     # we assume camera clock is in nanoseconds precision, so using it:
@@ -202,7 +203,7 @@ class VideoRecord(Thread):
                                     d2 = 1 / d2
                                 else:
                                     d2 = math.nan
-                            vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}\n")
+                            vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}, {frame_id}\n")
                             prev_perf_now = frame_perf_now
                             prev_frame_when = frame_when
 
