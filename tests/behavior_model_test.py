@@ -78,7 +78,7 @@ class TestEmergency(MockSystemMachine):
         assert not algo.algo_paused
         assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(algo.baseline_intensity)]
-        self.mock_pellet_ack()
+        self.mock_pellet_ack(until_none=True)
         self.mock_pose_response(pellet_seen=True)
         assert self.pellet_state_trans == [
             PelletState.home,

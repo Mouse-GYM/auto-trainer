@@ -232,6 +232,8 @@ def test_move_home(machine, mock_system):
     assert pellet_m._api_status_token is not None
     assert pellet_m.state == PelletState.home
     mock_system.mock_pellet_ack()
+    assert pellet_m.state == PelletState.sending
+    mock_system.mock_pellet_ack()
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [
         PelletState.home,
@@ -239,10 +241,6 @@ def test_move_home(machine, mock_system):
         PelletState.sending,
         PelletState.monitoring,
     ]
-    assert pellet_m._api_status_token is not None
-    algo.update_triangle_seen(True)
-    algo.update_pellet_seen(True)
-    mock_system.mock_pellet_ack()
     assert pellet_m._api_status_token is None
     assert mock_system.pellet_state_trans == [
         PelletState.home,
