@@ -7,6 +7,7 @@ logger = get_verbose_logger(__name__)
 
 _missing = object()  # sentinel
 
+
 class MotorSteps:
 
     @classmethod

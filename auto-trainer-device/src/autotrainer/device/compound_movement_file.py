@@ -101,13 +101,13 @@ class CompoundMovements(CompoundMovementDataSet):
             yaml_dict (dict): Dictionary of data
         """
         if not isinstance(yaml_dict, dict):
-            raise TypeError(f"Expected dict for main compound move content, but got %s", type(yaml_dict))
+            raise TypeError(f"Expected dict for main compound move content, but got {type(yaml_dict)}")
         try:
             actions = yaml_dict["actions"]
         except KeyError:
             raise ValueError("Expected an 'actions' key in main compound move content") from None
         if not isinstance(actions, dict):
-            raise TypeError(f"Expected dict for 'actions' in main compound move content, but got %s", type(actions))
+            raise TypeError(f"Expected dict for 'actions' in main compound move content, but got {type(actions)}")
 
         for name, value in actions.items():
             kind = CompoundMovementByStringValue.get(name, None)
@@ -116,7 +116,7 @@ class CompoundMovements(CompoundMovementDataSet):
                 continue
             if not isinstance(value, (list, tuple)):
                 raise TypeError(f"Expected dict for action {name!r}, got {value!r}")
-            steps = MotorSteps.from_raw(name, value)
+            steps = MotorSteps.from_raw(name, list(value))
             self._movements[kind] = steps
             logger.debug("loaded compound move %r: %s", name, steps)
 

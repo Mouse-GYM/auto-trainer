@@ -388,8 +388,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     continue
                 # we use eventual event from raw args below, so can task_done directly:
                 input_queue.task_done()
-            if raw is None:
-                break
+                if raw is None:
+                    break
             tot_msgs += 1
             func, args, kwargs, event = raw
             try:
