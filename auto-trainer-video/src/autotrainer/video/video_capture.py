@@ -225,7 +225,10 @@ class VideoCapture(Process):
             self._run_capture_loop(self._camera)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
-        self._terminate_capture_loop()
+            save_err = str(err)
+        else:
+            save_err = None
+        self._terminate_capture_loop(save_err)
 
     def _set_status(self, status: CaptureProcessStatus):
         self._status.value = status
@@ -421,7 +424,7 @@ class VideoCapture(Process):
                          tuple(t[0] for t in record_q_list))
             while idx >= 0:
                 if record_q_list[idx][0] > synced_frame_idx:
-                    if idx > 0 and record_q_list[idx - 1][0] <= synced_frame_idx:
+                    if idx == 0 or record_q_list[idx - 1][0] <= synced_frame_idx:
                         break
                 idx -= 1
             if idx >= 0:
@@ -462,6 +465,7 @@ class VideoCapture(Process):
         self._set_status(CaptureProcessStatus.RUNNING)
 
         frame_perf_now = math.nan
+        save_err = None
 
         while True:
 
@@ -477,7 +481,6 @@ class VideoCapture(Process):
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
-                self._set_error("too many capture failure")
                 if record_start_stop_frame_idx is not None:
                     synced_frame_idx = cam_frame_id
                     perform_stop_recording(force=True)
@@ -511,6 +514,7 @@ class VideoCapture(Process):
                 # camera capture:
                 frame, when = cam_capture()
                 if frame is None:
+                    save_err = "camera capture returned None"
                     logger.error("Failed to capture a frame (frame = None) ; prev_frame_id=%s",
                                  prev_frame_id)
                     fault_count += 1
@@ -686,12 +690,15 @@ class VideoCapture(Process):
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)
-                self._set_error(str(err))
+                if save_err is not None:
+                    save_err = str(err)
                 fault_count += 1
 
         # end while self._is_running
+        if save_err is not None:
+            self._set_error(save_err)
 
-    def _terminate_capture_loop(self):
+    def _terminate_capture_loop(self, error: Optional[str]):
         camera = self._camera
         try:
             logger.info(f"<{self._name}> capture loop ended")
@@ -722,10 +729,13 @@ class VideoCapture(Process):
 
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
-            self._set_error(str(err))
-            # NB: _set_error does _set_status(FAILED)
+            if error is None:  # keep orig error
+                self._set_error(str(err))
         else:
-            self._set_status(CaptureProcessStatus.TERMINATED)
+            if error is None and self._status.value != CaptureProcessStatus.FAILED:
+                self._set_status(CaptureProcessStatus.TERMINATED)
+            else:
+                self._set_error(error)  # also set status to FAILED
         finally:
             logger.debug("exiting")
 

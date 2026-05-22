@@ -76,7 +76,7 @@ class SpinCam(CameraBase):
     def list(cls) -> List[str]:
         _start_spincam_lib_instance()
         serial_numbers = []
-        cam_list = sSystem.GetCameras()
+        cam_list = sSystem.GetCameras()  # noqa
         try:
             for cam in cam_list:
                 serial_numbers.append(cam.TLDevice.DeviceSerialNumber.ToString())
@@ -108,7 +108,7 @@ class SpinCam(CameraBase):
                 logger.verbose("No default for param %r", k)
             return v
 
-        self._exposure: int = get_def("exposure")
+        self._exposure: float = get_def("exposure")
         self._fps: int = get_def("fps")
         self._horizontal_binning: int = get_def("hbin")
         self._vertical_binning: int = get_def("vbin")
@@ -128,7 +128,7 @@ class SpinCam(CameraBase):
 
         _start_spincam_lib_instance()
 
-        cam_list = sSystem.GetCameras()
+        cam_list = sSystem.GetCameras()  # noqa
         try:
             self._camera = cam_list.GetBySerial(serial_number)
         finally:
@@ -266,7 +266,7 @@ class SpinCam(CameraBase):
 
     def _apply_settings(self, cam: PySpin.Camera):
         # exposure first:
-        self._set_bounded_int_property_node(cam.ExposureTime, self._exposure)
+        self._set_bounded_float_property_node(cam.ExposureTime, self._exposure)
         # then FPS:
         cam.AcquisitionFrameRateEnable.SetValue(True)
         cam.AcquisitionFrameRate.SetValue(self._fps)
@@ -284,14 +284,14 @@ class SpinCam(CameraBase):
         self._set_bounded_int_property_node(cam.OffsetY, self._offset_y)
 
         if self._gain is not None:
-            self._set_bounded_float_property_node(self._camera.Gain, self._gain)
+            self._set_bounded_float_property_node(cam.Gain, self._gain)
 
         gamma = self._gamma
         if gamma is not None:
-            self._set_bounded_bool_property_node(self._camera.GammaEnable, True)
-            self._set_bounded_float_property_node(self._camera.Gamma, gamma)
+            self._set_bounded_bool_property_node(cam.GammaEnable, True)
+            self._set_bounded_float_property_node(cam.Gamma, gamma)
         else:
-            self._set_bounded_bool_property_node(self._camera.GammaEnable, False)
+            self._set_bounded_bool_property_node(cam.GammaEnable, False)
 
     def prepare_capture(self):
         super().prepare_capture()
@@ -454,7 +454,8 @@ class SpinCam(CameraBase):
     def _set_bounded_float_property_node(self, prop_node, value: float) -> float:
         return float(self._set_bounded_property(prop_node, value))
 
-    def _set_bounded_property(self, prop_node, value):
+    @staticmethod
+    def _set_bounded_property(prop_node, value):
         name = prop_node.GetDisplayName()
         if value is None:
             logger.warning("%s: received None value for _set_bounded_float_property_node", name)
@@ -482,7 +483,8 @@ class SpinCam(CameraBase):
 
         return set_value
 
-    def _set_bounded_bool_property_node(self, prop_node, value: bool) -> bool:
+    @staticmethod
+    def _set_bounded_bool_property_node(prop_node, value: bool) -> Optional[bool]:
         set_value = value
         name = prop_node.GetDisplayName()
         try:
