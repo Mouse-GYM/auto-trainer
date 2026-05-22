@@ -437,7 +437,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cur_thread = threading.current_thread()
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
-        # if handler_thread is cur_thread and t_allow_reentrant:
         if (handler_queue is None
             or cls._no_handler_thread
             or (cur_thread is handler_thread and t_allow_reentrant)

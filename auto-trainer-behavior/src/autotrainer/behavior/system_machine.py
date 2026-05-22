@@ -243,7 +243,8 @@ class SystemMachine(StateMachine):
         self._disengage_auto_clamp()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
-            algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+            with algo.set_allow_reentrant(True):
+                algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             batch_projects = self._batch_project_sessions_list
             if len(batch_projects) > 0:
@@ -253,7 +254,8 @@ class SystemMachine(StateMachine):
                                    self._intersession.state, len(batch_projects))
                 else:
                     prj = batch_projects[0]
-                    self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
+                    with algo.set_allow_reentrant(True):
+                        self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
 
     def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
         algo = self._algorithm
@@ -421,7 +423,7 @@ class SystemMachine(StateMachine):
         cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
-        algo = self.algorithm
+        algo = self._algorithm
         #
         can_perform_analysis = (
             cur_project is not None
@@ -481,7 +483,8 @@ class SystemMachine(StateMachine):
                 cur_sessions_batch.clear()
                 # it will be handled normally anyway
             prj = cur_project if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
-            self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
+            with algo.set_allow_reentrant(True):
+                self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
             # so we ask it to switch back to live:
