@@ -38,10 +38,10 @@ class OpenCVCam(CameraBase):
         requested_fps = self._fps
         fps = self._fps = vc.get(cv2.CAP_PROP_FPS)
         logger.info("requested fps=%s ; obtained fps=%s", requested_fps, fps)
-        if fps == 0:
+        if fps <= 0:
             vc.release()
             self._video_capture = None
-            raise RuntimeError("read fps from camera is 0")
+            raise RuntimeError("read fps from camera negative or zero")
         self._frame_half_period = 0.5 / self._fps
 
     def _apply_settings(self, vc: cv2.VideoCapture):
