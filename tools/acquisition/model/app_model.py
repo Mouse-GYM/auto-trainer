@@ -418,7 +418,8 @@ class AppModel(ObservableObject):
         # if prj is None:
         #     prj = self.make_project_info()
         new_day = prev_day + timedelta(days=1)
-        today = datetime.today().date()
+        now = datetime.now()
+        today = now.date()
         if new_day != today:
             logger.warning("detected time change: %s vs %s", new_day, today)
             new_day = today
@@ -429,7 +430,7 @@ class AppModel(ObservableObject):
         #
         self._current_day = new_day
         #
-        delay = (today_midnight + timedelta(days=1) - datetime.now()).total_seconds()
+        delay = (today_midnight + timedelta(days=1) - now).total_seconds()
         # delay = 30  # uncomment for manual testing purpose
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
