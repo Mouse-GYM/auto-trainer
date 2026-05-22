@@ -297,6 +297,10 @@ class PoseProcess(Process):
                 frame_buffer, frames_indices = offline_input.get_output(timeout=0.1)
             except queue.Empty:
                 if offline_input.live_requested:
+                    # ensure we won't immediately return on live,
+                    # if we switch back to offline later with an EndOfRecording mark,
+                    # while we don't have yet received the related project info in the offline side/thread:
+                    offline_input.set_live(False)
                     self._set_process_live(reason="live-requested")
                 return False
             if (frames_indices <= 0).any():
@@ -342,14 +346,13 @@ class PoseProcess(Process):
                 logger.verbose("Detected change of mode: %s", self._mode)
                 prev_mode = self._mode
 
-            if i_q is not self._input_queue:
-                reset_locals()  # always, so we get eventual change from command handler
-
             # should be removed once more confident
             if i_q is offline_input and p_now > p_last_data + 15:
                 logger.warning("timeout waiting offline data ; auto-switching to online")
                 self._set_process_live(reason="timeout-offline")
-                reset_locals()
+
+            if i_q is not self._input_queue:
+                reset_locals()  # always, so we get eventual change from command handler
 
             if not cur_get_output():
                 continue
@@ -364,17 +367,6 @@ class PoseProcess(Process):
                     if not (frames_indices == FrameIndexCategory.ONLINE_NO_RECORDING).all():
                         logger.debug("mode=%s prev=%s indices=%s", self._mode, prev_mode, frames_indices.tolist())
 
-                # if (
-                #     i_q is offline_input
-                #     and numpy.isin(frames_indices[:, -1], [ # noqa
-                #         FrameIndexCategory.ONLINE_NO_RECORDING,
-                #         FrameIndexCategory.SWITCH_TO_ONLINE]
-                #     ).any()
-                # ):
-                #     self._set_process_live(reason=frames_indices[:, -1].tolist())
-                #     # reset_locals()  # no need given done before next get_output
-                # # elif required, given _set_process_live called in previous if block:
-                # elif
             if (
                 i_q is live_input
                 and (frames_indices[:, -1] == FrameIndexCategory.EOF_RECORDING).any()
@@ -428,9 +420,10 @@ class PoseProcess(Process):
 
             # could only check the frame index, given is only emitted from offline mode:
             if mode_used == InferenceMode.Offline and (
-                frames_indices[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
+                frames_indices_out[:, -1] == FrameIndexCategory.EOF_OFFLINE_PROCESSING
             ).any():
-                logger.notice("Detected end of offline queue processing: %s", frames_indices.tolist())
+                logger.notice("Detected end of offline queue processing: %s",
+                              frames_indices_out.tolist())
                 d_q_put((None, InferenceMode.Offline, None))  # tells data monitor this is EOF current offline data
                 # the swap to live queue will be requested explicitly by main app,
                 # there can be many/multiple offline sessions analyzed one after the other,
