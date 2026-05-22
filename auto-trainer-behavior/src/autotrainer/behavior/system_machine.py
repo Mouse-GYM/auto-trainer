@@ -305,13 +305,15 @@ class SystemMachine(StateMachine):
 
     def after_exit_intersession(self):
         if self._analysis.load_cell_monitor.is_engaged:
-            self.exit_intersession_to_tunnel()
+            with self._algorithm.set_allow_reentrant(True):
+                self.exit_intersession_to_tunnel()
         else:
             # always ensure open gate on intersession ended (to cage)
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()
             self._execute_disengage_auto_clamp_if_in_progress()
-            self.exit_intersession_to_cage()
+            with self._algorithm.set_allow_reentrant(True):
+                self.exit_intersession_to_cage()
 
     def after_exit_intersession_to_cage(self):
         # ensure pellet goes back where necessary:
@@ -505,7 +507,8 @@ class SystemMachine(StateMachine):
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
                 # continue remaining session(s) in batch in all cases
                 self._batch_current_trial_index += 1
-                self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
+                with algo.set_allow_reentrant(True):
+                    self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
             shift_xyz = self._next_shift_xyz_to_apply
             if shift_xyz is not None:
