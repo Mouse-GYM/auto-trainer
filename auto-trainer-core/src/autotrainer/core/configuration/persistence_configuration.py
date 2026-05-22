@@ -23,7 +23,3 @@ class PersistenceConfiguration:
         return cls(
             output_location=content.get("output_location", "")
         )
-
-
-persistence_configuration_representer = make_camelize_representer("!PersistenceConfiguration")
-persistence_configuration_constructor = make_decamelize_constructor(PersistenceConfiguration)

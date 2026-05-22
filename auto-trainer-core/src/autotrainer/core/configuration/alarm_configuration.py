@@ -1,15 +1,12 @@
 
 from dataclasses import dataclass, field
 
+from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.autoclamp_evasion_config import AutoClampEvasionAlarmConfig
+
 
 @dataclass
-class EmergencyAlarmCondition:
-    use: bool = True  # decide if "used by/enabled with" the alarm monitor, or not
-    is_emergency_condition: bool = True  # decide if trigger emergency_stop()/_resume(), or not.
-    allow_autoresume_on_cleared: bool = True  # decide if, when cleared, emergency_resume() is automatically called or not.
-
-
-class AudioLoadCellThrashAlarmCondition(EmergencyAlarmCondition):
+class AudioLoadCellThrashAlarmConfig(AlarmDetectorConfig):
     use: bool = False
     is_emergency_condition: bool = True
     allow_autoresume_on_cleared: bool = False
@@ -79,6 +76,9 @@ class _EmergencyAlarmConfiguration:
     use_system_fault: bool = True
     auto_resume_on_system_fault: bool = True
     system_fault_is_emergency_stop_condition: bool = True
+
+    # 8th
+    autoclamp_evasion: AutoClampEvasionAlarmConfig = field(default_factory=AutoClampEvasionAlarmConfig)
 
 
 @dataclass

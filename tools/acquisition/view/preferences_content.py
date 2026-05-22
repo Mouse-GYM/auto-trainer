@@ -1020,6 +1020,27 @@ class PreferencesContent(QWidget):
             system_fault_mon.check_state()
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        autoclamp_evasion_det = analysis.autoclamp_evasion_detector
+        left_grid_layout.addWidget(QLabel("<b>AutoClamp Evasion:</b>"), cur_row, cur_col)
+        cur_row += 1
+        left_grid_layout.addWidget(QLabel("Pellets Consumed Trigger:"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        spinbox.setMinimum(1)
+        spinbox.setMaximum(1000)
+        spinbox.setValue(autoclamp_evasion_det.config.pellets_consumed_trigger)
+        def on_autoclamp_evasion_pellets_consumed_trigger_changed(value: int):
+            det = analysis.autoclamp_evasion_detector
+            det.config.pellets_consumed_trigger = value
+            det.property_changed(det.CONFIG, det.config, None)  # force global config refresh for listener(s)
+            det.check_state()
+        spinbox.valueChanged.connect(on_autoclamp_evasion_pellets_consumed_trigger_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        left_grid_layout.addWidget(QLabel("Current count:"), cur_row, cur_col)
+        label = QLabel(f"{autoclamp_evasion_det.pellets_consumed}")
+        left_grid_layout.addWidget(label, cur_row, cur_col + 1)
 
         # right side
         right_layout = QFormLayout()
@@ -1311,6 +1332,8 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(missing_delay_after_exit_tunnel_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
+
+        # grid_layout.addWidget(QLabel("<b>AutoClamp Evasion</b>"), cur_row, cur_col)
 
         # right side:
 

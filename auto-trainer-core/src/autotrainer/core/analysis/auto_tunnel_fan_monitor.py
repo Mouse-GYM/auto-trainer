@@ -77,7 +77,7 @@ class AutoTunnelSweepMonitor(BaseDetector):
         if not self._running or not self._config.enabled:
             logger.verbose("auto tunnel sweep not enabled")
             return
-        if name == BaseDetector.IS_ENGAGED:
+        if name == self._misplaced_detector.IS_ENGAGED:
             if value:
                 delay = self._config.misplaced_trigger_delay
                 if delay > 0:

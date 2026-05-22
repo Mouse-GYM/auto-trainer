@@ -96,13 +96,7 @@ class CameraConfiguration:
         )
 
 
-camera_configuration_representer = make_camelize_representer("!CameraConfiguration")
-
-
 def camera_id_representer(dumper: yaml.SafeDumper, obj):
     return dumper.represent_data(int(obj))
 
 SystemConfigurationDumper.add_representer(CameraId, camera_id_representer)
-
-
-camera_configuration_constructor = make_decamelize_constructor(CameraConfiguration)

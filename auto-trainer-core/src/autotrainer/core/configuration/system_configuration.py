@@ -13,18 +13,16 @@ import humps
 
 from autotrainer.core.logging import get_verbose_logger
 from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader
+from .alarm_detector import AlarmDetectorConfig
+from .autoclamp_evasion_config import AutoClampEvasionAlarmConfig
 from .watchdog_config import WatchdogConfig
 from .. import make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
-from .camera_configuration import CameraConfiguration, CameraId, camera_configuration_representer, \
-    camera_configuration_constructor
-from .hardware_configuration import HardwareConfiguration, hardware_configuration_representer, \
-    hardware_configuration_constructor
-from .inference_configuration import InferenceConfiguration, inference_configuration_representer, \
-    inference_configuration_constructor
-from .persistence_configuration import PersistenceConfiguration, persistence_configuration_representer, \
-    persistence_configuration_constructor
+from .camera_configuration import CameraConfiguration, CameraId
+from .hardware_configuration import HardwareConfiguration
+from .inference_configuration import InferenceConfiguration
+from .persistence_configuration import PersistenceConfiguration
 from ..project.project_info import DATE_FORMAT, TIME_FORMAT
 
 logger = get_verbose_logger(__name__)
@@ -44,7 +42,7 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 39
+    version: int = 40
 
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
@@ -191,25 +189,33 @@ class SystemConfiguration:
 
 system_configuration_representer = make_camelize_representer("!SystemConfiguration")
 
-SystemConfigurationDumper.add_representer(SystemConfiguration, system_configuration_representer)
-SystemConfigurationDumper.add_representer(CameraConfiguration, camera_configuration_representer)
-SystemConfigurationDumper.add_representer(HardwareConfiguration, hardware_configuration_representer)
-SystemConfigurationDumper.add_representer(InferenceConfiguration, inference_configuration_representer)
-SystemConfigurationDumper.add_representer(PersistenceConfiguration, persistence_configuration_representer)
-SystemConfigurationDumper.add_representer(WatchdogConfig, make_camelize_representer("!WatchdogConfig"))
+_tag_2_cls = dict(
+    SystemConfiguration=SystemConfiguration,
+    HardwareConfiguration=HardwareConfiguration,
+    CameraConfiguration=CameraConfiguration,
+    InferenceConfiguration=InferenceConfiguration,
+    WatchdogConfig=WatchdogConfig,
+    AlarmDetectorConfig=AlarmDetectorConfig,
+    AutoClampEvasionConfig=AutoClampEvasionAlarmConfig,
+    PersistenceConfiguration=PersistenceConfiguration,
+)
+
+def add_repr(_tag, _cls):
+    SystemConfigurationDumper.add_representer(_cls, make_camelize_representer(f"!{_tag}"))
+
+
+for tag, cls in _tag_2_cls.items():
+    add_repr(tag, cls)
+
+
 add_behavior_configuration_representers(SystemConfigurationDumper)
 
-
-system_configuration_constructor = make_decamelize_constructor(SystemConfiguration)
 
 for cls in SystemConfigurationLoader, :
     # SystemConfigurationSafeLoader:
     # no need also add on SystemConfigurationSafeLoader given it subclass SystemConfigurationLoader
 
-    cls.add_constructor("!SystemConfiguration", system_configuration_constructor)
-    cls.add_constructor("!CameraConfiguration", camera_configuration_constructor)
-    cls.add_constructor("!HardwareConfiguration", hardware_configuration_constructor)
-    cls.add_constructor("!InferenceConfiguration", inference_configuration_constructor)
-    cls.add_constructor("!PersistenceConfiguration", persistence_configuration_constructor)
-    cls.add_constructor("!WatchdogConfig", make_decamelize_constructor(WatchdogConfig))
+    for tag, tag_cls in _tag_2_cls.items():
+        cls.add_constructor(f"!{tag}", make_decamelize_constructor(tag_cls))
+
     add_behavior_configuration_constructors(cls)

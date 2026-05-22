@@ -145,12 +145,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         analysis.load_cell_monitor.load_configuration(config.load_cell)
         analysis.load_cell_tare_monitor.load_configuration(config.auto_tare)
         analysis.audio_thrashing_monitor.config = config.audio
-        analysis.emergency_alarm_monitor.config = config.emergency_alarm
         analysis.global_animal_presence_monitor.config = config.global_animal_presence
         analysis.external_doors_monitor.config = config.external_doors
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
         analysis.system_maintenance_monitor.config = config.system_maintenance
         analysis.system_fault_monitor.config = config.system_fault
+        alarm_cfg = config.emergency_alarm
+        analysis.emergency_alarm_monitor.config = alarm_cfg
+        analysis.autoclamp_evasion_detector.config = alarm_cfg.autoclamp_evasion
 
     def save_configuration(self) -> BehaviorConfiguration:
         algo = self._system_machine.algorithm

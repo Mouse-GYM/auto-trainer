@@ -15,6 +15,7 @@ from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core.perf_monitor import PerfMonitor
 from autotrainer.core.observable_object import ObservableObject
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from .autoclamp_evasion_detector import AutoClampEvasionDetector
 from .watchdog_monitor import WatchdogMonitor
 
 from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
@@ -29,7 +30,7 @@ from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
-from .alarm_monitor import EmergencyAlarmMonitor
+from .alarm_monitor import EmergencyAlarmMonitor, EmergencyReason
 from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from .external_doors_monitor import ExternalDoorsMonitor
 from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
@@ -98,7 +99,7 @@ class SensorAnalysis(ObservableObject):
         self._system_fault_monitor = SystemFaultMonitor(
             config=SystemFaultConfig(), watchdog_monitor=self._watchdog_monitor)
 
-        self._alarm_monitor = EmergencyAlarmMonitor(
+        alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor(
             config=EmergencyAlarmConfiguration(),
             load_cell_monitor=self._load_cell_monitor,
             load_cell_tare_monitor=self._tare_detector,
@@ -109,6 +110,15 @@ class SensorAnalysis(ObservableObject):
             system_fault_monitor=self._system_fault_monitor,
             topcam_presence_attrs=topcam_presence,
         )
+
+        self._autoclamp_evasion_detector = AutoClampEvasionDetector(
+            loadcell_detector=self._load_cell_monitor,
+            headbar_detector=self._headbar_pressure_monitor,
+        )
+
+        #  dynamically handled alarm sub-monitors:
+        reg_alarm_cond = alarm_mon.register_detector
+        reg_alarm_cond(EmergencyReason.AUTOCLAMP_EVASION, self._autoclamp_evasion_detector)
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
@@ -124,6 +134,7 @@ class SensorAnalysis(ObservableObject):
             self._system_maintenance_monitor,
             self._system_fault_monitor,
             self._watchdog_monitor,
+            self._autoclamp_evasion_detector,
         ]
 
     @property
@@ -219,6 +230,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def watchdog_monitor(self) -> WatchdogMonitor:
         return self._watchdog_monitor
+
+    @property
+    def autoclamp_evasion_detector(self) -> AutoClampEvasionDetector:
+        return self._autoclamp_evasion_detector
 
     #
 

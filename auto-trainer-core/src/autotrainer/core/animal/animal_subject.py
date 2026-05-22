@@ -19,18 +19,6 @@ logger = get_verbose_logger(__name__)
 _date_format = "%Y%m%d"
 
 
-def _load_old_format(data: Dict[str, Any]) -> "AnimalSubject":
-    kw = {}
-    if "name" in data:
-        kw['name'] = data["name"]
-    animal = AnimalSubject(**kw)
-    if "pellet_x" in data and "pellet_y" in data and "pellet_z" in data:
-        animal.pellet_x = data["pellet_x"]
-        animal.pellet_y = data["pellet_y"]
-        animal.pellet_z = data["pellet_z"]
-    return animal
-
-
 @dataclass
 class AnimalTraining:
     """Animal Training configuration"""
@@ -71,7 +59,7 @@ class AnimalPelletCounts:
 class _AnimalSubject:
     """A subject in an animal experiment."""
 
-    version: int = 2
+    version: int = 3
 
     name: str = ""
     id: str = None   # handled in post_init
@@ -89,11 +77,25 @@ class _AnimalSubject:
 
     target_y_limit: Optional[float] = None  # in DCS
 
+    autoclamp_evasion_pellets_consumed: int = 0
+
     def __post_init__(self):
         if self.id is None:
             self.id = str(uuid.uuid4())
         if not self.name:
             self.name = f"Mouse-{self.id}"
+
+    @classmethod
+    def _load_old_format(cls, data: Dict[str, Any]) -> Self:
+        kw = {}
+        if "name" in data:
+            kw['name'] = data["name"]
+        animal = cls(**kw)
+        if "pellet_x" in data and "pellet_y" in data and "pellet_z" in data:
+            animal.pellet_x = data["pellet_x"]
+            animal.pellet_y = data["pellet_y"]
+            animal.pellet_z = data["pellet_z"]
+        return animal
 
 
 @dataclass
@@ -122,40 +124,42 @@ class AnimalSubject(_AnimalSubject):
                                    file_version, AnimalSubject.version)
                 if "id" not in data:
                     # old format
-                    animal = _load_old_format(data)
+                    return cls._load_old_format(data)
+                # new "id" format:
+                reach = data.pop('reach')
+                pellet_dev = reach.pop('pelletDevice', None)
+                pellet_dcs = reach.pop('pelletDcs', None)
+                if pellet_dcs is None:
+                    src = pellet_dev
                 else:
-                    reach = data.pop('reach')
-                    pellet_dev = reach.pop('pelletDevice', None)
-                    pellet_dcs = reach.pop('pelletDcs', None)
-                    if pellet_dcs is None:
-                        src = pellet_dev
-                    else:
-                        src = pellet_dcs
-                    pellet_x, pellet_y, pellet_z = src['x'], src['y'], src['z']
-                    training = data.pop('training')
-                    pellet_counts_day_dct = data.pop("pelletCountsDay", {})
-                    pellet_counts_total_dct = data.pop("pelletCountsTotal", {})
-                    count_day_date_str: Optional[str] = data.pop('pelletCountsDayDate', None)
-                    if count_day_date_str is None:
-                        pellet_counts_day_date = datetime.date.today()
-                    else:
-                        pellet_counts_day_date = datetime.datetime.strptime(count_day_date_str, _date_format).date()
-                    animal = cls(
-                        id=data.pop('id'),
-                        name=data.pop('name'),
-                        is_pellet_dcs=pellet_dcs is not None,
-                        target_y_limit=data.pop('targetYLimit', None),
-                        pellet_x=pellet_x,
-                        pellet_y=pellet_y,
-                        pellet_z=pellet_z,
-                        training=AnimalTraining(
-                            current_protocol=training.pop('currentProtocol'),
-                            protocols=training.pop('protocols'),
-                        ),
-                        pellet_counts_day_date=pellet_counts_day_date,
-                        pellet_counts_day=AnimalPelletCounts(**pellet_counts_day_dct),
-                        pellet_counts_total=AnimalPelletCounts(**pellet_counts_total_dct),
-                    )
+                    src = pellet_dcs
+                pellet_x, pellet_y, pellet_z = src['x'], src['y'], src['z']
+                training = data.pop('training')
+                pellet_counts_day_dct = data.pop("pelletCountsDay", {})
+                pellet_counts_total_dct = data.pop("pelletCountsTotal", {})
+                count_day_date_str: Optional[str] = data.pop('pelletCountsDayDate', None)
+                if count_day_date_str is None:
+                    pellet_counts_day_date = datetime.date.today()
+                else:
+                    pellet_counts_day_date = datetime.datetime.strptime(count_day_date_str, _date_format).date()
+                autoclamp_evasion_pellets_consumed = data.pop("autoclampEvasionPelletsConsumed", 0)
+                animal = cls(
+                    id=data.pop('id'),
+                    name=data.pop('name'),
+                    is_pellet_dcs=pellet_dcs is not None,
+                    target_y_limit=data.pop('targetYLimit', None),
+                    pellet_x=pellet_x,
+                    pellet_y=pellet_y,
+                    pellet_z=pellet_z,
+                    training=AnimalTraining(
+                        current_protocol=training.pop('currentProtocol'),
+                        protocols=training.pop('protocols'),
+                    ),
+                    pellet_counts_day_date=pellet_counts_day_date,
+                    pellet_counts_day=AnimalPelletCounts(**pellet_counts_day_dct),
+                    pellet_counts_total=AnimalPelletCounts(**pellet_counts_total_dct),
+                    autoclamp_evasion_pellets_consumed=autoclamp_evasion_pellets_consumed,
+                )
             except Exception as err:
                 logger.error("Error loading animal subject from %s: %s", file_path, err)
                 return None
@@ -210,6 +214,7 @@ class AnimalSubject(_AnimalSubject):
             "pelletCountsDayDate": self.pellet_counts_day_date.strftime(_date_format),
             "pelletCountsDay": dataclasses.asdict(self.pellet_counts_day),
             "pelletCountsTotal": dataclasses.asdict(self.pellet_counts_total),
+            "autoclampEvasionPelletsConsumed": self.autoclamp_evasion_pellets_consumed,
         }
         xyz = Offset3DTuple(self.pellet_x, self.pellet_y, self.pellet_z)
         logger.debug("Saving %s to %s ; xyz=%s", self.name, file_path.as_posix(), xyz.humanize())

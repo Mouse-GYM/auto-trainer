@@ -320,29 +320,32 @@ class AppModel(ObservableObject):
 
         self._system_message_queue = queue.Queue()  # only dedicated to CAN bus messages reading/handling
 
-        sensor_analysis = self._analysis = SensorAnalysis(
-            topcam_presence=self._top_camera_presence_detection
-        ) if sensor_analysis is None else sensor_analysis
+        if sensor_analysis is None:
+            sensor_analysis = SensorAnalysis(
+                topcam_presence=self._top_camera_presence_detection
+            )
+        analysis = self._analysis = sensor_analysis
+        del sensor_analysis  # using "analysis" instead
         #
-        self._system_message_handler = SystemMessageHandler(self._system_message_queue,
-                                                            sensor_analysis=sensor_analysis) if system_message_handler is None else system_message_handler
-        assert self._system_message_handler.analysis is sensor_analysis, \
+        if system_message_handler is None:
+            system_message_handler = SystemMessageHandler(self._system_message_queue, sensor_analysis=analysis)
+        self._system_message_handler = system_message_handler
+        assert self._system_message_handler.analysis is analysis, \
             "something very wrong: sensor_analysis different in system_message_handler"
         self._system_message_handler.start()
 
-        self._hardware = HardwareModel(self._system_message_handler,
-                                       sensor_analysis=sensor_analysis)
+        self._hardware = HardwareModel(self._system_message_handler, sensor_analysis=analysis)
 
         self._inference_queue = None
 
         self._pose_algorithm: PoseAlgorithm = None
-        self._inference: Optional[InferenceModel] = None  # needed before reload_calib
+        self._inference: InferenceModel = None  # noqa. needed before reload_calib
         self.reload_calib(calib_dir)
         #
-        inference = self._inference = InferenceModel(self._pose_algorithm,
-                                                     calib_dir=calib_dir,
-                                                     mp_manager=self._mp_manager,
-                                                     ) if inference_model is None else inference_model
+        if inference_model is None:
+            inference_model = InferenceModel(
+                self._pose_algorithm, calib_dir=calib_dir, mp_manager=self._mp_manager)
+        inference = self._inference =  inference_model
         #
 
         self._training_plans: List[PlanInfo] = []
@@ -392,9 +395,11 @@ class AppModel(ObservableObject):
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
         pellet_m.events.pellet_sent += self._on_pellet_sent
 
-        sensor_analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
-        sensor_analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
-        sensor_analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
+        analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
+        analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
+        analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
+        analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
+
 
         self._timer_send_status = no_op_timer
 
@@ -739,8 +744,13 @@ class AppModel(ObservableObject):
                 self._set_animal_base_positions(animal)
             else:
                 self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
-        self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._preferences.selected_animal = "" if animal is None else animal.name
+        analysis = self._behavior.analysis
+        analysis.autoclamp_evasion_detector.pellets_consumed = (
+            0 if animal is None
+            else animal.autoclamp_evasion_pellets_consumed
+        )
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
         self._event_manager.post_event_content(
             ApiEventKind.animalSelected, None if animal is None else animal.to_api_status())
         logger.success("Switched to animal %s", animal)
@@ -1669,11 +1679,19 @@ class AppModel(ObservableObject):
                               f"{engaged_d}\n\n"
                               f"Application shall be restarted fully.")
 
+    def _on_autoclamp_evasion_property_changed(self, name, value, _):
+        det = self._analysis.autoclamp_evasion_detector
+        animal = self._selected_animal
+        if name == det.PELLETS_CONSUMED:
+            if animal is not None and value != animal.autoclamp_evasion_pellets_consumed:
+                animal.autoclamp_evasion_pellets_consumed = value
+                self._save_animal_metadata(animal, sender="autoclamp_evasion_pellets_consumed")
+
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
 
-    def _on_behavior_algo_property_changed(self, name: str, value, _):
+    def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
         animal = self._selected_animal
         #
@@ -1691,6 +1709,14 @@ class AppModel(ObservableObject):
 
         elif name == props.CAGE_CLEAN_CONFIG:
             self._refresh_cage_clean_data()
+
+        elif name == props.HEAD_FIXATION_ENABLED:
+            det = self._behavior.analysis.autoclamp_evasion_detector
+            if value and not old_value:
+                det.pellets_consumed = 0
+                # we monitor the detector pellets_consumed property,
+                # and update it in selected animal.
+            det.autoclamp_enabled = value
 
     def _on_hardware_property_changed(self, name: str, value, _):
         animal = self._selected_animal

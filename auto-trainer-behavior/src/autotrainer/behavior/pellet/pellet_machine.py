@@ -8,6 +8,7 @@ from autotrainer.api import ApiEventKind
 
 from autotrainer.core import transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.pose_elements import SceneElement
 
 from ..intersession import IntersessionState
 from ..behavior_algorithm import BehaviorAlgorithm
@@ -392,11 +393,19 @@ class PelletMachine(StateMachine):
 
         p_now = get_perf_now()
 
+        pellet_seen_perf = algo.all_cams_scene_parts_presence_context.present_last_perf_c.get(
+            SceneElement.Pellet, -math.inf)
+        pellet_miss_perf = algo.any_cams_scene_parts_presence_context.missing_last_perf_c.get(
+            SceneElement.Pellet, -math.inf)
+
         if (
             pellet_seen
             and is_from_inference
             and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c
             and algo.is_pellet_recently_seen(perf_now=p_now)
+            and pellet_seen_perf > self._prev_pellet_load_perf_c
+            and pellet_seen_perf > pellet_miss_perf
+            # also ensure new pellet_seen perf_c is more recent than the previous full miss
         ):
             self._notify_pellet_loaded_ok()
 
