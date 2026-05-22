@@ -1130,7 +1130,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         p_now = get_perf_now()
         sess_duration = p_now - self._session_started_perf_c
         miss_delay = self._sess_min_duration - sess_duration
-        if miss_delay > 0:
+        if miss_delay > 0 and reason != RecordingEndingReason.ALGO_PAUSED:
             logger.verbose("current trial record too short, delaying end_capture_session of %.1f",
                            miss_delay)
             timer = self._timer_end_capture_session = make_daemon_timer(
