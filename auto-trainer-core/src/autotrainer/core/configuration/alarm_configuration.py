@@ -2,7 +2,8 @@
 from dataclasses import dataclass, field
 
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
-from autotrainer.core.configuration.autoclamp_evasion_config import AutoClampEvasionAlarmConfig
+from autotrainer.core.configuration.autoclamp_evasion_config import AnimalEvasionAlarmConfig
+from autotrainer.core.configuration.detector import DetectorConfig
 
 
 @dataclass
@@ -27,7 +28,7 @@ class AudioLoadCellThrashAlarmConfig(AlarmDetectorConfig):
 
 
 @dataclass
-class _EmergencyAlarmConfiguration:
+class _EmergencyAlarmConfiguration(DetectorConfig):
 
     # 1st possible alarm condition
     # audio_load_cell_thrash: AudioLoadCellThrashAlarmCondition = field(default_factory=AudioLoadCellThrashAlarmCondition)
@@ -78,7 +79,7 @@ class _EmergencyAlarmConfiguration:
     system_fault_is_emergency_stop_condition: bool = True
 
     # 8th
-    autoclamp_evasion: AutoClampEvasionAlarmConfig = field(default_factory=AutoClampEvasionAlarmConfig)
+    autoclamp_evasion: AnimalEvasionAlarmConfig = field(default_factory=AnimalEvasionAlarmConfig)
 
 
 @dataclass

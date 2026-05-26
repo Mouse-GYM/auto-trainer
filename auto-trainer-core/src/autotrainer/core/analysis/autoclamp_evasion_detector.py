@@ -2,18 +2,18 @@ from typing import Optional
 
 from autotrainer.api import ApiDetectorKind
 
-from autotrainer.core.analysis.alarm_detector import AlarmDetector
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 from autotrainer.core.analysis.headbar_pressure_monitor import HeadbarPressureMonitor
-from autotrainer.core.configuration.autoclamp_evasion_config import AutoClampEvasionAlarmConfig
+from autotrainer.core.configuration.autoclamp_evasion_config import AutoClampEvasionDetectorConfig
 
 
-class AutoClampEvasionDetector(AlarmDetector[AutoClampEvasionAlarmConfig]):
+class AutoClampEvasionDetector(BaseDetector[AutoClampEvasionDetectorConfig]):
 
     PELLETS_CONSUMED = "pellets_consumed"  # under autoclamp evasion conditions
 
-    config_cls = AutoClampEvasionAlarmConfig
-    api_kind = ApiDetectorKind.animalAutoClampEvasion
+    config_cls = AutoClampEvasionDetectorConfig
+    detector_api_kind = ApiDetectorKind.animalAutoClampEvasion
 
     def __init__(self, *, loadcell_detector: LoadCellMonitor, headbar_detector: HeadbarPressureMonitor):
         super().__init__()
@@ -27,6 +27,7 @@ class AutoClampEvasionDetector(AlarmDetector[AutoClampEvasionAlarmConfig]):
     def _stop(self):
         super()._stop()
         self._running = True
+        self._checking_state = False
 
     def _check_state(self) -> Optional[float]:
         cfg = self._config

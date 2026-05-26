@@ -13,7 +13,9 @@ logger = get_verbose_logger(__name__)
 WatchdogEvaluatePerfCounterT = Callable[[], float]
 
 
-class WatchdogMonitor(BaseDetector):
+class WatchdogMonitor(BaseDetector[WatchdogConfig]):
+
+    config_cls = WatchdogConfig
 
     use_daemon = True
     default_timer_delay = 1  # "refresh" rate
@@ -21,16 +23,7 @@ class WatchdogMonitor(BaseDetector):
     def __init__(self):
         super().__init__()
         self._watchdogs: Dict[str, WatchdogEvaluatePerfCounterT] = {}
-        self._config = WatchdogConfig()
         self._engaged_watchdogs: Set[str] = set()
-
-    @property
-    def config(self) -> WatchdogConfig:
-        return self._config
-
-    @config.setter
-    def config(self, value: WatchdogConfig):
-        self._config = value
 
     @property
     def registered_watchdogs(self) -> List[str]:

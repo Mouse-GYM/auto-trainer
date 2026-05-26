@@ -2126,7 +2126,7 @@ class AppModel(ObservableObject):
             ApiDetectorStatus(
                 detector_id=ApiDetectorKind.audioThrash,
                 is_enabled=audio_mon.running,
-                is_active=audio_mon.thrashing_detected,
+                is_active=audio_mon.is_engaged,
             ),
             ApiDetectorStatus(
                 detector_id=ApiDetectorKind.pelletMisplaced,

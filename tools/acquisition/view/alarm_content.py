@@ -259,7 +259,7 @@ class AlarmContent(ContentWidget):
 
     @invoke_method
     def _audio_thrashing_property_changed(self, name, new_value, _):
-        if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
+        if name == AudioSpectrumThrashMonitor.IS_ENGAGED:
             self.audio_thrashing_changed.emit(new_value)
 
     @invoke_method

@@ -15,6 +15,7 @@ from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core.perf_monitor import PerfMonitor
 from autotrainer.core.observable_object import ObservableObject
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from .animal_evasion_alarm import AnimalEvasionAlarm
 from .autoclamp_evasion_detector import AutoClampEvasionDetector
 from .watchdog_monitor import WatchdogMonitor
 
@@ -115,10 +116,12 @@ class SensorAnalysis(ObservableObject):
             loadcell_detector=self._load_cell_monitor,
             headbar_detector=self._headbar_pressure_monitor,
         )
+        self._animal_evasion_alarm = AnimalEvasionAlarm()
+        self._animal_evasion_alarm.register_sub_detector("autoclamp_evasion", self._autoclamp_evasion_detector)
 
         #  dynamically handled alarm sub-monitors:
         reg_alarm_cond = alarm_mon.register_detector
-        reg_alarm_cond(EmergencyReason.AUTOCLAMP_EVASION, self._autoclamp_evasion_detector)
+        reg_alarm_cond(EmergencyReason.ANIMAL_EVASION, self._animal_evasion_alarm)
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
@@ -135,6 +138,7 @@ class SensorAnalysis(ObservableObject):
             self._system_fault_monitor,
             self._watchdog_monitor,
             self._autoclamp_evasion_detector,
+            self._animal_evasion_alarm,
         ]
 
     @property
@@ -234,6 +238,10 @@ class SensorAnalysis(ObservableObject):
     @property
     def autoclamp_evasion_detector(self) -> AutoClampEvasionDetector:
         return self._autoclamp_evasion_detector
+
+    @property
+    def animal_evasion_alarm(self) -> AnimalEvasionAlarm:
+        return self._animal_evasion_alarm
 
     #
 

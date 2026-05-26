@@ -1,8 +1,10 @@
 import dataclasses
 
+from autotrainer.core.configuration.detector import DetectorConfig
+
 
 @dataclasses.dataclass
-class _GlobalAnimalPresenceConfig:
+class _GlobalAnimalPresenceConfig(DetectorConfig):
 
     presence_missing_delay_hours: float = 12
     # if mouse not seen in tunnel AND not seen in cage longer than the delay, then trigger

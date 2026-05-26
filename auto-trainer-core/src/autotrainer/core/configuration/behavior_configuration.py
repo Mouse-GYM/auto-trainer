@@ -9,6 +9,7 @@ import yaml
 
 from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
+from .autoclamp_evasion_config import AutoClampEvasionDetectorConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .system_fault_config import SystemFaultConfig
@@ -20,6 +21,7 @@ from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfigurati
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
+from ..analysis.autoclamp_evasion_detector import AutoClampEvasionDetector
 
 logger = get_verbose_logger(__name__)
 
@@ -226,6 +228,7 @@ class _BehaviorConfiguration:
     system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
     system_fault: SystemFaultConfig = field(default_factory=SystemFaultConfig)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
+    autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:

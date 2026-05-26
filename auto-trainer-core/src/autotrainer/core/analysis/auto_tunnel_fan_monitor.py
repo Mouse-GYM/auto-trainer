@@ -4,6 +4,7 @@ import math
 from typing import Optional, Tuple, List
 
 from autotrainer.core import get_perf_now, Offset3DTuple
+from autotrainer.core.configuration.detector import DetectorConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.analysis.detector import BaseDetector
@@ -17,7 +18,7 @@ _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
 
 
 @dataclasses.dataclass
-class AutoTunnelSweepConfiguration:
+class AutoTunnelSweepConfiguration(DetectorConfig):
     enabled: bool = False
     misplaced_trigger_delay: float = 5
     tunnel_fan_on_duration: float = 5
@@ -26,24 +27,17 @@ class AutoTunnelSweepConfiguration:
 
 class AutoTunnelSweepMonitor(BaseDetector):
 
+    config_cls = AutoTunnelSweepConfiguration
+
     def __init__(
         self, config: AutoTunnelSweepConfiguration,
         *,
         pellet_misplaced_detector: PelletMisplacedDetector,
     ):
-        super().__init__()
-        self._config = config
+        super().__init__(config=config)
         self._misplaced_detector = pellet_misplaced_detector
         self._timer_end_engaged = no_op_timer
         pellet_misplaced_detector.property_changed += self._on_pellet_misplaced_property_changed
-
-    @property
-    def config(self) -> AutoTunnelSweepConfiguration:
-        return self._config
-
-    @config.setter
-    def config(self, value: AutoTunnelSweepConfiguration):
-        self._config = value
 
     def _stop(self):
         self._timer_end_engaged.cancel()

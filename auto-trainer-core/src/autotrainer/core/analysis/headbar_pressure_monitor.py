@@ -6,12 +6,14 @@ from typing_extensions import Self
 
 import numpy
 
+from .detector import BaseDetector
+from ..configuration.detector import DetectorConfig
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind, post_api_event_content
 
 
 @dataclass
-class HeadbarPressureConfiguration:
+class HeadbarPressureConfiguration(DetectorConfig):
     threshold: float = 20
     duration: float = 0.5
 
@@ -23,25 +25,24 @@ class HeadbarPressureConfiguration:
         )
 
 
-class HeadbarPressureMonitor(ObservableObject):
+class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
     """
     Monitor the headbar pressure data stream and perform any required analysis.  The current implementation is used to
     determine if the headbar is considered sufficiently "engaged" or not.  At this time, this is specifically used
     downstream to allow for the tunnel auto-clamp behavior, when enabled.
     """
 
-    IS_ENGAGED_PROPERTY = "is_engaged"
+    config_cls = HeadbarPressureConfiguration
 
     def __init__(self):
         super().__init__()
 
-        self._is_engaged = False
         self._force_engaged = False
 
         self._sample_rate = 100
 
-        self._load_cell_engaged_threshold: float = 30
-        self._duration: float = 0.25
+        self.load_cell_engaged_threshold: float = 30
+        self.duration: float = 0.25
 
         self._values = numpy.empty((1, 0))
 
@@ -68,21 +69,23 @@ class HeadbarPressureMonitor(ObservableObject):
 
     @property
     def load_cell_engaged_threshold(self) -> float:
-        return self._load_cell_engaged_threshold
+        return self._config.threshold
 
     @load_cell_engaged_threshold.setter
     def load_cell_engaged_threshold(self, value: float) -> None:
-        prev, self._load_cell_engaged_threshold = self._load_cell_engaged_threshold, value
-        self._on_property_changed("threshold", value, prev)
+        cfg = self._config
+        prev, cfg.threshold = cfg.threshold, value
+        # self._on_property_changed("threshold", value, prev)  # unused
 
     @property
     def duration(self) -> float:
-        return self._duration
+        return self._config.duration
 
     @duration.setter
     def duration(self, value: float) -> None:
-        prev, self._duration = self._duration, value
-        self._on_property_changed("duration", value, prev)
+        cfg = self.config
+        prev, cfg.duration = cfg.duration, value
+        # self._on_property_changed("duration", value, prev)  unused
         self._rebuild_buffers()
 
     @property
@@ -90,22 +93,22 @@ class HeadbarPressureMonitor(ObservableObject):
         return self._is_engaged or self._force_engaged
 
     @is_engaged.setter
-    def is_engaged(self, value):
-        value = value or self._force_engaged
-        old_value, self._is_engaged = self._is_engaged, value
-        if value != old_value:
-            self.property_changed(self.IS_ENGAGED_PROPERTY, value, old_value)
+    def is_engaged(self, value: bool):
+        BaseDetector.is_engaged.fset(self, value)
 
     def load_configuration(self, configuration: HeadbarPressureConfiguration):
-        self.load_cell_engaged_threshold = configuration.threshold
-        self.duration = configuration.duration
+        self._config = configuration
+        # self.load_cell_engaged_threshold = configuration.threshold
+        # self.duration = configuration.duration
 
     def save_configuration(self) -> HeadbarPressureConfiguration:
-        return HeadbarPressureConfiguration(threshold=self._load_cell_engaged_threshold, duration=self._duration)
+        return self._config
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0) -> bool:
         self._values = numpy.append(self._values, values)
         self._values = self._values[-self._retain_count:]
+
+        cfg = self._config
 
         if len(self._values) < self._retain_count:
             return False
@@ -124,7 +127,7 @@ class HeadbarPressureMonitor(ObservableObject):
             old_end = idx + self._first_third
 
             if numpy.all(self._values[old_start:old_end] <= (
-                    self._values[new_start:new_end] - self._load_cell_engaged_threshold)):
+                    self._values[new_start:new_end] - cfg.threshold)):
                 is_engaged = True
                 break
 
@@ -142,10 +145,11 @@ class HeadbarPressureMonitor(ObservableObject):
         # Measurements are received in batches.  Depending on that batch size, it may not result in a continuous, moving
         # evaluation with data processed in batches.  Store a larger buffer than the window so we can apply the window
         # over each starting and ending element.
-        self._buffer_length = self._duration * 4
+        cfg = self._config
+        self._buffer_length = cfg.duration * 4
         self._retain_count = round(self._sample_rate * self._buffer_length)
 
-        self._window_count = round(self._sample_rate * self._duration)
+        self._window_count = round(self._sample_rate * cfg.duration)
 
         self._first_third = floor(self._window_count / 3)
         self._last_third = self._window_count - self._first_third

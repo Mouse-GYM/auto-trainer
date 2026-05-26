@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from autotrainer.api import ApiDetectorKind
 
 from autotrainer.core.logging import get_verbose_logger
+from .alarm_detector import AlarmDetector
 
 from .detector import BaseDetector
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
@@ -13,7 +14,9 @@ from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 logger = get_verbose_logger(__name__)
 
 
-class SystemMaintenanceMonitor(BaseDetector):
+class SystemMaintenanceMonitor(AlarmDetector[SystemMaintenanceConfig]):
+
+    config_cls = SystemMaintenanceConfig
 
     use_daemon = True
     default_timer_delay = 60  # do really not need precise, but once every minute is quite good.
@@ -25,9 +28,7 @@ class SystemMaintenanceMonitor(BaseDetector):
     CAGE_NEED_CLEAN_ENGAGED = "cage_need_clean_engaged"
 
     def __init__(self, *, config: SystemMaintenanceConfig):
-        super().__init__()
-        self._config = config
-        self._engaged_reasons: Set[str] = set()
+        super().__init__(config=config)
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
@@ -37,20 +38,6 @@ class SystemMaintenanceMonitor(BaseDetector):
         # otherwise, given default cage_need_clean_look_ahead_hours of 4h,
         # if some test case are executed after 20h localtime,
         # then that breaks some test with cage_need_clean engaged.
-
-    @property
-    def config(self) -> SystemMaintenanceConfig:
-        return self._config
-
-    @config.setter
-    def config(self, value):
-        prev, self._config = self._config, value
-        self._on_property_changed(self.CONFIG, value, prev)
-        self._logger.verbose("Received config: %s", value)
-
-    @property
-    def engaged_reasons(self) -> List[str]:
-        return list(self._engaged_reasons)
 
     @property
     def max_pellet_loaded_engaged(self):

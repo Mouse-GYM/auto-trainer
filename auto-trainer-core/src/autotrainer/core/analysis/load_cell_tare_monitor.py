@@ -30,17 +30,17 @@ class LoadCellAutoTareContext:
     low_variance_disengaged_perf_c: float = -math.inf
 
 
-class LoadCellTareMonitor(BaseDetector):
+class LoadCellTareMonitor(BaseDetector[LoadCellAutoTareConfiguration]):
     """
     Monitor the load cell data stream and whether zeroing is required.  The decision to actually zero or not is not
     performed here.  It simply reports whether the conditions meet the requirements where zeroing is applicable.
     """
 
+    config_cls = LoadCellAutoTareConfiguration
+
     def __init__(self):
         super().__init__()
-
         self._context = LoadCellAutoTareContext()
-        self._config = LoadCellAutoTareConfiguration()
         self._tare_callback: Optional[TareCallbackT] = None
         self._baseline: float = 0
         self._values: numpy.ndarray
@@ -54,10 +54,6 @@ class LoadCellTareMonitor(BaseDetector):
     def _check_state(self) -> Optional[float]:
         # all handled by .update()
         return None
-
-    @property
-    def config(self) -> LoadCellAutoTareConfiguration:
-        return self._config
 
     @property
     def context(self) -> LoadCellAutoTareContext:
@@ -116,9 +112,8 @@ class LoadCellTareMonitor(BaseDetector):
         logger.info("Setting new tare_callback: %s", tare_callback)
         self._tare_callback = tare_callback
 
-    def load_configuration(self, configuration: LoadCellAutoTareConfiguration):
-        self._config = configuration
-        logger.info("got new config: %s", configuration)
+    def _set_config(self, config: LoadCellAutoTareConfiguration):
+        super()._set_config(config)
         self._reset()
 
     def save_configuration(self) -> LoadCellAutoTareConfiguration:

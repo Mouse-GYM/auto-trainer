@@ -2,10 +2,11 @@ import math
 import queue
 import threading
 import time
-from typing import Dict, Tuple, Optional, Union
+from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic
 
-from autotrainer.api import ApiEventKind
+from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now
+from autotrainer.core.configuration.detector import DetectorConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.event.event_manager import EventManager
 from autotrainer.core.logging import get_verbose_logger
@@ -18,15 +19,27 @@ logger = get_verbose_logger(__name__)
 _request_check_state = object()
 
 
-class BaseDetector(ObservableObject):
+DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
+
+
+class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     IS_ENGAGED = "is_engaged"
+    IS_ENGAGED_PROPERTY = IS_ENGAGED  # synonym
+
+    CONFIG = "config"
+
+    config_cls: Type[DetectorConfigT] = DetectorConfig
 
     use_daemon: bool = False
     default_timer_delay: Optional[float] = None
 
-    def __init__(self):
+    detector_api_kind: ClassVar[Optional[ApiDetectorKind]] = None
+    default_detector_enabled: ClassVar[bool] = True  # raw base detectors are always "enabled" by default
+
+    def __init__(self, *, config: Optional[DetectorConfigT] = None):
         super().__init__()
+        self._config = self.config_cls() if config is None else config
         self._running = False
         self._p_started = -math.inf
         self._is_engaged = False
@@ -38,6 +51,20 @@ class BaseDetector(ObservableObject):
         self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
+
+    @property
+    def config(self) -> DetectorConfigT:
+        return self._config
+
+    @config.setter
+    def config(self, config: DetectorConfigT):
+        self._set_config(config)
+
+    def _set_config(self, value: DetectorConfigT):
+        self._logger.info("got new config: %s", value)
+        prev, self._config = self._config, value
+        self.property_changed(self.CONFIG, value, prev)
+        self.check_state()
 
     def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
@@ -54,17 +81,23 @@ class BaseDetector(ObservableObject):
 
     @is_engaged.setter
     def is_engaged(self, value):
-        prev, self._is_engaged = self._is_engaged, value
-        if prev == value:
+        self.set_is_engaged(value)
+
+    def set_is_engaged(self, engaged: bool):
+        prev, self._is_engaged = self._is_engaged, engaged
+        if prev == engaged:
             return
         perf_now = get_perf_now()
-        if value:
+        if engaged:
             self._engaged_perf_c = perf_now
         else:
             self._disengaged_perf_c = perf_now
         self._logger.notice("is_engaged -> %s (age previous = %.1f)",
-                            value, perf_now - (self._disengaged_perf_c if value else self._engaged_perf_c))
-        self._on_property_changed(self.IS_ENGAGED, value, prev)
+                            engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
+        kind = self.detector_api_kind
+        if kind is not None:
+            self.post_detector_event(kind, engaged, self.default_detector_enabled)
+        self._on_property_changed(self.IS_ENGAGED, engaged, prev)
 
     @property
     def engaged_age(self):
@@ -100,12 +133,13 @@ class BaseDetector(ObservableObject):
                     th_q.put(_request_check_state)
                     return None
             if self._checking_state:
+                logger.warning("checking_state already in progress")
                 return None
             self._checking_state = True
             try:
                 next_delay = self._check_state()
             except Exception as err:
-                logger.exception("_check_state() failed: %s", err)
+                self._logger.exception("_check_state() failed: %s", err)
                 next_delay = None
             finally:
                 self._checking_state = False

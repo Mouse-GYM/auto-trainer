@@ -64,12 +64,14 @@ class LoadCellMonitorContext:
         return age - self.thrashing_last_disengaged_perf_c
 
 
-class LoadCellMonitor(BaseDetector):
+class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
     """
     Monitor the load cell data stream and perform any required analysis.  The current implementation is used to
     determine when the animal is in the tunnel.  At this time, this is specifically used downstream as a factor in
     whether to start and stop "sessions" of an experiment.
     """
+
+    config_cls = LoadCellConfiguration
 
     use_timer: bool = False
     # to use timer to allow triggering active/inactive, or not.
@@ -83,8 +85,7 @@ class LoadCellMonitor(BaseDetector):
         *,
         config: Optional[LoadCellConfiguration] = None
     ):
-        super().__init__()
-        self._config = LoadCellConfiguration() if config is None else config
+        super().__init__(config=config)
         self._cur_idx = 0
         self._p_start_active = None  # get_perf_now()
         self._p_start_inactive = None  # get_perf_now()
@@ -109,10 +110,6 @@ class LoadCellMonitor(BaseDetector):
     @property
     def context(self) -> LoadCellMonitorContext:
         return self._context
-
-    @property
-    def config(self) -> LoadCellConfiguration:
-        return self._config
 
     @property
     def load_cell_engaged_threshold(self) -> float:
@@ -183,7 +180,7 @@ class LoadCellMonitor(BaseDetector):
         # force the on_property_changed event too (if new value differs) :
         self.load_cell_engaged_threshold = configuration.weight_active_threshold
         # before resetting the new config:
-        self._config = configuration
+        self.config = configuration
 
     def save_configuration(self) -> LoadCellConfiguration:
         return self._config
