@@ -1314,10 +1314,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         # NB: "mouse" == SceneElement.Nose
+        if perf_now is None:
+            perf_now = get_perf_now()
         self.update_part_seen(SceneElement.Nose, seen, perf_now=perf_now)  # ensure presence_context gets updated
         if seen:
-            if perf_now is None:
-                perf_now = get_perf_now()
             self._mouse_seen_last_perf_c = perf_now
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
