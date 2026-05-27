@@ -49,11 +49,9 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
             },
         )
 
-    @BaseDetector.is_engaged.setter
-    def is_engaged(self, engaged: bool):
-        if engaged != self._is_engaged:
-            self.post_alarm_event()
-        BaseDetector.is_engaged.fset(self, engaged)
+    def _custom_set_is_engaged(self):
+        super()._custom_set_is_engaged()
+        self.post_alarm_event()
 
     def get_sub_detector(self, name: str) -> Optional[BaseDetector]:
         with self._lock:

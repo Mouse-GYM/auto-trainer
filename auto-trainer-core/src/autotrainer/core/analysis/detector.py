@@ -83,6 +83,9 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def is_engaged(self, value):
         self.set_is_engaged(value)
 
+    def _custom_set_is_engaged(self):
+        """this is for subclass to customize their logic on is_engaged changed"""
+
     def set_is_engaged(self, engaged: bool):
         prev, self._is_engaged = self._is_engaged, engaged
         if prev == engaged:
@@ -97,6 +100,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         kind = self.detector_api_kind
         if kind is not None:
             self.post_detector_event(kind, engaged, self.default_detector_enabled)
+        self._custom_set_is_engaged()  # before the property changed event
         self._on_property_changed(self.IS_ENGAGED, engaged, prev)
 
     @property
