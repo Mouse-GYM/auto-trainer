@@ -53,7 +53,7 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
         self._first_third = 1
         self._last_third = 1
 
-        self._last_when: float = -math.inf
+        self._last_when: float = 0
         self._last_index: int = 0
 
         self._rebuild_buffers()
