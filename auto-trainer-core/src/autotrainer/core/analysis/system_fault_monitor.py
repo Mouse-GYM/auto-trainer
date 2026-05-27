@@ -3,7 +3,6 @@ from typing import Optional, Set, List
 import psutil
 
 from autotrainer.api import ApiDetectorKind
-from .alarm_detector import AlarmDetector
 
 from .detector import BaseDetector
 from .watchdog_monitor import WatchdogMonitor
@@ -19,7 +18,7 @@ class SystemFaultMonitor(BaseDetector[SystemFaultConfig]):
     use_daemon = True  # for free disk space checks
     default_timer_delay = 30  # secs ; check is very fast so can afford do it regularly
 
-    CONFIG = AlarmDetector.CONFIG
+    CONFIG = BaseDetector.CONFIG
 
     FREE_DISK_SPACE_ENGAGED = "free_disk_space_engaged"
     WATCHDOG_ENGAGED = "watchdog_engaged"
@@ -83,10 +82,10 @@ class SystemFaultMonitor(BaseDetector[SystemFaultConfig]):
             if use and engaged:
                 reasons.add(reason)
         self._engaged_reasons = reasons
-        prev_engaged = self._is_engaged
-        self.is_engaged = len(reasons) > 0
-        if not prev_engaged and self._is_engaged:
+        is_engaged = len(reasons) > 0
+        if not self._is_engaged and is_engaged:
             self._logger.notice("Engaging with %s", reasons)
+        self.is_engaged = is_engaged
 
     def _on_watchdog_property_changed(self, name, value, _):
         if name == self._watchdog_mon.IS_ENGAGED:
