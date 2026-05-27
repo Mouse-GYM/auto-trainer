@@ -141,7 +141,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         system_m.shift_xyz_handler.set_config(config.shift_xyz_handler)
         system_m.algorithm.load_configuration(config)
         analysis = self._analysis
-        analysis.headbar_pressure_monitor.load_configuration(config.headbar_pressure)
+        analysis.headbar_pressure_monitor.config = config.headbar_pressure
         analysis.load_cell_monitor.load_configuration(config.load_cell)
         analysis.load_cell_tare_monitor.config = config.auto_tare
         analysis.audio_thrashing_monitor.config = config.audio

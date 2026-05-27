@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from math import floor
 from datetime import datetime
@@ -37,8 +38,6 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
     def __init__(self):
         super().__init__()
 
-        self._force_engaged = False
-
         self._sample_rate = 100
 
         self.load_cell_engaged_threshold: float = 30
@@ -53,6 +52,9 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
 
         self._first_third = 1
         self._last_third = 1
+
+        self._last_when: float = -math.inf
+        self._last_index: int = 0
 
         self._rebuild_buffers()
 
@@ -88,21 +90,11 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
         # self._on_property_changed("duration", value, prev)  unused
         self._rebuild_buffers()
 
-    @property
-    def is_engaged(self) -> bool:
-        return self._is_engaged or self._force_engaged
-
-    @is_engaged.setter
-    def is_engaged(self, value: bool):
-        BaseDetector.is_engaged.fset(self, value)
-
-    def load_configuration(self, configuration: HeadbarPressureConfiguration):
-        self._config = configuration
-        # self.load_cell_engaged_threshold = configuration.threshold
-        # self.duration = configuration.duration
-
-    def save_configuration(self) -> HeadbarPressureConfiguration:
-        return self._config
+    def _custom_set_is_engaged(self):
+        self._event_manager.post_event_content(
+            ApiEventKind.headbarPressureEngagedChanged,
+            data=dict(is_engaged=self._is_engaged),
+            when=datetime.fromtimestamp(self._last_when), index=self._last_index)
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0) -> bool:
         self._values = numpy.append(self._values, values)
@@ -131,15 +123,10 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
                 is_engaged = True
                 break
 
-        is_engaged |= self._force_engaged
-        prev_engaged = self._is_engaged
+        self._last_when = when
+        self._last_index = index
         self.is_engaged = is_engaged
-        if is_engaged != prev_engaged:
-            EventManager.default().post_event_content(
-                ApiEventKind.headbarPressureEngagedChanged,
-                data=dict(is_engaged=is_engaged),
-                when=datetime.fromtimestamp(when), index=index)
-        return is_engaged
+        return self._is_engaged
 
     def _rebuild_buffers(self):
         # Measurements are received in batches.  Depending on that batch size, it may not result in a continuous, moving
@@ -153,10 +140,3 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
 
         self._first_third = floor(self._window_count / 3)
         self._last_third = self._window_count - self._first_third
-
-    def force_engaged(self, engaged: bool) -> None:
-        """
-        Primarily used for testing.  This will force the headbar pressure monitor to be engaged or not engaged.
-        """
-        self._force_engaged = engaged
-        self.is_engaged = engaged

@@ -94,7 +94,6 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
         self._active_debounce = no_op_timer
         self._inactive_debounce = no_op_timer
         self._index = 0  # used to pass with event when engaged is changed
-        self._force_engaged: bool = False  # debug
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
         self._p_next_hist_log = get_perf_now()
@@ -358,13 +357,3 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
         self._cur_ptp_count = 0
         self.thrashing_detected = False
         self.is_engaged = False  # last
-
-    def force_engaged(self, engaged: bool) -> None:
-        """
-        Primarily used for testing.  This will force the load cell monitor to be engaged or not engaged.
-        """
-        logger.verbose("Force engaged: %s", engaged)
-        self._force_engaged = engaged
-        # self.is_engaged = engaged  # assuming the load-cell sensor is working and calling our .update() function
-        # which will generate the engaged after the configured delay.
-        # And same for disengage.

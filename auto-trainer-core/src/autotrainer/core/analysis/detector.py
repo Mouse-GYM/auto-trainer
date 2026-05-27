@@ -43,6 +43,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._running = False
         self._p_started = -math.inf
         self._is_engaged = False
+        self._force_engaged = False  # only used for dev/testing
         self._engaged_perf_c = -math.inf
         self._disengaged_perf_c = -math.inf
         self._cur_timer = no_op_timer
@@ -61,10 +62,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._set_config(config)
 
     def _set_config(self, value: DetectorConfigT):
-        self._logger.info("got new config: %s", value)
+        self._logger.debug("got new config: %s", value)
         prev, self._config = self._config, value
         self.property_changed(self.CONFIG, value, prev)
-        self.check_state()
+        self.check_state()  # force check_state even if same config
 
     def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
@@ -77,7 +78,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     @property
     def is_engaged(self):
-        return self._is_engaged
+        return self._is_engaged or self._force_engaged
 
     @is_engaged.setter
     def is_engaged(self, value):
@@ -87,6 +88,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         """this is for subclass to customize their logic on is_engaged changed"""
 
     def set_is_engaged(self, engaged: bool):
+        engaged |= self._force_engaged
         prev, self._is_engaged = self._is_engaged, engaged
         if prev == engaged:
             return
@@ -240,3 +242,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._logger.notice("Restarting %s", self.__class__.__name__)
         self.stop()
         self.start()
+
+    def force_engaged(self, engaged: bool) -> None:
+        """
+        Primarily used for testing.  This will force the detector to be engaged if called with True.
+        """
+        self._force_engaged = engaged
+        self.is_engaged = engaged
