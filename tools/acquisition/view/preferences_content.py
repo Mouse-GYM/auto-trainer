@@ -1386,7 +1386,7 @@ class PreferencesContent(QWidget):
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        self._make_alarm_entries(grid_layout, "AutoClamp Evasion Alarm",
+        self._make_alarm_entries(grid_layout, "Animal Evasion Alarm",
                                  analysis.animal_evasion_alarm, cur_row, cur_col)
         cur_row += 3
 
