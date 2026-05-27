@@ -1347,7 +1347,7 @@ class MainWindow(QMainWindow):
                     # self.force_headbar_detector_action.setChecked(True)
                     set_headfix = True
                     do_sleep()
-                    for _ in range(2 * random.randint(1, 4)):
+                    for _ in range(random.randint(1, 4)):
                         print("setting headfix trigger")
                         # self.force_headbar_detector_action.toggle()
                         self.force_headbar_detector_action.trigger()
@@ -1363,7 +1363,7 @@ class MainWindow(QMainWindow):
                     self.mouse_near_pellet_action.trigger()
                     do_sleep()
                 if set_headfix:
-                    for _ in range(4):
+                    for _ in range(2):
                         # self.force_headbar_detector_action.toggle()
                         self.force_headbar_detector_action.trigger()
                         for _ in range(2):
