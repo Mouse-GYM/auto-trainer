@@ -751,21 +751,19 @@ class SystemMachine(StateMachine):
                     min_y = part_3d.y
                 if part_3d.y > max_y:
                     max_y = part_3d.y
-        has_at_leat_one = not math.isinf(min_y)
-        if not has_at_leat_one:
-            return
         perf_now = get_perf_now()
-        valid = min_y >= uncov_cfg.min_y_dcs
+        valid = max_y < uncov_cfg.min_y_dcs
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
-            logger.verbose("setting pellet-uncover valid ; min_dist=%.1f", min_y)
-            ctx.start_y_dcs_valid_perf_c = perf_now
+            logger.verbose("setting pellet-uncover valid ; max_dist=%.1f", max_y)
             ctx.start_min_y = min_y
-            ctx.y_dcs_valid = True
         elif not valid and prev_valid:
-            logger.verbose("unsetting pellet-uncover valid ; min_dist=%.1f", min_y)
-            ctx.y_dcs_valid = False
+            logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
+        if not valid:
+            # as well, so that compare with minimum duration threshold give expected result
+            ctx.start_y_dcs_valid_perf_c = perf_now
+        ctx.y_dcs_valid = valid
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_pose_changed(self, response: PoseResponse):
@@ -1021,6 +1019,8 @@ class SystemMachine(StateMachine):
         logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
         if new_value == PelletState.monitoring:
             self._consider_start_session(reason="pellet-monitoring")
+        elif new_value == PelletState.releasing:
+            self._algorithm.pellet_uncover_context.has_released = True
 
     def _on_pellet_sent(self):
         self._consider_start_session(reason="pellet-sent")

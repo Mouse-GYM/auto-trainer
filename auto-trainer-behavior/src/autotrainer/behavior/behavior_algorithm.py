@@ -52,11 +52,13 @@ class PelletUncoverContext:
     y_dcs_valid: bool = False
     start_min_y: float = math.nan  # mm
     start_y_dcs_valid_perf_c: float = math.nan  # second
+    has_released: bool = False
 
     def reset(self):
         self.y_dcs_valid = False
+        self.has_released = False
         self.start_min_y = math.nan
-        self.start_y_dcs_valid_perf_c = math.nan
+        self.start_y_dcs_valid_perf_c = get_perf_now()
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
         return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
@@ -1229,6 +1231,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if not cfg.is_enabled or self._algo_paused:
             return False
         return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam)
+
+    @property
+    def pellet_uncover_context(self) -> PelletUncoverContext:
+        return self._uncover_ctx
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
