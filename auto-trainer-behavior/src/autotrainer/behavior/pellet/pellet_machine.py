@@ -332,13 +332,13 @@ class PelletMachine(StateMachine):
             self._consecutive_failed_load = 0
             self.events.pellet_loaded()
 
-    def _check_notify_pellet_load_failed(self):
+    def _check_notify_pellet_load_failed(self, *, perf_now):
         if (
             self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c
             and self._prev_notify_load_failed_perf_c < self._prev_pellet_load_perf_c
         ):
             self._consecutive_failed_load += 1
-            self._prev_notify_load_failed_perf_c = get_perf_now()
+            self._prev_notify_load_failed_perf_c = perf_now
             logger.info("Notifying pellet load failed, consecutive=%s", self._consecutive_failed_load)
             self.events.pellet_load_failed(consecutive=self._consecutive_failed_load)
 
@@ -399,8 +399,17 @@ class PelletMachine(StateMachine):
         cur_state = self._state
         can_use_command = self.can_use_pellet_command()
         all_cams_ctx = algo.all_cams_scene_parts_presence_context
-        pellet_seen_perf = all_cams_ctx.present_last_perf_c.get(SceneElement.Pellet, -math.inf)
-        # pellet_miss_perf = all_cams_ctx.missing_last_perf_c.get(SceneElement.Pellet, -math.inf)
+        any_cams_ctx = algo.any_cams_scene_parts_presence_context
+        pellet_seen_all = all_cams_ctx.get_part_seen(SceneElement.Pellet)
+        triangle_seen_all = all_cams_ctx.get_part_seen(SceneElement.Triangle)
+        pellet_seen_any = any_cams_ctx.get_part_seen(SceneElement.Pellet)
+
+        if can_use_command:  # wait no move in progress
+            if pellet_seen_all:
+                self._check_notify_pellet_loaded_ok(perf_now=perf_now)
+            elif not pellet_seen and cur_state == PelletState.loading:
+                if triangle_seen_all and not pellet_seen_any:
+                    self._check_notify_pellet_load_failed(perf_now=perf_now)
 
         if algo.algo_paused:  # really unsure we should keep,
             # we may want to handle the user commands still when algo-paused (emergency)
@@ -418,8 +427,6 @@ class PelletMachine(StateMachine):
             # this is going to be called at end of intersession after going to detection phase,
             # basically when inference is back to live
             if self.can_load_pellet(use_any_cam=True):
-                if cur_state == PelletState.loading:
-                    self._check_notify_pellet_load_failed()
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
                 logit()
                 with BehaviorAlgorithm.set_allow_reentrant(True):
@@ -468,15 +475,11 @@ class PelletMachine(StateMachine):
         elif cur_state == PelletState.monitoring:
 
             if self.can_load_pellet():
-                if pellet_seen_perf < self._prev_pellet_load_perf_c:
-                    self._check_notify_pellet_load_failed()
                 reason = "load_pellet_when_monitoring_can_load_pellet"
                 logit()
                 with BehaviorAlgorithm.set_allow_reentrant(True):
                     self.load_pellet()
                 return
-
-            self._check_notify_pellet_loaded_ok(perf_now=perf_now)
 
             if self._prev_covered_state is not self._covered_state:
                 logger.debug("covered_state: %s -> %s", self._prev_covered_state, self._covered_state)
