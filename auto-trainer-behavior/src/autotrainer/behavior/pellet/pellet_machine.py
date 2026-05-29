@@ -404,7 +404,7 @@ class PelletMachine(StateMachine):
         if can_use_command:  # wait no move in progress
             if pellet_seen_all:
                 self._check_notify_pellet_loaded_ok(perf_now=perf_now)
-            elif not pellet_seen and cur_state == PelletState.loading:
+            elif not pellet_seen:  # and cur_state == PelletState.loading:
                 if triangle_seen_all and not pellet_seen_any:
                     self._check_notify_pellet_load_failed(perf_now=perf_now)
 
