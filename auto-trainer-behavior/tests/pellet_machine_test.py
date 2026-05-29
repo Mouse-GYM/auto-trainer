@@ -44,14 +44,17 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.pellet_recently_seen  # back !
     assert algo.session_pellet_loaded_count == 0
-    mock_system.mock_pellet_ack()  # ack the load
     mock_system.mock_pose_response(pellet_seen=True)
+    assert algo.session_pellet_loaded_count == 0  # still
+    mock_system.mock_pellet_ack()  # ack the load
+    assert algo.session_pellet_loaded_count == 1  # now
     assert pellet_m.state == PelletState.sending
     mock_system.mock_pose_response(pellet_seen=True)
     assert algo.session_pellet_loaded_count == 1  # not increased after
     mock_system.mock_pellet_ack()  # ack the sending
     assert algo.session_pellet_loaded_count == 1  # not increased after
     assert pellet_m.state == PelletState.monitoring
+    assert pellet_m.can_use_pellet_command()
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
         PelletState.covering if cover_enabled else PelletState.releasing,
