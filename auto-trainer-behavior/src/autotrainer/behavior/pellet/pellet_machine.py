@@ -195,9 +195,6 @@ class PelletMachine(StateMachine):
     def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
         """Is more: *should* or *has to* load pellet"""
         can_use = self.can_use_pellet_command()
-        # perf_now = get_perf_now()
-        # algo_would_load = self._algorithm.would_load_pellet(
-        #     pellet_state=self._state, use_any_cam=use_any_cam, perf_now=perf_now)
         can = force or (
             can_use
             and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
