@@ -1,3 +1,4 @@
+import os
 import pickle
 import shutil
 import textwrap
@@ -830,7 +831,7 @@ class MainWindow(QMainWindow):
     def _set_autoclamp_evasion(self, det: AutoClampEvasionDetector):
         det = self._app_model.analysis.autoclamp_evasion_detector
         action = self._reset_autoclamp_evasion_action
-        action.setVisible(det.is_engaged)
+        action.setVisible(det.is_engaged or os.getenv("AUTOTRAINER_SHOW_AUTOCLAMP_EVASION") == "1")
         action.setToolTip(f"Reset AutoClamp Evasion\n{det.pellets_consumed} out of {det.config.pellets_consumed_trigger}")
 
     def _create_actions(self):
@@ -1600,8 +1601,8 @@ class MainWindow(QMainWindow):
     @invoke_method
     def _on_autoclamp_evasion_property_changed(self, name: str, value, _):
         det = self._app_model.analysis.autoclamp_evasion_detector
-        if name in (det.IS_ENGAGED, det.CONFIG):
-            self._set_autoclamp_evasion(det)
+        # if name in (det.IS_ENGAGED, det.CONFIG, det.PELLETS_CONSUMED):
+        self._set_autoclamp_evasion(det)
 
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):

@@ -357,3 +357,7 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
         self._cur_ptp_count = 0
         self.thrashing_detected = False
         self.is_engaged = False  # last
+
+    def force_engaged(self, engaged: bool) -> None:
+        self._force_engaged = engaged
+        # NB: is consumed in update() to set weight over threshold

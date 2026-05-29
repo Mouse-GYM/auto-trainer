@@ -24,15 +24,11 @@ class AutoClampEvasionDetector(BaseDetector[AutoClampEvasionDetectorConfig]):
         self._autoclamp_in_progress = False
         self._running = True  # always "active"
 
-    def _stop(self):
-        super()._stop()
-        self._running = True
-        self._checking_state = False
+    def stop(self):
+        pass  # keep always active
 
     def _check_state(self) -> Optional[float]:
-        cfg = self._config
-        # check both for headbar not engaged AND autoclamp not in-progress/engaged too
-        self.is_engaged = self._pellets_consumed_count >= cfg.pellets_consumed_trigger
+        self.is_engaged = self._pellets_consumed_count >= self._config.pellets_consumed_trigger
 
     def increment_pellets_consumed(self, inc: int = 1):
         if (

@@ -30,7 +30,7 @@ timer_update_state = make_daemon_timer
 
 class EmergencyReason(str, enum.Enum):
 
-    ANIMAL_EVASION = "AUTOCLAMP_EVASION"
+    ANIMAL_EVASION = "ANIMAL_EVASION"
     MOUSE_THRASHING = "MOUSE_THRASHING"
     IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
     DOORS_OPEN = "DOORS_OPEN"

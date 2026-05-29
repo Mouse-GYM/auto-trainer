@@ -146,7 +146,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 next_delay = self._check_state()
             except Exception as err:
                 self._logger.exception("_check_state() failed: %s", err)
-                next_delay = None
+                next_delay = 1
+                # if not daemon detector, this will create a timer for another check in 1s
             finally:
                 self._checking_state = False
             if next_delay is None:
@@ -177,8 +178,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 cmd_queue = queue.Queue(maxsize=32)
                 thread = threading.Thread(name=self.__class__.__name__, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
+                self._thread_queue = thread, cmd_queue  # set before start
                 thread.start()
-                self._thread_queue = thread, cmd_queue
             else:
                 self.check_state()
 

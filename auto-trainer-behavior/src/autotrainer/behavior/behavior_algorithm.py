@@ -1224,7 +1224,13 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return True
         return False
 
-    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring, use_any_cam: bool=False) -> bool:
+    def can_load_pellet(
+        self,
+        *,
+        pellet_state: PelletState = PelletState.monitoring,
+        use_any_cam: bool=False,
+        perf_now: Optional[float] = None,
+    ) -> bool:
         """Say if a pellet can and must be loaded"""
         # is more has_to_load_pellet()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
@@ -1232,7 +1238,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam)
+        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
+                                      perf_now=perf_now)
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""

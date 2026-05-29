@@ -114,6 +114,7 @@ class SystemMachine(StateMachine):
 
         self._session_started_perf_c = -math.inf
 
+        self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
 
@@ -156,14 +157,13 @@ class SystemMachine(StateMachine):
         inference.property_changed += self._on_inference_property_changed
         inference.segmentation_finished += self._on_inference_segmentation_finished
 
-        self._pellet_device = pellet_device
-
-        pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
-        pellet_machine.events.state_changed += self._on_pellet_state_changed
-        pellet_machine.events.pellet_loading += self._on_pellet_loading
-        pellet_machine.events.pellet_loaded += self._on_pellet_loaded
-        pellet_machine.events.pellet_sent += self._on_pellet_sent
-        pellet_machine.events.load_failed += self._on_pellet_load_failed
+        pellet_machine = self._pellet_machine = PelletMachine(algo, msg_handler, pellet_device)
+        pellet_events = pellet_machine.events
+        pellet_events.state_changed += self._on_pellet_state_changed
+        pellet_events.pellet_loading += self._on_pellet_loading
+        pellet_events.pellet_loaded += self._on_pellet_loaded
+        pellet_events.pellet_sent += self._on_pellet_sent
+        pellet_events.pellet_load_failed += self._on_pellet_load_failed
         self._last_pellet_loaded_perf_c = -math.inf
         self._last_pellet_loading_perf_c = -math.inf
         self._last_pellet_failed_loaded_perf_c = -math.inf
@@ -804,7 +804,9 @@ class SystemMachine(StateMachine):
         new_pellet_recently_seen = algo.is_pellet_recently_seen()
         if math.isinf(self._last_pellet_loaded_perf_c) and new_pellet_recently_seen:
             # ensure ok if pellet already loaded on start
-            self._last_pellet_loading_perf_c = response.perf_c
+            # take the min of response and p_now for loading_perf_c:
+            self._last_pellet_loading_perf_c = min(response.perf_c, p_now)
+            # so that loaded_perf_c is always >= than loading.
             self._last_pellet_loaded_perf_c = p_now
             logger.info("set first last_pellet_loading=%.4f and last_pellet_loaded=%.4f",
                         self._last_pellet_loading_perf_c, self._last_pellet_loaded_perf_c)
@@ -1008,7 +1010,6 @@ class SystemMachine(StateMachine):
             else:
                 self._pellet_device.set_tunnel_fan_off()
 
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_pellet_loading(self):
         algo = self._algorithm
         analysis = self._analysis
@@ -1020,8 +1021,8 @@ class SystemMachine(StateMachine):
             self._last_pellet_loading_perf_c >
             self._last_pellet_failed_loaded_perf_c
         )
-        logger.verbose("on_pellet_loading: last_loading=%.4f last_loaded=%.4f last_failed=%.4f",
-                    self._last_pellet_loading_perf_c, self._last_pellet_loaded_perf_c,
+        logger.verbose("on_pellet_loading: consumed=%s last_loaded=%.4f last_loading=%.4f  last_failed=%.4f",
+                    consumed, self._last_pellet_loaded_perf_c, self._last_pellet_loading_perf_c,
                     self._last_pellet_failed_loaded_perf_c)
         self._last_pellet_loading_perf_c = p_now
         if consumed:
@@ -1057,8 +1058,8 @@ class SystemMachine(StateMachine):
             self._consider_start_session(reason="pellet-monitoring")
 
     def _on_pellet_sent(self):
-        self._consider_start_session(reason="pellet-sent")
         self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
+        self._consider_start_session(reason="pellet-sent")
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
