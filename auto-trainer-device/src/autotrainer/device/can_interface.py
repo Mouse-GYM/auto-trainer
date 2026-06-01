@@ -25,10 +25,11 @@ from typing import Type, Optional, Dict, Union, Any, Tuple
 
 
 try:
+    import pyjerrycan as jerry
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
         JerryCANBootloaderCmd
 except ModuleNotFoundError:
-    JerryCAN = None
+    jerry = JerryCAN = None
 else:
     from importlib.metadata import version
     jerry_v = tuple(
@@ -749,7 +750,12 @@ class CanInterface(DeviceInterface):
         Returns:
              int: CANbus address of the given target
         """
-        dst = self.pellet_address if target == Target.PELLET_DEVICE else self.magnet_address
+        if target == Target.PELLET_DEVICE:
+            dst = self.pellet_address
+        elif target == Target.MAGNET_DEVICE:
+            dst = self.magnet_address
+        else:
+            raise ValueError(f"Unhandled target: {target}")
         if dst is None:
             raise MissingDeviceAddressError(f"{target} missing address")
         return dst
@@ -1990,3 +1996,10 @@ class CanInterface(DeviceInterface):
         if res != 0:
             logger.error("%s: ServoDetach failed: %s", motor, res)
         return res == 0
+
+    def board_reboot(self, target: Target):
+        addr = self._tgt2addr(target)
+        rc = self._jc.BootloaderCommand(addr, JerryCANBootloaderCmd.SubCommand.REBOOT)
+        if rc != 0:
+            logger.error("board_reboot failed: SendMessage(dst_id=%s): rc=%s", addr, rc)
+        return rc == 0
