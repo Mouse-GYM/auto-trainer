@@ -100,6 +100,7 @@ class SystemMachine(StateMachine):
         # and that a session is active, to trigger an eventual end_session().
         # If 0 (or lower) : immediately consider end session on start of pellet-load.
 
+        # todo: should probably make/use a state "Machine" for AutoClamp itself
         self._auto_clamp_in_progress = False
         self._auto_clamp_disengage_in_progress = False
         self._timer_auto_clamp_evaluate = no_op_timer
@@ -107,13 +108,13 @@ class SystemMachine(StateMachine):
         self._disengage_auto_clamp_load_count = 0
         self._last_disengage_autoclamp_perf_c = -math.inf
 
-        self._last_close_tunnel_gate_perf_t = -math.inf
         self._is_handling_diamond_triangle = False
 
         self._enter_tunnel_pellet_seen = False
 
         self._session_started_perf_c = -math.inf
 
+        self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
 
@@ -156,14 +157,16 @@ class SystemMachine(StateMachine):
         inference.property_changed += self._on_inference_property_changed
         inference.segmentation_finished += self._on_inference_segmentation_finished
 
-        self._pellet_device = pellet_device
-
-        pellet_machine = self._pellet_machine = PelletMachine(self.algorithm, msg_handler, pellet_device)
-        pellet_machine.events.state_changed += self._on_pellet_state_changed
-        pellet_machine.events.pellet_loading += self._on_pellet_loading
-        pellet_machine.events.pellet_loaded += self._on_pellet_loaded
-        pellet_machine.events.pellet_sent += self._on_pellet_sent
-        pellet_machine.events.load_failed += self._on_pellet_load_failed
+        pellet_machine = self._pellet_machine = PelletMachine(algo, msg_handler, pellet_device)
+        pellet_events = pellet_machine.events
+        pellet_events.state_changed += self._on_pellet_state_changed
+        pellet_events.pellet_loading += self._on_pellet_loading
+        pellet_events.pellet_loaded += self._on_pellet_loaded
+        pellet_events.pellet_sent += self._on_pellet_sent
+        pellet_events.pellet_load_failed += self._on_pellet_load_failed
+        self._last_pellet_loaded_perf_c = -math.inf
+        self._last_pellet_loading_perf_c = -math.inf
+        self._last_pellet_failed_loaded_perf_c = -math.inf
 
         intersession_machine = self._intersession = IntersessionMachine(
             algorithm=algo,
@@ -622,7 +625,7 @@ class SystemMachine(StateMachine):
             return
         intensity = cfg.auto_clamp_intensity
         logger.info("auto-clamp setting position to %s ; caller=%s", intensity, caller)
-        self._auto_clamp_in_progress = True
+        self._autoclamp_set_in_progress(True)
         self._update_magnet_position(intensity)
         self._event_manager.post_event_content(ApiEventKind.autoClampEngaged, data=dict(intensity=intensity))
         self._disengage_auto_clamp_load_count = 0
@@ -769,6 +772,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_pose_changed(self, response: PoseResponse):
+        p_now = get_perf_now()
         analysis = self._analysis
         algo = self._algorithm
         if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
@@ -792,11 +796,20 @@ class SystemMachine(StateMachine):
         self._handle_triangle_pellet_offset_changed(
             response.get_parts_3d_offset(SceneElement.Triangle, SceneElement.Pellet))
         #
-        prev_pellet_seen = algo.pellet_recently_seen
+        prev_pellet_seen = algo.is_pellet_recently_seen()
         #
         algo.update_parts_seen(response)  # replace many previous update_xxx_seen()
         # refresh analysis with the parts presence context:
         analysis.emergency_alarm_monitor.update_parts_context(algo.all_cams_scene_parts_presence_context)
+        new_pellet_recently_seen = algo.is_pellet_recently_seen()
+        if math.isinf(self._last_pellet_loaded_perf_c) and new_pellet_recently_seen:
+            # ensure ok if pellet already loaded on start
+            # take the min of response and p_now for loading_perf_c:
+            self._last_pellet_loading_perf_c = min(response.perf_c, p_now)
+            # so that loaded_perf_c is always >= than loading.
+            self._last_pellet_loaded_perf_c = p_now
+            logger.info("set first last_pellet_loading=%.4f and last_pellet_loaded=%.4f",
+                        self._last_pellet_loading_perf_c, self._last_pellet_loaded_perf_c)
         #
         if not prev_pellet_seen and response.pellet_seen and (
             self._state == SystemState.tunnel
@@ -813,6 +826,11 @@ class SystemMachine(StateMachine):
 
     # AUTO-CLAMP / HEAD-BAR
 
+    def _autoclamp_set_in_progress(self, prog: bool):
+        self._auto_clamp_in_progress = prog
+        det = self._analysis.autoclamp_evasion_detector
+        det.autoclamp_in_progress = prog
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _execute_disengage_auto_clamp_if_in_progress(self):
         self._timer_auto_clamp_evaluate.cancel()  # in case of
@@ -824,7 +842,7 @@ class SystemMachine(StateMachine):
         self._last_disengage_autoclamp_perf_c = get_perf_now()
         self._update_magnet_position(baseline_intensity)
         self._event_manager.post_event_content(ApiEventKind.autoClampDisengaged, data=dict(intensity=baseline_intensity))
-        self._auto_clamp_in_progress = False
+        self._autoclamp_set_in_progress(False)
         self._auto_clamp_disengage_in_progress = False
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -863,7 +881,7 @@ class SystemMachine(StateMachine):
         clamp_cfg = algo.head_clamp_config
         if algo.is_in_session:
             freq = clamp_cfg.auto_clamp_release_tone_freq
-            logger.debug("sending tone (freq=%s) to indicate auto-clamp disabled", freq)
+            logger.debug("sending tone (freq=%s) to indicate auto-clamp disengaging", freq)
             pellet_dev.play_tone(freq, 0.5)
             self._event_manager.post_event_content(ApiEventKind.autoClampPlayReleaseTone,
                                                    data=dict(frequency=freq, duration=0.5))
@@ -932,7 +950,7 @@ class SystemMachine(StateMachine):
             timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_algorithm_property_changed(self, name: str, new_value, _):
+    def _on_algorithm_property_changed(self, name: str, new_value, old_value):
         # Always back off to the baseline intensity when auto-clamp is disabled.
         pellet_dev = self._pellet_device
         props = BehaviorAlgoProps
@@ -951,7 +969,8 @@ class SystemMachine(StateMachine):
             tunnel_dev = self._tunnel_device
             self.cancel_timers()
             # don't leave in-progress:
-            self._auto_clamp_in_progress = self._auto_clamp_disengage_in_progress = False
+            self._autoclamp_set_in_progress(False)
+            self._auto_clamp_disengage_in_progress = False
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
@@ -991,12 +1010,23 @@ class SystemMachine(StateMachine):
             else:
                 self._pellet_device.set_tunnel_fan_off()
 
-    def _update_magnet_position(self, position: float):
-        self._tunnel_device.update_head_magnet_intensity(position)
-
-    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_pellet_loading(self):
         algo = self._algorithm
+        analysis = self._analysis
+        p_now = get_perf_now()
+
+        # ensure this new loading was preceded by a successful pellet_loaded:
+        consumed = (
+            self._last_pellet_loaded_perf_c >
+            self._last_pellet_loading_perf_c >
+            self._last_pellet_failed_loaded_perf_c
+        )
+        logger.verbose("on_pellet_loading: consumed=%s last_loaded=%.4f last_loading=%.4f  last_failed=%.4f",
+                    consumed, self._last_pellet_loaded_perf_c, self._last_pellet_loading_perf_c,
+                    self._last_pellet_failed_loaded_perf_c)
+        self._last_pellet_loading_perf_c = p_now
+        if consumed:
+            analysis.autoclamp_evasion_detector.increment_pellets_consumed()
 
         self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
 
@@ -1011,22 +1041,28 @@ class SystemMachine(StateMachine):
             self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
 
     def _on_pellet_loaded(self):
+        p_now = get_perf_now()
+        self._last_pellet_loaded_perf_c = p_now
+        logger.verbose("received pellet_loaded p_now=%.4f", self._last_pellet_loaded_perf_c)
         self._algorithm.pellet_loaded()
         self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=0)
 
     def _on_pellet_load_failed(self, *, consecutive: int):
+        logger.verbose("received pellet_load_failed consecutive=%s", consecutive)
+        self._last_pellet_failed_loaded_perf_c = get_perf_now()
         self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=consecutive)
 
     def _on_pellet_state_changed(self, old_value, new_value):
-        logger.info("pellet_state_changed: %s -> %s", old_value, new_value)
+        logger.verbose("pellet_state_changed: %s -> %s", old_value, new_value)
         if new_value == PelletState.monitoring:
             self._consider_start_session(reason="pellet-monitoring")
 
     def _on_pellet_sent(self):
+        self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
         self._consider_start_session(reason="pellet-sent")
-        self._event_manager.post_event_content(
-            ApiEventKind.trialPelletPresented,
-        )
+
+    def _update_magnet_position(self, position: float):
+        self._tunnel_device.update_head_magnet_intensity(position)
 
     def _consider_enter_tunnel(self, reason: str="NA"):
         if not (

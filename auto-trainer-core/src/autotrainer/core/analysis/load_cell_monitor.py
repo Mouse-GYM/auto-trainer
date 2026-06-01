@@ -64,12 +64,14 @@ class LoadCellMonitorContext:
         return age - self.thrashing_last_disengaged_perf_c
 
 
-class LoadCellMonitor(BaseDetector):
+class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
     """
     Monitor the load cell data stream and perform any required analysis.  The current implementation is used to
     determine when the animal is in the tunnel.  At this time, this is specifically used downstream as a factor in
     whether to start and stop "sessions" of an experiment.
     """
+
+    config_cls = LoadCellConfiguration
 
     use_timer: bool = False
     # to use timer to allow triggering active/inactive, or not.
@@ -83,8 +85,7 @@ class LoadCellMonitor(BaseDetector):
         *,
         config: Optional[LoadCellConfiguration] = None
     ):
-        super().__init__()
-        self._config = LoadCellConfiguration() if config is None else config
+        super().__init__(config=config)
         self._cur_idx = 0
         self._p_start_active = None  # get_perf_now()
         self._p_start_inactive = None  # get_perf_now()
@@ -93,7 +94,6 @@ class LoadCellMonitor(BaseDetector):
         self._active_debounce = no_op_timer
         self._inactive_debounce = no_op_timer
         self._index = 0  # used to pass with event when engaged is changed
-        self._force_engaged: bool = False  # debug
         self._engaged_batch_count: int = 10  # how many last values to use as mean for check is_engaged
         # same than in HardwareModel.connect (currently hardcoded too)
         self._p_next_hist_log = get_perf_now()
@@ -109,10 +109,6 @@ class LoadCellMonitor(BaseDetector):
     @property
     def context(self) -> LoadCellMonitorContext:
         return self._context
-
-    @property
-    def config(self) -> LoadCellConfiguration:
-        return self._config
 
     @property
     def load_cell_engaged_threshold(self) -> float:
@@ -183,7 +179,7 @@ class LoadCellMonitor(BaseDetector):
         # force the on_property_changed event too (if new value differs) :
         self.load_cell_engaged_threshold = configuration.weight_active_threshold
         # before resetting the new config:
-        self._config = configuration
+        self.config = configuration
 
     def save_configuration(self) -> LoadCellConfiguration:
         return self._config
@@ -363,11 +359,5 @@ class LoadCellMonitor(BaseDetector):
         self.is_engaged = False  # last
 
     def force_engaged(self, engaged: bool) -> None:
-        """
-        Primarily used for testing.  This will force the load cell monitor to be engaged or not engaged.
-        """
-        logger.verbose("Force engaged: %s", engaged)
         self._force_engaged = engaged
-        # self.is_engaged = engaged  # assuming the load-cell sensor is working and calling our .update() function
-        # which will generate the engaged after the configured delay.
-        # And same for disengage.
+        # NB: is consumed in update() to set weight over threshold

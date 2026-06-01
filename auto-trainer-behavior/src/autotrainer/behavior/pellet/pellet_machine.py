@@ -8,6 +8,7 @@ from autotrainer.api import ApiEventKind
 
 from autotrainer.core import transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.pose_elements import SceneElement
 
 from ..intersession import IntersessionState
 from ..behavior_algorithm import BehaviorAlgorithm
@@ -23,7 +24,7 @@ logger = get_verbose_logger(__name__)
 DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME = int(os.getenv("AUTOTRAINER_LOAD_RETRACT_COUNT_FORCE_HOME", "12"))
 
 
-class _load_failed_event(Protocol):
+class _pellet_load_failed_event(Protocol):
 
     def __call__(self, *, consecutive: int):
         """Load failed event declaration"""
@@ -35,7 +36,7 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_sending: Callable[[], None]  # now unused
     pellet_loaded: Callable[[], None]  # when a load-pellet is finished executing AND a pellet is seen on it
     pellet_sent: Callable[[], None]  # when a send-pellet is finished executing
-    load_failed: _load_failed_event
+    pellet_load_failed: _pellet_load_failed_event
 
 
 class PelletDeviceCommandFailed(RuntimeError):
@@ -194,9 +195,6 @@ class PelletMachine(StateMachine):
     def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
         """Is more: *should* or *has to* load pellet"""
         can_use = self.can_use_pellet_command()
-        algo_would_load = self._algorithm.would_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
-        if can_use and algo_would_load:
-            self._check_pellet_load_failed()
         can = force or (
             can_use
             and self._algorithm.can_load_pellet(pellet_state=self._state, use_any_cam=use_any_cam)
@@ -319,23 +317,27 @@ class PelletMachine(StateMachine):
 
     # endregion
 
-    def _notify_pellet_loaded_ok(self):
-        # always double check:
-        if self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
-            self._prev_notify_loaded_perf_c = get_perf_now()
+    def _check_notify_pellet_loaded_ok(self, *, perf_now):
+        algo = self._algorithm
+        all_cams_ctx = algo.all_cams_scene_parts_presence_context
+        recently_seen = all_cams_ctx.get_recently_seen(SceneElement.Pellet, algo.pellet_missing_time,
+                                                       perf_now=perf_now)
+
+        if recently_seen and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c:
+            self._prev_notify_loaded_perf_c = perf_now
             logger.info("Notifying pellet loaded successfully")
             self._consecutive_failed_load = 0
             self.events.pellet_loaded()
 
-    def _check_pellet_load_failed(self):
+    def _check_notify_pellet_load_failed(self, *, perf_now):
         if (
             self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c
             and self._prev_notify_load_failed_perf_c < self._prev_pellet_load_perf_c
         ):
             self._consecutive_failed_load += 1
-            self._prev_notify_load_failed_perf_c = get_perf_now()
+            self._prev_notify_load_failed_perf_c = perf_now
             logger.info("Notifying pellet load failed, consecutive=%s", self._consecutive_failed_load)
-            self.events.load_failed(consecutive=self._consecutive_failed_load)
+            self.events.pellet_load_failed(consecutive=self._consecutive_failed_load)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def environment_changed(
@@ -390,21 +392,25 @@ class PelletMachine(StateMachine):
             reason = f"would have retried shortly {reason}"
             logit()
 
-        p_now = get_perf_now()
+        perf_now = get_perf_now()
+        cur_state = self._state
+        can_use_command = self.can_use_pellet_command()
+        all_cams_ctx = algo.all_cams_scene_parts_presence_context
+        any_cams_ctx = algo.any_cams_scene_parts_presence_context
+        pellet_seen_all = all_cams_ctx.get_part_seen(SceneElement.Pellet)
+        triangle_seen_all = all_cams_ctx.get_part_seen(SceneElement.Triangle)
+        pellet_seen_any = any_cams_ctx.get_part_seen(SceneElement.Pellet)
 
-        if (
-            pellet_seen
-            and is_from_inference
-            and self._prev_notify_loaded_perf_c < self._prev_pellet_load_perf_c
-            and algo.is_pellet_recently_seen(perf_now=p_now)
-        ):
-            self._notify_pellet_loaded_ok()
+        if can_use_command:  # wait no move in progress
+            if pellet_seen_all:
+                self._check_notify_pellet_loaded_ok(perf_now=perf_now)
+            elif not pellet_seen:  # and cur_state == PelletState.loading:
+                if triangle_seen_all and not pellet_seen_any:
+                    self._check_notify_pellet_load_failed(perf_now=perf_now)
 
         if algo.algo_paused:  # really unsure we should keep,
             # we may want to handle the user commands still when algo-paused (emergency)
             return
-
-        cur_state = self._state
 
         if algo.system_state == SystemState.intersession:
             if algo.intersession_state == IntersessionState.segmentation:
@@ -412,7 +418,7 @@ class PelletMachine(StateMachine):
                 return
 
         if cur_state in {PelletState.loading, PelletState.retract}:
-            if not self.can_use_pellet_command():
+            if not can_use_command:
                 # always wait the previous movement is finished
                 return
             # this is going to be called at end of intersession after going to detection phase,
@@ -433,7 +439,7 @@ class PelletMachine(StateMachine):
                         self.send_pellet()
 
         elif cur_state == PelletState.sending:
-            if self.can_use_pellet_command():
+            if can_use_command:
                 reason = "monitor_when_sent"
                 logit()
                 with BehaviorAlgorithm.set_allow_reentrant(True):
@@ -495,7 +501,7 @@ class PelletMachine(StateMachine):
                     release_or_cover_action = self.cover_pellet
 
             if release_or_cover_action is not None:
-                if self.can_use_pellet_command():
+                if can_use_command:
                     logit()
                     with BehaviorAlgorithm.set_allow_reentrant(True):
                         release_or_cover_action()

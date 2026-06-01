@@ -1,11 +1,13 @@
 import dataclasses
 import enum
 import math
-from typing import Optional, List, Set, Callable
+from functools import partial
+from typing import Optional, List, Set, Callable, Dict, Union
 
 from autotrainer.api import ApiEventKind, ApiAlarmKind
 
 from autotrainer.core import get_perf_now
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer
 from autotrainer.core.pose_elements import ScenePartsPresenceContext
@@ -28,6 +30,7 @@ timer_update_state = make_daemon_timer
 
 class EmergencyReason(str, enum.Enum):
 
+    ANIMAL_EVASION = "ANIMAL_EVASION"
     MOUSE_THRASHING = "MOUSE_THRASHING"
     IN_CAGE_AFTER_EXIT_TUNNEL = "IN_CAGE_AFTER_EXIT_TUNNEL"
     DOORS_OPEN = "DOORS_OPEN"
@@ -37,7 +40,11 @@ class EmergencyReason(str, enum.Enum):
     SYSTEM_FAULT = "SYSTEM_FAULT"
 
 
+AlarmDetectorNameT = Union[str, EmergencyReason]
+
+
 _map_emergency_reason_2_api_alarm_kind = {
+    EmergencyReason.ANIMAL_EVASION: ApiAlarmKind.animalEvasion,
     EmergencyReason.MOUSE_THRASHING: ApiAlarmKind.thrashing,
     EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL: ApiAlarmKind.animalMissing,
     EmergencyReason.GLOBAL_ANIMAL_PRESENCE: ApiAlarmKind.animalImmobile,
@@ -52,10 +59,16 @@ def emergency_reason_2_api_alarm_kind(reason: EmergencyReason) -> ApiAlarmKind:
     return _map_emergency_reason_2_api_alarm_kind[reason]
 
 
+@dataclasses.dataclass
+class AlarmDetectorContext:
+    detector: AlarmDetector
+    property_changed_callback: Callable
 
-class EmergencyAlarmMonitor(BaseDetector):
-    IS_ENGAGED = "is_engaged"
-    CONFIG = "config"
+
+class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
+
+    IS_ENGAGED = BaseDetector.IS_ENGAGED
+    CONFIG = BaseDetector.CONFIG
 
     PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED = "presence_in_cage_after_exit_tunnel_engaged"
     AUDIO_LOAD_CELL_THRASHING_ENGAGED = "audio_load_cell_thrashing_engaged"
@@ -66,6 +79,7 @@ class EmergencyAlarmMonitor(BaseDetector):
     SYSTEM_FAULT_ENGAGED = "system_fault_engaged"
 
     use_daemon = True
+    config_cls = EmergencyAlarmConfiguration
 
     def __init__(
         self,
@@ -80,9 +94,9 @@ class EmergencyAlarmMonitor(BaseDetector):
         system_fault_monitor: SystemFaultMonitor,
         topcam_presence_attrs: Optional[PresenceDetectionAttrs] = None,
     ):
-        super().__init__()
+        super().__init__(config=config)
+        self._detectors_condition: Dict[str, AlarmDetectorContext] = {}
         self._all_scene_parts_ctx = ScenePartsPresenceContext()  # both/all cams seen
-        self._config = config
         self._load_cell_monitor = load_cell_monitor
         self._load_cell_tare_monitor = load_cell_tare_monitor
         self._audio_monitor = audio_monitor
@@ -114,8 +128,28 @@ class EmergencyAlarmMonitor(BaseDetector):
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context
 
-    def add_alarm_condition(self, name, check):
-        ...  # TODO
+    def get_alarm_detector(self, name: AlarmDetectorNameT) -> Optional[AlarmDetector]:
+        with self._lock:
+            ctx = self._detectors_condition.get(name, None)
+            return None if ctx is None else ctx.detector
+
+    def register_detector(self, name: AlarmDetectorNameT, detector: AlarmDetector):
+        with self._lock:
+            self.unregister_detector(name)
+            ctx = AlarmDetectorContext(
+                detector=detector,
+                property_changed_callback=partial(self._on_detector_property_changed, detector),
+            )
+            self._detectors_condition[name] = ctx
+            detector.property_changed += ctx.property_changed_callback
+
+    def unregister_detector(self, name: AlarmDetectorNameT) -> Optional[AlarmDetector]:
+        with self._lock:
+            ctx = self._detectors_condition.pop(name, None)
+            if ctx is not None:
+                ctx.detector.property_changed -= ctx.property_changed_callback
+                return ctx.detector
+        return None
 
     def _start(self):
         super()._start()
@@ -132,15 +166,6 @@ class EmergencyAlarmMonitor(BaseDetector):
                 "is_stop_condition": is_stop_cond,
             },
         )
-
-    @property
-    def config(self) -> EmergencyAlarmConfiguration:
-        return self._config
-
-    @config.setter
-    def config(self, value: EmergencyAlarmConfiguration):
-        prev, self._config = self._config, value
-        self.property_changed(self.CONFIG, value, prev)
 
     @property
     def engaged_reasons(self) -> List[EmergencyReason]:
@@ -302,7 +327,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         if v is not None:
             if v[1]:
                 tot_audio_thrash_engaged += perf_now - v[0]
-        elif self._audio_monitor.thrashing_detected:
+        elif self._audio_monitor.is_engaged:
             tot_audio_thrash_engaged += cfg.audio_load_cell_thrash_aggregate_delay
         #
         pc_load_cell_thrash = 100 * tot_load_cell_thrash_engaged / cfg.audio_load_cell_thrash_aggregate_delay
@@ -414,6 +439,11 @@ class EmergencyAlarmMonitor(BaseDetector):
         #
         reasons = set()
         map_use_for_engaged = self._make_use_for_engaged_map(cfg)
+        for name, condition_ctx in self._detectors_condition.items():
+            det = condition_ctx.detector
+            cond_cfg = det.config
+            if det.is_engaged and cond_cfg.use and cond_cfg.is_emergency_condition:
+                reasons.add(name)
         for reason, engaged in (
             (EmergencyReason.MOUSE_THRASHING, self._audio_load_cell_thrashing_engaged),
             (EmergencyReason.DEVICE_COMM_ERROR, self._device_comm_error_engaged),
@@ -461,8 +491,13 @@ class EmergencyAlarmMonitor(BaseDetector):
             # look if previous engaged reasons (which are now cleared), allowed auto-resume, or not.
             # if any does not allow : don't remove the is_engaged.
             for prev_r in prev_engaged:
-                if add_remove_map[prev_r]:
+                if prev_r in add_remove_map and add_remove_map[prev_r]:
                     check_reasons.remove(prev_r)
+                elif prev_r in self._detectors_condition:
+                    ctx = self._detectors_condition[prev_r]
+                    det = ctx.detector
+                    if det.config.allow_autoresume_on_cleared:
+                        check_reasons.remove(prev_r)
             #
             self._engaged_reasons = check_reasons  # always reset with what remains in check_reasons.
             if len(check_reasons) == 0 and len(prev_engaged) > 0:
@@ -476,8 +511,13 @@ class EmergencyAlarmMonitor(BaseDetector):
             # if some possible condition were previously present and are not auto-resume enabled,
             # then re-add them to current reasons of engaged.
             for prev_r in list(check_reasons):
-                if not add_remove_map[prev_r]:
+                if prev_r in add_remove_map and not add_remove_map[prev_r]:
                     reasons.add(prev_r)
+                elif prev_r in self._detectors_condition:
+                    ctx = self._detectors_condition[prev_r]
+                    det = ctx.detector
+                    if not det.config.allow_autoresume_on_cleared:
+                        reasons.add(prev_r)
             if reasons != self._engaged_reasons:
                 self._is_engaged = None  # force trigger again, so that new reasons are seen
                 self._engaged_reasons = reasons
@@ -485,7 +525,7 @@ class EmergencyAlarmMonitor(BaseDetector):
         return 1  # timer_delay
 
     def _on_load_cell_monitor_prop_changed(self, name, value, _):
-        if not self._running:
+        if not self._running:  # keep check to not append values below
             return
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             perf_now = get_perf_now()
@@ -499,10 +539,10 @@ class EmergencyAlarmMonitor(BaseDetector):
             self.check_state()
 
     def _on_audio_prop_changed(self, name, value, _):
-        if not self._running:
+        if not self._running:  # keep check to not append values below
             return
-        if name == AudioSpectrumThrashMonitor.AUDIO_THRASHING_DETECTED_PROPERTY:
-            audio_monitor = self._audio_monitor
+        audio_monitor = self._audio_monitor
+        if name == audio_monitor.IS_ENGAGED:
             with self._lock:
                 self._audio_thrash_values.append((get_perf_now(), value,
                                                   audio_monitor.disengaged_age if value
@@ -511,23 +551,20 @@ class EmergencyAlarmMonitor(BaseDetector):
             self.check_state()
 
     def _on_ext_doors_prop_changed(self, name, value, _):
-        if not self._running:
-            return
-        if name == ExternalDoorsMonitor.IS_ENGAGED:
+        if name == self._external_doors_monitor.IS_ENGAGED:
             self.check_state()
 
     def _on_global_animal_presence_prop_changed(self, name, value, _):
-        if not self._running:
-            return
-        if name == GlobalAnimalPresenceMonitor.IS_ENGAGED:
+        if name == self._global_animal_presence_monitor.IS_ENGAGED:
             self.check_state()
 
     def _on_system_maintenance_prop_changed(self, name, value, _):
-        if not self._running:
-            return
         self.check_state()
 
     def _on_system_fault_prop_changed(self, name, value, _):
-        if not self._running:
-            return
         self.check_state()
+
+    def _on_detector_property_changed(self, detector: AlarmDetector, name: str, value, _):
+        logger.verbose("got %s: %s=%r", type(detector), name, value)
+        if name  == detector.IS_ENGAGED:
+            self.check_state()

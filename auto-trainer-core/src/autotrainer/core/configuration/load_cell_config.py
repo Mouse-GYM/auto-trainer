@@ -3,10 +3,12 @@ from typing import Dict, Any
 from typing_extensions import Self
 
 from autotrainer.core import build_kwargs_apply_mapping
+from autotrainer.core.configuration.detector import DetectorConfig
 
 
 @dataclass
-class LoadCellConfiguration:
+class LoadCellConfiguration(DetectorConfig):
+
     # NB: this is the current/previous value used on agx001:
     weight_active_threshold: float = 2  # grams ; if above then will become engaged if above for threshold_duration
     weight_inactive_threshold: float = 2  # grams ;
@@ -45,7 +47,7 @@ class LoadCellConfiguration:
 
 
 @dataclass
-class LoadCellAutoTareConfiguration:
+class LoadCellAutoTareConfiguration(DetectorConfig):
     threshold: float = 0.1
     range_threshold: float = 0.75
     duration: float = 2.0

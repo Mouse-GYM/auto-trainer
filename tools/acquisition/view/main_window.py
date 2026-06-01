@@ -1,3 +1,4 @@
+import os
 import pickle
 import shutil
 import textwrap
@@ -20,6 +21,7 @@ import qtawesome as qta
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual, ProjectInfo, get_perf_now
+from autotrainer.core.analysis.autoclamp_evasion_detector import AutoClampEvasionDetector
 from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
@@ -155,9 +157,6 @@ class MainWindow(QMainWindow):
             # app_model.on_close()
             # raise RuntimeError(f"Could not load config: {err}") from err
 
-        self._set_reset_vat_text()
-        self._set_reset_cage_clean_text()
-
         app_model.property_changed += self._on_app_model_property_changed
         app_model.current_day_changed += self._on_day_changed
         app_model.hardware.property_changed += self._on_hardware_property_changed
@@ -170,11 +169,16 @@ class MainWindow(QMainWindow):
         analysis = app_model.analysis
         analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
         analysis.system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
+        analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
         self.running_status_changed.connect(self._set_start_or_stop)
         #
-        self._reload_animals(self._app_model.animals)
+        self._reload_animals(self._app_model.animals)  # after all property_changed connect above
         #
+        # then after everything:
+        self._set_reset_vat_text()
+        self._set_reset_cage_clean_text()
+        self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
 
     @property
     def app_model(self) -> AppModel:
@@ -335,6 +339,9 @@ class MainWindow(QMainWindow):
         prefs.cage_clean_previous_day = date.today()
         prefs.save()
         self._set_reset_cage_clean_text()
+
+    def on_reset_autoclamp_evasion(self):
+        self._app_model.analysis.autoclamp_evasion_detector.pellets_consumed = 0
 
     def _check_target_next_or_previous_plan_phase(
         self,
@@ -821,6 +828,12 @@ class MainWindow(QMainWindow):
         txt = f"Mark the cage as cleaned.\n{msg}"
         self._reset_cage_clean_action.setToolTip(txt)
 
+    def _set_autoclamp_evasion(self, det: AutoClampEvasionDetector):
+        det = self._app_model.analysis.autoclamp_evasion_detector
+        action = self._reset_autoclamp_evasion_action
+        action.setVisible(det.is_engaged or os.getenv("AUTOTRAINER_SHOW_AUTOCLAMP_EVASION") == "1")
+        action.setToolTip(f"Reset AutoClamp Evasion\n{det.pellets_consumed} out of {det.config.pellets_consumed_trigger}")
+
     def _create_actions(self):
         action = self.edit_camera_settings_action = QAction(QIcon(qta.icon("fa5s.edit")), "Edit Camera Settings", self)
         action.setToolTip("Edit Camera Settings")
@@ -847,11 +860,15 @@ class MainWindow(QMainWindow):
         action.setEnabled(False)  # comment me to be able to show 20260205_agx001_trial011 on start
         action.triggered.connect(self.on_show_reach_event)
 
-        action = self._reset_pellet_loaded_count_action = QAction(QIcon(qta.icon("fa5s.fill")), "", self)
+        action = self._reset_pellet_loaded_count_action = QAction(QIcon(qta.icon("fa5s.fill")), "Reset Pellet VAT Load Count", self)
         action.triggered.connect(self.on_reset_pellet_loaded_count)
 
-        action = self._reset_cage_clean_action = QAction(QIcon(qta.icon("fa5s.broom")), "", self)
+        action = self._reset_cage_clean_action = QAction(QIcon(qta.icon("fa5s.broom")), "Reset Cage Clean", self)
         action.triggered.connect(self.on_reset_cage_clean)
+
+        action = self._reset_autoclamp_evasion_action = QAction(QIcon(qta.icon("ei.vimeo")), "Reset AutoClamp Evasion", self)
+        action.setVisible(False)
+        action.triggered.connect(self.on_reset_autoclamp_evasion)
 
         action = self.next_training_phase_action = QAction(QIcon(qta.icon("fa5s.arrow-alt-circle-right")), "Next Phase", self)
         action.setVisible(False)
@@ -982,6 +999,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.show_reach_event_action)
         toolbar.addAction(self._reset_pellet_loaded_count_action)
         toolbar.addAction(self._reset_cage_clean_action)
+        toolbar.addAction(self._reset_autoclamp_evasion_action)
 
         toolbar.addAction(self.previous_training_phase_action)
         toolbar.addAction(self.next_training_phase_action)
@@ -1579,6 +1597,12 @@ class MainWindow(QMainWindow):
         props = BehaviorAlgoProps
         if name == props.CAGE_CLEAN_CONFIG:
             self._set_reset_cage_clean_text()
+
+    @invoke_method
+    def _on_autoclamp_evasion_property_changed(self, name: str, value, _):
+        det = self._app_model.analysis.autoclamp_evasion_detector
+        # if name in (det.IS_ENGAGED, det.CONFIG, det.PELLETS_CONSUMED):
+        self._set_autoclamp_evasion(det)
 
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):

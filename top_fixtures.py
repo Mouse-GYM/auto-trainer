@@ -319,6 +319,7 @@ class MockSystemMachine:
         self.intersession_state_trans = []
         machine.intersession.events.state_changed += partial(
             property_value_save_transitions, transitions=self.intersession_state_trans)
+        self._pose_response_idx = 0
 
     increment_perf_now = staticmethod(increase_simulate_perf_now)
 
@@ -478,7 +479,8 @@ class MockSystemMachine:
             "Diamond": diamond_seen,
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
-        response = PoseResponse(sequence=1, parts_flags=parts_flags, locations=[])
+        self._pose_response_idx += 1
+        response = PoseResponse(sequence=self._pose_response_idx, parts_flags=parts_flags, locations=[])
         self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
             self.pellet._pellet_device_ack_received(self.pellet._api_status_token)

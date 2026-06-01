@@ -11,19 +11,20 @@ from ..configuration.system_fault_config import SystemFaultConfig
 from ..event import post_api_detector_event_content
 
 
-class SystemFaultMonitor(BaseDetector):
+class SystemFaultMonitor(BaseDetector[SystemFaultConfig]):
+
+    config_cls = SystemFaultConfig
 
     use_daemon = True  # for free disk space checks
     default_timer_delay = 30  # secs ; check is very fast so can afford do it regularly
 
-    CONFIG = "config"
+    CONFIG = BaseDetector.CONFIG
 
     FREE_DISK_SPACE_ENGAGED = "free_disk_space_engaged"
     WATCHDOG_ENGAGED = "watchdog_engaged"
 
     def __init__(self, *, config: SystemFaultConfig, watchdog_monitor: WatchdogMonitor):
-        super().__init__()
-        self._config = config
+        super().__init__(config=config)
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
@@ -81,10 +82,10 @@ class SystemFaultMonitor(BaseDetector):
             if use and engaged:
                 reasons.add(reason)
         self._engaged_reasons = reasons
-        prev_engaged = self._is_engaged
-        self.is_engaged = len(reasons) > 0
-        if not prev_engaged and self._is_engaged:
+        is_engaged = len(reasons) > 0
+        if not self._is_engaged and is_engaged:
             self._logger.notice("Engaging with %s", reasons)
+        self.is_engaged = is_engaged
 
     def _on_watchdog_property_changed(self, name, value, _):
         if name == self._watchdog_mon.IS_ENGAGED:

@@ -9,6 +9,7 @@ import yaml
 
 from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
+from .autoclamp_evasion_config import AutoClampEvasionDetectorConfig
 from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 from .presence_detection_configuration import PresenceDetectionConfig
 from .system_fault_config import SystemFaultConfig
@@ -20,6 +21,7 @@ from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfigurati
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
+from ..analysis.autoclamp_evasion_detector import AutoClampEvasionDetector
 
 logger = get_verbose_logger(__name__)
 
@@ -226,6 +228,7 @@ class _BehaviorConfiguration:
     system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
     system_fault: SystemFaultConfig = field(default_factory=SystemFaultConfig)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
+    autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -279,38 +282,38 @@ class BehaviorConfiguration(_BehaviorConfiguration):
         super().__init__(**kwargs)
 
 
-_cls_2_tag = {
-    PelletDeliveryConfiguration: "PelletDeliveryConfiguration",
-    PelletUncoverConfiguration: "PelletUncoverConfiguration",
-    LoadCellConfiguration: "LoadCellConfiguration",
-    HeadClampConfiguration: "HeadClampConfiguration",
-    HeadbarPressureConfiguration: "HeadbarPressureConfiguration",
-    LoadCellAutoTareConfiguration: "LoadCellAutoTareConfiguration",
-    BehaviorConfiguration: "BehaviorConfiguration",
-    AudioSpectrumThrashMonitorConfig: "AudioMonitorConfiguration",
-    GlobalAnimalPresenceConfig: "AnimalPresenceConfiguration",
-    EmergencyAlarmConfiguration: "EmergencyAlarmConfiguration",
-    PresenceDetectionConfig: "PresenceDetectionConfiguration",
-    ExternalDoorsMonitorConfig: "ExternalDoorsMonitorConfiguration",
-    AutoEndSessionConfiguration: "AutoEndSessionConfiguration",
-    AutoTunnelSweepConfiguration: "AutoTunnelSweepConfiguration",
-    BatchSessionRecordingConfiguration: "BatchSessionRecordingConfiguration",
-    AutoCloseGateOnIntersessionConfiguration: "AutoCloseGateOnIntersessionConfiguration",
-    HomeOnExcessiveDriftDistanceConfiguration: "HomeOnExcessiveDriftDistance",  # missed Configuration suffix
-    # ShiftXYZTarget: "ShiftXYZTarget",  # replaced by Offset3dTuple.
-    ShiftXYZHandlerConfig: "ShiftXYZHandlerConfiguration",
-    ShiftXYZBufferHandlerConfig: "ShiftXYZBufferHandlerConfiguration",
-    SystemMaintenanceConfig: "SystemMaintenanceConfig",
-    SystemFaultConfig: "SystemFaultConfig",
-    CageCleaningConfig: "CageCleaningConfig",
-}
+_tag_2_cls = dict(
+    PelletDeliveryConfiguration=PelletDeliveryConfiguration,
+    PelletUncoverConfiguration=PelletUncoverConfiguration,
+    LoadCellConfiguration=LoadCellConfiguration,
+    HeadClampConfiguration=HeadClampConfiguration,
+    HeadbarPressureConfiguration=HeadbarPressureConfiguration,
+    LoadCellAutoTareConfiguration=LoadCellAutoTareConfiguration,
+    BehaviorConfiguration=BehaviorConfiguration,
+    AudioMonitorConfiguration=AudioSpectrumThrashMonitorConfig,
+    AnimalPresenceConfiguration=GlobalAnimalPresenceConfig,
+    EmergencyAlarmConfiguration=EmergencyAlarmConfiguration,
+    PresenceDetectionConfiguration=PresenceDetectionConfig,
+    ExternalDoorsMonitorConfiguration=ExternalDoorsMonitorConfig,
+    AutoEndSessionConfiguration=AutoEndSessionConfiguration,
+    AutoTunnelSweepConfiguration=AutoTunnelSweepConfiguration,
+    BatchSessionRecordingConfiguration=BatchSessionRecordingConfiguration,
+    AutoCloseGateOnIntersessionConfiguration=AutoCloseGateOnIntersessionConfiguration,
+    HomeOnExcessiveDriftDistance=HomeOnExcessiveDriftDistanceConfiguration,  # missed Configuration suffix
+    # ShiftXYZTarget="ShiftXYZTarget",  # replaced by Offset3dTuple.
+    ShiftXYZHandlerConfiguration=ShiftXYZHandlerConfig,
+    ShiftXYZBufferHandlerConfiguration=ShiftXYZBufferHandlerConfig,
+    SystemMaintenanceConfig=SystemMaintenanceConfig,
+    SystemFaultConfig=SystemFaultConfig,
+    CageCleaningConfig=CageCleaningConfig,
+)
 
 
 def add_behavior_configuration_representers(dumper: Type[yaml.SafeDumper]):
     def add(klass, tagname):
         dumper.add_representer(klass, make_camelize_representer(f"!{tagname}"))
 
-    for cls, tag in _cls_2_tag.items():
+    for tag, cls in _tag_2_cls.items():
         add(cls, tag)
 
     from autotrainer.core.configuration import repr_offset3d_tuple
@@ -324,7 +327,7 @@ def add_behavior_configuration_constructors(safe_loader: Type[yaml.SafeLoader]):
     def add(klass, tagname):
         safe_loader.add_constructor(f"!{tagname}", make_decamelize_constructor(klass))
 
-    for cls, tag in _cls_2_tag.items():
+    for tag, cls in _tag_2_cls.items():
         add(cls, tag)
 
     add(GlobalAnimalPresenceConfig, "MousePresenceConfiguration")

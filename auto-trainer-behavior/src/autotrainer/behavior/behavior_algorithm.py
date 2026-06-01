@@ -670,10 +670,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def head_fixation_enabled(self, value: bool):
         # NB: not saved in config
         prev, self._head_fixation_enabled = self._head_fixation_enabled, value
-        if prev != self._head_fixation_enabled:
+        if value != prev:
             logger.info("auto-clamp enabled changed to: %s", self._head_fixation_enabled)
-            self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, prev)
             self._event_manager.post_event_content(ApiEventKind.autoClampEnabledChanged, data=dict(is_enabled=value))
+            self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, prev)
 
     @property
     def clean_raw_data_on_inactive_session(self):
@@ -1166,6 +1166,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @property
     def pellet_recently_seen(self):
+        # TODO: many things are using this algo.pellet_recently_seen,
+        # which using _any_ cam seen, not _all/both_ cams seen flags,
+        # but for better certainty, most-if-not-all of them shall be using the later.
+        # there is the algo.is_pellet_recently_seen() method which is doing that.
         return self._parts_pres_ctx_any_cam.get_recently_seen(
             SceneElement.Pellet, self.limits.pellet_missing_time,
             perf_now=get_perf_now(),
@@ -1199,10 +1203,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if perf_now is None:
             perf_now = get_perf_now()
         pellet_missing = (
-                not self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam)
-            and (self.is_part_recently_seen(SceneElement.Triangle, use_any_cam=use_any_cam)
+                not self.is_part_recently_seen(SceneElement.Pellet, use_any_cam=use_any_cam, perf_now=perf_now)
+            and (self.is_part_recently_seen(SceneElement.Triangle, use_any_cam=use_any_cam, perf_now=perf_now)
                  or (pellet_state == PelletState.monitoring
-                     and self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam)))
+                     and self.is_part_recently_seen(SceneElement.Star, use_any_cam=use_any_cam, perf_now=perf_now)))
         )
         if pellet_missing:
             # logger.verbose("BehaviorAlgo.can_load_pellet: pellet missing")
@@ -1220,7 +1224,13 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return True
         return False
 
-    def can_load_pellet(self, *, pellet_state: PelletState = PelletState.monitoring, use_any_cam: bool=False) -> bool:
+    def can_load_pellet(
+        self,
+        *,
+        pellet_state: PelletState = PelletState.monitoring,
+        use_any_cam: bool=False,
+        perf_now: Optional[float] = None,
+    ) -> bool:
         """Say if a pellet can and must be loaded"""
         # is more has_to_load_pellet()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
@@ -1228,7 +1238,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam)
+        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
+                                      perf_now=perf_now)
 
     def can_cover_pellet(self) -> bool:
         """Say if cover-pellet is enabled"""
@@ -1310,10 +1321,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     def update_mouse_seen(self, seen: bool = True, *, perf_now: Optional[float] = None):
         # NB: "mouse" == SceneElement.Nose
+        if perf_now is None:
+            perf_now = get_perf_now()
         self.update_part_seen(SceneElement.Nose, seen, perf_now=perf_now)  # ensure presence_context gets updated
         if seen:
-            if perf_now is None:
-                perf_now = get_perf_now()
             self._mouse_seen_last_perf_c = perf_now
         if self._is_in_session and seen:
             prev_seen, self._session_mouse_seen = self._session_mouse_seen, True

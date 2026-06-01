@@ -24,7 +24,3 @@ class InferenceConfiguration(_InferenceConfiguration):
     def __init__(self, **kwargs):
         kwargs.pop("intersession_wait_time", None)  # was deprecated/removed
         super().__init__(**kwargs)
-
-
-inference_configuration_representer = make_camelize_representer("!InferenceConfiguration")
-inference_configuration_constructor = make_decamelize_constructor(InferenceConfiguration)

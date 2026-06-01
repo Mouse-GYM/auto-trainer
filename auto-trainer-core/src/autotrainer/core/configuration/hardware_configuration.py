@@ -30,7 +30,3 @@ class HardwareConfiguration:
             configuration.pellet_identifier = content["pellet_delivery"].get("port", "")
 
         return configuration
-
-
-hardware_configuration_representer = make_camelize_representer("!HardwareConfiguration")
-hardware_configuration_constructor = make_decamelize_constructor(HardwareConfiguration)
