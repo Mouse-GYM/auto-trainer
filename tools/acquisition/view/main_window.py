@@ -1304,11 +1304,12 @@ class MainWindow(QMainWindow):
         self._app_model.behavior.algorithm.update_mouse_seen(True)
 
     def _internal_mouse_near_pellet(self):
+        # actually nothing needs be done
         algo = self._app_model.behavior.algorithm
         ctx = algo.uncover_context
         cfg = algo.active_config.pellet_uncover
         ctx.start_y_dcs_valid_perf_c = get_perf_now()
-        ctx.start_min_y = cfg.min_y_dcs + 5
+        ctx.start_min_y = cfg.min_y_dcs - 5
         ctx.y_dcs_valid = True
 
     def _internal_detection_result_toggle(self):
