@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QWidget, QFormLayout, QLineEdit, QComboBox, QLabe
 
 from autotrainer.api import ApiAlarmKind
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration, \
@@ -1020,6 +1021,27 @@ class PreferencesContent(QWidget):
             system_fault_mon.check_state()
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
+        autoclamp_evasion_det = analysis.autoclamp_evasion_detector
+        left_grid_layout.addWidget(QLabel("<b>AutoClamp Evasion:</b>"), cur_row, cur_col)
+        cur_row += 1
+        left_grid_layout.addWidget(QLabel("Pellets Consumed Trigger:"), cur_row, cur_col)
+        spinbox = QSpinBox()
+        spinbox.setMinimum(1)
+        spinbox.setMaximum(1000)
+        spinbox.setValue(autoclamp_evasion_det.config.pellets_consumed_trigger)
+        def on_autoclamp_evasion_pellets_consumed_trigger_changed(value: int):
+            det = analysis.autoclamp_evasion_detector
+            det.config.pellets_consumed_trigger = value
+            det.property_changed(det.CONFIG, det.config, None)  # force global config refresh for listener(s)
+            det.check_state()
+        spinbox.valueChanged.connect(on_autoclamp_evasion_pellets_consumed_trigger_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+        left_grid_layout.addWidget(QLabel("Current count:"), cur_row, cur_col)
+        label = QLabel(f"{autoclamp_evasion_det.pellets_consumed}")
+        left_grid_layout.addWidget(label, cur_row, cur_col + 1)
 
         # right side
         right_layout = QFormLayout()
@@ -1119,6 +1141,58 @@ class PreferencesContent(QWidget):
         apply_size_policy(tab, (QSwitch, QSpinBox, QDoubleSpinBox, QLineEdit))
 
         return tab
+
+    def _make_alarm_entries(
+        self, grid_layout, name: str, det: AlarmDetector, cur_row, cur_col
+    ):
+        refresh_enabled_cb = []
+        add_refresh = refresh_enabled_cb.append
+        def refresh_enabled():
+            for r in refresh_enabled_cb:
+                r()
+        #
+        label = QLabel(f"<b>Use {name}:</b>")
+        grid_layout.addWidget(label, cur_row, cur_col)
+        toggle_use = QSwitch()
+        toggle_use.setChecked(det.config.use)
+        def on_use_toggle_changed(value: int):
+            toggled = value != 0
+            prev, det.config.use = det.config.use, toggled
+            if prev != toggled:
+                det.property_changed(det.CONFIG, det.config, None)
+                refresh_enabled()
+        toggle_use.toggled.connect(on_use_toggle_changed)
+        grid_layout.addWidget(toggle_use, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Is Emergency Condition:"), cur_row, cur_col)
+        toggle_is_emergency_condition = QSwitch()
+        toggle_is_emergency_condition.setChecked(det.config.is_emergency_condition)
+        add_refresh(lambda: toggle_is_emergency_condition.setEnabled(det.config.use))
+        def on_is_emergency_toggle_changed(value: int):
+            toggled = value != 0
+            prev, det.config.is_emergency_condition = det.config.is_emergency_condition, toggled
+            if prev != toggled:
+                det.property_changed(det.CONFIG, det.config, None)
+                refresh_enabled()
+        toggle_is_emergency_condition.toggled.connect(on_is_emergency_toggle_changed)
+        grid_layout.addWidget(toggle_is_emergency_condition, cur_row, cur_col + 1)
+        cur_row += 1
+
+        grid_layout.addWidget(QLabel("Allow AutoResume When Cleared:"), cur_row, cur_col)
+        toggle_allow_autoresume = QSwitch()
+        toggle_allow_autoresume.setChecked(det.config.allow_autoresume_on_cleared)
+        add_refresh(lambda: toggle_allow_autoresume.setEnabled(det.config.use and det.config.is_emergency_condition))
+        def on_allow_autoresume_toggle_changed(value: int):
+            toggled = value != 0
+            prev, det.config.allow_autoresume_on_cleared = det.config.allow_autoresume_on_cleared, toggled
+            if prev != toggled:
+                det.property_changed(det.CONFIG, det.config, None)
+                refresh_enabled()
+        toggle_allow_autoresume.toggled.connect(on_allow_autoresume_toggle_changed)
+        grid_layout.addWidget(toggle_allow_autoresume, cur_row, cur_col + 1)
+        cur_row += 1
+        refresh_enabled()
 
     def _create_alarms_tab(self):
         app_model = self._app_model
@@ -1311,6 +1385,10 @@ class PreferencesContent(QWidget):
         spinbox.valueChanged.connect(missing_delay_after_exit_tunnel_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
+
+        self._make_alarm_entries(grid_layout, "Animal Evasion Alarm",
+                                 analysis.animal_evasion_alarm, cur_row, cur_col)
+        cur_row += 3
 
         # right side:
 

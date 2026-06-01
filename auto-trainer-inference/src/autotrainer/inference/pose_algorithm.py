@@ -70,7 +70,7 @@ class PoseResponse:
     @property
     def pellet_seen(self) -> bool:
         """Default logic/conditions for pellet seen"""
-        return self.parts_flags[0].get(SceneElement.Pellet, False) or self.parts_flags[1].get(SceneElement.Pellet, False)
+        return self.parts_flags[2].get(SceneElement.Pellet, False)
 
     @property
     def star_seen(self):

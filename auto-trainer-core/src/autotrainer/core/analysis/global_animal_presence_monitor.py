@@ -13,7 +13,9 @@ from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 logger = get_verbose_logger(__name__)
 
 
-class GlobalAnimalPresenceMonitor(BaseDetector):
+class GlobalAnimalPresenceMonitor(BaseDetector[GlobalAnimalPresenceConfig]):
+
+    config_cls = GlobalAnimalPresenceConfig
 
     use_daemon = True
     feature_enabled = True
@@ -24,18 +26,9 @@ class GlobalAnimalPresenceMonitor(BaseDetector):
         load_cell_monitor: LoadCellMonitor,
         topcam_presence: PresenceDetectionAttrs,
     ):
-        super().__init__()
-        self._config = config
+        super().__init__(config=config)
         self._load_cell_monitor = load_cell_monitor
         self._topcam_presence = topcam_presence
-
-    @property
-    def config(self):
-        return self._config
-
-    @config.setter
-    def config(self, value):
-        self._config = value
 
     def _check_state(self):
         perf_now = get_perf_now()

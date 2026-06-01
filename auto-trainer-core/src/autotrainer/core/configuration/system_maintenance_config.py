@@ -1,8 +1,10 @@
 import dataclasses
 
+from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+
 
 @dataclasses.dataclass
-class SystemMaintenanceConfig:
+class SystemMaintenanceConfig(AlarmDetectorConfig):
 
     use_max_pellet_loaded: bool = True
     auto_resume_on_max_pellets_loaded: bool = True  # actually unused

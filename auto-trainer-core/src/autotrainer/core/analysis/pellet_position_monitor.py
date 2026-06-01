@@ -3,6 +3,7 @@ import math
 from typing import Optional, Tuple, List
 
 from autotrainer.api import ApiDetectorKind
+from autotrainer.core.configuration.detector import DetectorConfig
 
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import get_perf_now, Offset3DTuple, calculate_std_dev_manual
@@ -17,7 +18,8 @@ _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
 
 
 @dataclasses.dataclass
-class PelletMisplacedDetectorConfiguration:
+class PelletMisplacedDetectorConfiguration(DetectorConfig):
+
     enabled: bool = True
     aggregate_duration: float = 1  # how long ago to check/look at results
     # previous results older than that are discarded before each check/update.
@@ -26,25 +28,19 @@ class PelletMisplacedDetectorConfiguration:
     dcs_y_low_limit: float = 0  # lower than this -> error condition
 
 
-class PelletMisplacedDetector(BaseDetector):
+class PelletMisplacedDetector(BaseDetector[PelletMisplacedDetectorConfiguration]):
 
     use_daemon = True
     default_timer_delay = 0.25  # default delay between each check of the possible condition(s)
     # NB: should be at least 2 times smaller than aggregate_duration, otherwise given we expire too old data
     # before checking the condition, we could always have the data set empty.
 
+    detector_api_kind = ApiDetectorKind.pelletMisplaced
+
     def __init__(self, config: PelletMisplacedDetectorConfiguration):
-        super().__init__()
-        self._config = config
+        super().__init__(config=config)
         self._prev_data: List[Tuple[float, Offset3DTuple]] = []
         self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
-
-    @BaseDetector.is_engaged.setter
-    def is_engaged(self, value):
-        prev = self._is_engaged
-        BaseDetector.is_engaged.fset(self, value)
-        if prev != value:
-            self.post_detector_event(ApiDetectorKind.pelletMisplaced, value)
 
     @property
     def dcs_config(self) -> Optional[DiamondTriangleOffsetConfig]:

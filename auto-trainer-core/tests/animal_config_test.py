@@ -30,8 +30,20 @@ def test_save_load(tmp_path):
     animal.to_file(dest)
     animal2 = AnimalSubject.from_file(dest)
     assert animal == animal2
+    # also ensure for change to any attribute:
     for k, v in animal.__dict__.items():
-        setattr(animal, k, object())
-        assert animal != animal2
+        if k == "version":  # version special, it's forced on write to file
+            continue
+        if isinstance(v, bool):
+            v = not v
+        elif isinstance(v, (int, float)):
+            v += 1
+        elif isinstance(v, str):
+            v += "1"
+        else:
+            continue
         setattr(animal, k, v)
-        assert animal == animal2
+        assert animal != animal2
+        animal.to_file(dest)
+        animal2 = AnimalSubject.from_file(dest)
+        assert animal == animal2, f"attribute {k} is not correctly saved/loaded"

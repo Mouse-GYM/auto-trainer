@@ -63,23 +63,13 @@ def _make_doors_state():
 
 class ExternalDoorsMonitor(BaseDetector):
 
-    CONFIG = "config"
+    CONFIG = BaseDetector.CONFIG
+    config_cls = ExternalDoorsMonitorConfig
 
     def __init__(self, config: ExternalDoorsMonitorConfig):
         super().__init__()
         self._config = config
         self._doors_state = _make_doors_state()
-
-    @property
-    def config(self) -> ExternalDoorsMonitorConfig:
-        return self._config
-
-    @config.setter
-    def config(self, value: ExternalDoorsMonitorConfig):
-        prev, self._config = self._config, value
-        logger.debug("external_doors=%s", value)
-        # self._on_property_changed(self.CONFIG, value, prev)
-        # not needed atm.
 
     @property
     def doors_state(self) -> DoorsState:
