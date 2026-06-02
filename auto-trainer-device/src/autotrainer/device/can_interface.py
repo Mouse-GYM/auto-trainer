@@ -164,8 +164,8 @@ def motor_to_str(motor: Motor) -> str:
 
 class MotorInstance(IntEnum):
     TUNNEL_MAGNET_SERVO_ID = 0
-    TUNNEL_GATE_SERVO_ID = 1
-    TUNNEL_FAN_SERVO_ID = 2
+    TUNNEL_FAN_SERVO_ID = 1
+    TUNNEL_GATE_SERVO_ID = 2
 
     PELLET_X_MOTOR_ID = 0
     PELLET_Y_MOTOR_ID = 1
@@ -250,23 +250,19 @@ def is_stepper(motor: Motor) -> bool:
     return not is_servo(motor)
 
 
-_tunnel_servos = {
-    Motor.TUNNEL_MAGNET_SERVO,
-    Motor.TUNNEL_GATE_SERVO,
-    # Motor.TUNNEL_FAN_SERVO,  No: tunnel-fan is handled by pellet-device board
-}
 
-
-_pellet_motors = {
+_pellet_board_motors = {
     Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR,
     Motor.PELLET_LOAD_SERVO, Motor.PELLET_COVER_SERVO,
 
-    Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
+    # Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
+    Motor.TUNNEL_GATE_SERVO,
 }
 
 
-_tunnel_motors = {
-    Motor.TUNNEL_GATE_SERVO,
+_magnet_board_motors = {
+    # Motor.TUNNEL_GATE_SERVO,
+    Motor.TUNNEL_FAN_SERVO,
     Motor.TUNNEL_MAGNET_SERVO,
 }
 
@@ -279,9 +275,9 @@ def target_of_motor(motor: Motor) -> Target:
     Returns:
         Target: the hardware target that the motor resides on
     """
-    if motor in _tunnel_motors:
+    if motor in _magnet_board_motors:
         return Target.MAGNET_DEVICE
-    if motor in _pellet_motors or motor in {Motor.DELAY, Motor.TONE}:
+    if motor in _pellet_board_motors or motor in {Motor.DELAY, Motor.TONE}:
         return Target.PELLET_DEVICE
     raise ValueError(f"Unhandled motor for target_of_motor: {motor!r}")
 
@@ -306,8 +302,10 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
         if isa_servo:
             if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID:
                 return Motor.TUNNEL_MAGNET_SERVO
-            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
-                return Motor.TUNNEL_GATE_SERVO
+            elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
+                return Motor.TUNNEL_FAN_SERVO
+            # elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
+            #     return Motor.TUNNEL_GATE_SERVO
     else:
         assert target == Target.PELLET_DEVICE
         if isa_servo:
@@ -315,8 +313,10 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
                 return Motor.PELLET_COVER_SERVO
             elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID:
                 return Motor.PELLET_LOAD_SERVO
-            elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
-                return Motor.TUNNEL_FAN_SERVO
+            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
+                return Motor.TUNNEL_GATE_SERVO
+            # elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
+            #     return Motor.TUNNEL_FAN_SERVO
         else:
             if motor_id == MotorInstance.PELLET_X_MOTOR_ID:
                 return Motor.PELLET_X_MOTOR
@@ -404,12 +404,12 @@ class CanInterface(DeviceInterface):
         self._tunnel_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
-            if motor in _tunnel_motors
+            if motor in _magnet_board_motors
         }
         self._pellet_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
-            if motor in _pellet_motors
+            if motor in _pellet_board_motors
         }
 
         self._pellet_addr: Optional[int] = None
@@ -510,13 +510,13 @@ class CanInterface(DeviceInterface):
                     motor_p_now -= fake_age
             except Exception:
                 logger.exception("__allow_fake_status_time")
-        if motor in _pellet_motors:
+        if motor in _pellet_board_motors:
             vals = self._pellet_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" pellet status perf_c
             oldest = min(vals.values())
             self.pellet_status_perf_c = oldest
-        elif motor in _tunnel_motors:
+        elif motor in _magnet_board_motors:
             vals = self._tunnel_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" tunnel status perf_c
