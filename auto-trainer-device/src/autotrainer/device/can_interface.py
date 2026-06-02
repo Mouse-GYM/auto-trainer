@@ -401,12 +401,12 @@ class CanInterface(DeviceInterface):
         self._is_open = False
 
         self._next_status_log_perf_c = -math.inf
-        self._tunnel_last_status_perf_c = {
+        self._magnet_board_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
             if motor in _magnet_board_motors
         }
-        self._pellet_last_status_perf_c = {
+        self._pellet_board_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
             if motor in _pellet_board_motors
@@ -499,7 +499,7 @@ class CanInterface(DeviceInterface):
         p_now = motor_p_now = get_perf_now()
         if p_now > self._next_status_log_perf_c:
             self._next_status_log_perf_c = p_now + 15
-            for vals in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+            for vals in (self._pellet_board_last_status_perf_c, self._magnet_board_last_status_perf_c):
                 logger.verbose("motor status age: %s",
                     ' '.join(f"{k.name}={p_now - v:.6f}s"
                     for k, v in sorted(vals.items(), key=lambda i: i[1])))
@@ -511,13 +511,13 @@ class CanInterface(DeviceInterface):
             except Exception:
                 logger.exception("__allow_fake_status_time")
         if motor in _pellet_board_motors:
-            vals = self._pellet_last_status_perf_c
+            vals = self._pellet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" pellet status perf_c
             oldest = min(vals.values())
             self.pellet_status_perf_c = oldest
         elif motor in _magnet_board_motors:
-            vals = self._tunnel_last_status_perf_c
+            vals = self._magnet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" tunnel status perf_c
             oldest = min(vals.values())
@@ -796,7 +796,7 @@ class CanInterface(DeviceInterface):
         self._cnt_none = 0
 
         p_now = get_perf_now()
-        for dct in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+        for dct in (self._pellet_board_last_status_perf_c, self._magnet_board_last_status_perf_c):
             for m in dct:
                 dct[m] = p_now
 
