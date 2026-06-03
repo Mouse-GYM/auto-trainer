@@ -1,3 +1,4 @@
+import atexit
 import collections
 import contextlib
 import copy
@@ -61,7 +62,9 @@ class PelletUncoverContext:
         self.start_y_dcs_valid_perf_c = get_perf_now()
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
-        return self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
+        return self.has_released or (
+            self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
+        )
 
 
 @dataclasses.dataclass
@@ -1564,7 +1567,5 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     relay_func = staticmethod(relay_func)
     # so that it can be used with @BehaviorAlgorithm.relay_func by importers.
 
-
-import atexit
 
 atexit.register(BehaviorAlgorithm.close_algorithm_handler)

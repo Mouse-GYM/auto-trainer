@@ -1,12 +1,10 @@
 
 import dataclasses
 import itertools
-import math
 import operator
 import os
-import time
 from collections import deque
-from functools import reduce, partial
+from functools import partial
 from typing import Optional, List
 
 from autotrainer.api import ApiDetectorKind

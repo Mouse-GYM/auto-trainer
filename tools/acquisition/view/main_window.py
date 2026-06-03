@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
 
         analysis = app_model.analysis
         analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
-        analysis.system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
+        analysis.system_maintenance_alarm.property_changed += self._on_system_maintenance_prop_changed
         analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
         self.running_status_changed.connect(self._set_start_or_stop)
@@ -810,7 +810,7 @@ class MainWindow(QMainWindow):
 
     def _set_reset_vat_text(self):
         analysis = self._app_model.analysis
-        maint_cfg = analysis.system_maintenance_monitor.config
+        maint_cfg = analysis.system_maintenance_alarm.config
         prefs = self._preferences
         txt = (
             f"Reset vat pellet count (vat refilled)\n"
@@ -1252,7 +1252,7 @@ class MainWindow(QMainWindow):
 
     @invoke_method
     def _on_system_maintenance_prop_changed(self, name, value, _):
-        mon = self._app_model.analysis.system_maintenance_monitor
+        mon = self._app_model.analysis.system_maintenance_alarm
         if name == mon.CONFIG:
             self._set_reset_vat_text()
 

@@ -2,33 +2,31 @@ from typing import Optional, Set, List
 
 from datetime import date, datetime, timedelta
 
-from autotrainer.api import ApiDetectorKind
+from autotrainer.api import ApiDetectorKind, ApiAlarmKind
 
 from autotrainer.core.logging import get_verbose_logger
 from .alarm_detector import AlarmDetector
 
-from .detector import BaseDetector
 from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 
 
 logger = get_verbose_logger(__name__)
 
 
-class SystemMaintenanceMonitor(AlarmDetector[SystemMaintenanceConfig]):
+class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
 
     config_cls = SystemMaintenanceConfig
+    alarm_api_kind = ApiAlarmKind.systemMaintenance
 
     use_daemon = True
     default_timer_delay = 60  # do really not need precise, but once every minute is quite good.
-
-    CONFIG = "config"
 
     MAX_PELLET_LOADED_ENGAGED = "max_pellet_loaded_engaged"
     MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED = "max_consecutive_failed_load_engaged"
     CAGE_NEED_CLEAN_ENGAGED = "cage_need_clean_engaged"
 
-    def __init__(self, *, config: SystemMaintenanceConfig):
-        super().__init__(config=config)
+    def __init__(self):
+        super().__init__()
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False

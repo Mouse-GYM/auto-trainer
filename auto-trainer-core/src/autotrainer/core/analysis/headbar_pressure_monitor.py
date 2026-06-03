@@ -9,8 +9,7 @@ import numpy
 
 from .detector import BaseDetector
 from ..configuration.detector import DetectorConfig
-from ..observable_object import ObservableObject
-from ..event import EventManager, ApiEventKind, post_api_event_content
+from autotrainer.api import ApiEventKind
 
 
 @dataclass

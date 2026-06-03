@@ -77,7 +77,6 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
     # to use timer to allow triggering active/inactive, or not.
 
     LOAD_CELL_ENGAGED_THRESHOLD_PROPERTY = "load_cell_engaged_threshold"
-    IS_ENGAGED_PROPERTY = "is_engaged"
     IS_THRASHING_DETECTED_PROPERTY = "is_thrashing_detected"
 
     def __init__(

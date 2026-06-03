@@ -10,8 +10,9 @@ import yaml
 from autotrainer.core.logging import get_verbose_logger
 from .animal_presence_configuration import GlobalAnimalPresenceConfig
 from .autoclamp_evasion_config import AutoClampEvasionDetectorConfig
-from .external_doors_monitor_configuration import ExternalDoorsMonitorConfig
+from .external_doors_monitor_configuration import ExternalDoorsAlarmConfig
 from .presence_detection_configuration import PresenceDetectionConfig
+from .presence_in_cage_config import PresenceInCageAlarmConfig
 from .system_fault_config import SystemFaultConfig
 from .system_maintenance_config import SystemMaintenanceConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
@@ -21,7 +22,8 @@ from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfigurati
 from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
 from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
-from ..analysis.autoclamp_evasion_detector import AutoClampEvasionDetector
+from ..analysis.animal_thrash_alarm import AnimalThrashAlarmConfig
+from ..analysis.device_comm_alarm import DeviceCommAlarmConfig
 
 logger = get_verbose_logger(__name__)
 
@@ -216,17 +218,13 @@ class _BehaviorConfiguration:
     headbar_pressure: HeadbarPressureConfiguration = field(default_factory=HeadbarPressureConfiguration)
     auto_tare: LoadCellAutoTareConfiguration = field(default_factory=LoadCellAutoTareConfiguration)
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
-    global_animal_presence: GlobalAnimalPresenceConfig = field(default_factory=GlobalAnimalPresenceConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
-    external_doors: ExternalDoorsMonitorConfig = field(default_factory=ExternalDoorsMonitorConfig)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
     auto_end_session: AutoEndSessionConfiguration = field(default_factory=AutoEndSessionConfiguration)
     auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
     batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
     auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
-    system_maintenance: SystemMaintenanceConfig = field(default_factory=SystemMaintenanceConfig)
-    system_fault: SystemFaultConfig = field(default_factory=SystemFaultConfig)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
     autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
 
@@ -294,7 +292,7 @@ _tag_2_cls = dict(
     AnimalPresenceConfiguration=GlobalAnimalPresenceConfig,
     EmergencyAlarmConfiguration=EmergencyAlarmConfiguration,
     PresenceDetectionConfiguration=PresenceDetectionConfig,
-    ExternalDoorsMonitorConfiguration=ExternalDoorsMonitorConfig,
+    ExternalDoorsMonitorConfiguration=ExternalDoorsAlarmConfig,
     AutoEndSessionConfiguration=AutoEndSessionConfiguration,
     AutoTunnelSweepConfiguration=AutoTunnelSweepConfiguration,
     BatchSessionRecordingConfiguration=BatchSessionRecordingConfiguration,
@@ -306,6 +304,9 @@ _tag_2_cls = dict(
     SystemMaintenanceConfig=SystemMaintenanceConfig,
     SystemFaultConfig=SystemFaultConfig,
     CageCleaningConfig=CageCleaningConfig,
+    AnimalThrashAlarmConfig=AnimalThrashAlarmConfig,
+    PresenceInCageAlarmConfig=PresenceInCageAlarmConfig,
+    DeviceCommAlarmConfig=DeviceCommAlarmConfig,
 )
 
 

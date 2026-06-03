@@ -101,12 +101,12 @@ class SystemMessageHandler(MessageHandler):
 
         elif msg == SystemStatusMessageKind.FRONT_DOOR:
             # directly update related monitor, hopefully is very fast
-            self._analysis.external_doors_monitor.update_door_state(msg, data)
+            self._analysis.external_doors_alarm.update_door_state(msg, data)
             self.property_changed(MessageHandler.FRONT_DOOR_PROPERTY, data, None)
 
         elif msg == SystemStatusMessageKind.DRAWER_DOOR:
             # directly update related monitor, hopefully is very fast
-            self._analysis.external_doors_monitor.update_door_state(msg, data)
+            self._analysis.external_doors_alarm.update_door_state(msg, data)
             self.property_changed(MessageHandler.DRAWER_DOOR_PROPERTY, data, None)
 
         elif msg == SystemStatusMessageKind.SPARE_DOOR:

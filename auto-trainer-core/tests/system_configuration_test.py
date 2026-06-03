@@ -9,23 +9,18 @@ import yaml
 from autotrainer.core import (
     SystemConfiguration,
     CameraId,
-    HardwareConfiguration,
-    InferenceConfiguration,
-    PersistenceConfiguration,
     CameraConfiguration,
     Offset3DTuple,
 )
-from autotrainer.core.analysis import HeadbarPressureConfiguration
-from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
+from autotrainer.core.analysis.device_comm_alarm import DeviceCommAlarmConfig
+from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration import (
-    SystemConfigurationSafeLoader,
     SystemConfigurationDumper,
     SystemConfigurationLoader,
 )
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
-from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -332,3 +327,8 @@ def test_offset3d_yaml():
     o2 = yaml.load(data, Loader=SystemConfigurationLoader)
     assert isinstance(o2, Offset3DTuple)
     assert o2 == o
+
+
+def test_device_comm_default():
+    cfg = DeviceCommAlarmConfig()
+    assert cfg.is_emergency_condition is True

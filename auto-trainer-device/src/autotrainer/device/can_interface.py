@@ -484,6 +484,7 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.SERVO_MOVE: no_op,
             JerryCANCmdType.GPIO_WRITE: no_op,
             JerryCANCmdType.DELAY: no_op,
+            JerryCANCmdType.BOOTLOADER_DATA: no_op,
         }
 
     def __allow_fake_status_time(self, motor):
