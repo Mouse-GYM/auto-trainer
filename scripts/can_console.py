@@ -757,6 +757,12 @@ def print_help():
     print()
 
 
+def parse_log_level(value: str):
+    if value.isdigit():
+        return int(value)
+    return value
+
+
 def main():
     global output_file, perf_print
 
@@ -767,8 +773,12 @@ def main():
     parser.add_argument("-p", "--perf",
                         help="performance measurement with specified number of samples",
                         type=int, default=-1)
+    parser.add_argument("--log-level", default=logging.INFO, type=parse_log_level)
 
     args = parser.parse_args()
+
+    logging.getLogger("autotrainer").setLevel(args.log_level)  # can be changed with "logger" cli command
+    # logging.root.setLevel(args.log_level)
 
     output_file = args.output
 
@@ -779,5 +789,4 @@ def main():
 
 if __name__ == '__main__':
     logger = setup_logging(time_precision=4)
-    logging.getLogger("autotrainer").setLevel("WARNING")  # can be changed with "logger" cli command
     sys.exit(main())
