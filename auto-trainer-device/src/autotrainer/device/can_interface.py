@@ -416,11 +416,11 @@ class CanInterface(DeviceInterface):
         self._magnet_addr: Optional[int] = None
 
         self._servo_configs = {}
-        self.magnet_config = self._servo_configs[Motor.TUNNEL_MAGNET_SERVO] = ServoConfig()
-        self.gate_config = self._servo_configs[Motor.TUNNEL_GATE_SERVO] = ServoConfig()
-        self.load_config = self._servo_configs[Motor.PELLET_LOAD_SERVO] = ServoConfig()
-        self.cover_config = self._servo_configs[Motor.PELLET_COVER_SERVO] = ServoConfig()
-        self.tunnel_fan_config = self._servo_configs[Motor.TUNNEL_FAN_SERVO] = ServoConfig()
+        self.magnet_config = ServoConfig()
+        self.gate_config = ServoConfig()
+        self.load_config = ServoConfig()
+        self.cover_config = ServoConfig()
+        self.tunnel_fan_config = ServoConfig()
 
         self._motor_configs = {}
         self.x_config = StepperConfig()
@@ -540,6 +540,10 @@ class CanInterface(DeviceInterface):
                 prev_warn = prev_err = False
             self._motors_prev_warn_error[m] = (prev_warn, prev_err)
 
+    def _set_servo_config(self, config: ServoConfig):
+        config.target = target_of_motor(config.motor)
+        self._servo_configs[config.motor] = config
+
     @property
     def magnet_config(self):
         """
@@ -556,9 +560,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._magnet_config = config if config is not None else ServoConfig()
-        self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
-        self._magnet_config.target = target_of_motor(self._magnet_config.motor)
+        cfg = self._magnet_config = config if config is not None else ServoConfig()
+        cfg.motor = Motor.TUNNEL_MAGNET_SERVO
+        self._set_servo_config(cfg)
 
     @property
     def gate_config(self):
@@ -576,9 +580,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._gate_config = config if config is not None else ServoConfig()
-        self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
-        self._gate_config.target = target_of_motor(self._gate_config.motor)
+        cfg = self._gate_config = config if config is not None else ServoConfig()
+        cfg.motor = Motor.TUNNEL_GATE_SERVO
+        self._set_servo_config(cfg)
 
     @property
     def load_config(self):
@@ -596,9 +600,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._load_config = config if config is not None else ServoConfig()
-        self._load_config.motor = Motor.PELLET_LOAD_SERVO
-        self._load_config.target = target_of_motor(self._load_config.motor)
+        cfg = self._load_config = config if config is not None else ServoConfig()
+        cfg.motor = Motor.PELLET_LOAD_SERVO
+        self._set_servo_config(cfg)
 
     @property
     def cover_config(self):
@@ -616,9 +620,9 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._cover_config = config if config is not None else ServoConfig()
-        self._cover_config.motor = Motor.PELLET_COVER_SERVO
-        self._cover_config.target = target_of_motor(self._cover_config.motor)
+        cfg = self._cover_config = config if config is not None else ServoConfig()
+        cfg.motor = Motor.PELLET_COVER_SERVO
+        self._set_servo_config(cfg)
 
     def _set_motor_config(self, config):
         config.target = target_of_motor(config.motor)
@@ -689,10 +693,10 @@ class CanInterface(DeviceInterface):
         return self._tunnel_fan_config
 
     @tunnel_fan_config.setter
-    def tunnel_fan_config(self, value: ServoConfig):
-        self._tunnel_fan_config = value
-        value.motor = Motor.TUNNEL_FAN_SERVO
-        value.target = target_of_motor(Motor.TUNNEL_FAN_SERVO)
+    def tunnel_fan_config(self, config: ServoConfig):
+        self._tunnel_fan_config = config
+        config.motor = Motor.TUNNEL_FAN_SERVO
+        self._set_servo_config(config)
 
     @property
     def pellet_address(self):
