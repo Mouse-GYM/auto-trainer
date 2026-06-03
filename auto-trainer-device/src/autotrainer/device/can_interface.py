@@ -254,20 +254,35 @@ def is_stepper(motor: Motor) -> bool:
     return not is_servo(motor)
 
 
-
 _pellet_board_motors = {
     Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR,
     Motor.PELLET_LOAD_SERVO, Motor.PELLET_COVER_SERVO,
 
-    Motor.TUNNEL_FAN_SERVO,  # NB: it's handled as GPIO with hardcoded address of pellet-device
     Motor.TUNNEL_GATE_SERVO,
 }
 
-
 _magnet_board_motors = {
     # Motor.TUNNEL_GATE_SERVO,  NB: moved to pellet-board because breaking the audio stream
-    # Motor.TUNNEL_FAN_SERVO,
     Motor.TUNNEL_MAGNET_SERVO,
+    Motor.TUNNEL_FAN_SERVO,  # NB: it's handled as GPIO with hardcoded address of pellet-device
+}
+
+
+_magnet_servo_2_motor = {
+    MotorInstance.TUNNEL_MAGNET_SERVO_ID: Motor.TUNNEL_MAGNET_SERVO,
+    MotorInstance.TUNNEL_FAN_SERVO_ID: Motor.TUNNEL_FAN_SERVO,
+}
+
+_pellet_servo_2_motor = {
+    MotorInstance.PELLET_COVER_SERVO_ID: Motor.PELLET_COVER_SERVO,
+    MotorInstance.PELLET_LOAD_SERVO_ID: Motor.PELLET_LOAD_SERVO,
+    MotorInstance.TUNNEL_GATE_SERVO_ID: Motor.TUNNEL_GATE_SERVO,
+}
+
+_pellet_stepper_2_motor = {
+    MotorInstance.PELLET_X_MOTOR_ID: Motor.PELLET_X_MOTOR,
+    MotorInstance.PELLET_Y_MOTOR_ID: Motor.PELLET_Y_MOTOR,
+    MotorInstance.PELLET_Z_MOTOR_ID: Motor.PELLET_Z_MOTOR,
 }
 
 
@@ -298,40 +313,21 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
     Returns:
         Motor: associated Motor identifier
     """
-
-    # NOTE: The ENUM.value MUST be used here, as the incoming value is an int,
-    # and we need to compare to the value of the enum, not the enum, itself.
-
+    motor = Motor.NONE
     if target == Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID:
-                return Motor.TUNNEL_MAGNET_SERVO
-            if motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
-                return Motor.TUNNEL_FAN_SERVO
-            # elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
-            #     return Motor.TUNNEL_GATE_SERVO
+            motor = _magnet_servo_2_motor.get(motor_id, motor)
     else:
         assert target == Target.PELLET_DEVICE
         if isa_servo:
-            if motor_id == MotorInstance.PELLET_COVER_SERVO_ID:
-                return Motor.PELLET_COVER_SERVO
-            elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID:
-                return Motor.PELLET_LOAD_SERVO
-            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
-                return Motor.TUNNEL_GATE_SERVO
-            # elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
-            #     return Motor.TUNNEL_FAN_SERVO
+            motor = _pellet_servo_2_motor.get(motor_id, motor)
         else:
-            if motor_id == MotorInstance.PELLET_X_MOTOR_ID:
-                return Motor.PELLET_X_MOTOR
-            elif motor_id == MotorInstance.PELLET_Y_MOTOR_ID:
-                return Motor.PELLET_Y_MOTOR
-            elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID:
-                return Motor.PELLET_Z_MOTOR
+            motor = _pellet_stepper_2_motor.get(motor_id, motor)
 
-    logger.warning("Unknown motor id for target: target=%s isa_servo=%s motor_id=%s",
-                   target, isa_servo, motor_id)
-    return Motor.NONE
+    if motor == Motor.NONE:
+        logger.warning("Unknown motor id for target: target=%s isa_servo=%s motor_id=%s",
+                       target, isa_servo, motor_id)
+    return motor
 
 
 class CanInterface(DeviceInterface):
@@ -1096,7 +1092,7 @@ class CanInterface(DeviceInterface):
         query(Motor.PELLET_COVER_SERVO, ServoConfig)
         query(Motor.TUNNEL_MAGNET_SERVO, ServoConfig)
         query(Motor.TUNNEL_GATE_SERVO, ServoConfig)
-        # query(Motor.TUNNEL_FAN_SERVO, ServoConfig)
+        query(Motor.TUNNEL_FAN_SERVO, ServoConfig)
 
     def delay(self, delay_sec) -> bool:
         """
