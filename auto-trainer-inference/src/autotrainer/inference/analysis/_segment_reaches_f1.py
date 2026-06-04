@@ -3,6 +3,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
 from autotrainer.core.logging import get_verbose_logger
 
@@ -14,7 +15,7 @@ def segment_reaches_f11(
     *,
     df_3d: pd.DataFrame,
     frame_rate: int,
-    pellet_home: Tuple[float, float, float],
+    pellet_home: Offset3DTuple,
     debug: int,
 ):
     #define dist and velo for each reach sequence
@@ -183,4 +184,4 @@ def segment_reaches_f11(
     logger.verbose("segment_reaches: pellet_home=%s frames_on_found=%s pellet_events=%s",
                    pellet_home, frames_on_found, pellet_events)
     # end big for
-    return dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found
+    return dist_p, Z_dist_p, dist_hvpp_R, pellet_events, frames_on_found

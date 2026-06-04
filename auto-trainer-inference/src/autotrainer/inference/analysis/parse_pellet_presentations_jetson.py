@@ -94,13 +94,17 @@ def segment_reaches(
         # TODO: read the file and returns its results dicts..
         return results_dict
 
+    pellet_home = project_info.dcs_send_position
+    if pellet_home is None:
+        logger.error("cannot execute segment_reaches without trial DCS send position")
+        return results_dict
+
     coeffs = get_coeffs()
 
-    dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found = segment_reaches_f1(
+    dist_p, Z_dist_p, dist_hvpp_R, pellet_events, frames_on_found = segment_reaches_f1(
+        pellet_home=pellet_home,
         df_3d=df_3d,
         frame_rate=frame_rate,
-        coeffs=coeffs,
-        center_method=center_method,
         debug=debug,
     )
 
@@ -200,43 +204,11 @@ def segment_reaches(
 
 def segment_reaches_f1(
     *,
+    pellet_home: Offset3DTuple,
     df_3d: pd.DataFrame,
     frame_rate: int,
-    coeffs: np.ndarray,
-    center_method: Tuple[int, str],
     debug: int,
 ):
-    # Calculate distance and speed
-    # bodyparts = df_3d.columns.get_level_values('bodyparts').unique()
-    bp4speed = ['R_Hand','L_Hand','Pellet']
-    for bp in bp4speed:
-        df_bp = df_3d[bp]
-        dist_vec = np.sqrt(
-              np.diff(df_bp['x']) ** 2
-            + np.diff(df_bp['y']) ** 2
-            + np.diff(df_bp['z']) ** 2
-        )  # calculate distance
-        dist_vec = np.concatenate(([dist_vec[0]], dist_vec))  # adjust size
-        speed_vec = dist_vec * (frame_rate / 1000)  # convert to speed in mm/ms
-
-        # Apply filter using filtfilt for smoothing
-        speed_vec_filt = filtfilt(coeffs, [1], speed_vec)
-        # speed_vec_filt[df_3d[bp]['p'] == 0] = np.nan
-        df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
-
-    if center_method[0] > 0 and center_method[1] == 'Pellet':
-        pellet_home = [0, 0, 0]
-    else:
-        # how many frames to use at start for getting pellet home pos:
-        n_frames_mean = 50   # todo
-        pellet_home = []
-        df_3d_pellet = df_3d["Pellet"]
-        for pos in ('x', 'y', 'z'):
-            # using n_frames_mean first frames where p == 1 :
-            ploc = df_3d_pellet.iloc[:n_frames_mean].loc[df_3d_pellet['p'] == 1, pos].median()
-            pellet_home.append(ploc)
-
-    pellet_home = (pellet_home[0], pellet_home[1], pellet_home[2])
     logger.verbose("segment_reaches: using pellet_home=%s", pellet_home)
 
     return segment_reaches_f11(
