@@ -490,3 +490,7 @@ class EmulationInterface(DeviceInterface):
         self._positions[Motor.TUNNEL_FAN_SERVO] = 0
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return True
+
+    def board_reboot(self, target: Target):
+        logger.verbose("board_reboot %s", target)
+        return True
