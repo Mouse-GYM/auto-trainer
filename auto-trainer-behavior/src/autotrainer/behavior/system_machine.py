@@ -303,7 +303,8 @@ class SystemMachine(StateMachine):
 
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
-        intersession.perform_segmentation(project_info)
+        with algo.set_allow_reentrant(True):
+            intersession.perform_segmentation(project_info)
         self._inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
@@ -530,7 +531,8 @@ class SystemMachine(StateMachine):
                 ApiEventKind.batchAnalysisEnded,
                 data=dict(failed_count=self._batch_failed_count))
 
-        self.exit_intersession()
+        with algo.set_allow_reentrant(True):
+            self.exit_intersession()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_property_changed(self, name: str, new_value, prev_value):
@@ -576,7 +578,8 @@ class SystemMachine(StateMachine):
                 inter_state = self.intersession.state
                 if self._state != SystemState.cage:
                     if inter_state == IntersessionState.idle:
-                        self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
+                        with self._algorithm.set_allow_reentrant(True):
+                            self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
                     else:
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
@@ -1073,7 +1076,8 @@ class SystemMachine(StateMachine):
             and self._analysis.load_cell_monitor.is_engaged
         ):
             return
-        self.enter_tunnel(reason=reason)
+        with self._algorithm.set_allow_reentrant(True):
+            self.enter_tunnel(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_start_session(self, reason: str = "NA"):
