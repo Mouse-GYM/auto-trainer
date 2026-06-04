@@ -7,10 +7,14 @@ from typing_extensions import Self
 
 import numpy
 
+from .. import get_verbose_logger
 from .detector import BaseDetector
 from ..configuration.detector import DetectorConfig
 from ..observable_object import ObservableObject
 from ..event import EventManager, ApiEventKind, post_api_event_content
+
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclass
