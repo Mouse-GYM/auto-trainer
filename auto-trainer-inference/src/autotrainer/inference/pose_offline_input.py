@@ -289,7 +289,8 @@ class OfflineInputProcess:
                 dict(event=self._event_cb_ack),  # kwargs
             ),
         )
-        self._event_cb_ack.wait(1)
+        if not self._event_cb_ack.wait(5):
+            logger.warning("timeout waiting ack SET_FEED_INTERSESSION_RESULT to main process, but continuing")
         #
         for cdx in range(self._nr_cams):
             missing_for_batch = (

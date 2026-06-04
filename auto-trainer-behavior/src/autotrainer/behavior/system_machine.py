@@ -243,7 +243,8 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
-        self._disengage_auto_clamp()
+        with algo.set_allow_reentrant(True):
+            self._disengage_auto_clamp()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
             with algo.set_allow_reentrant(True):
@@ -538,6 +539,7 @@ class SystemMachine(StateMachine):
                            prev_value, new_value, self.state)
             self._consider_enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         logger.verbose("got inference segmentation finished: %s ; err=%s prj=%s", success, error, project)
         inference = self._inference
@@ -594,9 +596,6 @@ class SystemMachine(StateMachine):
             logger.debug("auto_clamp already in progress")
             return
         is_headbar_pressure_engaged = self._analysis.headbar_pressure_monitor.is_engaged
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
-        self._timer_auto_clamp_evaluate = no_op_timer
         if not algo.head_fixation_enabled:
             logger.info("auto-clamp: disabled (no action taken)")
             return
@@ -612,6 +611,7 @@ class SystemMachine(StateMachine):
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
+        self._timer_auto_clamp_evaluate.cancel()
         p_now = get_perf_now()
         cfg = algo.active_config.head_clamp
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
@@ -846,8 +846,8 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
         clamp_cfg = self._algorithm.head_clamp_config
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
+        self._timer_auto_clamp_evaluate.cancel()  # not sure that we want this one
+        self._timer_auto_clamp_disengage.cancel()  # ensure no other disengage timer remain
         pre_duration = clamp_cfg.prerelease_duration
         if pre_duration > 0:
             intensity = clamp_cfg.prerelease_intensity
@@ -872,8 +872,8 @@ class SystemMachine(StateMachine):
             return
         self._auto_clamp_disengage_in_progress = True
         logger.info("auto-clamp: starting disengage procedure..")
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
+        self._timer_auto_clamp_evaluate.cancel()  # no sure about this one
+        self._timer_auto_clamp_disengage.cancel()
         pellet_dev = self._pellet_device
         algo = self._algorithm
         clamp_cfg = algo.head_clamp_config
@@ -893,7 +893,8 @@ class SystemMachine(StateMachine):
             )
             timer.start()
         else:
-            self._pre_disengage_auto_clamp()
+            with BehaviorAlgorithm.set_allow_reentrant(True):
+                self._pre_disengage_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_during_intersession(self):
@@ -1131,7 +1132,8 @@ class SystemMachine(StateMachine):
             self._timer_consider_start_session = timer
             timer.start()
             return
-        algo.start_session(reason=reason)
+        with BehaviorAlgorithm.set_allow_reentrant(True):
+            algo.start_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_end_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
@@ -1152,7 +1154,8 @@ class SystemMachine(StateMachine):
                     delay, lambda: algo.end_capture_session(reason=reason))
                 timer.start()
         else:
-            algo.end_capture_session(reason=reason)
+            with BehaviorAlgorithm.set_allow_reentrant(True):
+                algo.end_capture_session(reason=reason)
 
     def _on_intersession_state_changed(self, old, new):
         self._algorithm.intersession_state = new

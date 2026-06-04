@@ -154,7 +154,7 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     # handle bound method vs normal function:
     @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
-        BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
+        return BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
     #
     wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
     #
@@ -448,11 +448,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                func(*args) if kwargs is None else func(*args, **kwargs)
+                res = func(*args) if kwargs is None else func(*args, **kwargs)
                 if t_reentrant_count == 0 and handler_thread is None:
                     while reentrant_list:
                         func, args, kwargs, _ = reentrant_list.pop(0)
                         func(*args) if kwargs is None else func(*args, **kwargs)
+                return res
             finally:
                 cls._thread_locals.reentrant_count = t_reentrant_count
                 cls._thread_locals.allow_reentrant = t_allow_reentrant
@@ -1076,11 +1077,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     #
 
+    @relay_func(wait=False)
     def start_session(self, *, reason: str = "NA"):
-        with self._thread_lock:
-            return self._start_capture_session(reason=reason)
-
-    def _start_capture_session(self, *, reason: str):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session", reason)
             return False
@@ -1119,11 +1117,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         return True
 
+    @relay_func(wait=False)
     def end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
-        with self._thread_lock:
-            return self._end_capture_session(reason=reason)
-
-    def _end_capture_session(self, *, reason: RecordingEndingReason):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
@@ -1147,16 +1142,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
             ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
-        self.session_capture_ending(reason)
         self._event_manager.flush()
+        with self.set_allow_reentrant(True):
+            self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
+        """called on end of a full "session" handling, analysis on it possibly included, if not delayed.
+        But this is still called from system machine when analysis is delayed.
+        """
         logger.notice("session processing end: %s", result)
         self._event_manager.post_event_content(
             ApiEventKind.trialEnded, data=dict(result=result))
-        self.session_ending(result)
+        self.session_ending(result)  # NB: only used via tests
 
     def reset_session_pellet_count(self):
         self.session_pellet_loaded_count = 0
