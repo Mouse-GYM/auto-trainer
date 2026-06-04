@@ -81,7 +81,8 @@ class IntersessionMachine(StateMachine):
         if res is None:
             logger.error("perform segmentation didn't started")
             self._segmentation_configuration = None
-            self.end_analysis(project_info, False)
+            with BehaviorAlgorithm.set_allow_reentrant(True):
+                self.end_analysis(project_info, False)
         else:
             self.events.on_analysis_started()
             self.post_event_content(ApiEventKind.intertrialSegmentationBegin)
@@ -147,14 +148,17 @@ class IntersessionMachine(StateMachine):
         if success:
             self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
-                self.perform_detection(segment_config)
+                with BehaviorAlgorithm.set_allow_reentrant(True):
+                    self.perform_detection(segment_config)
             else:
                 logger.warning("cannot perform detection for %s", project)
-                self.end_analysis(project, False)
+                with BehaviorAlgorithm.set_allow_reentrant(True):
+                    self.end_analysis(project, False)
         else:
             logger.error("perform segmentation failed. config=%s", segment_config)
             self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
-            self.end_analysis(project, False)
+            with BehaviorAlgorithm.set_allow_reentrant(True):
+                self.end_analysis(project, False)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _detection_complete(self, success: bool, *,
@@ -164,7 +168,8 @@ class IntersessionMachine(StateMachine):
             self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
         else:
             self.post_event_content(ApiEventKind.intertrialDetectionEnd)
-        self.end_analysis(detection_config.project, success)
+        with BehaviorAlgorithm.set_allow_reentrant(True):
+            self.end_analysis(detection_config.project, success)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
