@@ -426,7 +426,7 @@ class AppModel(ObservableObject):
         elif name == "config":
             self.config = value
 
-    def reader_ack_received(self, ack):
+    def reader_ack_received(self, ack, *, perf_c: Optional[float]=None):
         logger.info(f"ack context received: {ack}")
         if self._last_command is not None and ack == self._last_command:
             self._last_command = None
