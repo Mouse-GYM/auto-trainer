@@ -436,6 +436,8 @@ class SystemMachine(StateMachine):
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
         algo = self._algorithm
+        if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
+            self._pellet_machine.move_retract()
         #
         can_perform_analysis = (
             cur_project is not None

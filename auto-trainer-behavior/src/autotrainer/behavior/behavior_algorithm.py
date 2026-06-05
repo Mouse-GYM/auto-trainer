@@ -1210,7 +1210,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if not cfg.pellet_delivery.is_enabled:
             return False
         if cfg.head_clamp.enabled:
-            return self._is_in_session and self._autoclamp_engaged_perf_c >= self._session_started_perf_c
+            return self._autoclamp_in_progress or (
+                self._is_in_session and self._autoclamp_engaged_perf_c >= self._session_started_perf_c
+            )
         return True
 
     def would_load_pellet(
