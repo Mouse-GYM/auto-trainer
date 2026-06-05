@@ -24,10 +24,22 @@ from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, 
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
-from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
-                              CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
-                              Offset3DTuple)
+from autotrainer.core import (
+    ObservableObject,
+    EventManager,
+    SystemMessageHandler,
+    SystemConfiguration,
+    CameraId,
+    PersistenceConfiguration,
+    HardwareConfiguration,
+    Notification,
+    NotificationCenter,
+    TriggerNotification,
+    SystemStatusMessageKind,
+    SensorAnalysis,
+    Offset3DTuple,
+    get_perf_now,
+)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
@@ -615,7 +627,8 @@ class AppModel(ObservableObject):
                     if new_status == CaptureProcessStatus.RECORDING:
                         project = self._project_info
                         if project is not None:
-                            self._read_trial_start_infos(project)
+                            recording_start_perf_c = r_args[0] if len(r_args) > 0 else get_perf_now()
+                            project.recording_start_perf_c = recording_start_perf_c
                     if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet

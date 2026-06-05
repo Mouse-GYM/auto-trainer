@@ -165,6 +165,7 @@ class SystemMachine(StateMachine):
         pellet_events.pellet_loaded += self._on_pellet_loaded
         pellet_events.pellet_sent += self._on_pellet_sent
         pellet_events.pellet_load_failed += self._on_pellet_load_failed
+        pellet_events.pellet_released += self._on_pellet_released
         self._last_pellet_loaded_perf_c = -math.inf
         self._last_pellet_loading_perf_c = -math.inf
         self._last_pellet_failed_loaded_perf_c = -math.inf
@@ -407,8 +408,11 @@ class SystemMachine(StateMachine):
             logger.warning("project None or current dcs_send_pos None (DCS)")
         p_now = self._session_started_perf_c = get_perf_now()
         pellet_m = self._pellet_machine
-        self._session_pellet_sent_perf_c = p_now if pellet_m.state == PelletState.monitoring else None
-        logger.info("session_capture_started: dcs_send_pos=%s prj.when=%s",
+        self._session_pellet_sent_perf_c = p_now if (
+            pellet_m.state == PelletState.monitoring
+            and self._algorithm.is_pellet_recently_seen()
+        ) else None
+        logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
@@ -1066,8 +1070,17 @@ class SystemMachine(StateMachine):
         if self._algorithm.is_in_session:
             if self._session_pellet_sent_perf_c is None:
                 self._session_pellet_sent_perf_c = perf_c
+                project = self._project_info
+                if project is not None:
+                    project.pellet_presented_perf_c = perf_c
         else:
             self._consider_start_session(reason="pellet-sent")
+
+    def _on_pellet_released(self, *, perf_c: float):
+        if self._algorithm.is_in_session:
+            project = self._project_info
+            if project is not None and project.pellet_released_perf_c < self._session_started_perf_c:
+                project.pellet_released_perf_c = perf_c
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)

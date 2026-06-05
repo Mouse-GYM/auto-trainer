@@ -34,6 +34,11 @@ class PelletSentEventT(Protocol):
         """Pellet Sent event signature"""
 
 
+class PelletReleasedEventT(Protocol):
+    def __call__(self, *, perf_c: Optional[float]=None):
+        """Pellet Released event signature"""
+
+
 class PelletMachineEvents(StateMachineEvents):
 
     pellet_loading: Callable[[], None]  # when a load-pellet is started executing
@@ -41,6 +46,7 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_loaded: Callable[[], None]  # when a load-pellet is finished executing AND a pellet is seen on it
     pellet_sent: PelletSentEventT  # when a send-pellet is finished executing
     pellet_load_failed: PelletLoadFailedEventT
+    pellet_released: PelletReleasedEventT
 
 
 class PelletDeviceCommandFailed(RuntimeError):
@@ -66,8 +72,6 @@ class PelletMachine(StateMachine):
         if algorithm is None:
             algorithm = BehaviorAlgorithm()
         self._algorithm = algorithm
-        # algorithm.session_starting += self._session_started
-        # algorithm.session_capture_ending += self._session_capture_ended
 
         self._message_handler = msg_handler
         if msg_handler is not None:
@@ -291,6 +295,7 @@ class PelletMachine(StateMachine):
         elif token == self._token_release_pellet:
             self._token_release_pellet = None
             api_evt = ApiEventKind.pelletReleaseEnd
+            self.events.pellet_released(perf_c=perf_now)
 
         elif token == self._token_move_retract:
             self._token_move_retract = None

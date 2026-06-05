@@ -97,6 +97,7 @@ def segment_reaches(
     coeffs = get_coeffs()
 
     dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found = segment_reaches_f1(
+        project=project_info,
         df_3d=df_3d,
         frame_rate=frame_rate,
         coeffs=coeffs,
@@ -200,6 +201,7 @@ def segment_reaches(
 
 def segment_reaches_f1(
     *,
+    project: ProjectInfo,
     df_3d: pd.DataFrame,
     frame_rate: int,
     coeffs: np.ndarray,
@@ -236,7 +238,12 @@ def segment_reaches_f1(
             ploc = df_3d_pellet.iloc[:n_frames_mean].loc[df_3d_pellet['p'] == 1, pos].median()
             pellet_home.append(ploc)
 
-    pellet_home = (pellet_home[0], pellet_home[1], pellet_home[2])
+    t_presented = project.pellet_presented_perf_c - project.recording_start_perf_c
+    f_presented = int(t_presented * frame_rate)
+
+    r = df_3d["Pellet"].iloc[f_presented:f_presented + 15].loc[df_3d_pellet['p'] == 1]
+    pellet_home = tuple(r.loc[pos].median() for pos in "xyz")
+
     logger.verbose("segment_reaches: using pellet_home=%s", pellet_home)
 
     return segment_reaches_f11(

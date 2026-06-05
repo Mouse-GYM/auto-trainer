@@ -3,8 +3,8 @@ from __future__ import annotations
 import ctypes
 import dataclasses
 import logging
+import math
 import multiprocessing.managers
-import multiprocessing as mp
 import os
 import os.path
 import sys
@@ -119,6 +119,9 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
+    recording_start_perf_c: float = -math.inf
+    pellet_presented_perf_c: float = -math.inf
+    pellet_released_perf_c: float = -math.inf
 
 
 @dataclass
