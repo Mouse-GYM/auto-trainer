@@ -155,9 +155,11 @@ class DeviceConnection(DeviceConnectionProtocol):
         orig_cb = self._api.message_callback
         tokens_acked = []
         def cb(kind, context):
-            if kind == SystemStatusMessageKind.ACKNOWLEDGE and context in tokens:
-                tokens_acked.append(context)
-                tokens.remove(context)
+            if kind == SystemStatusMessageKind.ACKNOWLEDGE:
+                tok, *r_args = context
+                if tok in tokens:
+                    tokens_acked.append(tok)
+                    tokens.remove(tok)
             elif orig_cb is not None:
                 orig_cb(kind, context)
         self._api.message_callback = cb

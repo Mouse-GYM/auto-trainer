@@ -140,6 +140,10 @@ class ProjectInfo(_ProjectInfo):
         session: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
+        recording_start_perf_c: float = _ProjectInfo.recording_start_perf_c,
+        pellet_presented_perf_c: float = _ProjectInfo.pellet_presented_perf_c,
+        pellet_released_perf_c: float = _ProjectInfo.pellet_released_perf_c,
+        #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
         super().__init__()

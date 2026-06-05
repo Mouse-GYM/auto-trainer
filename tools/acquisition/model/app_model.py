@@ -2280,7 +2280,7 @@ class AppModel(ObservableObject):
         #
         self.check_max_pellet_loaded()
 
-    def _on_pellet_sent(self):
+    def _on_pellet_sent(self, *, perf_c: Optional[float]=None):
         selected = self._selected_animal
         status = self._status
         recent = self._behavior.algorithm.pellet_recently_seen
