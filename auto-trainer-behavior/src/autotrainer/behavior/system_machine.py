@@ -113,6 +113,7 @@ class SystemMachine(StateMachine):
         self._enter_tunnel_pellet_seen = False
 
         self._session_started_perf_c = -math.inf
+        self._session_pellet_sent_perf_c: Optional[float] = None
 
         self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
@@ -404,7 +405,9 @@ class SystemMachine(StateMachine):
         prj = self._project_info
         if prj is None or dcs_send_pos is None:
             logger.warning("project None or current dcs_send_pos None (DCS)")
-        self._session_started_perf_c = get_perf_now()
+        p_now = self._session_started_perf_c = get_perf_now()
+        pellet_m = self._pellet_machine
+        self._session_pellet_sent_perf_c = p_now if pellet_m.state == PelletState.monitoring else None
         logger.info("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
@@ -826,6 +829,7 @@ class SystemMachine(StateMachine):
 
     def _autoclamp_set_in_progress(self, prog: bool):
         self._auto_clamp_in_progress = prog
+        self._algorithm.autoclamp_in_progress = prog
         det = self._analysis.autoclamp_evasion_detector
         det.autoclamp_in_progress = prog
 
@@ -1057,9 +1061,13 @@ class SystemMachine(StateMachine):
         elif new_value == PelletState.releasing:
             self._algorithm.pellet_uncover_context.has_released = True
 
-    def _on_pellet_sent(self):
+    def _on_pellet_sent(self, *, perf_c: float):
         self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
-        self._consider_start_session(reason="pellet-sent")
+        if self._algorithm.is_in_session:
+            if self._session_pellet_sent_perf_c is None:
+                self._session_pellet_sent_perf_c = perf_c
+        else:
+            self._consider_start_session(reason="pellet-sent")
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
@@ -1088,6 +1096,7 @@ class SystemMachine(StateMachine):
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
+        autoclamp_enabled = algo.head_fixation_enabled
         logger.verbose(
             "consider_start_session: load_cell.engaged=%s "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
@@ -1102,24 +1111,32 @@ class SystemMachine(StateMachine):
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and pellet_machine.state == PelletState.monitoring
-            # waiting monitoring state, ensure pellet is in deliver position
+            and (
+                # waiting monitoring state, ensure pellet is in deliver position
+                pellet_machine.state == PelletState.monitoring
+                or autoclamp_enabled  # or using auto-clamp which allows start session before
+            )
         ):
             logger.debug("Not good state")
             return
-        if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
+        if (
+                not autoclamp_enabled
+            and not math.isinf(send_begin_age)
+            and send_begin_age < send_end_age
+        ):
             logger.debug("Wait pellet is sent")
             # wait pellet-sent, no need further timer:
             # we'll get a pellet_machine.events.pellet_sent() when it's received/acked
             return
-        if not algo.pellet_recently_seen:
+        if not autoclamp_enabled and not algo.pellet_recently_seen:
             logger.debug("Wait pellet seen")
             # pellet not seen, if enabled a pellet-load will be executed,
             # which we also consider-start-session for it.
             return
         #
-        if math.isinf(send_begin_age) and math.isinf(send_end_age):
-            remains = 0  # first session
+        if autoclamp_enabled or (math.isinf(send_begin_age) and math.isinf(send_end_age)):
+            # autoclamp enabled, or first session
+            remains = 0
         else:
             # This ensures that we'll have the start of video matching the very end, or ~right after,
             # of send-pellet action/move.

@@ -837,7 +837,7 @@ class CanDevice(Device):
                     target_board.compound_steps = None
                     logger.success("finished executing %s ; ctx=%s board=%s", kind, ctx, target_board.ctx)
                     if ctx is not None:
-                        self._acknowledge_command(ctx)
+                        self._acknowledge_command(ctx, perf_now=p_now)
                         target_board.ctx = None
                     target_board.kind = None
 

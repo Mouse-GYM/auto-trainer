@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import multiprocessing
 import os
 import threading
 import time
@@ -10,12 +11,13 @@ from enum import IntEnum
 from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TextIO
 
 import cv2
 import numpy
 
-from autotrainer.core import ProjectInfo, ProjectInterval
+from autotrainer.core import ProjectInfo, ProjectInterval, SystemStatusMessageKind
+from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
@@ -73,8 +75,15 @@ class VideoRecordProperties:
 
 
 class VideoRecord(Thread):
-    def __init__(self, properties: VideoRecordProperties, input_queue: Queue):
-        Thread.__init__(self, name=properties.name, daemon=True)
+    def __init__(
+        self,
+        cam_index: int,
+        properties: VideoRecordProperties,
+        input_queue: Queue,
+        msg_queue: Optional[multiprocessing.Queue] = None,
+    ):
+        super().__init__(name=properties.name, daemon=True)
+        self._cam_idx = cam_index,
         self._project_info = properties.project_info
         self._name = properties.name
         self._width = properties.frame_size[0]
@@ -85,13 +94,14 @@ class VideoRecord(Thread):
         self._image_interval = properties.image_interval
 
         self._input_queue: Queue = input_queue
+        self._msg_queue = msg_queue
 
         self._is_running = True
 
         self._is_video_enabled = self._video_rotate_interval >= 0
         self._video_writer = None
         self._video_file = None
-        self._video_timestamp_file = None
+        self._video_timestamp_file: Optional[TextIO] = None
 
         self._image_location: Optional[Path] = None
         self._image_name: Optional[str] = None
@@ -128,8 +138,10 @@ class VideoRecord(Thread):
 
     def _run(self) -> None:
         input_q = self._input_queue
+        msg_q = self._msg_queue
 
-        if self._project_info is None or not self._project_info.is_valid():
+        project = self._project_info
+        if project is None or not project.is_valid():
             logger.error("video recording and image capture can not proceed without value project information")
             return
 
@@ -186,14 +198,6 @@ class VideoRecord(Thread):
                         vid_ts_file = self._video_timestamp_file
                         if vid_ts_file is not None:
                             # NB: Using camera frame_when, which is the most precise, to measure FPS:
-                            # if last_perf_now is None:
-                            #     d = 0
-                            # else:
-                            #     d = frame_perf_now - last_perf_now
-                            #     if d:
-                            #         d = 1 / d
-                            #     else:
-                            #         d = math.nan
                             if prev_frame_when is None:
                                 d2 = 0
                             else:
@@ -206,6 +210,13 @@ class VideoRecord(Thread):
                             vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}, {frame_id}\n")
                             prev_perf_now = frame_perf_now
                             prev_frame_when = frame_when
+                            if tot_written == 1:
+                                vid_ts_file.flush()  # ensure first frame timestamps is flushed to disk,
+                                # for other reader(s).
+                            if tot_written == 1 and msg_q is not None:
+                                msg_q.put((
+                                    SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
+                                    (self._cam_idx, CaptureProcessStatus.RECORDING)))
 
                     if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
                         img_loc, img_name = self._image_location, self._image_name

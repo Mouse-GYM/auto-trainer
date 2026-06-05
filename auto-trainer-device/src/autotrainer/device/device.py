@@ -1,3 +1,4 @@
+import math
 from typing import Optional, Any
 
 from autotrainer.core.logging import get_verbose_logger
@@ -65,13 +66,12 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token: object):
+    def _acknowledge_command(self, token: object, *, perf_now: float=math.nan):
         logger.verbose("sending command ack: %s", token)
         EventManager.default().post_event_content(
-            ApiEventKind.deviceCommandAcknowledge, data=dict(context=token)
-        )
+            ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
         if self._api is not None:
-            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, token)
+            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_now))
 
     @property
     def api(self):

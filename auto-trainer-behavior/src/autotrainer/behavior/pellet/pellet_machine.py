@@ -24,10 +24,14 @@ logger = get_verbose_logger(__name__)
 DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME = int(os.getenv("AUTOTRAINER_LOAD_RETRACT_COUNT_FORCE_HOME", "12"))
 
 
-class _pellet_load_failed_event(Protocol):
-
+class PelletLoadFailedEventT(Protocol):
     def __call__(self, *, consecutive: int):
         """Load failed event declaration"""
+
+
+class PelletSentEventT(Protocol):
+    def __call__(self, *, perf_c: Optional[float]=None):
+        """Pellet Sent event signature"""
 
 
 class PelletMachineEvents(StateMachineEvents):
@@ -35,8 +39,8 @@ class PelletMachineEvents(StateMachineEvents):
     pellet_loading: Callable[[], None]  # when a load-pellet is started executing
     pellet_sending: Callable[[], None]  # now unused
     pellet_loaded: Callable[[], None]  # when a load-pellet is finished executing AND a pellet is seen on it
-    pellet_sent: Callable[[], None]  # when a send-pellet is finished executing
-    pellet_load_failed: _pellet_load_failed_event
+    pellet_sent: PelletSentEventT  # when a send-pellet is finished executing
+    pellet_load_failed: PelletLoadFailedEventT
 
 
 class PelletDeviceCommandFailed(RuntimeError):
@@ -251,7 +255,7 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: Optional[str]):
+    def _pellet_device_ack_received(self, token: Optional[str], *, perf_c: Optional[float]=None):
         if token is None:
             return
 
@@ -268,13 +272,13 @@ class PelletMachine(StateMachine):
             return
 
         self._api_status_token = None
-        perf_now = get_perf_now()
+        perf_now = get_perf_now() if perf_c is None else perf_c
         api_evt = None
         if token == self._token_pellet_send:
             self._send_end_perf_c = perf_now
             self._token_pellet_send = None
             api_evt = ApiEventKind.pelletSendEnd
-            self.events.pellet_sent()
+            self.events.pellet_sent(perf_c=perf_now)
 
         elif token == self._token_pellet_load:
             self._token_pellet_load = None
@@ -308,6 +312,10 @@ class PelletMachine(StateMachine):
             # we could possibly & erroneously acknowledge a successfully load-pellet...
             caller="pellet_device_ack_received",
         )
+
+    @property
+    def pellet_send_end_perf_c(self) -> float:
+        return self._send_end_perf_c
 
     def get_pellet_send_begin_age(self, perf_now: float):
         return perf_now - self._send_begin_perf_c

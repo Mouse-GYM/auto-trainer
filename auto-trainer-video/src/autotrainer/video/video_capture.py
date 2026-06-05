@@ -270,7 +270,8 @@ class VideoCapture(Process):
             self._record_properties.frame_size = (camera.width, camera.height)
             self._record_properties.fps = camera.fps
 
-            vid_rec = self._record = VideoRecord(self._record_properties, rec_queue)
+            vid_rec = self._record = VideoRecord(
+                self._camera_idx, self._record_properties, rec_queue, self._attrs.msg_queue)
             vid_rec.start()
 
             det_attrs = self._attrs.presence_detection_attrs

@@ -214,8 +214,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._active_config = BehaviorConfiguration()
         self._loaded_config: Optional[BehaviorConfiguration] = None
 
-        self._head_fixation_enabled = False  # NB: not saved in config
-        self._clean_raw_data_on_inactive_session = False
+        self._head_fixation_enabled = False
+        self._autoclamp_in_progress = False
+        self._autoclamp_engaged_perf_c = -math.inf
+
+        self._clean_raw_data_on_inactive_session = False  # NB: not saved in config
 
         self._parts_pres_ctx_any_cam = ScenePartsPresenceContext()
         self._parts_pres_ctx_all_cams = ScenePartsPresenceContext()
@@ -684,6 +687,18 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     @clean_raw_data_on_inactive_session.setter
     def clean_raw_data_on_inactive_session(self, value):
         self._clean_raw_data_on_inactive_session = value
+
+    # auto/head clamp
+
+    @property
+    def autoclamp_in_progress(self) -> bool:
+        return self._autoclamp_in_progress
+
+    @autoclamp_in_progress.setter
+    def autoclamp_in_progress(self, value: bool):
+        self._autoclamp_in_progress = value
+        if value:
+            self._autoclamp_engaged_perf_c = get_perf_now()
 
     @property
     def baseline_intensity(self) -> float:
@@ -1189,9 +1204,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     #
 
     def can_send_pellet(self):
-        if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+        if self._algo_paused or self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
             return False
-        return self._active_config.pellet_delivery.is_enabled and not self._algo_paused
+        cfg = self._active_config
+        if not cfg.pellet_delivery.is_enabled:
+            return False
+        if cfg.head_clamp.enabled:
+            return self._autoclamp_engaged_perf_c >= self._session_started_perf_c
+        return True
 
     def would_load_pellet(
         self,

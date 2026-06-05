@@ -578,6 +578,10 @@ class AppModel(ObservableObject):
         else:
             logger.verbose("consider_release_pellet but not in session")
 
+    def _read_trial_start_infos(self, project: ProjectInfo):
+        pass
+        # _, ts_path, _ = project.get_video_path()
+
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
@@ -604,10 +608,14 @@ class AppModel(ObservableObject):
             logger.info("Handling %s ; data=%s", cmd, extra_info)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
-                cam_idx, new_status = args
+                cam_idx, new_status, *r_args = args
                 if self._cameras[cam_idx].is_primary:
                     algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
+                    if new_status == CaptureProcessStatus.RECORDING:
+                        project = self._project_info
+                        if project is not None:
+                            self._read_trial_start_infos(project)
                     if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet

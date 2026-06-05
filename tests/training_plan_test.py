@@ -14,7 +14,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
-from autotrainer.core import Offset3DTuple, EventManager
+from autotrainer.core import Offset3DTuple, EventManager, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
@@ -122,7 +122,7 @@ class BaseTrainingPlan(MockSystemMachine):
         tokens = list(self._app_model.hardware._pending_tokens)
         logger.info("acking %s pending tokens", len(tokens))
         for tok in tokens:
-            self.msg_handler.ack_received(tok)
+            self.msg_handler.ack_received(tok, perf_c=get_perf_now())
         if wait_acked:
             for tok in tokens:
                 logger.debug("waiting tock %s", tok)
