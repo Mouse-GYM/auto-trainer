@@ -202,15 +202,18 @@ class DeviceConnection(DeviceConnectionProtocol):
                 context=make_token(),
             )
 
-        with self.await_acknowledge(tokens, timeout=10):
-            send(data.x_config)
-            send(data.y_config)
-            send(data.z_config)
-            send(data.load_config)
-            send(data.magnet_config)
-            send(data.cover_config)
-            send(data.gate_config)
-            send(data.tunnel_fan_config)
+        for conf in (
+            data.x_config,
+            data.y_config,
+            data.z_config,
+            data.load_config,
+            data.magnet_config,
+            data.cover_config,
+            data.gate_config,
+            data.tunnel_fan_config,
+        ):
+            with self.await_acknowledge(tokens, timeout=3):
+                send(conf)
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
