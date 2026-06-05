@@ -1345,7 +1345,10 @@ class PreferencesContent(QWidget):
         spinbox.setValue(analysis.presence_in_cage_alarm.config.tunnel_to_cage_presence_missing_delay)
         def missing_delay_after_exit_tunnel_value_changed(value):
             det = analysis.presence_in_cage_alarm
-            prev, det.config.tunnel_to_cage_presence_missing_delay = det.config.tunnel_to_cage_presence_missing_delay
+            prev, det.config.tunnel_to_cage_presence_missing_delay = (
+                det.config.tunnel_to_cage_presence_missing_delay,
+                value,
+            )
             if prev != value:
                 det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(missing_delay_after_exit_tunnel_value_changed)

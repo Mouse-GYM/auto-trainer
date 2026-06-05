@@ -64,7 +64,7 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
             return
         if name == LoadCellMonitor.IS_THRASHING_DETECTED_PROPERTY:
             perf_now = get_perf_now()
-            load_cell = self._load_cell_monitor.context
+            load_cell = self._load_cell_det.context
             with self._lock:
                 self._load_cell_thrash_values.append((perf_now, value,
                                                       load_cell.thrashing_disengaged_age if value
