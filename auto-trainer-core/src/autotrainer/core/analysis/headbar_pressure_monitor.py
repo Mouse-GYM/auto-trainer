@@ -7,9 +7,13 @@ from typing_extensions import Self
 
 import numpy
 
+from .. import get_verbose_logger
 from .detector import BaseDetector
 from ..configuration.detector import DetectorConfig
 from autotrainer.api import ApiEventKind
+
+
+logger = get_verbose_logger(__name__)
 
 
 @dataclass
