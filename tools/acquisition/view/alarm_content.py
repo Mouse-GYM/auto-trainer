@@ -108,7 +108,7 @@ class AlarmContent(ContentWidget):
         make_detector_icon = partial(make_icon, off_color="black")
 
         self.register_alarm("Thrashing", analysis.animal_thrashing_alarm)
-        self.register_alarm("Mouse Missing:", analysis.presence_in_cage_alarm)
+        self.register_alarm("Mouse Missing", analysis.presence_in_cage_alarm)
         self.register_alarm("External Doors", analysis.external_doors_alarm)
         self.register_alarm("Device Comm. Error", analysis.device_comm_alarm)
         self.register_alarm("Animal Immobile", analysis.global_animal_presence_alarm)
