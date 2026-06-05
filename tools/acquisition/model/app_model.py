@@ -609,11 +609,15 @@ class AppModel(ObservableObject):
                     continue
                 cmd = raw[0]
                 if len(raw) > 1:
-                    args = raw[1]
-                    if len(raw) > 2:
-                        kwargs = raw[2]
-                        if len(raw) > 3:
-                            logger.warning("Unhandled extra args to status msg: %r", raw[3:])
+                    if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
+                        args = raw[1]
+                        kwargs = None
+                    else:
+                        args = raw[1]
+                        if len(raw) > 2:
+                            kwargs = raw[2]
+                            if len(raw) > 3:
+                                logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
             extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
