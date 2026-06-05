@@ -202,7 +202,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                 context=make_token(),
             )
 
-        with self.await_acknowledge(tokens, timeout=3):
+        with self.await_acknowledge(tokens, timeout=10):
             send(data.x_config)
             send(data.y_config)
             send(data.z_config)
