@@ -29,8 +29,10 @@ from .load_cell_tare_monitor import LoadCellTareMonitor
 from .alarm_monitor import EmergencyAlarmMonitor, EmergencyReason
 from .global_animal_presence_monitor import GlobalAnimalPresenceAlarm
 from .external_doors_monitor import ExternalDoorsAlarm
-from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
-from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor, AutoTunnelSweepConfiguration
+from .pellet_position_monitor import PelletMisplacedDetector
+from ..configuration.pellet_misplaced_config import PelletMisplacedDetectorConfiguration
+from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor
+from ..configuration.tunnel_sweep_config import AutoTunnelSweepConfiguration
 from .system_maintenance_alarm import SystemMaintenanceAlarm
 from .system_fault_monitor import SystemFaultAlarm
 

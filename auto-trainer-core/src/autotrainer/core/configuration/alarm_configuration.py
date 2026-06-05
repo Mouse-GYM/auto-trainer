@@ -1,8 +1,8 @@
 
 from dataclasses import dataclass, field
 
-from autotrainer.core.analysis.animal_thrash_alarm import AnimalThrashAlarmConfig
-from autotrainer.core.analysis.device_comm_alarm import DeviceCommAlarmConfig
+from autotrainer.core.configuration.animal_thrash_config import AnimalThrashAlarmConfig
+from autotrainer.core.configuration.device_comm_alarm_config import DeviceCommAlarmConfig
 from autotrainer.core.configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from autotrainer.core.configuration.autoclamp_evasion_config import AnimalEvasionAlarmConfig
 from autotrainer.core.configuration.detector import DetectorConfig

@@ -12,9 +12,9 @@ from autotrainer.core import (
     CameraConfiguration,
     Offset3DTuple,
 )
-from autotrainer.core.analysis.device_comm_alarm import DeviceCommAlarmConfig
+from autotrainer.core.configuration.device_comm_alarm_config import DeviceCommAlarmConfig
 from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
-from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
+from autotrainer.core.configuration.audio_thrash_config import AudioSpectrumThrashMonitorConfig
 from autotrainer.core.configuration import (
     SystemConfigurationDumper,
     SystemConfigurationLoader,

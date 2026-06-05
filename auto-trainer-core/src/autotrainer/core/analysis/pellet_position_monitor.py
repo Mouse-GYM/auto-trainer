@@ -1,9 +1,8 @@
-import dataclasses
 import math
 from typing import Optional, Tuple, List
 
 from autotrainer.api import ApiDetectorKind
-from autotrainer.core.configuration.detector import DetectorConfig
+from autotrainer.core.configuration.pellet_misplaced_config import PelletMisplacedDetectorConfiguration
 
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import get_perf_now, Offset3DTuple, calculate_std_dev_manual
@@ -15,17 +14,6 @@ logger = get_verbose_logger(__name__)
 
 
 _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
-
-
-@dataclasses.dataclass
-class PelletMisplacedDetectorConfiguration(DetectorConfig):
-
-    enabled: bool = True
-    aggregate_duration: float = 1  # how long ago to check/look at results
-    # previous results older than that are discarded before each check/update.
-
-    use_dcs_y_low_limit: bool = True
-    dcs_y_low_limit: float = 0  # lower than this -> error condition
 
 
 class PelletMisplacedDetector(BaseDetector[PelletMisplacedDetectorConfiguration]):

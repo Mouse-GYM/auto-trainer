@@ -1,10 +1,8 @@
-
-import dataclasses
 import math
-from typing import Optional, Tuple, List
+from typing import Optional
 
 from autotrainer.core import get_perf_now, Offset3DTuple
-from autotrainer.core.configuration.detector import DetectorConfig
+from autotrainer.core.configuration.tunnel_sweep_config import AutoTunnelSweepConfiguration
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.analysis.detector import BaseDetector
@@ -15,14 +13,6 @@ logger = get_verbose_logger(__name__)
 
 
 _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
-
-
-@dataclasses.dataclass
-class AutoTunnelSweepConfiguration(DetectorConfig):
-    enabled: bool = False
-    misplaced_trigger_delay: float = 5
-    tunnel_fan_on_duration: float = 5
-    rate_limit_delay: float = 60
 
 
 class AutoTunnelSweepMonitor(BaseDetector):

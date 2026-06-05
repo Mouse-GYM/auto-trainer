@@ -1,6 +1,6 @@
 
-from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor, \
-    AudioSpectrumThrashMonitorConfig
+from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
+from autotrainer.core.configuration.audio_thrash_config import AudioSpectrumThrashMonitorConfig
 
 
 def test_detect_thrashing():

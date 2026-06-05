@@ -1,32 +1,15 @@
-import math
-from dataclasses import dataclass
 from math import floor
 from datetime import datetime
 from typing import List
-from typing_extensions import Self
 
 import numpy
 
 from .. import get_verbose_logger
 from .detector import BaseDetector
-from ..configuration.detector import DetectorConfig
 from autotrainer.api import ApiEventKind
-
+from ..configuration.headbar_pressure_config import HeadbarPressureConfiguration
 
 logger = get_verbose_logger(__name__)
-
-
-@dataclass
-class HeadbarPressureConfiguration(DetectorConfig):
-    threshold: float = 20
-    duration: float = 0.5
-
-    @classmethod
-    def from_version_zero(cls, content: dict) -> Self:
-        return cls(
-            threshold=content.get("threshold", 30),
-            duration=content.get("duration", 0.25)
-        )
 
 
 class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):

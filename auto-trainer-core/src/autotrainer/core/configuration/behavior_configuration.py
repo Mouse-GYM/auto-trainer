@@ -17,13 +17,13 @@ from .system_fault_config import SystemFaultConfig
 from .system_maintenance_config import SystemMaintenanceConfig
 from .. import build_kwargs_apply_mapping, make_camelize_representer, make_decamelize_constructor, Offset3DTuple
 
-from ..analysis import HeadbarPressureConfiguration
+from .headbar_pressure_config import HeadbarPressureConfiguration
 from .load_cell_config import LoadCellConfiguration, LoadCellAutoTareConfiguration
-from ..analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitorConfig
+from .audio_thrash_config import AudioSpectrumThrashMonitorConfig
 from .alarm_configuration import EmergencyAlarmConfiguration
-from ..analysis.auto_tunnel_fan_monitor import AutoTunnelSweepConfiguration
-from ..analysis.animal_thrash_alarm import AnimalThrashAlarmConfig
-from ..analysis.device_comm_alarm import DeviceCommAlarmConfig
+from .tunnel_sweep_config import AutoTunnelSweepConfiguration
+from .animal_thrash_config import AnimalThrashAlarmConfig
+from .device_comm_alarm_config import DeviceCommAlarmConfig
 
 logger = get_verbose_logger(__name__)
 
