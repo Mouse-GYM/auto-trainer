@@ -1,3 +1,4 @@
+import dataclasses
 import math
 from functools import partial
 from itertools import chain
@@ -300,7 +301,8 @@ class SystemMachine(StateMachine):
             wait_stop_recorded = True
 
         if self._pellet_machine.state == PelletState.monitoring:
-            self._pellet_machine.move_retract()
+            with algo.set_allow_reentrant(True):
+                self._pellet_machine.move_retract()
 
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
@@ -435,9 +437,11 @@ class SystemMachine(StateMachine):
         cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
+        logger.verbose("cur_project=%s", dataclasses.asdict(cur_project))
         algo = self._algorithm
         if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
-            self._pellet_machine.move_retract()
+            with algo.set_allow_reentrant(True):
+                self._pellet_machine.move_retract()
         #
         can_perform_analysis = (
             cur_project is not None

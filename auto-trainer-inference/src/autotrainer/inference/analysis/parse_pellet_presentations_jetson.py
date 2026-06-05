@@ -1,4 +1,5 @@
 import inspect
+import math
 import os
 import glob
 import pickle
@@ -238,11 +239,16 @@ def segment_reaches_f1(
             ploc = df_3d_pellet.iloc[:n_frames_mean].loc[df_3d_pellet['p'] == 1, pos].median()
             pellet_home.append(ploc)
 
-    t_presented = project.pellet_presented_perf_c - project.recording_start_perf_c
-    f_presented = int(t_presented * frame_rate)
+    rec_start_perf_c = project.recording_start_perf_c
+    pres_perf_c = project.pellet_presented_perf_c
+    if math.isfinite(rec_start_perf_c) and math.isfinite(pres_perf_c):
+        t_presented = pres_perf_c - rec_start_perf_c
+        f_presented = int(t_presented * frame_rate)
+    else:
+        f_presented = 0
 
     r = df_3d["Pellet"].iloc[f_presented:f_presented + 15].loc[df_3d_pellet['p'] == 1]
-    pellet_home = tuple(r.loc[pos].median() for pos in "xyz")
+    pellet_home = tuple(r[pos].median() for pos in "xyz")
 
     logger.verbose("segment_reaches: using pellet_home=%s", pellet_home)
 

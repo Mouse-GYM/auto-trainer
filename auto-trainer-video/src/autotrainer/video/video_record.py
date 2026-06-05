@@ -83,7 +83,7 @@ class VideoRecord(Thread):
         msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__(name=properties.name, daemon=True)
-        self._cam_idx = cam_index,
+        self._cam_idx = cam_index
         self._project_info = properties.project_info
         self._name = properties.name
         self._width = properties.frame_size[0]
@@ -213,10 +213,6 @@ class VideoRecord(Thread):
                             if tot_written == 1:
                                 vid_ts_file.flush()  # ensure first frame timestamps is flushed to disk,
                                 # for other reader(s).
-                            if tot_written == 1 and msg_q is not None:
-                                msg_q.put((
-                                    SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
-                                    (self._cam_idx, CaptureProcessStatus.RECORDING)))
 
                     if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
                         img_loc, img_name = self._image_location, self._image_name

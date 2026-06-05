@@ -315,6 +315,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         pose_paths: List[Path] = []
         cams_read_h5_dss: List[h5py.Dataset] = []
         cams_read_h5_idx: List[int] = []
+        cams_read_h5_fhs = []
         recording_in_progress = False
         next_prev_mode = None
         tot_written_to_live = None

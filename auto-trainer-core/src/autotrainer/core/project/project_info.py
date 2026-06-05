@@ -159,32 +159,35 @@ class ProjectInfo(_ProjectInfo):
             _session = RawValueHolder(session)
             if when is None:
                 raise ValueError("Cannot create ProjectInfo with session but without when")
-        self.root = root
-        self.device_id = device_id
-        self._when = _when
-        self.ensure_exists = ensure_exists
-        self.camera_1 = camera_1
-        self.camera_2 = camera_2
-        self.send_position = send_position
-        self.dcs_send_position = dcs_send_position
-        self._session = _session
-        if self._session is None and self._when is None:
+        if _session is None and _when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
-            self._session = ctx.Value(ctypes.c_uint32, 1)
+            _session = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
-            self._when = ctx.Value(ctypes.c_double,  # double required, not float !!
+            _when = ctx.Value(ctypes.c_double,  # double required, not float !!
                                    _get_datetime_now().timestamp(),
                                    # with mp_manager on 3.8 we would need to access private _getvalue
                                    # lock=(session_shared_obj if mp_manager is None
                                    #       else session_shared_obj._getvalue()).get_lock()
                                    # see:
                                    )
+        self.root = root
+        self.device_id = device_id
+        self._when = _when
+        self._session = _session
+        self.ensure_exists = ensure_exists
+        self.camera_1 = camera_1
+        self.camera_2 = camera_2
+        self.send_position = send_position
+        self.dcs_send_position = dcs_send_position
+        self.recording_start_perf_c = recording_start_perf_c
+        self.pellet_presented_perf_c = pellet_presented_perf_c
+        self.pellet_released_perf_c = pellet_released_perf_c
 
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
-            f"send_pos={self.send_position}, dcs_send_pos={self.dcs_send_position})"
-        )
+    # def __repr__(self):
+    #     return (
+    #         f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
+    #         f"send_pos={self.send_position}, dcs_send_pos={self.dcs_send_position})"
+    #     )
 
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
