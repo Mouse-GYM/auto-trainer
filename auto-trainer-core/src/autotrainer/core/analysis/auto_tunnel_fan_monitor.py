@@ -15,16 +15,14 @@ logger = get_verbose_logger(__name__)
 _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
 
 
-class AutoTunnelSweepMonitor(BaseDetector):
+class AutoTunnelSweepMonitor(BaseDetector[AutoTunnelSweepConfiguration]):
 
     config_cls = AutoTunnelSweepConfiguration
 
     def __init__(
-        self, config: AutoTunnelSweepConfiguration,
-        *,
-        pellet_misplaced_detector: PelletMisplacedDetector,
+        self, *, pellet_misplaced_detector: PelletMisplacedDetector,
     ):
-        super().__init__(config=config)
+        super().__init__()
         self._misplaced_detector = pellet_misplaced_detector
         self._timer_end_engaged = no_op_timer
         pellet_misplaced_detector.property_changed += self._on_pellet_misplaced_property_changed

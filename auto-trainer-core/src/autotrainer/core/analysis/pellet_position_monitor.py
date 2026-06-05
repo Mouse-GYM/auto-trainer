@@ -18,6 +18,8 @@ _offset_nans = Offset3DTuple(math.nan, math.nan, math.nan)
 
 class PelletMisplacedDetector(BaseDetector[PelletMisplacedDetectorConfiguration]):
 
+    config_cls = PelletMisplacedDetectorConfiguration
+
     use_daemon = True
     default_timer_delay = 0.25  # default delay between each check of the possible condition(s)
     # NB: should be at least 2 times smaller than aggregate_duration, otherwise given we expire too old data
@@ -25,8 +27,8 @@ class PelletMisplacedDetector(BaseDetector[PelletMisplacedDetectorConfiguration]
 
     detector_api_kind = ApiDetectorKind.pelletMisplaced
 
-    def __init__(self, config: PelletMisplacedDetectorConfiguration):
-        super().__init__(config=config)
+    def __init__(self):
+        super().__init__()
         self._prev_data: List[Tuple[float, Offset3DTuple]] = []
         self._dcs_config: Optional[DiamondTriangleOffsetConfig] = None
 

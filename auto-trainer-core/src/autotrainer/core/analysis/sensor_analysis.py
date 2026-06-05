@@ -86,9 +86,8 @@ class SensorAnalysis(ObservableObject):
 
         self._device_comm_alarm = DeviceCommAlarm()
 
-        self._pellet_misplaced_monitor = PelletMisplacedDetector(PelletMisplacedDetectorConfiguration())
+        self._pellet_misplaced_monitor = PelletMisplacedDetector()
         self._auto_tunnel_sweep_monitor = AutoTunnelSweepMonitor(
-            AutoTunnelSweepConfiguration(),
             pellet_misplaced_detector=self._pellet_misplaced_monitor,
         )
 
