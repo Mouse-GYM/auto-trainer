@@ -438,8 +438,7 @@ class PelletMachine(StateMachine):
             # basically when inference is back to live
             if self.can_load_pellet(use_any_cam=True):
                 reason = "load_pellet_when_not_seen_and_retract_or_loading"
-                logit()
-                with algo.set_allow_reentrant(True):
+                def action():
                     self.load_pellet(use_any_cam=True)
             else:
                 # current state is either retract or loading (loaded),
@@ -447,9 +446,22 @@ class PelletMachine(StateMachine):
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
                 if algo.can_send_pellet():
                     reason = "send_pellet_when_loaded_or_retract"
-                    logit()
-                    with algo.set_allow_reentrant(True):
-                        self.send_pellet()
+                    action = self.send_pellet
+                elif self._covered_state is not True and algo.can_cover_pellet():
+
+                    reason = "cover_when_loaded"
+                    action = self._before_cover_pellet
+                elif self._covered_state is not False and algo.can_release_pellet():
+                    reason = "release_when_loaded"
+                    action = self._before_release_pellet
+                    # NB: not using the trigger, which also change the actual current state,
+                    # only getting the action executed
+                else:
+                    action = None
+            if action is not None:
+                logit()
+                with algo.set_allow_reentrant(True):
+                    action()
 
         elif cur_state == PelletState.sending:
             if can_use_command:
@@ -474,13 +486,18 @@ class PelletMachine(StateMachine):
             # then the state will remains after, until another command/trigger/state-change is executed.
 
         elif cur_state == PelletState.home:
-            reason = "send_pellet_when_home"
-            if self.can_send_pellet():
+            if self.can_load_pellet():
+                reason = "load_pellet_when_home"
+                action = self.load_pellet
+            elif self.can_send_pellet():
+                reason = "send_pellet_when_home"
+                action = self.send_pellet
+            else:
+                action = None
+            if action is not None:
                 logit()
                 with algo.set_allow_reentrant(True):
-                    self.send_pellet()
-            else:
-                log_could_retry_shortly()
+                    action()
 
         elif cur_state == PelletState.monitoring:
 
