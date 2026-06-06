@@ -1086,8 +1086,13 @@ class SystemMachine(StateMachine):
             self._consider_start_session(reason="pellet-sent")
 
     def _on_pellet_released(self, *, perf_c: float):
+        project = self._project_info
+        if project is None:
+            return
+        logger.debug(
+            "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
+            perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
         if self._algorithm.is_in_session:
-            project = self._project_info
             if project is not None and project.pellet_released_perf_c < self._session_started_perf_c:
                 project.pellet_released_perf_c = perf_c
                 logger.debug("set pellet_released_perf_c=%.3f to project=%s", perf_c, project)

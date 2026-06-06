@@ -250,7 +250,6 @@ class PelletMachine(StateMachine):
             if self._covered_state is not True:
                 with self._algorithm.set_allow_reentrant(True):
                     self.cover_pellet()
-                self._api_status_token = None
         token = self._pellet_device.send_retract()
         if token is None:
             raise PelletDeviceCommandFailed
@@ -268,16 +267,15 @@ class PelletMachine(StateMachine):
             # External command. Safe to ignore.
             return
 
-        if token != self._api_status_token:
-            # External command while we are waiting for our own.  Track in case it is causing conflicts.
-            # self.post_event_content(ApiEventKind.pelletExternalToken, context=token)
-            logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
-                         token, self._api_status_token)
-            return
-
-        self._api_status_token = None
         perf_now = get_perf_now() if perf_c is None else perf_c
         api_evt = None
+
+        if token == self._api_status_token:
+            self._api_status_token = None
+            was_api_token = True
+        else:
+            was_api_token = False
+
         if token == self._token_pellet_send:
             self._send_end_perf_c = perf_now
             self._token_pellet_send = None
@@ -304,6 +302,14 @@ class PelletMachine(StateMachine):
         elif token == self._token_move_home:
             self._token_move_home = None
             api_evt = ApiEventKind.pelletHomeEnd
+
+        else:
+            if not was_api_token:
+                # External command while we are waiting for our own.  Track in case it is causing conflicts.
+                # self.post_event_content(ApiEventKind.pelletExternalToken, context=token)
+                logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
+                             token, self._api_status_token)
+                return
 
         if api_evt is not None:
             self.post_event_content(api_evt, data=dict(context=token))
@@ -537,7 +543,6 @@ class PelletMachine(StateMachine):
                     logit()
                     with algo.set_allow_reentrant(True):
                         release_or_cover_action()
-                        self._api_status_token = None  # no need wait for ack
                         self.monitor_pellet()
                 else:
                     log_could_retry_shortly()
