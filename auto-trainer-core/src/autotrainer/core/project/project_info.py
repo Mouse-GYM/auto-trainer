@@ -485,8 +485,6 @@ class ProjectInfo(_ProjectInfo):
             dct = {
                 field_name: getattr(self, field_name)
                 for field_name, field in
-                ((field.name.lstrip("_"), field)
-                for field in dataclasses.fields(self)
-                )
+                ((field.name.lstrip("_"), field) for field in dataclasses.fields(self))
             }
         return self.__class__(**dct)

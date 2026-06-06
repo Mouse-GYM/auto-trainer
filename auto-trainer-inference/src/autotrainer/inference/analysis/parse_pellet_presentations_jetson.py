@@ -209,17 +209,37 @@ def segment_reaches_f1(
     center_method: Tuple[int, str],
     debug: int,
 ):
+    # Calculate distance and speed
+    # bodyparts = df_3d.columns.get_level_values('bodyparts').unique()
+    bp4speed = ['R_Hand','L_Hand','Pellet']
+    for bp in bp4speed:
+        df_bp = df_3d[bp]
+        dist_vec = np.sqrt(
+              np.diff(df_bp['x']) ** 2
+            + np.diff(df_bp['y']) ** 2
+            + np.diff(df_bp['z']) ** 2
+        )  # calculate distance
+        dist_vec = np.concatenate(([dist_vec[0]], dist_vec))  # adjust size
+        speed_vec = dist_vec * (frame_rate / 1000)  # convert to speed in mm/ms
+
+        # Apply filter using filtfilt for smoothing
+        speed_vec_filt = filtfilt(coeffs, [1], speed_vec)
+        # speed_vec_filt[df_3d[bp]['p'] == 0] = np.nan
+        df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
+
     df_3d_pellet = df_3d["Pellet"]
     rec_start_perf_c = project.recording_start_perf_c
     pres_perf_c = project.pellet_presented_perf_c
+    released_perf_c = project.pellet_released_perf_c
+    f_presented = 0
+    f_released = 0
     if math.isfinite(rec_start_perf_c) and math.isfinite(pres_perf_c):
         t_presented = pres_perf_c - rec_start_perf_c
         f_presented = int(t_presented * frame_rate)
-        t_released = project.pellet_released_perf_c - rec_start_perf_c
-        f_released = int(t_released * frame_rate)
-    else:
-        f_presented = 0
-        f_released = math.nan
+        if math.isfinite(released_perf_c):
+            t_released = released_perf_c - rec_start_perf_c
+            f_released = int(t_released * frame_rate)
+
     # todo; using up to 15 frames arbitrarily, we might want be more precise
     r = df_3d_pellet.iloc[f_presented:f_presented + 15].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")

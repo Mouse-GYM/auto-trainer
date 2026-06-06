@@ -772,7 +772,7 @@ class SystemMachine(StateMachine):
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
-            logger.verbose("setting pellet-uncover valid ; max_dist=%.1f", max_y)
+            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f", min_y, max_y)
             ctx.start_min_y = min_y
         elif not valid and prev_valid:
             logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
@@ -1090,6 +1090,7 @@ class SystemMachine(StateMachine):
             project = self._project_info
             if project is not None and project.pellet_released_perf_c < self._session_started_perf_c:
                 project.pellet_released_perf_c = perf_c
+                logger.debug("set pellet_released_perf_c=%.3f to project=%s", perf_c, project)
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
