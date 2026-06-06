@@ -119,9 +119,9 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
-    recording_start_perf_c: float = -math.inf
-    pellet_presented_perf_c: float = -math.inf
-    pellet_released_perf_c: float = -math.inf
+    # recording_start_perf_c: float = -math.inf
+    t_pellet_presented: float = -math.inf
+    t_pellet_released: float = -math.inf
 
 
 @dataclass
@@ -140,9 +140,8 @@ class ProjectInfo(_ProjectInfo):
         session: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
-        recording_start_perf_c: float = _ProjectInfo.recording_start_perf_c,
-        pellet_presented_perf_c: float = _ProjectInfo.pellet_presented_perf_c,
-        pellet_released_perf_c: float = _ProjectInfo.pellet_released_perf_c,
+        t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
+        t_pellet_released: float = _ProjectInfo.t_pellet_released,
         #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
@@ -179,9 +178,8 @@ class ProjectInfo(_ProjectInfo):
         self.camera_2 = camera_2
         self.send_position = send_position
         self.dcs_send_position = dcs_send_position
-        self.recording_start_perf_c = recording_start_perf_c
-        self.pellet_presented_perf_c = pellet_presented_perf_c
-        self.pellet_released_perf_c = pellet_released_perf_c
+        self.t_pellet_presented = t_pellet_presented
+        self.t_pellet_released = t_pellet_released
 
     # def __repr__(self):
     #     return (
@@ -394,6 +392,12 @@ class ProjectInfo(_ProjectInfo):
         logger.success("Calculated next session index=%s when=%s",
                        self.session, self.when)
 
+    def _reset_vals(self, when, session):
+        with self:
+            self.when = when  # noqa
+            self.session = session  # noqa
+            self.t_pellet_presented = self.t_pellet_released = -math.inf
+
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
         if when is None:
@@ -414,9 +418,7 @@ class ProjectInfo(_ProjectInfo):
             except FileExistsError:
                 pass
             else:
-                with self:
-                    self.session = 1
-                    self.when = when
+                self._reset_vals(when, 1)
                 return
         if prev_when.date() < when.date():
             # actually the day directory could be already created from possible other writers to it,
@@ -433,9 +435,7 @@ class ProjectInfo(_ProjectInfo):
                 pass
             else:
                 logger.info("found fast next session: %s", tentative_p)
-                with self:
-                    self.session = new_session_nbr
-                    self.when = when
+                self._reset_vals(when, new_session_nbr)
                 return
 
         # slower code way
@@ -450,17 +450,13 @@ class ProjectInfo(_ProjectInfo):
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
         if len(session_vals) == 0:
             logger.debug("no existing sessions found")
-            with self:
-                self.session = 1
-                self.when = when
+            self._reset_vals(when, 1)
         else:
             logger.debug("found %s existing session directories", len(session_vals))
             session_vals.sort(reverse=True)
             greater_val = session_vals[0]
             logger.info("last session index for day: %s", greater_val)
-            with self:
-                self.session = greater_val + 1
-                self.when = when
+            self._reset_vals(when, greater_val + 1)
 
     def get_log_file_path(self, when: Optional[datetime] = None, *, auto_new: bool=True) -> Path:
         when = self._get_when_or_now(when)

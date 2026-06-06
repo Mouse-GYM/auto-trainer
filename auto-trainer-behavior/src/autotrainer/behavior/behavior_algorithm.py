@@ -254,6 +254,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
         self._last_capture_status_change_perf_c = -math.inf
+        self._recording_start_perf_c = -math.inf
 
         # self.max_pellets_per_headfix_session: int = 10  # unused
 
@@ -552,9 +553,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @capture_status.setter
     def capture_status(self, value: CaptureProcessStatus):
-        prev, self._capture_status = self._capture_status, value
-        self._last_capture_status_change_perf_c = get_perf_now()
+        self.set_capture_status(value)
+
+    def set_capture_status(self, status: CaptureProcessStatus, *, perf_now: Optional[float]=None):
+        if perf_now is None:
+            perf_now = get_perf_now()
+        prev, self._capture_status = self._capture_status, status
+        self._last_capture_status_change_perf_c = perf_now
+        if status == CaptureProcessStatus.RECORDING:
+            self._recording_start_perf_c = perf_now
         # self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
+
+    @property
+    def recording_start_perf_c(self) -> float:
+        return self._recording_start_perf_c
 
     @property
     def capture_status_age(self) -> float:

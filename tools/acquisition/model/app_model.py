@@ -618,13 +618,12 @@ class AppModel(ObservableObject):
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status, *r_args = args
                 if self._cameras[cam_idx].is_primary:
-                    algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
                     if new_status == CaptureProcessStatus.RECORDING:
-                        project = self._project_info
-                        if project is not None:
-                            recording_start_perf_c = r_args[0]  # if len(r_args) > 0 else get_perf_now()
-                            project.recording_start_perf_c = recording_start_perf_c
+                        p_now = r_args[0]
+                    else:
+                        p_now = get_perf_now()
+                    algo.set_capture_status(new_status, perf_now=p_now)
                     if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet

@@ -228,17 +228,14 @@ def segment_reaches_f1(
         df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
 
     df_3d_pellet = df_3d["Pellet"]
-    rec_start_perf_c = project.recording_start_perf_c
-    pres_perf_c = project.pellet_presented_perf_c
-    released_perf_c = project.pellet_released_perf_c
+    t_presented = project.t_pellet_presented
+    t_released = project.t_pellet_released
     f_presented = 0
     f_released = 0
-    if math.isfinite(rec_start_perf_c) and math.isfinite(pres_perf_c):
-        t_presented = pres_perf_c - rec_start_perf_c
+    if math.isfinite(t_presented):
         f_presented = int(t_presented * frame_rate)
-        if math.isfinite(released_perf_c):
-            t_released = released_perf_c - rec_start_perf_c
-            f_released = int(t_released * frame_rate)
+    if math.isfinite(t_released):
+        f_released = int(t_released * frame_rate)
 
     # todo; using up to 15 frames arbitrarily, we might want be more precise
     r = df_3d_pellet.iloc[f_presented:f_presented + 15].loc[df_3d_pellet['p'] == 1]

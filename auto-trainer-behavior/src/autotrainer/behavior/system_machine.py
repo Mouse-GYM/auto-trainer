@@ -436,10 +436,6 @@ class SystemMachine(StateMachine):
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
         cur_project = self._project_info
         if cur_project is not None:
-            cur_project.pellet_presented_perf_c = max(cur_project.recording_start_perf_c,
-                                                      cur_project.pellet_presented_perf_c)
-            cur_project.pellet_released_perf_c = max(cur_project.recording_start_perf_c,
-                                                     cur_project.pellet_released_perf_c)
             cur_project = cur_project.to_local_value()
             logger.verbose("cur_project=%s", dataclasses.asdict(cur_project))
         algo = self._algorithm
@@ -1087,7 +1083,7 @@ class SystemMachine(StateMachine):
                 project = self._project_info
                 if project is not None:
                     logger.debug("set project.pellet_presented_perf_c=%.3f", perf_c)
-                    project.pellet_presented_perf_c = perf_c
+                    project.t_pellet_presented = perf_c - self._algorithm.recording_start_perf_c
         else:
             self._consider_start_session(reason="pellet-sent")
 
@@ -1099,8 +1095,8 @@ class SystemMachine(StateMachine):
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
             perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
         if self._algorithm.is_in_session:
-            if project is not None and project.pellet_released_perf_c < self._session_started_perf_c:
-                project.pellet_released_perf_c = perf_c
+            if project is not None:
+                project.t_pellet_released = perf_c - self._algorithm.recording_start_perf_c
                 logger.debug("set pellet_released_perf_c=%.3f to project=%s", perf_c, project)
 
     def _update_magnet_position(self, position: float):
