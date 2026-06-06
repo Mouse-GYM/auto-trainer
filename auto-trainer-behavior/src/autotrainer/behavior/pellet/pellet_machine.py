@@ -525,6 +525,8 @@ class PelletMachine(StateMachine):
 
             elif algo.can_retract_pellet():
                 if can_use_command:
+                    reason = "retract_when_monitor"
+                    logit()
                     with algo.set_allow_reentrant(True):
                         self.move_retract()
 

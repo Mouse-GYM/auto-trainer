@@ -1058,6 +1058,7 @@ class SystemMachine(StateMachine):
         logger.verbose("received pellet_loaded p_now=%.4f", self._last_pellet_loaded_perf_c)
         self._algorithm.pellet_loaded()
         self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=0)
+        self._consider_start_session(reason="pellet_loaded")
 
     def _on_pellet_load_failed(self, *, consecutive: int):
         logger.verbose("received pellet_load_failed consecutive=%s", consecutive)
