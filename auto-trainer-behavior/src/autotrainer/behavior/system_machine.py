@@ -436,9 +436,14 @@ class SystemMachine(StateMachine):
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
         cur_project = self._project_info
         if cur_project is not None:
+            cur_project.pellet_presented_perf_c = max(cur_project.recording_start_perf_c,
+                                                      cur_project.pellet_presented_perf_c)
+            cur_project.pellet_released_perf_c = max(cur_project.recording_start_perf_c,
+                                                     cur_project.pellet_released_perf_c)
             cur_project = cur_project.to_local_value()
-        logger.verbose("cur_project=%s", dataclasses.asdict(cur_project))
+            logger.verbose("cur_project=%s", dataclasses.asdict(cur_project))
         algo = self._algorithm
+        # not sure necessary:
         if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
