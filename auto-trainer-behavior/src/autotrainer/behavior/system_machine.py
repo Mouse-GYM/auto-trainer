@@ -1081,6 +1081,7 @@ class SystemMachine(StateMachine):
                 self._session_pellet_sent_perf_c = perf_c
                 project = self._project_info
                 if project is not None:
+                    logger.debug("set project.pellet_presented_perf_c=%.3f", perf_c)
                     project.pellet_presented_perf_c = perf_c
         else:
             self._consider_start_session(reason="pellet-sent")

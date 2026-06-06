@@ -66,12 +66,12 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token: object, *, perf_now: float=math.nan):
-        logger.verbose("sending command ack: %s", token)
+    def _acknowledge_command(self, token: object, *, perf_c: float=math.nan):
+        logger.verbose("sending command ack: %s perf_c=%.3f", token, perf_c)
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
         if self._api is not None:
-            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_now))
+            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c))
 
     @property
     def api(self):
