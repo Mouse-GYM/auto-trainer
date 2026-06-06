@@ -444,20 +444,22 @@ class PelletMachine(StateMachine):
                 # current state is either retract or loading (loaded),
                 # even if pellet is not seen, send it to deliver,
                 # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
+                action = None
+                can_release = self.can_release_pellet()
+                can_cover = self.can_cover_pellet()
                 if algo.can_send_pellet():
                     reason = "send_pellet_when_loaded_or_retract"
                     action = self.send_pellet
-                elif self._covered_state is not True and algo.can_cover_pellet():
-
-                    reason = "cover_when_loaded"
-                    action = self._before_cover_pellet
-                elif self._covered_state is not False and algo.can_release_pellet():
-                    reason = "release_when_loaded"
-                    action = self._before_release_pellet
+                elif can_cover:
+                    if self._covered_state is not True:
+                        reason = "cover_when_loaded"
+                        action = self._before_cover_pellet
+                elif can_release:
+                    if self._covered_state is not False:
+                        reason = "release_when_loaded"
+                        action = self._before_release_pellet
                     # NB: not using the trigger, which also change the actual current state,
                     # only getting the action executed
-                else:
-                    action = None
             if action is not None:
                 logit()
                 with algo.set_allow_reentrant(True):

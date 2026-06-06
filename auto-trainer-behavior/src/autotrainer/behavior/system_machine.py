@@ -826,7 +826,9 @@ class SystemMachine(StateMachine):
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and self._pellet_machine.state == PelletState.monitoring
+            and (
+                self._pellet_machine.state == PelletState.monitoring
+                or algo.head_fixation_enabled)  # or using auto-clamp which allows start session before
         ):
             # this is mainly for when app/acquisition starts :
             # if load-cell is engaged before inference is live then we need this case/if.
