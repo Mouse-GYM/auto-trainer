@@ -77,13 +77,10 @@ class VideoRecordProperties:
 class VideoRecord(Thread):
     def __init__(
         self,
-        cam_index: int,
         properties: VideoRecordProperties,
         input_queue: Queue,
-        msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__(name=properties.name, daemon=True)
-        self._cam_idx = cam_index
         self._project_info = properties.project_info
         self._name = properties.name
         self._width = properties.frame_size[0]
@@ -94,7 +91,6 @@ class VideoRecord(Thread):
         self._image_interval = properties.image_interval
 
         self._input_queue: Queue = input_queue
-        self._msg_queue = msg_queue
 
         self._is_running = True
 
@@ -138,7 +134,6 @@ class VideoRecord(Thread):
 
     def _run(self) -> None:
         input_q = self._input_queue
-        msg_q = self._msg_queue
 
         project = self._project_info
         if project is None or not project.is_valid():
@@ -210,9 +205,6 @@ class VideoRecord(Thread):
                             vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}, {frame_id}\n")
                             prev_perf_now = frame_perf_now
                             prev_frame_when = frame_when
-                            if tot_written == 1:
-                                vid_ts_file.flush()  # ensure first frame timestamps is flushed to disk,
-                                # for other reader(s).
 
                     if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
                         img_loc, img_name = self._image_location, self._image_name

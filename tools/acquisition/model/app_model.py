@@ -590,10 +590,6 @@ class AppModel(ObservableObject):
         else:
             logger.verbose("consider_release_pellet but not in session")
 
-    def _read_trial_start_infos(self, project: ProjectInfo):
-        pass
-        # _, ts_path, _ = project.get_video_path()
-
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
@@ -609,15 +605,11 @@ class AppModel(ObservableObject):
                     continue
                 cmd = raw[0]
                 if len(raw) > 1:
-                    if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
-                        args = raw[1]
-                        kwargs = None
-                    else:
-                        args = raw[1]
-                        if len(raw) > 2:
-                            kwargs = raw[2]
-                            if len(raw) > 3:
-                                logger.warning("Unhandled extra args to status msg: %r", raw[3:])
+                    args = raw[1]
+                    if len(raw) > 2:
+                        kwargs = raw[2]
+                        if len(raw) > 3:
+                            logger.warning("Unhandled extra args to status msg: %r", raw[3:])
             else:
                 cmd = raw
             extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
@@ -631,7 +623,7 @@ class AppModel(ObservableObject):
                     if new_status == CaptureProcessStatus.RECORDING:
                         project = self._project_info
                         if project is not None:
-                            recording_start_perf_c = r_args[0] if len(r_args) > 0 else get_perf_now()
+                            recording_start_perf_c = r_args[0]  # if len(r_args) > 0 else get_perf_now()
                             project.recording_start_perf_c = recording_start_perf_c
                     if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(

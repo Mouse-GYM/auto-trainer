@@ -87,16 +87,8 @@ class IntersessionMachine(StateMachine):
             self.post_event_content(ApiEventKind.intertrialSegmentationBegin)
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
-        project = segment_config.project
-        logger.verbose(
-            "after_enter_detection: project=%s config_sess=%s",
-        )
-        if project is not None:
-            use_project = project.to_local_value()
-        else:
-            use_project = segment_config.project
         detection_config = DetectionConfiguration(
-            project=use_project,
+            project=segment_config.project,
             frame_rate=segment_config.frame_rate,
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)

@@ -261,11 +261,7 @@ class PelletMachine(StateMachine):
     def _pellet_device_ack_received(self, token: Optional[str], *, perf_c: Optional[float]=None):
         if token is None:
             return
-
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
-        # if self._api_status_token is None:
-        #     # External command. Safe to ignore.
-        #     return
 
         perf_now = get_perf_now() if perf_c is None else perf_c
         api_evt = None

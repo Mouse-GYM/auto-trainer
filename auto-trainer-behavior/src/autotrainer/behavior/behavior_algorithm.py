@@ -1213,6 +1213,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return self._is_in_session and (
                 # self._autoclamp_engaged_perf_c >= self._session_started_perf_c or
                 self._autoclamp_in_progress
+                # isn't there another possibility ?
             )
         return True
 
