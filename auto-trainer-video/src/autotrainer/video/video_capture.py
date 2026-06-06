@@ -648,8 +648,10 @@ class VideoCapture(Process):
                         if is_primary and msg_q is not None:
                             if __debug__:
                                 logger.debug("is_primary: Putting CaptureProcessStatus.RECORDING")
+                            #
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
-                                       (self._camera_idx, CaptureProcessStatus.RECORDING, first_frame_p_now)))
+                                       (self._camera_idx, CaptureProcessStatus.RECORDING,
+                                        first_frame_p_now, first_frame_when, first_frame_time)))
                         else:
                             if __debug__:
                                 logger.debug("not is_primary or msg_q None"

@@ -119,8 +119,8 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
-    # recording_start_perf_c: float = -math.inf
-    t_pellet_presented: float = -math.inf
+    start_record_timestamp: float = -math.inf  # regular unix timestamp, in seconds
+    t_pellet_presented: float = -math.inf  # in seconds (zero-based on start_recording)
     t_pellet_released: float = -math.inf
 
 
@@ -140,6 +140,7 @@ class ProjectInfo(_ProjectInfo):
         session: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
+        start_record_timestamp: float = _ProjectInfo.start_record_timestamp,
         t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
         t_pellet_released: float = _ProjectInfo.t_pellet_released,
         #
@@ -178,6 +179,7 @@ class ProjectInfo(_ProjectInfo):
         self.camera_2 = camera_2
         self.send_position = send_position
         self.dcs_send_position = dcs_send_position
+        self.start_record_timestamp = start_record_timestamp
         self.t_pellet_presented = t_pellet_presented
         self.t_pellet_released = t_pellet_released
 

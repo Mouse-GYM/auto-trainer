@@ -42,6 +42,7 @@ from autotrainer.core import (
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
+from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -396,7 +397,9 @@ class AppModel(ObservableObject):
         inference.pose_response_ready += self._on_pose_response_ready
         inference.detection_result_ready += self._on_detection_result_ready
         preferences.property_changed += self._on_preferences_property_changed
-        behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
+        algo = behavior_model.algorithm
+        algo.property_changed += self._on_behavior_algo_property_changed
+        algo.session_capture_ending += self._on_session_capture_ended
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
@@ -620,7 +623,11 @@ class AppModel(ObservableObject):
                 if self._cameras[cam_idx].is_primary:
                     self._timer_recording_age_enough.cancel()
                     if new_status == CaptureProcessStatus.RECORDING:
-                        p_now = r_args[0]
+                        first_frame_perf, first_frame_when, first_frame_time, *r_args = r_args
+                        p_now = first_frame_perf
+                        project = self._project_info
+                        if project is not None:
+                            project.start_record_timestamp = first_frame_time
                     else:
                         p_now = get_perf_now()
                     algo.set_capture_status(new_status, perf_now=p_now)
@@ -1245,7 +1252,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, session=None)
+        self._save_project_metadata(project_info, when=datetime.now(), session=None)
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1606,8 +1613,8 @@ class AppModel(ObservableObject):
         self._is_recording_trigger = notification.context
         project = self._project_info
         if notification.context and project is not None:
-            now = datetime.now()
-            self._save_metadata(now, project.get_metadata_file(project.session, when=now), project.session)
+            self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
+                                project.session)
 
     def _update_status_text_overlay(self):
         parts = []
@@ -1706,6 +1713,12 @@ class AppModel(ObservableObject):
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
+
+    def _on_session_capture_ended(self, reason: RecordingEndingReason):
+        project = self._project_info
+        if project is not None:
+            self._save_project_metadata(project)
+        self._behavior.system_machine.on_session_capture_ended(reason)
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
@@ -1932,20 +1945,23 @@ class AppModel(ObservableObject):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
         when = when if when is not None else (project_info.when if project_info.when is not None else datetime.now())
         file_name = project_info.get_metadata_file(session, when)
-        self._save_metadata(when, file_name, session)
+        self._save_metadata(project_info, when, file_name, session)
 
-    def _save_metadata(self, when: datetime, file_name: str, session: int = None):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: int = None):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
             "date": when.strftime("%Y%m%d_%H%M%S"),
             "created": when.timestamp(),
             "createdUtc": when_as_utc.timestamp(),  # same than created
+            "start_record_timestamp": project.start_record_timestamp,
             "serialNumber": self._preferences.serial_number or "",
             "appVersion": self._app_version,
             "animalName": self.animal_name,
             "notes": self.notes or "",
             "session": session,
-            "configuration": None
+            "t_pellet_presented": project.t_pellet_presented,
+            "t_pellet_released": project.t_pellet_released,
+            "configuration": None,
         }
 
         configuration = self._create_configuration()

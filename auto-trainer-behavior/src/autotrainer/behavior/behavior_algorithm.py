@@ -562,6 +562,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._last_capture_status_change_perf_c = perf_now
         if status == CaptureProcessStatus.RECORDING:
             self._recording_start_perf_c = perf_now
+            logger.debug("set recording_start_perf_c=%.3f", perf_now)
         # self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
 
     @property

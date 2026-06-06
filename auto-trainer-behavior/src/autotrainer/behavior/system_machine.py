@@ -53,6 +53,8 @@ _consider_close_gate_timer = make_daemon_timer
 
 class SystemMachine(StateMachine):
 
+    # _events_class
+
     states = list(SystemState)
 
     def __init__(self,
@@ -127,7 +129,7 @@ class SystemMachine(StateMachine):
         del algorithm  # using algo
 
         algo.session_starting += self._on_session_capture_started
-        algo.session_capture_ending += self._on_session_capture_ended
+        # algo.session_capture_ending += self._on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
@@ -406,13 +408,13 @@ class SystemMachine(StateMachine):
     def _on_session_capture_started(self):
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         prj = self._project_info
+        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         if prj is None or dcs_send_pos is None:
             logger.warning("project None or current dcs_send_pos None (DCS)")
         p_now = self._session_started_perf_c = get_perf_now()
         pellet_m = self._pellet_machine
         self._session_pellet_sent_perf_c = p_now if (
-            pellet_m.state == PelletState.monitoring
-            and self._algorithm.is_pellet_recently_seen()
+            pellet_m.state == PelletState.monitoring and pellet_recent_seen
         ) else None
         logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
@@ -422,12 +424,14 @@ class SystemMachine(StateMachine):
         if prj is not None:
             prj.send_position = self._pellet_device.last_set_position
             prj.dcs_send_position = dcs_send_pos
+            if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
+                prj.t_pellet_presented = 0
             logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
             self._inference.project = prj
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_session_capture_ended(self, reason: RecordingEndingReason):
+    def on_session_capture_ended(self, reason: RecordingEndingReason):
         self._timer_consider_auto_end_session.cancel()
         if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
             logger.notice("Forcing tare load cell due to %s", reason)
@@ -437,7 +441,7 @@ class SystemMachine(StateMachine):
         cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
-            logger.verbose("cur_project=%s", dataclasses.asdict(cur_project))
+            logger.verbose("capture_ended: project=%s", dataclasses.asdict(cur_project))
         algo = self._algorithm
         # not sure necessary:
         if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
