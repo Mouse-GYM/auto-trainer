@@ -248,7 +248,7 @@ class PelletMachine(StateMachine):
     def _before_move_retract(self):
         if self._algorithm.pellet_cover_enabled:
             if self._covered_state is not True:
-                with BehaviorAlgorithm.set_allow_reentrant(True):
+                with self._algorithm.set_allow_reentrant(True):
                     self.cover_pellet()
                 self._api_status_token = None
         token = self._pellet_device.send_retract()
@@ -611,61 +611,59 @@ class PelletMachine(StateMachine):
     # Note that transitions have conditions, where applicable.  What may appear to be unconditional calls to cover,
     # release, or otherwise perform pellet transitions will not succeed and perform those actions if these conditions
     # are met.
-    transitions = transitions_allow_functions([
-        dict(
-            trigger=load_pellet,
-            source="*",
-            dest=PelletState.loading,
-            before=_before_load_pellet,
-            conditions=can_load_pellet,
-        ),
-
-        dict(
-            trigger=send_pellet,
-            source="*",
-            dest=PelletState.sending,
-            before=_before_send_pellet,
-            conditions=can_send_pellet,
-        ),
-
-        dict(
-            trigger=cover_pellet,
-            source="*",
-            dest=PelletState.covering,
-            before=_before_cover_pellet,
-            conditions=can_cover_pellet,
-        ),
-
-        dict(
-            trigger=release_pellet,
-            source="*",
-            dest=PelletState.releasing,
-            before=_before_release_pellet,
-            conditions=can_release_pellet,
-        ),
-
-        dict(
-            trigger=monitor_pellet,
-            source="*",
-            dest=PelletState.monitoring,
-        ),
-
-        dict(
-            trigger=move_home,
-            source="*",
-            dest=PelletState.home,
-            before=_before_move_home,
-            conditions=can_move_home,
-        ),
-
-        dict(
-            trigger=move_retract,
-            source=(
-                # possible todo: don't see why we could not allow it from all states ("*")
-                # is only executed when going into intersession if/when pellet still present
-                PelletState.monitoring,
+    transitions = transitions_allow_functions(
+        [
+            dict(
+                trigger=load_pellet,
+                source="*",
+                dest=PelletState.loading,
+                before=_before_load_pellet,
+                conditions=can_load_pellet,
             ),
-            dest=PelletState.retract,
-            before=_before_move_retract,
-        ),
-    ])
+            dict(
+                trigger=send_pellet,
+                source="*",
+                dest=PelletState.sending,
+                before=_before_send_pellet,
+                conditions=can_send_pellet,
+            ),
+            dict(
+                trigger=cover_pellet,
+                source="*",
+                dest=PelletState.covering,
+                before=_before_cover_pellet,
+                conditions=can_cover_pellet,
+            ),
+            dict(
+                trigger=release_pellet,
+                source="*",
+                dest=PelletState.releasing,
+                before=_before_release_pellet,
+                conditions=can_release_pellet,
+            ),
+            dict(
+                trigger=monitor_pellet,
+                source="*",
+                dest=PelletState.monitoring,
+            ),
+            dict(
+                trigger=move_home,
+                source="*",
+                dest=PelletState.home,
+                before=_before_move_home,
+                conditions=can_move_home,
+            ),
+            dict(
+                trigger=move_retract,
+                source=(
+                    # possible todo: don't see why we could not allow it from all states ("*")
+                    # is only executed when going into intersession if/when pellet still present
+                    PelletState.monitoring,
+                    PelletState.covering,
+                    PelletState.sending,
+                ),
+                dest=PelletState.retract,
+                before=_before_move_retract,
+            ),
+        ]
+    )

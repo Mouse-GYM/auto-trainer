@@ -300,7 +300,7 @@ class SystemMachine(StateMachine):
             self._batch_project_sessions_finished = 0
             wait_stop_recorded = True
 
-        if self._pellet_machine.state == PelletState.monitoring:
+        if self._pellet_machine.state in {PelletState.monitoring, PelletState.covering, PelletState.sending}:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
 
