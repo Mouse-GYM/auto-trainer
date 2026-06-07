@@ -437,7 +437,7 @@ class CanDevice(Device):
             self._current_temperature = m.temperature_c
             self._current_humidity = m.humidity_percent
 
-        def set_current_digital(m):
+        def set_current_digital(m: MagnetDigitalInputs):
             self._current_digital = m.continuity_0
 
         def handle_motor_config(m: Union[StepperConfig, ServoConfig]):
