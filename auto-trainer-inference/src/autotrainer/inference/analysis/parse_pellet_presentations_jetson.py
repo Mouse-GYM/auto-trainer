@@ -236,9 +236,11 @@ def segment_reaches_f1(
         f_presented = int(t_presented * frame_rate)
     if math.isfinite(t_released):
         f_released = int(t_released * frame_rate)
+    if f_released < f_presented:
+        f_released = f_presented
 
-    # todo; using up to 15 frames arbitrarily, we might want be more precise
-    r = df_3d_pellet.iloc[f_presented:f_presented + 15].loc[df_3d_pellet['p'] == 1]
+    # todo; using up to 25 frames arbitrarily, we might want be more precise
+    r = df_3d_pellet.iloc[f_presented:f_presented + 25].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")
 
     logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s",

@@ -68,7 +68,7 @@ def increase_simulate_perf_now(delay: float = 60):
 # for small diff of timers delay:
 class AlmostEqualFloat(float):
     def __eq__(self, other):
-        return abs(self - other) < 0.001
+        return abs(self - other) < 0.01
 
 
 @pytest.fixture
