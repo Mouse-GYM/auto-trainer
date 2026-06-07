@@ -579,13 +579,14 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
+            pellet_m = self._behavior.system_machine.pellet
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
                            algo.pellet_recently_seen, algo.pellet_presence_age)
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            if algo.can_release_pellet():
+            if algo.can_release_pellet(pellet_state=pellet_m.state):
                 self._behavior.system_machine.pellet.environment_changed(
                     pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-recording-aged-enough")
                 # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,

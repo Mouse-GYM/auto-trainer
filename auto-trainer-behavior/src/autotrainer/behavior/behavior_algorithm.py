@@ -1291,7 +1291,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config.pellet_delivery
         return cfg.is_enabled and cfg.is_pellet_cover_enabled and not self._algo_paused
 
-    def can_release_pellet(self) -> bool:
+    def can_release_pellet(self, *, pellet_state: PelletState = PelletState.monitoring) -> bool:
         """Say if algo should release pellet"""
         # self._check_date()
         if self._status is not BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
@@ -1302,7 +1302,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         uncov_cfg = self._active_config.pellet_uncover
         ctx = self._uncover_ctx
         if self.can_cover_pellet():
-            if self._is_in_session:
+            if self._is_in_session and pellet_state == PelletState.monitoring:
                 p_now = get_perf_now()
                 return (
                     self._capture_status == CaptureProcessStatus.RECORDING

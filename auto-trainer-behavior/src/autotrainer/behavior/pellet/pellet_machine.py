@@ -162,12 +162,12 @@ class PelletMachine(StateMachine):
         # use can_cover which checks for both cover_pellet_enabled AND pellet_delivery_enabled:
         if algo.can_cover_pellet():
             if self._covered_state is not True:
-                with BehaviorAlgorithm.set_allow_reentrant(True):
+                with algo.set_allow_reentrant(True):
                     self.cover_pellet()
-        elif algo.can_release_pellet():
+        elif algo.can_release_pellet(pellet_state=self._state):
             # maybe auto-behavior/commands are not enabled given system/app not in good mode
             if self._covered_state is not False:
-                with BehaviorAlgorithm.set_allow_reentrant(True):
+                with algo.set_allow_reentrant(True):
                     self.release_pellet()
         token = self._pellet_device.send_pellet()
         if token is None:
@@ -230,7 +230,7 @@ class PelletMachine(StateMachine):
     def can_release_pellet(self, *, force: bool=False):
         can = force or (
             self.can_use_pellet_command()
-            and self._algorithm.can_release_pellet()
+            and self._algorithm.can_release_pellet(pellet_state=self._state)
         )
         if can != self._prev_can_release:
             self._prev_can_release = can
