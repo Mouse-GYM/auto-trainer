@@ -129,7 +129,7 @@ class SystemMachine(StateMachine):
         del algorithm  # using algo
 
         algo.session_starting += self._on_session_capture_started
-        # algo.session_capture_ending += self._on_session_capture_ended
+        algo.session_capture_ending += self.on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
@@ -441,7 +441,7 @@ class SystemMachine(StateMachine):
         cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
-            logger.verbose("capture_ended: project=%s", dataclasses.asdict(cur_project))
+            logger.verbose("capture_ended: project=%s", vars(cur_project))
         algo = self._algorithm
         # not sure necessary:
         if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:

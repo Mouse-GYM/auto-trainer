@@ -1719,7 +1719,9 @@ class AppModel(ObservableObject):
         project = self._project_info
         if project is not None:
             self._save_project_metadata(project)
-        self._behavior.system_machine.on_session_capture_ended(reason)
+        # self._behavior.system_machine.on_session_capture_ended(reason)
+        # NB: had to keep in system_machine for many tests.
+        # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
