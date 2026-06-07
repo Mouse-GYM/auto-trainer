@@ -2,7 +2,7 @@ import dataclasses
 from functools import partial
 from typing import Type, TypeVar, Generic, ClassVar, Optional, Callable, Dict, Set, List
 
-from autotrainer.api import ApiDetectorKind, ApiAlarmKind, ApiEventKind
+from autotrainer.api import ApiAlarmKind, ApiEventKind
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 
@@ -27,6 +27,11 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
         super().__init__(config=config)
         self._engaged_reasons: Set[str] = set()
         self._sub_detectors: Dict[str, AlarmSubDetectorContext] = {}
+        self.property_changed += self._on_property_changed_cb
+
+    def _on_property_changed_cb(self, name, value, _):
+        if name == self.CONFIG:
+            self.post_alarm_event()
 
     @property
     def engaged_reasons(self) -> List[str]:

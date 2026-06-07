@@ -2,7 +2,8 @@ from typing import Optional, Set, List
 
 import psutil
 
-from autotrainer.api import ApiDetectorKind
+from autotrainer.api import ApiDetectorKind, ApiAlarmKind
+from .alarm_detector import AlarmDetector
 
 from .detector import BaseDetector
 from .watchdog_monitor import WatchdogMonitor
@@ -11,20 +12,19 @@ from ..configuration.system_fault_config import SystemFaultConfig
 from ..event import post_api_detector_event_content
 
 
-class SystemFaultMonitor(BaseDetector[SystemFaultConfig]):
+class SystemFaultAlarm(AlarmDetector[SystemFaultConfig]):
 
     config_cls = SystemFaultConfig
+    alarm_api_kind = ApiAlarmKind.systemFault
 
     use_daemon = True  # for free disk space checks
     default_timer_delay = 30  # secs ; check is very fast so can afford do it regularly
 
-    CONFIG = BaseDetector.CONFIG
-
     FREE_DISK_SPACE_ENGAGED = "free_disk_space_engaged"
     WATCHDOG_ENGAGED = "watchdog_engaged"
 
-    def __init__(self, *, config: SystemFaultConfig, watchdog_monitor: WatchdogMonitor):
-        super().__init__(config=config)
+    def __init__(self, *, watchdog_monitor: WatchdogMonitor):
+        super().__init__()
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
         self._free_disk_space_engaged = False
@@ -36,16 +36,6 @@ class SystemFaultMonitor(BaseDetector[SystemFaultConfig]):
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
         self._logger.verbose("Received persistence config: %s", config)
-
-    @property
-    def config(self) -> SystemFaultConfig:
-        return self._config
-
-    @config.setter
-    def config(self, value: SystemFaultConfig):
-        prev, self._config = self._config, value
-        self._on_property_changed(self.CONFIG, value, prev)
-        self._logger.verbose("Received config: %s", value)
 
     @property
     def engaged_reasons(self) -> List[str]:
