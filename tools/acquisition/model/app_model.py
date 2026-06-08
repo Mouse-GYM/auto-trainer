@@ -24,10 +24,22 @@ from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, 
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
-from autotrainer.core import (ObservableObject, EventManager, SystemMessageHandler, SystemConfiguration,
-                              CameraId, PersistenceConfiguration, HardwareConfiguration, Notification,
-                              NotificationCenter, TriggerNotification, SystemStatusMessageKind, SensorAnalysis,
-                              Offset3DTuple)
+from autotrainer.core import (
+    ObservableObject,
+    EventManager,
+    SystemMessageHandler,
+    SystemConfiguration,
+    CameraId,
+    PersistenceConfiguration,
+    HardwareConfiguration,
+    Notification,
+    NotificationCenter,
+    TriggerNotification,
+    SystemStatusMessageKind,
+    SensorAnalysis,
+    Offset3DTuple,
+    Motor,
+)
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
@@ -238,6 +250,7 @@ class AppModel(ObservableObject):
         # existing sub-process(es).
 
         self._status = AppModelStatus.IDLE
+        self._start_count = 0
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
@@ -1052,6 +1065,8 @@ class AppModel(ObservableObject):
                 logger.warning("Acquisition already starting")
                 return False
             self._acquisition_starting = True
+            self._start_count += 1
+            is_first_start = self._start_count == 1
 
         algo = self._behavior.algorithm
         analysis = self._analysis

@@ -417,11 +417,11 @@ class CanInterface(DeviceInterface):
         self._magnet_addr: Optional[int] = None
 
         self._servo_configs = {}
-        self.magnet_config = self._servo_configs[Motor.TUNNEL_MAGNET_SERVO] = ServoConfig()
-        self.gate_config = self._servo_configs[Motor.TUNNEL_GATE_SERVO] = ServoConfig()
-        self.load_config = self._servo_configs[Motor.PELLET_LOAD_SERVO] = ServoConfig()
-        self.cover_config = self._servo_configs[Motor.PELLET_COVER_SERVO] = ServoConfig()
-        self.tunnel_fan_config = self._servo_configs[Motor.TUNNEL_FAN_SERVO] = ServoConfig()
+        self.magnet_config = ServoConfig()
+        self.gate_config = ServoConfig()
+        self.load_config = ServoConfig()
+        self.cover_config = ServoConfig()
+        self.tunnel_fan_config = ServoConfig()
 
         self._motor_configs = {}
         self.x_config = StepperConfig()
@@ -545,6 +545,11 @@ class CanInterface(DeviceInterface):
                 prev_warn = prev_err = False
             self._motors_prev_warn_error[m] = (prev_warn, prev_err)
 
+    def _set_servo_config(self, motor: Motor, config: ServoConfig):
+        config.motor = motor
+        config.target = target_of_motor(motor)
+        self._servo_configs[motor] = config
+
     @property
     def magnet_config(self):
         """
@@ -561,9 +566,8 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._magnet_config = config if config is not None else ServoConfig()
-        self._magnet_config.motor = Motor.TUNNEL_MAGNET_SERVO
-        self._magnet_config.target = target_of_motor(self._magnet_config.motor)
+        self._magnet_config = config
+        self._set_servo_config(Motor.TUNNEL_MAGNET_SERVO, config)
 
     @property
     def gate_config(self):
@@ -581,9 +585,8 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._gate_config = config if config is not None else ServoConfig()
-        self._gate_config.motor = Motor.TUNNEL_GATE_SERVO
-        self._gate_config.target = target_of_motor(self._gate_config.motor)
+        self._gate_config = config
+        self._set_servo_config(Motor.TUNNEL_GATE_SERVO, config)
 
     @property
     def load_config(self):
@@ -601,9 +604,8 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._load_config = config if config is not None else ServoConfig()
-        self._load_config.motor = Motor.PELLET_LOAD_SERVO
-        self._load_config.target = target_of_motor(self._load_config.motor)
+        self._load_config = config
+        self._set_servo_config(Motor.PELLET_LOAD_SERVO, config)
 
     @property
     def cover_config(self):
@@ -621,13 +623,13 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        self._cover_config = config if config is not None else ServoConfig()
-        self._cover_config.motor = Motor.PELLET_COVER_SERVO
-        self._cover_config.target = target_of_motor(self._cover_config.motor)
+        self._cover_config = config
+        self._set_servo_config(Motor.PELLET_COVER_SERVO, config)
 
-    def _set_motor_config(self, config):
-        config.target = target_of_motor(config.motor)
-        self._motor_configs[config.motor] = config
+    def _set_motor_config(self, motor: Motor, config):
+        config.motor = motor
+        config.target = target_of_motor(motor)
+        self._motor_configs[motor] = config
 
     @property
     def x_config(self):
@@ -645,9 +647,7 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        config = config if config is not None else StepperConfig()
-        config.motor = Motor.PELLET_X_MOTOR
-        self._set_motor_config(config)
+        self._set_motor_config(Motor.PELLET_X_MOTOR, config)
 
     @property
     def y_config(self):
@@ -665,9 +665,7 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        config = config if config is not None else StepperConfig()
-        config.motor = Motor.PELLET_Y_MOTOR
-        self._set_motor_config(config)
+        self._set_motor_config(Motor.PELLET_Y_MOTOR, config)
 
     @property
     def z_config(self):
@@ -685,19 +683,16 @@ class CanInterface(DeviceInterface):
         Args:
             config: new configuration
         """
-        config = config if config is not None else StepperConfig()
-        config.motor = Motor.PELLET_Z_MOTOR
-        self._set_motor_config(config)
+        self._set_motor_config(Motor.PELLET_Z_MOTOR, config)
 
     @property
     def tunnel_fan_config(self) -> ServoConfig:
         return self._tunnel_fan_config
 
     @tunnel_fan_config.setter
-    def tunnel_fan_config(self, value: ServoConfig):
-        self._tunnel_fan_config = value
-        value.motor = Motor.TUNNEL_FAN_SERVO
-        value.target = target_of_motor(Motor.TUNNEL_FAN_SERVO)
+    def tunnel_fan_config(self, config: ServoConfig):
+        self._tunnel_fan_config = config
+        self._set_servo_config(Motor.TUNNEL_FAN_SERVO, config)
 
     @property
     def pellet_address(self):
@@ -1133,7 +1128,7 @@ class CanInterface(DeviceInterface):
     def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
         config = self._servo_configs.get(motor)
         if config is None:
-            logger.error("Unknown servo motor: %s", motor)
+            raise RuntimeError(f"Unhandled servo: {motor}")
         return self._move_servo_motor(motor, position, config)
 
     def _move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):
