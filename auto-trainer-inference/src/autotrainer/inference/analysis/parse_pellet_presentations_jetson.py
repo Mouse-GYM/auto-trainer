@@ -110,6 +110,7 @@ def segment_reaches(
         logger.verbose("segment_reaches_f1: events=%s", pellet_events)
 
     pellets_consumed, pellets_presented, successful_reaches, total_reaches, rh_max_vp_list, reach_events = segment_reaches_f2(
+        project=project_info,
         fps=frame_rate,
         df_3d=df_3d,
         coeffs=coeffs,
@@ -256,6 +257,7 @@ def segment_reaches_f1(
 
 def segment_reaches_f2(
     *,
+    project: ProjectInfo,
     fps: int,
     df_3d: pd.DataFrame,
     coeffs,
@@ -380,15 +382,7 @@ def segment_reaches_f2(
                         if testA and testB:
                             if debug >= 2:
                                 logger.debug('reach began at frame %d!', frame)
-                            delay_since_presented = frame / fps
-                            # for now considering presented moment as the video start itself, so frame / fps.
-                            # eventual todo: this could otherwise be calculated as :
-                            #   A = session_start_perf_c + reach_init_frame / fps
-                            #       # which is ~= start of the reach-init, in perf_counter clock so
-                            #   B = max(pellet_sent_perf_c, session_start_perf_c)
-                            #       # which is ~= "pellet-presented" (arrived at deliver/send position)
-                            # and then doing:
-                            #   delay_since_presented = A - B
+                            delay_since_presented = frame / fps - project.t_pellet_presented
                             reach_dict = {
                                 'init': frame,
                                 'max': None,
