@@ -321,6 +321,8 @@ class CanDevice(Device):
             SystemCommandKind.REQUEST_VERSION:
                 lambda data: self._interface.request_version(),
 
+            SystemCommandKind.BOARD_REBOOT: self._interface.board_reboot,
+
             SystemCommandKind.MOVE_MAGNET_SERVO: partial(handle_servo_move, Motor.TUNNEL_MAGNET_SERVO),
 
             SystemCommandKind.MOVE_LOAD_SERVO: partial(handle_servo_move, Motor.PELLET_LOAD_SERVO),
@@ -435,7 +437,7 @@ class CanDevice(Device):
             self._current_temperature = m.temperature_c
             self._current_humidity = m.humidity_percent
 
-        def set_current_digital(m):
+        def set_current_digital(m: MagnetDigitalInputs):
             self._current_digital = m.continuity_0
 
         def handle_motor_config(m: Union[StepperConfig, ServoConfig]):
@@ -996,9 +998,6 @@ class CanDevice(Device):
             SystemCommandKind.SET_DIGITAL_OUTPUT,
             SystemCommandKind.SET_ANALOG_OUTPUT,
             SystemCommandKind.SET_RGB_LED,
-        }:
-            return Target.PELLET_DEVICE
-        elif kind in {
             SystemCommandKind.MOVE_X,
             SystemCommandKind.MOVE_Y,
             SystemCommandKind.MOVE_Z,
@@ -1042,6 +1041,8 @@ class CanDevice(Device):
             motor = data
         elif kind == SystemCommandKind.SERVO_DETACH:
             motor = data
+        elif kind == SystemCommandKind.BOARD_REBOOT:
+            return data
         elif kind == SystemCommandKind.REQUEST_VERSION:
             # it's both boards, but doesn't use uuid, so does not matter, safe to give any:
             return None

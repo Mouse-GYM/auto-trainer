@@ -397,16 +397,16 @@ class PelletMachine(StateMachine):
         can_use_command = self.can_use_pellet_command()
         all_cams_ctx = algo.all_cams_scene_parts_presence_context
         any_cams_ctx = algo.any_cams_scene_parts_presence_context
-        pellet_seen_all = all_cams_ctx.get_part_seen(SceneElement.Pellet)
-        triangle_seen_all = all_cams_ctx.get_part_seen(SceneElement.Triangle)
-        pellet_seen_any = any_cams_ctx.get_part_seen(SceneElement.Pellet)
 
         if can_use_command:  # wait no move in progress
+            pellet_seen_all = all_cams_ctx.get_part_seen(SceneElement.Pellet)
+            triangle_seen_all = all_cams_ctx.get_part_seen(SceneElement.Triangle)
+            pellet_seen_any = any_cams_ctx.get_part_seen(SceneElement.Pellet)
+
             if pellet_seen_all:
                 self._check_notify_pellet_loaded_ok(perf_now=perf_now)
-            elif not pellet_seen:  # and cur_state == PelletState.loading:
-                if triangle_seen_all and not pellet_seen_any:
-                    self._check_notify_pellet_load_failed(perf_now=perf_now)
+            elif triangle_seen_all and not pellet_seen_any:
+                self._check_notify_pellet_load_failed(perf_now=perf_now)
 
         if algo.algo_paused:  # really unsure we should keep,
             # we may want to handle the user commands still when algo-paused (emergency)

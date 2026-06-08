@@ -273,8 +273,8 @@ class AppModel(ObservableObject):
 
     @stimuli.setter
     def stimuli(self, value):
-        self._stimuli = self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value,
-                                                  self._stimuli)
+        prev, self._stimuli = self._stimuli, value
+        self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, prev)
 
     @property
     def config(self):

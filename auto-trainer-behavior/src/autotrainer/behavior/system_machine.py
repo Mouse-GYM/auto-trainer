@@ -569,11 +569,11 @@ class SystemMachine(StateMachine):
                 # really not sure about this "headfixLoadCellEnabledChanged"
                 ApiEventKind.headfixLoadCellEnabledChanged, data=dict(is_enabled=value))
             if value:
-                self._analysis.global_animal_presence_monitor.stop()
+                self._analysis.global_animal_presence_alarm.stop()
                 self._consider_enter_tunnel(reason="load_cell_engaged_when_in_cage")
             else:
                 if self._inference.status == InferenceStatus.live:
-                    self._analysis.global_animal_presence_monitor.start()
+                    self._analysis.global_animal_presence_alarm.start()
                 inter_state = self.intersession.state
                 if self._state != SystemState.cage:
                     if inter_state == IntersessionState.idle:
@@ -800,7 +800,7 @@ class SystemMachine(StateMachine):
         #
         algo.update_parts_seen(response)  # replace many previous update_xxx_seen()
         # refresh analysis with the parts presence context:
-        analysis.emergency_alarm_monitor.update_parts_context(algo.all_cams_scene_parts_presence_context)
+        analysis.presence_in_cage_alarm.update_parts_context(algo.all_cams_scene_parts_presence_context)
         new_pellet_recently_seen = algo.is_pellet_recently_seen()
         if math.isinf(self._last_pellet_loaded_perf_c) and new_pellet_recently_seen:
             # ensure ok if pellet already loaded on start
@@ -1046,12 +1046,12 @@ class SystemMachine(StateMachine):
         self._last_pellet_loaded_perf_c = p_now
         logger.verbose("received pellet_loaded p_now=%.4f", self._last_pellet_loaded_perf_c)
         self._algorithm.pellet_loaded()
-        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=0)
+        self._analysis.system_maintenance_alarm.update_failed_pellet_load(consecutive=0)
 
     def _on_pellet_load_failed(self, *, consecutive: int):
         logger.verbose("received pellet_load_failed consecutive=%s", consecutive)
         self._last_pellet_failed_loaded_perf_c = get_perf_now()
-        self._analysis.system_maintenance_monitor.update_failed_pellet_load(consecutive=consecutive)
+        self._analysis.system_maintenance_alarm.update_failed_pellet_load(consecutive=consecutive)
 
     def _on_pellet_state_changed(self, old_value, new_value):
         logger.verbose("pellet_state_changed: %s -> %s", old_value, new_value)

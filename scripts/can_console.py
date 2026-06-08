@@ -11,9 +11,21 @@ from enum import IntEnum
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, EventManager
 from autotrainer.core.logging import setup_logging
 from autotrainer.core.message import SystemDataArgsKwargs
-from autotrainer.device import CanDevice, DeviceConnection, Motor, \
-    StepperConfig, ServoConfig, motor_to_str, target_to_str, is_stepper, \
-    CompoundMovements, MotorConfigurationFile, StepperStatus, is_servo
+from autotrainer.device import (
+    CanDevice,
+    DeviceConnection,
+    Motor,
+    StepperConfig,
+    ServoConfig,
+    motor_to_str,
+    target_to_str,
+    is_stepper,
+    CompoundMovements,
+    MotorConfigurationFile,
+    StepperStatus,
+    is_servo,
+    Target,
+)
 
 msg_queue_active = True
 output_file = None
@@ -481,6 +493,19 @@ def run_monitor():
                 elif cmd == 'close_gate':
                     device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE, context="close_gate")
 
+                elif cmd == 'board_reboot':
+                    if len(params) != 1:
+                        logger.warning("expected 1 board target name (magnet or pellet)")
+                        continue
+                    if params[0] == "magnet":
+                        tgt = Target.MAGNET_DEVICE
+                    elif params[0] == "pellet":
+                        tgt = Target.PELLET_DEVICE
+                    else:
+                        logger.error("unknown target board: %s", params[0])
+                        continue
+                    device_connection.send_message(SystemCommandKind.BOARD_REBOOT, tgt, context=f"board_reboot_{tgt}")
+
                 elif cmd == "logger":
                     get_input = True
                     if len(params) == 0:
@@ -723,11 +748,19 @@ def print_help():
           " ::Set tunnel fan ON")
     print("fan_off                            "
           " ::Set tunnel fan OFF")
+    print("board_reboot <board>               "
+          " ::Reboot the given board, either magnet or pellet")
     print("v[ersion]                          "
           " ::Version")
     print("logger [<name>] <level>            "
           " ::Set logger [name] level")
     print()
+
+
+def parse_log_level(value: str):
+    if value.isdigit():
+        return int(value)
+    return value
 
 
 def main():
@@ -740,8 +773,12 @@ def main():
     parser.add_argument("-p", "--perf",
                         help="performance measurement with specified number of samples",
                         type=int, default=-1)
+    parser.add_argument("--log-level", default=logging.INFO, type=parse_log_level)
 
     args = parser.parse_args()
+
+    logging.getLogger("autotrainer").setLevel(args.log_level)  # can be changed with "logger" cli command
+    # logging.root.setLevel(args.log_level)
 
     output_file = args.output
 
@@ -751,6 +788,5 @@ def main():
 
 
 if __name__ == '__main__':
-    logger = setup_logging(time_precision=6)
-    logging.getLogger("autotrainer").setLevel("DEBUG")  # can be changed with "logger" cli command
+    logger = setup_logging(time_precision=4)
     sys.exit(main())

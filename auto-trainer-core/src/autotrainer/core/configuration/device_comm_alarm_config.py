@@ -1,11 +1,9 @@
-
-
 import dataclasses
 
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 
 
 @dataclasses.dataclass
-class ExternalDoorsAlarmConfig(AlarmDetectorConfig):
+class DeviceCommAlarmConfig(AlarmDetectorConfig):
 
-    trigger_open_delay: float = 3
+    is_emergency_condition: bool = True

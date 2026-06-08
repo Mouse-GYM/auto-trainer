@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 import shutil
 import textwrap
 import threading
@@ -168,7 +169,7 @@ class MainWindow(QMainWindow):
 
         analysis = app_model.analysis
         analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
-        analysis.system_maintenance_monitor.property_changed += self._on_system_maintenance_prop_changed
+        analysis.system_maintenance_alarm.property_changed += self._on_system_maintenance_prop_changed
         analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
         self.running_status_changed.connect(self._set_start_or_stop)
@@ -810,7 +811,7 @@ class MainWindow(QMainWindow):
 
     def _set_reset_vat_text(self):
         analysis = self._app_model.analysis
-        maint_cfg = analysis.system_maintenance_monitor.config
+        maint_cfg = analysis.system_maintenance_alarm.config
         prefs = self._preferences
         txt = (
             f"Reset vat pellet count (vat refilled)\n"
@@ -1252,7 +1253,7 @@ class MainWindow(QMainWindow):
 
     @invoke_method
     def _on_system_maintenance_prop_changed(self, name, value, _):
-        mon = self._app_model.analysis.system_maintenance_monitor
+        mon = self._app_model.analysis.system_maintenance_alarm
         if name == mon.CONFIG:
             self._set_reset_vat_text()
 
@@ -1324,32 +1325,77 @@ class MainWindow(QMainWindow):
             inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
             inference._intersession_process_execute = self._orig_inference_analysis_process
 
-    def _simulate_sessions(self, *, n_sessions: int=1, n_trials: int = 1, sess_sleep: float=4):
+    def _simulate_sessions(
+        self,
+        *,
+        n_sessions: int = 1,
+        n_trials: int = 1,
+        step_sleep: float = 0.2,
+        monitor_sleep: float = 0.75,
+        load_sleep: float = 0.75,
+        sess_sleep: float = 0.75,
+        rand_mouse_seen: float = 1,
+        rand_hands_near_pellet: float = 1,
+        rand_headfix_trigger = 0.5,
+        print: Callable[[str], None] = lambda s: logger.info(s),  # for interactive logs output
+    ):
         app = self._app_model
         pellet_m = app.behavior.system_machine.pellet
         algo = app.behavior.algorithm
         infe = app.inference
+        def do_sleep():
+            time.sleep(random.uniform(step_sleep, 3 * step_sleep))
         for sess_idx in range(n_sessions):
             if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                 return
-            logger.notice("starting new simulate session")
+            print("starting new simulate session")
             self.load_cell_trigger_action.trigger()
-            time.sleep(1)
+            do_sleep()
             for idx in range(n_trials):
-                if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
-                    return
-                time.sleep(1)
-                self.mouse_near_pellet_action.toggle()
-                self.mouse_near_pellet_action.trigger()
-                time.sleep(1)
-                self.mouse_seen_action.toggle()
-                self.mouse_seen_action.trigger()
-                time.sleep(3)
-                pellet_m.load_pellet(force=True)
-                time.sleep(1)
-                logger.verbose("waiting pellet monitoring or retract")
+                print("wait monitoring")
+                while pellet_m.state != PelletState.monitoring:
+                    if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                        return
+                    time.sleep(0.1)
+                time.sleep(random.uniform(monitor_sleep, 2 * monitor_sleep))
+                if random.random() <= rand_mouse_seen:
+                    print("setting mouse seen")
+                    algo.update_mouse_seen()
+                    do_sleep()
+                if random.random() <= rand_headfix_trigger:
+                    # self.force_headbar_detector_action.setChecked(True)
+                    set_headfix = True
+                    do_sleep()
+                    for _ in range(random.randint(1, 4)):
+                        print("setting headfix trigger")
+                        # self.force_headbar_detector_action.toggle()
+                        self.force_headbar_detector_action.trigger()
+                        for _ in range(2):
+                            do_sleep()
+                            algo.update_mouse_seen()
+                        do_sleep()
+                else:
+                    set_headfix = False
+                if random.random() <= rand_hands_near_pellet:
+                    print("setting mouse near pellet")
+                    self.mouse_near_pellet_action.toggle()
+                    self.mouse_near_pellet_action.trigger()
+                    do_sleep()
+                if set_headfix:
+                    for _ in range(2):
+                        # self.force_headbar_detector_action.toggle()
+                        self.force_headbar_detector_action.trigger()
+                        for _ in range(2):
+                            do_sleep()
+                            algo.update_mouse_seen()
+                        do_sleep()
+                time.sleep(random.uniform(load_sleep, 2 * load_sleep))
+                print("loading pellet")
+                pellet_m.load_pellet(force=True)  # this basically simulate pellet dropped or eaten
+                do_sleep()
+                print("waiting pellet monitoring or retract")
                 while pellet_m.state not in {PelletState.monitoring, PelletState.retract}:
-                    time.sleep(1)
+                    time.sleep(0.05)
                     if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                         return
                     if infe.status in {
@@ -1357,17 +1403,19 @@ class MainWindow(QMainWindow):
                         InferenceStatus.stopping,
                     }:
                         return
-                if infe.status == InferenceStatus.intersession or pellet_m.state == PelletState.retract:
-                    break
-                time.sleep(2)
+                # if infe.status == InferenceStatus.intersession or pellet_m.state == PelletState.retract:
+                #     break
+                do_sleep()
             #
             self.load_cell_trigger_action.trigger()
             time.sleep(2)
             while infe.status != InferenceStatus.live:
-                time.sleep(1)
                 if infe.status in {InferenceStatus.stopped, InferenceStatus.stopping}:
                     return
+                time.sleep(0.05)
             time.sleep(sess_sleep)
+        # end for session_idx in
+        print("finished all")
 
     def notes_changed(self, value: str):
         self._app_model.notes = value
