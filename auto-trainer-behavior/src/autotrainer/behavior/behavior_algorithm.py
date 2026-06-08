@@ -450,12 +450,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                res = func(*args) if kwargs is None else func(*args, **kwargs)
+                func(*args) if kwargs is None else func(*args, **kwargs)
                 if t_reentrant_count == 0 and handler_thread is None:
                     while reentrant_list:
                         func, args, kwargs, _ = reentrant_list.pop(0)
                         func(*args) if kwargs is None else func(*args, **kwargs)
-                return res
             finally:
                 cls._thread_locals.reentrant_count = t_reentrant_count
                 cls._thread_locals.allow_reentrant = t_allow_reentrant
@@ -1079,8 +1078,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     #
 
-    @relay_func(wait=False)
     def start_session(self, *, reason: str = "NA"):
+        """Start a session/trial recording"""
+        with self._thread_lock:
+            return self._start_session(reason=reason)
+
+    def _start_session(self, *, reason: str = "NA"):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session", reason)
             return False
@@ -1119,8 +1122,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         return True
 
-    @relay_func(wait=False)
     def end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
+        with self._thread_lock:
+            return self._end_capture_session(reason=reason)
+
+    def _end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)

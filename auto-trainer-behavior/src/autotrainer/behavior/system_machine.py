@@ -247,8 +247,7 @@ class SystemMachine(StateMachine):
             self._disengage_auto_clamp()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
-            with algo.set_allow_reentrant(True):
-                algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+            algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             batch_projects = self._batch_project_sessions_list
             if len(batch_projects) > 0:
@@ -1136,8 +1135,7 @@ class SystemMachine(StateMachine):
             self._timer_consider_start_session = timer
             timer.start()
             return
-        with BehaviorAlgorithm.set_allow_reentrant(True):
-            algo.start_session(reason=reason)
+        algo.start_session(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_end_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
@@ -1155,11 +1153,11 @@ class SystemMachine(StateMachine):
             if prev_timer.finished.is_set():
                 logger.verbose("creating timer for consider_end_session within %.1f", delay)
                 timer = self._timer_consider_end_session = _consider_end_session_timer(
-                    delay, lambda: algo.end_capture_session(reason=reason))
+                    # NB: using algo.put_func_call to ensure it's executed with algo thread handler
+                    delay, lambda: algo.put_func_call(algo.end_capture_session, kwargs=dict(reason=reason), wait=False))
                 timer.start()
         else:
-            with BehaviorAlgorithm.set_allow_reentrant(True):
-                algo.end_capture_session(reason=reason)
+            algo.end_capture_session(reason=reason)
 
     def _on_intersession_state_changed(self, old, new):
         self._algorithm.intersession_state = new
