@@ -490,16 +490,20 @@ class MockSystemMachine:
         assert self.pellet.state == PelletState.covering
         self.mock_pellet_ack()
 
-    def mock_pellet_ack(self, until_none: bool=False):
+    def mock_pellet_ack(self, until_none: bool=False, max_limit: int=45):
         """Ack the previous sent pellet command"""
+        cur_ack = 0
         while True:
             token = self.pellet._api_status_token
             if token is None:
                 break
+            cur_ack += 1
             self.increment_perf_now(1e-9)
             self.pellet._pellet_device_ack_received(token)
             if not until_none:
                 break
+            if cur_ack > max_limit:
+                raise RuntimeError("Too many consecutive pellet ack")
 
     def mock_pellet_missing(self, mouse_seen: bool = False):
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)

@@ -66,8 +66,10 @@ class TestShiftXYZ(MockSystemMachine):
             self.mock_intersession_analysis(results=rsp, project=project, stack=stack)
         )
         self.mock_pose_response(pellet_seen=False)
+        self.mock_pellet_ack(until_none=True)
         self.increment_perf_now(cfg.pellet_delivery.max_pellet_missing_seconds)
         self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+        
         # pellet not seen for missing delay
         #   -> load pellet triggered -> stop-session-recording -> not algo.is_in_session
         assert not algo.is_in_session

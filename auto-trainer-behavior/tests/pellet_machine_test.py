@@ -153,7 +153,8 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
         PelletState.releasing,
         PelletState.monitoring,
     ]
-    assert pellet_m._api_status_token is None, "we don't await the release"
+    assert pellet_m._api_status_token is not None, "we wait the release"
+    assert pellet_m._api_status_token is pellet_m._token_release_pellet
 
 
 def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system, machine):
@@ -191,7 +192,8 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
         PelletState.releasing,
         PelletState.monitoring,
     ]
-    assert pellet_m._api_status_token is None, "we don't await the release ack"
+    assert pellet_m._api_status_token is not None, "we wait the release ack"
+    assert pellet_m._api_status_token is pellet_m._token_release_pellet, "current token must the one of release pellet"
 
 
 @pytest.mark.skipif(True, reason="Session limits and associated logic currently on hold")

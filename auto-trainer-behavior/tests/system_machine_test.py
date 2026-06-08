@@ -202,8 +202,9 @@ def test_intersession_enabled(mock_system, machine):
         PelletState.monitoring,
     ]
     mock_system.pellet_state_trans.clear()
-    assert pellet_m._api_status_token is None  # but we don't await the cover ack
-
+    assert pellet_m._api_status_token is not None  # but we wait the cover ack
+    mock_system.mock_pellet_ack()
+    
     mock_system.make_load_cell_active()  # this trigger a start session recording
 
     assert algo.is_in_session
@@ -233,6 +234,10 @@ def test_intersession_enabled(mock_system, machine):
     ]
     assert pellet_m._api_status_token is not None, \
         "An API status token should be in use for the previous retract"
+    assert pellet_m._token_move_retract is pellet_m._api_status_token
+    mock_system.mock_pellet_ack()
+    assert pellet_m._api_status_token is None
+    assert pellet_m._token_move_retract is None
 
 
 def test_inference_detection_ready(machine):
@@ -387,7 +392,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     self = mock_system
     algo = machine.algorithm
     algo.reload_diamond_triangle_config()  # ensure it's loaded
-    machine.enter_tunnel()
+    mock_system.start_session_in_tunnel()
     pellet_m = machine.pellet
     diamond_cfg = machine.algorithm.diamond_triangle_config
     assert machine.state == SystemState.tunnel
@@ -430,6 +435,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     pose_changed()
     assert algo.get_diamond_triangle_drifts() == (0, 0, 0)
     locs_3d[se.Triangle] += (0.5, 1, -1)
+    mock_system.mock_pellet_ack()
     pose_changed()
     assert algo.get_diamond_triangle_drifts() == (0.25, -0.5, 0.5)  # given 2 measures now
     pose_changed()

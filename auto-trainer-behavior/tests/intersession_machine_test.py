@@ -108,10 +108,11 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
         with mock_system.mock_intersession_analysis(concurrent_func=perform_exit_tunnel):
             assert machine.state == SystemState.tunnel
             mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
+            mock_system.mock_pellet_ack(until_none=True)
             mock_system.increment_perf_now(algo.pellet_missing_time)
             mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
             assert machine.state == SystemState.intersession
             assert after_exit_tunnel_msg not in caplog.text
 
-    assert machine.state == SystemState.cage, "Must be back in tunnel after end intersession analysis"
+    assert machine.state == SystemState.cage, "Must be back in cage after end intersession analysis"
     assert after_exit_tunnel_msg in caplog.text
