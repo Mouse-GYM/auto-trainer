@@ -499,7 +499,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
 
         # load and set motors and move configs
+        # 1)
         motors_config = device_conn.load_default_motor_config()
+        # 2)
+        device_conn.load_default_move_config()
+        # 3)
         if self._connect_count == 1:
             logger.notice("Doing cover attach-release-detach on first connect")
             send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
@@ -507,8 +511,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
             send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
             # also need to re-apply the config
-
-        device_conn.load_default_move_config()
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
         logger.success("STREAM_START acknowledged")
