@@ -269,6 +269,12 @@ class TestTrainingPlan(BaseTrainingPlan):
         # so that pellet-send will be allowed with ack of previous retract:
 
         self.mock_pellet_ack()  # for retract
+        p_timeout = time.perf_counter() + 3
+        while time.perf_counter() < p_timeout:
+            if pellet_m.state == PelletState.sending:
+                break
+            self.mock_pellet_ack()
+            time.sleep(0.001)
         assert pellet_m.state == PelletState.sending
         self.mock_pellet_ack()  # for send
         assert pellet_m.state == PelletState.monitoring
