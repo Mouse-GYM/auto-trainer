@@ -1095,6 +1095,9 @@ class SystemMachine(StateMachine):
         project = self._project_info
         if project is None:
             return
+        # for some reason the cover arm looks to sometimes still be finishing its move up to ~2-3 frames after
+        # the perf_c we receive, it might be it's related to its inertia.
+        perf_c += 0.012  # small correction for best result
         logger.debug(
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
             perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
