@@ -1240,10 +1240,6 @@ class AppModel(ObservableObject):
                 return t_end
             watchdog_mon_register("test-watchdog", lambda t=time.perf_counter() + 180: fake_watchdog(t))
 
-        #
-        if is_first_start:
-            pass
-
         # we always be/go at home on acquisition start, so:
         self._behavior.system_machine.pellet.move_home(force=True)
 

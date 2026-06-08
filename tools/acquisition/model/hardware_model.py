@@ -503,7 +503,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if self._connect_count == 1:
             logger.notice("Doing cover attach-release-detach on first connect")
             send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET, Motor.PELLET_COVER_SERVO)
+            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
             send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
             send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
             # also need to re-apply the config
