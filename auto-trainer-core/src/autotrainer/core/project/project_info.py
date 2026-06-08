@@ -119,9 +119,9 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
-    start_record_timestamp: float = -math.inf  # regular unix timestamp, in seconds
-    t_pellet_presented: float = -math.inf  # in seconds (zero-based on start_recording)
-    t_pellet_released: float = -math.inf
+    start_record_timestamp: float = math.nan  # regular unix timestamp, in seconds
+    t_pellet_presented: float = math.nan  # in seconds (zero-based on start_recording)
+    t_pellet_released: float = math.nan
 
 
 @dataclass
@@ -398,7 +398,7 @@ class ProjectInfo(_ProjectInfo):
         with self:
             self.when = when  # noqa
             self.session = session  # noqa
-            self.t_pellet_presented = self.t_pellet_released = -math.inf
+            self.start_record_timestamp = self.t_pellet_presented = self.t_pellet_released = math.nan
 
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""

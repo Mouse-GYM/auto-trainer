@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import List
+from unittest.mock import patch
 
 import h5py.h5f
 import numpy
@@ -25,6 +26,33 @@ calib_dir = this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME)
 
 
 AEF = AlmostEqualFloat
+
+
+def _init_t_presented_released(self: ProjectInfo):
+    self.t_pellet_presented = self.t_pellet_released = 0
+
+
+class _ProjectInfo(ProjectInfo):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _init_t_presented_released(self)
+
+
+@pytest.fixture(autouse=True)
+def _patch_project_info_for_t_presented_released(ProjectInfo=ProjectInfo):  # ensure orig
+    original_init = ProjectInfo.__init__
+
+    # Define your custom setup logic
+    def mocked_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        _init_t_presented_released(self)
+
+    # Patch the __init__ method of the target class
+    with patch.object(ProjectInfo, "__init__", autospec=True, side_effect=mocked_init):
+        yield
+
+
+ProjectInfo = _ProjectInfo  # for below top level ProjectInfo creation
 
 
 def assert_deep_almost_equal(obj1, obj2, *, places=3, delta=None):

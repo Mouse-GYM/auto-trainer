@@ -62,7 +62,8 @@ class ValueHolderDescriptor:
     def __get__(self, instance, owner):
         if instance is None:
             return self
-        return self._convert_from(getattr(instance, self._priv_name).value)
+        value_holder = getattr(instance, self._priv_name)
+        return None if value_holder is None else self._convert_from(value_holder.value)
 
     def __set__(self, instance, value):
         getattr(instance, self._priv_name).value = self._convert_to(value)
