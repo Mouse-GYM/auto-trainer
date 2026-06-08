@@ -157,7 +157,7 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     # handle bound method vs normal function:
     @functools.wraps(base_func)
     def wrapped(*args, **kwargs):
-        return BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
+        BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
     #
     wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
     #
