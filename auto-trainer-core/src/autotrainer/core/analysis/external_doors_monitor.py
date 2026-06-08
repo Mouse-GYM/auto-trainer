@@ -2,12 +2,13 @@ import dataclasses
 import math
 from typing import Dict, Tuple, Optional, NamedTuple
 
-from autotrainer.api import ApiDetectorKind
+from autotrainer.api import ApiDetectorKind, ApiAlarmKind
 
 from autotrainer.core import get_perf_now
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
+from autotrainer.core.configuration.external_doors_monitor_configuration import ExternalDoorsAlarmConfig
 from autotrainer.core.message.system_status_message import SystemStatusMessageKind
 
 logger = get_verbose_logger(__name__)
@@ -61,14 +62,15 @@ def _make_doors_state():
     )
 
 
-class ExternalDoorsMonitor(BaseDetector):
+class ExternalDoorsAlarm(AlarmDetector[ExternalDoorsAlarmConfig]):
 
     CONFIG = BaseDetector.CONFIG
-    config_cls = ExternalDoorsMonitorConfig
+    config_cls = ExternalDoorsAlarmConfig
 
-    def __init__(self, config: ExternalDoorsMonitorConfig):
+    alarm_api_kind = ApiAlarmKind.externalDoors
+
+    def __init__(self):
         super().__init__()
-        self._config = config
         self._doors_state = _make_doors_state()
 
     @property
@@ -110,5 +112,5 @@ class ExternalDoorsMonitor(BaseDetector):
         logger.notice("%s: is_open: %s -> %s", door_kind, state.open, is_open)
         new_perf_c = get_perf_now() if is_open else state.perf_c
         self._doors_state.set_door(door_kind, DoorState(is_open, new_perf_c))
-        self.check_state()
         self.post_detector_event(_door_2_api_detector_kind[door_kind], is_open)
+        self.check_state()

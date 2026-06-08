@@ -145,15 +145,21 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         analysis.load_cell_monitor.load_configuration(config.load_cell)
         analysis.load_cell_tare_monitor.config = config.auto_tare
         analysis.audio_thrashing_monitor.config = config.audio
-        analysis.global_animal_presence_monitor.config = config.global_animal_presence
-        analysis.external_doors_monitor.config = config.external_doors
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
-        analysis.system_maintenance_monitor.config = config.system_maintenance
-        analysis.system_fault_monitor.config = config.system_fault
         analysis.autoclamp_evasion_detector.config = config.autoclamp_evasion_detector
+        #
         alarm_cfg = config.emergency_alarm
         analysis.emergency_alarm_monitor.config = alarm_cfg
-        analysis.animal_evasion_alarm.config = alarm_cfg.autoclamp_evasion
+        # also need to set explicitly the different alarm configs on their alarm instance:
+        analysis.animal_evasion_alarm.config = alarm_cfg.animal_evasion
+        analysis.animal_thrashing_alarm.config = alarm_cfg.animal_thrashing
+        analysis.system_fault_alarm.config = alarm_cfg.system_fault
+        analysis.system_maintenance_alarm.config = alarm_cfg.system_maintenance
+        analysis.presence_in_cage_alarm.config = alarm_cfg.presence_in_cage
+        analysis.global_animal_presence_alarm.config = alarm_cfg.global_animal_presence
+        analysis.device_comm_alarm.config = alarm_cfg.device_comm_error
+        analysis.external_doors_alarm.config = alarm_cfg.external_doors
+        # so that they emit the CONFIG changed event.
 
     def save_configuration(self) -> BehaviorConfiguration:
         algo = self._system_machine.algorithm
@@ -175,15 +181,19 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         config.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
         config.headbar_pressure = analysis.headbar_pressure_monitor.config
         config.audio = analysis.audio_thrashing_monitor.config
-        alarm_cfg = analysis.emergency_alarm_monitor.config
-        config.emergency_alarm = alarm_cfg
+        #
+        alarm_cfg = config.emergency_alarm = analysis.emergency_alarm_monitor.config
+        alarm_cfg.external_doors = analysis.external_doors_alarm.config
+        alarm_cfg.global_animal_presence = analysis.global_animal_presence_alarm.config
+        alarm_cfg.device_comm_error = analysis.device_comm_alarm.config
+        alarm_cfg.presence_in_cage = analysis.presence_in_cage_alarm.config
+        alarm_cfg.animal_thrashing = analysis.animal_thrashing_alarm.config
+        alarm_cfg.system_fault = analysis.system_fault_alarm.config
+        alarm_cfg.system_maintenance = analysis.system_maintenance_alarm.config
+        alarm_cfg.animal_evasion = analysis.animal_evasion_alarm.config
+
         top_cam = algo.top_camera_presence_detection
         config.topcam_presence_detection = None if top_cam is None else top_cam.to_config()
-        config.global_animal_presence = analysis.global_animal_presence_monitor.config
-        config.external_doors = analysis.external_doors_monitor.config
-        config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
-        config.system_maintenance = analysis.system_maintenance_monitor.config
-        config.system_fault = analysis.system_fault_monitor.config
         config.autoclamp_evasion_detector = analysis.autoclamp_evasion_detector.config
 
         config = dataclasses.replace(algo.active_config, **assigned)

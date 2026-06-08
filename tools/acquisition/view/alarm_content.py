@@ -1,4 +1,6 @@
+import dataclasses
 from functools import partial
+from typing import Dict, Callable
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QPalette, QColor
@@ -7,9 +9,11 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QFormLayout, QSizePolicy, QSc
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core import LoadCellMonitor, get_verbose_logger
 from autotrainer.core.analysis import EmergencyAlarmMonitor
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
-from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
+from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceAlarm
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
+from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.pyside import CardWidget, StatusIcon
 from autotrainer.pyside.content_widget import ContentWidget, invoke_method
 
@@ -17,6 +21,14 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.hardware_model import HardwareModel
 
 logger = get_verbose_logger(__name__)
+
+
+@dataclasses.dataclass
+class AlarmContentContext:
+    alarm: AlarmDetector
+    property_changed_cb: Callable
+    icon: StatusIcon
+    label: QLabel
 
 
 def make_alarm_icon(name):
@@ -39,34 +51,24 @@ def make_icon(size: int = 18, off_color: str = "black", name: str = "NA"):
     return ico
 
 
+def make_label(txt: str) -> QLabel:
+    lbl = QLabel(txt)
+    palette = lbl.palette()
+    palette.setColor(
+        QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText, QColor("black")
+    )
+    palette.setColor(
+        QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("gray")
+    )
+    # NB: Inactive != Disabled, later has to be used. Same for WindowText vs Text roles.
+    lbl.setPalette(palette)
+    return lbl
+
+
 class AlarmContent(ContentWidget):
     """
     Widget to display alarm content.
     """
-
-    # alarm monitor:
-    use_load_cell_audio_thrash_changed = Signal(bool)
-    load_cell_audio_thrash_changed = Signal(bool)
-
-    use_presence_in_cage_after_exit_tunnel_changed = Signal(bool)
-    presence_in_cage_after_exit_tunnel_changed = Signal(bool)
-
-    use_external_door_changed = Signal(bool)
-    external_door_status_changed = Signal(bool)
-
-    use_global_animal_presence_changed = Signal(bool)
-    global_animal_presence_changed = Signal(bool)
-
-    use_device_comm_error_changed = Signal(bool)
-    device_comm_error_status_changed = Signal(bool)
-
-    use_system_maintenance_changed = Signal(bool)
-    system_maintenance_changed = Signal(bool)
-
-    use_system_fault_changed = Signal(bool)
-    system_fault_changed = Signal(bool)
-
-    #
 
     load_cell_thrashing_changed = Signal(bool, name="load_cell_thrashing_changed")
     audio_thrashing_changed = Signal(bool, name="audio_thrashing_changed")
@@ -90,13 +92,14 @@ class AlarmContent(ContentWidget):
         content_layout.setSpacing(16)
         content_layout.setContentsMargins(8, 4, 8, 4)
 
-        form_layout_alarms = QFormLayout()
+        form_layout_alarms = self._form_layout_alarms = QFormLayout()
         form_layout_alarms.setHorizontalSpacing(8)
         form_layout_alarms.setVerticalSpacing(4)
         form_layout_alarms.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
-        emergency_alarm = app_model.behavior.analysis.emergency_alarm_monitor
-        alarm_cfg = emergency_alarm.config
+        analysis = app_model.behavior.analysis
+
+        self._alarms: Dict[str, AlarmContentContext] = {}
 
         label = QLabel("<b>Alarms</b>")
         label.setContentsMargins(0, 0, 0, 4)
@@ -104,71 +107,13 @@ class AlarmContent(ContentWidget):
 
         make_detector_icon = partial(make_icon, off_color="black")
 
-        def make_label(txt: str) -> QLabel:
-            lbl = QLabel(txt)
-            palette = lbl.palette()
-            palette.setColor(QPalette.ColorGroup.Active, QPalette.ColorRole.WindowText, QColor("black"))
-            palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor("gray"))
-            # NB: Inactive != Disabled, later has to be used. Same for WindowText vs Text roles.
-            lbl.setPalette(palette)
-            return lbl
-
-        icon = self._mouse_thrashing_status = make_alarm_icon("alarm-thrashing")
-        label = self._mouse_thrashing_label = make_label("Thrashing:")
-        form_layout_alarms.addRow(label, icon)
-        self.use_load_cell_audio_thrash_changed.connect(label.setEnabled)
-        self.use_load_cell_audio_thrash_changed.connect(icon.setInUse)
-        self.use_load_cell_audio_thrash_changed.emit(alarm_cfg.use_audio_load_cell_thrash)
-        self.load_cell_audio_thrash_changed.connect(icon.setStatus)
-
-        icon = self._in_cage_after_tunnel_status = make_alarm_icon("alarm-missing")
-        label = self._in_cage_after_tunnel_label = make_label("Mouse Missing:")
-        form_layout_alarms.addRow(label, icon)
-        self.use_presence_in_cage_after_exit_tunnel_changed.connect(label.setEnabled)
-        self.use_presence_in_cage_after_exit_tunnel_changed.connect(icon.setInUse)
-        self.use_presence_in_cage_after_exit_tunnel_changed.emit(alarm_cfg.use_presence_missing_after_exit_tunnel)
-        self.presence_in_cage_after_exit_tunnel_changed.connect(icon.setStatus)
-
-        icon = self._external_door_status = make_alarm_icon("alarm-ext-doors")
-        label = self._external_door_label = make_label("External doors:")
-        form_layout_alarms.addRow(label, icon)
-        self.use_external_door_changed.connect(label.setEnabled)
-        self.use_external_door_changed.connect(icon.setInUse)
-        self.use_external_door_changed.emit(alarm_cfg.use_external_doors_open)
-        self.external_door_status_changed.connect(icon.setStatus)
-
-        icon = self._device_comm_error_status = make_alarm_icon("alarm-ext-doors")
-        label = self._device_comm_error_label = make_label("Device Comm. Error:")
-        self.use_device_comm_error_changed.connect(label.setEnabled)
-        self.use_device_comm_error_changed.connect(icon.setInUse)
-        self.use_device_comm_error_changed.emit(alarm_cfg.use_device_comm_error)
-        self.device_comm_error_status_changed.connect(icon.setStatus)
-        form_layout_alarms.addRow(label, icon)
-
-        if GlobalAnimalPresenceMonitor.feature_enabled:
-            icon = self._animal_missing_status = make_alarm_icon(name="animal-immobile")
-            label = self._animal_missing_label = make_label("Animal Immobile:")
-            form_layout_alarms.addRow(label, icon)
-            self.use_global_animal_presence_changed.connect(label.setEnabled)
-            self.use_global_animal_presence_changed.connect(icon.setInUse)
-            self.use_global_animal_presence_changed.emit(alarm_cfg.use_global_animal_presence)
-            self.global_animal_presence_changed.connect(icon.setStatus)
-
-        icon = self._system_maintenance_status = make_alarm_icon(name="system-maintenance")
-        label = self._system_maintenance_label = make_label("System Maintenance:")
-        self.use_system_maintenance_changed.connect(label.setEnabled)
-        self.use_system_maintenance_changed.connect(icon.setInUse)
-        self.use_system_maintenance_changed.emit(alarm_cfg.use_system_maintenance)
-        self.system_maintenance_changed.connect(icon.setStatus)
-        form_layout_alarms.addRow(label, icon)
-
-        icon = self._system_fault_status = make_alarm_icon(name="system-fault")
-        label = self._system_fault_label = make_label("System Fault:")
-        self.use_system_fault_changed.connect(label.setEnabled)
-        self.use_system_fault_changed.connect(icon.setInUse)
-        self.use_system_fault_changed.emit(alarm_cfg.use_system_fault)
-        self.system_fault_changed.connect(icon.setStatus)
-        form_layout_alarms.addRow(label, icon)
+        self.register_alarm("Thrashing", analysis.animal_thrashing_alarm)
+        self.register_alarm("Mouse Missing", analysis.presence_in_cage_alarm)
+        self.register_alarm("External Doors", analysis.external_doors_alarm)
+        self.register_alarm("Device Comm. Error", analysis.device_comm_alarm)
+        self.register_alarm("Animal Immobile", analysis.global_animal_presence_alarm)
+        self.register_alarm("System Maintenance", analysis.system_maintenance_alarm)
+        self.register_alarm("System Fault", analysis.system_fault_alarm)
 
         #
 
@@ -229,16 +174,35 @@ class AlarmContent(ContentWidget):
 
         hardware_model.property_changed += self._hardware_model_property_changed
         #
-        analysis = app_model.analysis
         analysis.load_cell_monitor.property_changed += self._load_cell_property_changed
         analysis.audio_thrashing_monitor.property_changed += self._audio_thrashing_property_changed
-        analysis.global_animal_presence_monitor.property_changed += self._global_animal_presence_property_changed
         # emergency alarm controls 3 sub-alarms:
-        analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
-        # analysis.external_doors_monitor.property_changed += self._ext_door_property_changed
         analysis.pellet_misplaced_monitor.property_changed += self._pellet_misplaced_property_changed
-        analysis.system_maintenance_monitor.property_changed += self._system_maint_mon_property_changed
-        analysis.system_fault_monitor.property_changed += self._on_system_fault_mon_property_changed
+        analysis.system_maintenance_alarm.property_changed += self._system_maint_mon_property_changed
+
+    @invoke_method
+    def _on_alarm_prop_changed(self, ctx: AlarmContentContext, name: str, value, _):
+        self._refresh_alarm(ctx)
+
+    def register_alarm(self, label: str, alarm: AlarmDetector):
+        self.unregister_alarm(alarm.name)
+        ctx = self._alarms[alarm.name] = AlarmContentContext(
+            alarm=alarm,
+            property_changed_cb=None,
+            icon=make_alarm_icon(alarm.name),
+            label=make_label(f"{label}:"),
+        )
+        ctx.property_changed_cb = partial(self._on_alarm_prop_changed, ctx)
+        self._refresh_alarm(ctx)
+        self._form_layout_alarms.addRow(ctx.label, ctx.icon)
+        alarm.property_changed += ctx.property_changed_cb
+
+    def unregister_alarm(self, name: str):
+        ctx = self._alarms.pop(name, None)
+        if ctx is None:
+            return
+        ctx.alarm.property_changed -= ctx.property_changed_cb
+        self._form_layout_alarms.removeRow(ctx.label)
 
     def set_is_capture_active(self, is_editable: bool):
         self._card_widget.setEnabled(is_editable)
@@ -262,75 +226,16 @@ class AlarmContent(ContentWidget):
         if name == AudioSpectrumThrashMonitor.IS_ENGAGED:
             self.audio_thrashing_changed.emit(new_value)
 
-    @invoke_method
-    def _alarm_monitor_property_changed(self, name, value, old_value):
-        p = EmergencyAlarmMonitor
-        # logger.debug("got %s -> %s (was %s)", name, value, old_value)
-        alarm_monitor = self._app_model.analysis.emergency_alarm_monitor
-        is_pause_emergency = self._app_model.behavior.algorithm.algo_paused
-        cfg = alarm_monitor.config
-        if name == p.CONFIG:
-            assert isinstance(value, EmergencyAlarmConfiguration)
-            self.use_load_cell_audio_thrash_changed.emit(value.use_audio_load_cell_thrash)
-            self.use_presence_in_cage_after_exit_tunnel_changed.emit(value.use_presence_missing_after_exit_tunnel)
-            self.use_external_door_changed.emit(value.use_external_doors_open)
-            self.use_global_animal_presence_changed.emit(value.use_global_animal_presence)
-            self.use_device_comm_error_changed.emit(value.use_device_comm_error)
-            self.use_system_maintenance_changed.emit(value.use_system_maintenance)
-            self.use_system_fault_changed.emit(value.use_system_fault)
-
-        elif name == p.IS_ENGAGED:
-            if not value:
-                mon = alarm_monitor
-                changed = self._alarm_monitor_property_changed
-                changed(p.GLOBAL_ANIMAL_PRESENCE_ENGAGED, mon.global_animal_presence_engaged, None)
-                changed(p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED, mon.presence_in_cage_after_exit_tunnel_engaged, None)
-                changed(p.AUDIO_LOAD_CELL_THRASHING_ENGAGED, mon.audio_load_cell_thrashing_engaged, None)
-                changed(p.EXT_DOORS_OPEN_ENGAGED, mon.ext_doors_open_engaged, None)
-                changed(p.DEVICE_COMM_ERROR_ENGAGED, mon.device_comm_error_engaged, None)
-                changed(p.SYSTEM_MAINTENANCE_ENGAGED, mon.system_maintenance_engaged, None)
-                changed(p.SYSTEM_FAULT_ENGAGED, mon.system_fault_engaged, None)
-
-        elif name == p.GLOBAL_ANIMAL_PRESENCE_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_global_animal_presence:
-                return
-            self.global_animal_presence_changed.emit(value)
-
-        elif name == p.PRESENCE_IN_CAGE_AFTER_EXIT_TUNNEL_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_presence_seen_after_exit_tunnel:
-                return
-            self.presence_in_cage_after_exit_tunnel_changed.emit(value)
-
-        elif name == p.AUDIO_LOAD_CELL_THRASHING_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_audio_load_cell_thrash_resume:
-                return
-            self.load_cell_audio_thrash_changed.emit(value)
-
-        elif name == p.EXT_DOORS_OPEN_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_external_doors_close:
-                return
-            self.external_door_status_changed.emit(value)
-
-        elif name == p.DEVICE_COMM_ERROR_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_device_comm_error:
-                return
-            self.device_comm_error_status_changed.emit(value)
-
-        elif name == p.SYSTEM_MAINTENANCE_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_system_maintenance:
-                return
-            self.system_maintenance_changed.emit(value)
-
-        elif name == p.SYSTEM_FAULT_ENGAGED:
-            if not value and is_pause_emergency and not cfg.auto_resume_on_system_fault:
-                return
-            self.system_fault_changed.emit(value)
+    def _refresh_alarm(self, ctx: AlarmContentContext):
+        cfg = ctx.alarm.config
+        ctx.label.setEnabled(cfg.use)
+        ctx.icon.setInUse(cfg.use)
+        ctx.icon.setStatus(ctx.alarm.is_engaged)
 
     @invoke_method
-    def _global_animal_presence_property_changed(self, name, value, _):
-        mon = self._app_model.analysis.global_animal_presence_monitor
-        if name == mon.IS_ENGAGED:
-            self.global_animal_presence_changed.emit(value)
+    def _refresh_alarm_icons_labels(self):
+        for ctx in self._alarms.values():
+            self._refresh_alarm(ctx)
 
     @invoke_method
     def _pellet_misplaced_property_changed(self, name, value, _):
@@ -340,16 +245,8 @@ class AlarmContent(ContentWidget):
 
     @invoke_method
     def _system_maint_mon_property_changed(self, name, value, _):
-        mon = self._app_model.analysis.system_maintenance_monitor
-        if name == mon.IS_ENGAGED:
-            self._system_maintenance_status.setStatus(value)
-        elif name == mon.MAX_PELLET_LOADED_ENGAGED:
+        mon = self._app_model.analysis.system_maintenance_alarm
+        if name == mon.MAX_PELLET_LOADED_ENGAGED:
             self._pellets_before_refill_status.setStatus(value)
         elif name == mon.MAX_CONSECUTIVE_FAILED_LOAD_ENGAGED:
             self._consecutive_failed_loads_status.setStatus(value)
-
-    @invoke_method
-    def _on_system_fault_mon_property_changed(self, name, value, _):
-        mon = self._app_model.analysis.system_fault_monitor
-        if name == mon.IS_ENGAGED:
-            self._system_fault_status.setStatus(value)

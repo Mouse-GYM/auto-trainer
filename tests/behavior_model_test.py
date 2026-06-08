@@ -10,10 +10,10 @@ def test_save_config_include_sensor_analysis_monitors_and_detectors(behavior_mod
     save = behavior_model.save_configuration
     analysis = behavior_model.analysis
     #
-    cfg = analysis.global_animal_presence_monitor.config
+    cfg = analysis.global_animal_presence_alarm.config
     cfg.presence_missing_delay_hours += 1
     new = cfg.presence_missing_delay_hours
-    assert save().global_animal_presence.presence_missing_delay_hours == new
+    assert save().emergency_alarm.global_animal_presence.presence_missing_delay_hours == new
     #
     cfg = analysis.auto_tunnel_sweep_monitor.config
     new = cfg.enabled = not cfg.enabled
@@ -27,9 +27,9 @@ def test_save_config_include_sensor_analysis_monitors_and_detectors(behavior_mod
     new = analysis.load_cell_monitor.config.threshold_duration = val + 3
     assert save().load_cell.threshold_duration == new
     #
-    val = analysis.emergency_alarm_monitor.config.use_external_doors_open
-    new = analysis.emergency_alarm_monitor.config.use_external_doors_open = not val
-    assert save().emergency_alarm.use_external_doors_open == new
+    val = analysis.emergency_alarm_monitor.config.external_doors.use
+    new = analysis.emergency_alarm_monitor.config.external_doors.use = not val
+    assert save().emergency_alarm.external_doors.use == new
     #
     val = analysis.auto_tunnel_sweep_monitor.config.enabled
     new = analysis.auto_tunnel_sweep_monitor.config.enabled = not val
