@@ -335,20 +335,25 @@ class SpinCam(CameraBase):
     def _capture(self):
         p_timeout = time.perf_counter() + 15  # eventual todo: allow config
         try_count = 0
+        t_prev_after = p_prev_after = -math.inf
         while True:
             try_count += 1
             if time.perf_counter() > p_timeout:
                 raise RuntimeError("Failed capture a frame in time")
+            t_before = time.time()
+            p_before = time.perf_counter()
             try:
-                t_before = time.time()
-                p_before = time.perf_counter()
                 image_result = self._camera.GetNextImage(1)  # 1 millisecond timeout
                 p_after = time.perf_counter()
                 t_after = time.time()
             except PySpin.SpinnakerException:
+                t_prev_after = t_before
+                p_prev_after = p_before
                 continue
             if image_result.IsIncomplete():
                 image_result.Release()
+                t_prev_after = t_after
+                p_prev_after = p_after
                 continue
             frame_id = image_result.GetFrameID()
             frame_when = image_result.GetTimeStamp()
@@ -356,8 +361,8 @@ class SpinCam(CameraBase):
             if try_count > 1:
                 # best case: we retried at least once, with a 1 millisecond timeout,
                 # so we can estimate as:
-                estimated_frame_perf_c = (2 * p_before + p_after) / 3  # good enough
-                estimated_frame_time = (2 * t_before + t_after) / 3
+                estimated_frame_perf_c = (2 * p_prev_after + p_before + p_after) / 4  # good enough
+                estimated_frame_time = (2 * t_prev_after + t_before + t_after) / 4
                 self._current_cam_frame_2_perf_offset = estimated_frame_perf_c - frame_when_sec
                 self._current_cam_frame_2_time_offset = estimated_frame_time - frame_when_sec
                 self._consecutive_late_acquire = 0
@@ -368,8 +373,8 @@ class SpinCam(CameraBase):
                 else:
                     estimated_frame_perf_c = frame_when_sec + self._current_cam_frame_2_perf_offset
                     estimated_frame_time = frame_when_sec + self._current_cam_frame_2_time_offset
-                late_delay = p_before - estimated_frame_perf_c
-                if self._consecutive_late_acquire == 0 and late_delay > 0.015:
+                late_delay = p_after - estimated_frame_perf_c
+                if self._consecutive_late_acquire == 0 and late_delay > 0.050:  # 0.050 semi-arbitrary
                     logger.warning("late acquire: frame_id=%s p_before=%.3f p_after=%.3f when=%.3f perf_c=%.3f late_delay=%.3f",
                                    frame_id, p_before, p_after, frame_when_sec, estimated_frame_perf_c, late_delay)
                 self._consecutive_late_acquire += 1
