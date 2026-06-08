@@ -411,7 +411,7 @@ class AppModel(ObservableObject):
         pellet_m.events.pellet_sent += self._on_pellet_sent
 
         analysis.emergency_alarm_monitor.property_changed += self._on_alarm_monitor_property_changed
-        analysis.system_maintenance_monitor.property_changed += self._on_system_maint_prop_changed
+        analysis.system_maintenance_alarm.property_changed += self._on_system_maint_prop_changed
         analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
         analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
@@ -458,7 +458,7 @@ class AppModel(ObservableObject):
         self.current_day_changed(new_day)
 
     def check_max_pellet_loaded(self):
-        mon = self._analysis.system_maintenance_monitor
+        mon = self._analysis.system_maintenance_alarm
         mon.update_pellet_loaded(self._preferences.pellet_load_count_total)
 
     @property
@@ -1457,7 +1457,7 @@ class AppModel(ObservableObject):
         self._load_animals()
 
         analysis = self._analysis
-        analysis.system_fault_monitor.set_persistence_config(configuration.persistence)
+        analysis.system_fault_alarm.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
 
         self._hardware.load_config(configuration.hardware)
@@ -1668,7 +1668,7 @@ class AppModel(ObservableObject):
             # yet, it will be done by pellet-machine automatically if/when status goes to animal-in-training
 
     def _refresh_cage_clean_data(self):
-        self._analysis.system_maintenance_monitor.set_cage_clean_next_day(
+        self._analysis.system_maintenance_alarm.set_cage_clean_next_day(
             self._preferences.cage_clean_previous_day
             + timedelta(days=self._behavior.algorithm.active_config.cage_cleaning.clean_days_interval)
         )
@@ -2132,13 +2132,12 @@ class AppModel(ObservableObject):
             project = self.make_project_info()
         if magnet_intensity is None:
             magnet_intensity = math.nan
-        doors_mon = analysis.external_doors_monitor
+        doors_mon = analysis.external_doors_alarm
         doors_state = doors_mon.doors_state
         alarm_mon = analysis.emergency_alarm_monitor
-        alarm_cfg = alarm_mon.config
         load_cell = analysis.load_cell_monitor
-        audio_mon = analysis.audio_thrashing_monitor
-        presence_mon = analysis.global_animal_presence_monitor
+        audio_mon = analysis.animal_thrashing_alarm
+        presence_mon = analysis.global_animal_presence_alarm
         misplaced_mon = analysis.pellet_misplaced_monitor
         animal = self._selected_animal
 
@@ -2174,57 +2173,19 @@ class AppModel(ObservableObject):
                 is_active=hard.device_ack_timeout_engaged,
             ),
         ]
-        alarms = [
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.externalDoors,
-                is_enabled=alarm_cfg.use_external_doors_open,
-                is_active=alarm_mon.ext_doors_open_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_external_doors_close,
-                is_stop_condition=alarm_cfg.external_doors_open_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.animalMissing,
-                is_enabled=alarm_cfg.use_presence_missing_after_exit_tunnel,
-                is_active=alarm_mon.presence_in_cage_after_exit_tunnel_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_presence_seen_after_exit_tunnel,
-                is_stop_condition=alarm_cfg.presence_missing_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.animalImmobile,
-                is_enabled=alarm_cfg.use_global_animal_presence,
-                is_active=alarm_mon.global_animal_presence_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_global_animal_presence,
-                is_stop_condition=alarm_cfg.global_animal_presence_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.thrashing,
-                is_enabled=alarm_cfg.use_audio_load_cell_thrash,
-                is_active=alarm_mon.audio_load_cell_thrashing_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_audio_load_cell_thrash_resume,
-                is_stop_condition=alarm_cfg.audio_load_cell_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.deviceCommunication,
-                is_enabled=alarm_cfg.use_device_comm_error,
-                is_active=alarm_mon.device_comm_error_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_device_comm_error,
-                is_stop_condition=alarm_cfg.device_comm_error_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.systemFault,
-                is_enabled=alarm_cfg.use_system_fault,
-                is_active=alarm_mon.system_fault_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_fault,
-                is_stop_condition=alarm_cfg.system_fault_is_emergency_stop_condition,
-            ),
-            ApiAlarmStatus(
-                alarm_id=ApiAlarmKind.systemMaintenance,
-                is_enabled=alarm_cfg.use_system_maintenance,
-                is_active=alarm_mon.system_maintenance_engaged,
-                is_auto_resume_enabled=alarm_cfg.auto_resume_on_system_maintenance,
-                is_stop_condition=alarm_cfg.system_maintenance_is_emergency_stop_condition,
-            ),
-        ]
+
+        alarms = []
+        for alarm in analysis.alarms:
+            alarm_cfg = alarm.config
+            alarms.append(
+                ApiAlarmStatus(
+                    alarm_id=alarm.alarm_api_kind,
+                    is_enabled=alarm_cfg.use,
+                    is_active=alarm.is_engaged,
+                    is_stop_condition=alarm_cfg.is_emergency_condition,
+                    is_auto_resume_enabled=alarm_cfg.allow_autoresume_on_cleared,
+                )
+            )
 
         dcs_pos_xyz = hard.last_dcs_position
         dcs_send_xyz = hard.last_dcs_set_position

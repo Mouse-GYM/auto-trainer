@@ -61,7 +61,7 @@ class BaseTrainingPlan(MockSystemMachine):
     def _set_shift_xyz_config_and_others_non_default_config_settings(self, system_config, trainer_config_dir):
         cfg = system_config.behavior.shift_xyz_handler
         cfg.buffer.minimum_reach_fail = 2
-        system_config.behavior.emergency_alarm.use_device_comm_error = False
+        system_config.behavior.emergency_alarm.device_comm_error.use = False
         system_config.save_default(trainer_config_dir)
 
     @pytest.fixture()

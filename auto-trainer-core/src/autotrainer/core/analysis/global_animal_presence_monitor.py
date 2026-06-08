@@ -1,10 +1,8 @@
-import os
-import time
 import math
-import threading
 
-from autotrainer.core import ObservableObject, get_perf_now
-from autotrainer.core.analysis.detector import BaseDetector
+from autotrainer.api import ApiAlarmKind
+from autotrainer.core import get_perf_now
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -13,20 +11,19 @@ from autotrainer.core.analysis.load_cell_monitor import LoadCellMonitor
 logger = get_verbose_logger(__name__)
 
 
-class GlobalAnimalPresenceMonitor(BaseDetector[GlobalAnimalPresenceConfig]):
+class GlobalAnimalPresenceAlarm(AlarmDetector[GlobalAnimalPresenceConfig]):
 
     config_cls = GlobalAnimalPresenceConfig
+    alarm_api_kind = ApiAlarmKind.animalImmobile
 
     use_daemon = True
-    feature_enabled = True
 
     def __init__(
         self, *,
-        config: GlobalAnimalPresenceConfig,
         load_cell_monitor: LoadCellMonitor,
         topcam_presence: PresenceDetectionAttrs,
     ):
-        super().__init__(config=config)
+        super().__init__()
         self._load_cell_monitor = load_cell_monitor
         self._topcam_presence = topcam_presence
 

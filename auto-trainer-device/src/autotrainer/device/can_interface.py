@@ -120,7 +120,11 @@ def _addr2tgt(addr: int) -> Target:
     Returns:
         Target: Either PELLET_DEVICE or MAGNET_DEVICE
     """
-    return Target.PELLET_DEVICE if _is_pellet_by_addr(addr) else Target.MAGNET_DEVICE
+    if _is_pellet_by_addr(addr):
+        return Target.PELLET_DEVICE
+    elif _is_magnet_by_addr(addr):
+        return Target.MAGNET_DEVICE
+    raise RuntimeError(f"unknown addr for _addr2tgt: {addr}")
 
 
 def target_to_str(target: Target) -> str:
@@ -165,8 +169,8 @@ def motor_to_str(motor: Motor) -> str:
 
 class MotorInstance(IntEnum):
     TUNNEL_MAGNET_SERVO_ID = 0
-    TUNNEL_GATE_SERVO_ID = 1
-    TUNNEL_FAN_SERVO_ID = 2
+    TUNNEL_FAN_SERVO_ID = 1
+    TUNNEL_GATE_SERVO_ID = 2
 
     PELLET_X_MOTOR_ID = 0
     PELLET_Y_MOTOR_ID = 1
@@ -220,7 +224,7 @@ def _motor_to_axis_idx(
 _servo_motors = {
     Motor.TUNNEL_MAGNET_SERVO,
     Motor.TUNNEL_GATE_SERVO,
-    Motor.TUNNEL_FAN_SERVO,
+    Motor.TUNNEL_FAN_SERVO,  # for config
 
     Motor.PELLET_LOAD_SERVO,
     Motor.PELLET_COVER_SERVO,
@@ -251,24 +255,35 @@ def is_stepper(motor: Motor) -> bool:
     return not is_servo(motor)
 
 
-_tunnel_servos = {
-    Motor.TUNNEL_MAGNET_SERVO,
-    Motor.TUNNEL_GATE_SERVO,
-    # Motor.TUNNEL_FAN_SERVO,  No: tunnel-fan is handled by pellet-device board
-}
-
-
-_pellet_motors = {
+_pellet_board_motors = {
     Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR,
     Motor.PELLET_LOAD_SERVO, Motor.PELLET_COVER_SERVO,
 
-    Motor.TUNNEL_FAN_SERVO,  # NB: same remark than above: it's on pellet-device board
+    Motor.TUNNEL_GATE_SERVO,
+}
+
+_magnet_board_motors = {
+    # Motor.TUNNEL_GATE_SERVO,  NB: moved to pellet-board because breaking the audio stream
+    Motor.TUNNEL_MAGNET_SERVO,
+    Motor.TUNNEL_FAN_SERVO,  # NB: it's handled as GPIO with hardcoded address of pellet-device
 }
 
 
-_tunnel_motors = {
-    Motor.TUNNEL_GATE_SERVO,
-    Motor.TUNNEL_MAGNET_SERVO,
+_magnet_servo_2_motor = {
+    MotorInstance.TUNNEL_MAGNET_SERVO_ID: Motor.TUNNEL_MAGNET_SERVO,
+    MotorInstance.TUNNEL_FAN_SERVO_ID: Motor.TUNNEL_FAN_SERVO,
+}
+
+_pellet_servo_2_motor = {
+    MotorInstance.PELLET_COVER_SERVO_ID: Motor.PELLET_COVER_SERVO,
+    MotorInstance.PELLET_LOAD_SERVO_ID: Motor.PELLET_LOAD_SERVO,
+    MotorInstance.TUNNEL_GATE_SERVO_ID: Motor.TUNNEL_GATE_SERVO,
+}
+
+_pellet_stepper_2_motor = {
+    MotorInstance.PELLET_X_MOTOR_ID: Motor.PELLET_X_MOTOR,
+    MotorInstance.PELLET_Y_MOTOR_ID: Motor.PELLET_Y_MOTOR,
+    MotorInstance.PELLET_Z_MOTOR_ID: Motor.PELLET_Z_MOTOR,
 }
 
 
@@ -280,9 +295,9 @@ def target_of_motor(motor: Motor) -> Target:
     Returns:
         Target: the hardware target that the motor resides on
     """
-    if motor in _tunnel_motors:
+    if motor in _magnet_board_motors:
         return Target.MAGNET_DEVICE
-    if motor in _pellet_motors or motor in {Motor.DELAY, Motor.TONE}:
+    if motor in _pellet_board_motors or motor in {Motor.DELAY, Motor.TONE}:
         return Target.PELLET_DEVICE
     raise ValueError(f"Unhandled motor for target_of_motor: {motor!r}")
 
@@ -299,36 +314,21 @@ def _id_to_motor(target: Target, isa_servo: bool, motor_id: int) -> Motor:
     Returns:
         Motor: associated Motor identifier
     """
-
-    # NOTE: The ENUM.value MUST be used here, as the incoming value is an int,
-    # and we need to compare to the value of the enum, not the enum, itself.
-
+    motor = Motor.NONE
     if target == Target.MAGNET_DEVICE:
         if isa_servo:
-            if motor_id == MotorInstance.TUNNEL_MAGNET_SERVO_ID:
-                return Motor.TUNNEL_MAGNET_SERVO
-            elif motor_id == MotorInstance.TUNNEL_GATE_SERVO_ID:
-                return Motor.TUNNEL_GATE_SERVO
+            motor = _magnet_servo_2_motor.get(motor_id, motor)
     else:
         assert target == Target.PELLET_DEVICE
         if isa_servo:
-            if motor_id == MotorInstance.PELLET_COVER_SERVO_ID:
-                return Motor.PELLET_COVER_SERVO
-            elif motor_id == MotorInstance.PELLET_LOAD_SERVO_ID:
-                return Motor.PELLET_LOAD_SERVO
-            elif motor_id == MotorInstance.TUNNEL_FAN_SERVO_ID:
-                return Motor.TUNNEL_FAN_SERVO
+            motor = _pellet_servo_2_motor.get(motor_id, motor)
         else:
-            if motor_id == MotorInstance.PELLET_X_MOTOR_ID:
-                return Motor.PELLET_X_MOTOR
-            elif motor_id == MotorInstance.PELLET_Y_MOTOR_ID:
-                return Motor.PELLET_Y_MOTOR
-            elif motor_id == MotorInstance.PELLET_Z_MOTOR_ID:
-                return Motor.PELLET_Z_MOTOR
+            motor = _pellet_stepper_2_motor.get(motor_id, motor)
 
-    logger.warning("Unknown motor id for target: target=%s isa_servo=%s motor_id=%s",
-                   target, isa_servo, motor_id)
-    return Motor.NONE
+    if motor == Motor.NONE:
+        logger.warning("Unknown motor id for target: target=%s isa_servo=%s motor_id=%s",
+                       target, isa_servo, motor_id)
+    return motor
 
 
 class CanInterface(DeviceInterface):
@@ -402,15 +402,15 @@ class CanInterface(DeviceInterface):
         self._is_open = False
 
         self._next_status_log_perf_c = -math.inf
-        self._tunnel_last_status_perf_c = {
+        self._magnet_board_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
-            if motor in _tunnel_motors
+            if motor in _magnet_board_motors
         }
-        self._pellet_last_status_perf_c = {
+        self._pellet_board_last_status_perf_c = {
             motor: -math.inf
             for motor in Motor
-            if motor in _pellet_motors
+            if motor in _pellet_board_motors
         }
 
         self._pellet_addr: Optional[int] = None
@@ -439,6 +439,9 @@ class CanInterface(DeviceInterface):
             Motor.PELLET_Y_MOTOR: None,
             Motor.PELLET_Z_MOTOR: None,
         }
+
+        self._last_gpio_status_perf: Dict[int, Tuple[
+            Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
 
         # Simple handlers implemented as lambdas
         self._handlers = {
@@ -485,6 +488,7 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.SERVO_MOVE: no_op,
             JerryCANCmdType.GPIO_WRITE: no_op,
             JerryCANCmdType.DELAY: no_op,
+            JerryCANCmdType.BOOTLOADER_DATA: no_op,
         }
 
     def __allow_fake_status_time(self, motor):
@@ -500,7 +504,7 @@ class CanInterface(DeviceInterface):
         p_now = motor_p_now = get_perf_now()
         if p_now > self._next_status_log_perf_c:
             self._next_status_log_perf_c = p_now + 15
-            for vals in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+            for vals in (self._pellet_board_last_status_perf_c, self._magnet_board_last_status_perf_c):
                 logger.verbose("motor status age: %s",
                     ' '.join(f"{k.name}={p_now - v:.6f}s"
                     for k, v in sorted(vals.items(), key=lambda i: i[1])))
@@ -511,14 +515,14 @@ class CanInterface(DeviceInterface):
                     motor_p_now -= fake_age
             except Exception:
                 logger.exception("__allow_fake_status_time")
-        if motor in _pellet_motors:
-            vals = self._pellet_last_status_perf_c
+        if motor in _pellet_board_motors:
+            vals = self._pellet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" pellet status perf_c
             oldest = min(vals.values())
             self.pellet_status_perf_c = oldest
-        elif motor in _tunnel_motors:
-            vals = self._tunnel_last_status_perf_c
+        elif motor in _magnet_board_motors:
+            vals = self._magnet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" tunnel status perf_c
             oldest = min(vals.values())
@@ -802,7 +806,7 @@ class CanInterface(DeviceInterface):
         self._cnt_none = 0
 
         p_now = get_perf_now()
-        for dct in (self._pellet_last_status_perf_c, self._tunnel_last_status_perf_c):
+        for dct in (self._pellet_board_last_status_perf_c, self._magnet_board_last_status_perf_c):
             for m in dct:
                 dct[m] = p_now
 
@@ -1788,8 +1792,7 @@ class CanInterface(DeviceInterface):
 
         return config
 
-    @staticmethod
-    def _translate_gpio(message) -> Union[MagnetDigitalInputs, PelletDigitalInputs]:
+    def _translate_gpio(self, message) -> Union[MagnetDigitalInputs, PelletDigitalInputs]:
         """
         Translate GPIO read response messages.
 
@@ -1799,20 +1802,36 @@ class CanInterface(DeviceInterface):
         Returns:
             MagnetDigitalInputs or PelletDigitalInputs depending on the source address
         """
+        prev = self._last_gpio_status_perf.get(message.dst_id, None)
+        state = message.gpio_read.state
         if _is_magnet_by_addr(message.dst_id):
-            return MagnetDigitalInputs(
+            tgt = Target.MAGNET_DEVICE
+            digital_inputs = MagnetDigitalInputs(
                 target=_addr2tgt(message.dst_id),
-                continuity_0=bool(message.gpio_read.state & 0x10),
-                continuity_1=bool(message.gpio_read.state & 0x20),
+                continuity_0=bool(state & 0x10),
+                continuity_1=bool(state & 0x20),
+            )
+
+        elif _is_pellet_by_addr(message.dst_id):
+            tgt = Target.PELLET_DEVICE
+            digital_inputs = PelletDigitalInputs(
+                target=_addr2tgt(message.dst_id),
+                stimulus_1=state & 0x010 == 0x010,
+                stimulus_2=state & 0x020 == 0x020,
+                stimulus_3=state & 0x040 == 0x040,
+                stimulus_4=state & 0x080 == 0x080,
             )
         else:
-            return PelletDigitalInputs(
-                target=_addr2tgt(message.dst_id),
-                stimulus_1=message.gpio_read.state & 0x010 == 0x010,
-                stimulus_2=message.gpio_read.state & 0x020 == 0x020,
-                stimulus_3=message.gpio_read.state & 0x040 == 0x040,
-                stimulus_4=message.gpio_read.state & 0x080 == 0x080,
+            logger.warning("unknown gpio msg.dst_id: %s", message.dst_id)
+            return None
+
+        if state != prev:
+            logger.verbose(
+                "%s: digital_inputs: dst_id=%s state=%s (prev=%s)",
+                tgt, message.dst_id, message.gpio_read.state, prev
             )
+        self._last_gpio_status_perf[message.dst_id] = state
+        return digital_inputs
 
     @staticmethod
     def _translate_analog_out(message) -> Optional[AnalogOutput]:

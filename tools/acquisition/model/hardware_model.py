@@ -561,8 +561,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self._device_tunnel_status_timeout_engaged,
                 self._device_pellet_status_timeout_engaged,
             ))
-            alarm_mon = self._sensor_analysis.emergency_alarm_monitor
-            alarm_mon.device_comm_error_engaged = engaged
+            self._sensor_analysis.device_comm_alarm.is_engaged = engaged
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         props = MessageHandler

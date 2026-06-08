@@ -37,8 +37,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     detector_api_kind: ClassVar[Optional[ApiDetectorKind]] = None
     default_detector_enabled: ClassVar[bool] = True  # raw base detectors are always "enabled" by default
 
-    def __init__(self, *, config: Optional[DetectorConfigT] = None):
+    def __init__(self, *, name: Optional[str] = None, config: Optional[DetectorConfigT] = None):
         super().__init__()
+        if name is None:
+            name = self.__class__.__qualname__
+        self._name = name
         self._config = self.config_cls() if config is None else config
         self._running = False
         self._p_started = -math.inf
@@ -52,6 +55,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     @property
     def config(self) -> DetectorConfigT:
@@ -103,15 +110,17 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         if kind is not None:
             self.post_detector_event(kind, engaged, self.default_detector_enabled)
         self._custom_set_is_engaged()  # before the property changed event
-        self._on_property_changed(self.IS_ENGAGED, engaged, prev)
+        self.property_changed(self.IS_ENGAGED, engaged, prev)
 
     @property
     def engaged_age(self):
-        return (get_perf_now() if self._is_engaged else self._disengaged_perf_c) - self._engaged_perf_c
+        with self._lock:
+            return (get_perf_now() if self._is_engaged else self._disengaged_perf_c) - self._engaged_perf_c
 
     @property
     def disengaged_age(self):
-        return (get_perf_now() if not self._is_engaged else self._engaged_perf_c) - self._disengaged_perf_c
+        with self._lock:
+            return (get_perf_now() if not self._is_engaged else self._engaged_perf_c) - self._disengaged_perf_c
 
     def _make_new_timer(self, delay: float):
         self._cur_timer.cancel()  # safer
@@ -156,7 +165,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
-                # daemon detector or detector that will resume by explicit refresh
+                # daemon detector or detector that will resume by explicit refresh,
+                # or that is manually checked.
                 self._cur_timer.cancel()
                 self._cur_timer = no_op_timer
         return next_delay

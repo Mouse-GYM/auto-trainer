@@ -6,6 +6,7 @@ import logging
 import math
 import platform
 from datetime import date
+from functools import partial
 
 import verboselogs
 from PySide6 import QtCore
@@ -18,7 +19,7 @@ from autotrainer.api import ApiAlarmKind
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
-from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceMonitor
+from autotrainer.core.analysis.global_animal_presence_monitor import GlobalAnimalPresenceAlarm
 from autotrainer.core.configuration.behavior_configuration import HeadClampConfiguration, PelletDeliveryConfiguration, \
     HeadClampReleaseMode
 from autotrainer.core.logging import get_verbose_logger
@@ -61,6 +62,11 @@ def set_row_col_visible(layout: QGridLayout, row: int, col: int, visible: bool):
             # If the item is a layout (e.g., QHBoxLayout nested inside the grid),
             # you would need to iterate through its children as well.
             # For this example, we assume widgets are added directly.
+
+
+def refresh_enabled(callbacks):
+    for cb in callbacks:
+        cb()
 
 
 class PreferencesContent(QWidget):
@@ -918,22 +924,23 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
 
-        if GlobalAnimalPresenceMonitor.feature_enabled:
-            left_grid_layout.addWidget(QLabel("<b>Global Animal Presence</b>"), cur_row, cur_col)
-            cur_row += 1
+        left_grid_layout.addWidget(QLabel("<b>Global Animal Presence</b>"), cur_row, cur_col)
+        cur_row += 1
 
-            left_grid_layout.addWidget(QLabel("Missing delay (hours):"), cur_row, cur_col)
-            spinbox = QDoubleSpinBox()
-            spinbox.setRange(0, 24 * 2)  # 2 days
-            spinbox.setDecimals(2)
-            spinbox.setSingleStep(1)
-            spinbox.setValue(analysis.global_animal_presence_monitor.config.presence_missing_delay_hours)
-            def global_animal_presence_missing_delay_changed(value):
-                analysis.global_animal_presence_monitor.config.presence_missing_delay_hours = value
-                analysis.global_animal_presence_monitor.check_state()
-            spinbox.valueChanged.connect(global_animal_presence_missing_delay_changed)
-            left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
-            cur_row += 1
+        left_grid_layout.addWidget(QLabel("Missing delay (hours):"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0, 24 * 2)  # 2 days
+        spinbox.setDecimals(2)
+        spinbox.setSingleStep(1)
+        spinbox.setValue(analysis.global_animal_presence_alarm.config.presence_missing_delay_hours)
+        def global_animal_presence_missing_delay_changed(value):
+            det = analysis.global_animal_presence_alarm
+            prev, det.config.presence_missing_delay_hours = det.config.presence_missing_delay_hours, value
+            if value != prev:
+                det.property_changed(det.CONFIG, det.config, None)
+        spinbox.valueChanged.connect(global_animal_presence_missing_delay_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
 
         #
         label = QLabel("<b>Load Cell Thrash Detector</b>")
@@ -942,10 +949,8 @@ class PreferencesContent(QWidget):
 
         left_grid_layout.addWidget(QLabel("Thrashing PTP change count:"), cur_row, cur_col)
         spinbox = QSpinBox()
-        if cur_row != 1:
-            assert GlobalAnimalPresenceMonitor.feature_enabled
-            label.setContentsMargins(0, 10, 0, 0)
-            spinbox.setContentsMargins(0, 10, 0, 0)
+        label.setContentsMargins(0, 10, 0, 0)
+        spinbox.setContentsMargins(0, 10, 0, 0)
         spinbox.setRange(0, 100)
         spinbox.setValue(load_cell_monitor.config.thrashing_min_ptp_change_count)
         def thrashing_min_ptp_changed(value):
@@ -976,6 +981,7 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
+        audio_thrash_det = analysis.audio_thrashing_monitor
         label = QLabel("<b>Audio Detector</b>")
         label.setContentsMargins(0, 10, 0, 0)
         left_grid_layout.addWidget(label, cur_row, cur_col)
@@ -986,7 +992,7 @@ class PreferencesContent(QWidget):
         spinbox.setContentsMargins(0, 10, 0, 0)
         spinbox.setDecimals(1)
         spinbox.setRange(0, 200)
-        spinbox.setValue(analysis.audio_thrashing_monitor.config.threshold_db)
+        spinbox.setValue(audio_thrash_det.config.threshold_db)
         def thrashing_threshold_db_changed(value):
             analysis.audio_thrashing_monitor.config.threshold_db = value
         spinbox.valueChanged.connect(thrashing_threshold_db_changed)
@@ -995,7 +1001,7 @@ class PreferencesContent(QWidget):
 
         left_grid_layout.addWidget(QLabel("Bins list:"), cur_row, cur_col)
         line_edit = QLineEdit()
-        line_edit.setText(str(analysis.audio_thrashing_monitor.config.bins_list))
+        line_edit.setText(str(audio_thrash_det.config.bins_list))
         def thrashing_bins_list_changed(line_edit=line_edit):
             value = line_edit.text()
             try:
@@ -1010,7 +1016,7 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
-        system_fault_mon = analysis.system_fault_monitor
+        system_fault_mon = analysis.system_fault_alarm
         left_grid_layout.addWidget(QLabel("<b>Free Disk Space Min MB:</b>"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setMinimum(50)
@@ -1088,7 +1094,7 @@ class PreferencesContent(QWidget):
         right_layout.addRow("Max Delay Skip Seconds:", spinbox)
 
         #
-        maint_mon = analysis.system_maintenance_monitor
+        maint_mon = analysis.system_maintenance_alarm
         maint_cfg = maint_mon.config
 
         spinbox = QSpinBox()
@@ -1147,9 +1153,6 @@ class PreferencesContent(QWidget):
     ):
         refresh_enabled_cb = []
         add_refresh = refresh_enabled_cb.append
-        def refresh_enabled():
-            for r in refresh_enabled_cb:
-                r()
         #
         label = QLabel(f"<b>Use {name}:</b>")
         grid_layout.addWidget(label, cur_row, cur_col)
@@ -1160,7 +1163,7 @@ class PreferencesContent(QWidget):
             prev, det.config.use = det.config.use, toggled
             if prev != toggled:
                 det.property_changed(det.CONFIG, det.config, None)
-                refresh_enabled()
+                refresh_enabled(refresh_enabled_cb)
         toggle_use.toggled.connect(on_use_toggle_changed)
         grid_layout.addWidget(toggle_use, cur_row, cur_col + 1)
         cur_row += 1
@@ -1174,7 +1177,7 @@ class PreferencesContent(QWidget):
             prev, det.config.is_emergency_condition = det.config.is_emergency_condition, toggled
             if prev != toggled:
                 det.property_changed(det.CONFIG, det.config, None)
-                refresh_enabled()
+                refresh_enabled(refresh_enabled_cb)
         toggle_is_emergency_condition.toggled.connect(on_is_emergency_toggle_changed)
         grid_layout.addWidget(toggle_is_emergency_condition, cur_row, cur_col + 1)
         cur_row += 1
@@ -1188,11 +1191,12 @@ class PreferencesContent(QWidget):
             prev, det.config.allow_autoresume_on_cleared = det.config.allow_autoresume_on_cleared, toggled
             if prev != toggled:
                 det.property_changed(det.CONFIG, det.config, None)
-                refresh_enabled()
+                refresh_enabled(refresh_enabled_cb)
         toggle_allow_autoresume.toggled.connect(on_allow_autoresume_toggle_changed)
         grid_layout.addWidget(toggle_allow_autoresume, cur_row, cur_col + 1)
         cur_row += 1
-        refresh_enabled()
+        refresh_enabled(refresh_enabled_cb)
+        return toggle_use, toggle_is_emergency_condition, toggle_allow_autoresume, refresh_enabled_cb
 
     def _create_alarms_tab(self):
         app_model = self._app_model
@@ -1202,9 +1206,7 @@ class PreferencesContent(QWidget):
 
         states_refresh = []
         add_enabled_state = states_refresh.append
-        def refresh_enabled_states():
-            for r in states_refresh:
-                r()
+        refresh_enabled_states = partial(refresh_enabled, states_refresh)
 
         def make_is_emegency_allow_autoresume(use_toggle, attr_is_emergency, attr_allow_autoresume):
             nonlocal cur_row
@@ -1258,130 +1260,97 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 0
 
-        label = QLabel("<b>Use Audio & Load Cell Thrashing Alarm:</b>")
-        grid_layout.addWidget(label, cur_row, cur_col)
-        toggle = self._use_audio_load_cell_thrashing_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_audio_load_cell_thrash)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        self._use_audio_load_cell_thrashing_toggle, tog_emergency, tog_autoresume, refresh_cb = self._make_alarm_entries(
+            grid_layout, "Animal Thrashing Alarm", analysis.animal_thrashing_alarm, cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
-        def use_audio_load_cell_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            if toggled != alarm_monitor.config.use_audio_load_cell_thrash:
-                cfg = alarm_monitor.config
-                cfg.use_audio_load_cell_thrash = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                alarm_monitor.post_alarm_event(
-                    ApiAlarmKind.thrashing,
-                    alarm_monitor.audio_load_cell_thrashing_engaged, toggled,
-                    cfg.auto_resume_on_audio_load_cell_thrash_resume,
-                    cfg.audio_load_cell_is_emergency_stop_condition,
-                )
-        self._use_audio_load_cell_thrashing_toggle.stateChanged.connect(use_audio_load_cell_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
-        make_is_emegency_allow_autoresume(
-            self._use_audio_load_cell_thrashing_toggle,
-            "audio_load_cell_is_emergency_stop_condition",
-            "auto_resume_on_audio_load_cell_thrash_resume",
-        )
-
+        thrash_cfg = analysis.animal_thrashing_alarm.config
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
-        spinbox.setValue(alarm_cfg.audio_load_cell_thrash_aggregate_delay)
-        def thrash_aggr_delay_value_changed(value):
-            alarm_cfg.audio_load_cell_thrash_aggregate_delay = value
+        spinbox.setValue(thrash_cfg.aggregate_delay)
+        def thrash_aggr_delay_value_changed(value, ):
+            det = analysis.animal_thrashing_alarm
+            det.config.aggregate_delay = value
+            det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(thrash_aggr_delay_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("LoadCell thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, 100)
-        spinbox.setValue(alarm_cfg.load_cell_thrash_percent_on)
+        spinbox.setValue(thrash_cfg.load_cell_thrash_percent_on)
         def load_cell_thrash_pc_time_value_changed(value):
-            alarm_cfg.load_cell_thrash_percent_on = value
+            det = analysis.animal_thrashing_alarm
+            det.config.load_cell_thrash_percent_on = value
+            det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(load_cell_thrash_pc_time_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("LoadCell thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, 100)
-        spinbox.setValue(alarm_cfg.load_cell_thrash_count)
+        spinbox.setValue(thrash_cfg.load_cell_thrash_count)
         def load_cell_thrash_count_value_changed(value):
-            alarm_cfg.load_cell_thrash_count = value
+            det = analysis.animal_thrashing_alarm
+            det.config.load_cell_thrash_count = value
+            det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(load_cell_thrash_count_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("Audio thrash % time:"), cur_row, cur_col)
         spinbox = QSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, 100)
-        spinbox.setValue(alarm_cfg.audio_thrash_percent_on)
+        spinbox.setValue(thrash_cfg.audio_thrash_percent_on)
         def audio_thrash_pc_time_value_changed(value):
-            alarm_cfg.audio_thrash_percent_on = value
+            det = analysis.animal_thrashing_alarm
+            det.config.audio_thrash_percent_on = value
+            det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(audio_thrash_pc_time_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
         grid_layout.addWidget(QLabel("Audio thrash count:"), cur_row, cur_col)
         spinbox = QSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, 100)
-        spinbox.setValue(alarm_cfg.audio_thrash_count)
+        spinbox.setValue(thrash_cfg.audio_thrash_count)
         def audio_thrash_count_value_changed(value):
-            alarm_cfg.audio_thrash_count = value
+            det = analysis.animal_thrashing_alarm
+            det.config.audio_thrash_count = value
+            det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(audio_thrash_count_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        label = QLabel("<b>Use Animal Missing Alarm:</b>")
-        tooltip_txt = "When not seen in cage after exit tunnel"
-        label.setToolTip(tooltip_txt)
-        grid_layout.addWidget(label, cur_row, cur_col)
-        toggle = self._use_animal_missing_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_presence_missing_after_exit_tunnel)
-        toggle.setToolTip(tooltip_txt)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_animal_missing_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_presence_missing_after_exit_tunnel:
-                cfg.use_presence_missing_after_exit_tunnel = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                alarm_monitor.post_alarm_event(
-                    ApiAlarmKind.animalMissing,
-                    alarm_monitor.presence_in_cage_after_exit_tunnel_engaged, toggled,
-                    cfg.auto_resume_on_presence_seen_after_exit_tunnel,
-                    cfg.presence_missing_is_emergency_stop_condition,
-                )
-        self._use_animal_missing_toggle.stateChanged.connect(use_animal_missing_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
-        make_is_emegency_allow_autoresume(
-            self._use_animal_missing_toggle,
-            "presence_missing_is_emergency_stop_condition",
-            "auto_resume_on_presence_seen_after_exit_tunnel",
-        )
+        tog_use, tog_emerg, tog_resume, refresh_cb = self._make_alarm_entries(
+            grid_layout, "Animal Missing Alarm", analysis.presence_in_cage_alarm, cur_row, cur_col)
+        cur_row += 3
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
 
         grid_layout.addWidget(QLabel("Missing delay after exit tunnel (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_animal_missing_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(analysis.presence_in_cage_alarm.config.use))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
-        spinbox.setValue(alarm_cfg.tunnel_to_cage_presence_missing_delay)
+        spinbox.setValue(analysis.presence_in_cage_alarm.config.tunnel_to_cage_presence_missing_delay)
         def missing_delay_after_exit_tunnel_value_changed(value):
-            alarm_cfg.tunnel_to_cage_presence_missing_delay = value
+            det = analysis.presence_in_cage_alarm
+            prev, det.config.tunnel_to_cage_presence_missing_delay = (
+                det.config.tunnel_to_cage_presence_missing_delay,
+                value,
+            )
+            if prev != value:
+                det.property_changed(det.CONFIG, det.config, None)
         spinbox.valueChanged.connect(missing_delay_after_exit_tunnel_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1395,137 +1364,51 @@ class PreferencesContent(QWidget):
         cur_row = 0
         cur_col = 2
 
-        grid_layout.addWidget(QLabel("<b>Use External Doors Open:</b>"), cur_row, cur_col)
-        toggle = self._use_external_doors_open_toggle = QSwitch()
-        toggle.setToolTip(tooltip_txt)
-        toggle.setChecked(alarm_cfg.use_external_doors_open)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_ext_doors_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_external_doors_open:
-                cfg.use_external_doors_open = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                alarm_monitor.post_alarm_event(
-                    ApiAlarmKind.externalDoors,
-                    alarm_monitor.ext_doors_open_engaged, toggled,
-                    cfg.auto_resume_on_external_doors_close,
-                    cfg.external_doors_open_is_emergency_stop_condition,
-                )
-        self._use_external_doors_open_toggle.stateChanged.connect(use_ext_doors_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-
-        make_is_emegency_allow_autoresume(
-            self._use_external_doors_open_toggle,
-            "external_doors_open_is_emergency_stop_condition",
-            "auto_resume_on_external_doors_close",
-        )
+        ext_doors_alarm = analysis.external_doors_alarm
+        self._use_external_doors_open_toggle, tog_emergency, tog_resume, refresh_cb = self._make_alarm_entries(
+            grid_layout, "External Doors Open", ext_doors_alarm, cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
         grid_layout.addWidget(QLabel("Trigger Open delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_external_doors_open_toggle.isChecked()))
+        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_external_doors_open_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
-        spinbox.setValue(analysis.external_doors_monitor.config.trigger_open_delay)
+        spinbox.setValue(analysis.external_doors_alarm.config.trigger_open_delay)
         def trigger_open_delay_value_changed(value):
-            analysis.external_doors_monitor.config.trigger_open_delay = value
-            analysis.external_doors_monitor.check_state()
+            ext_doors = analysis.external_doors_alarm
+            if value != ext_doors.config.trigger_open_delay:
+                ext_doors.config.trigger_open_delay = value
+                ext_doors.property_changed(ext_doors.CONFIG, ext_doors.config, None)
         spinbox.valueChanged.connect(trigger_open_delay_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
 
-        grid_layout.addWidget(QLabel("<b>Use Global Animal Presence:</b>"), cur_row, cur_col)
-        toggle = self._use_global_presence_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_global_animal_presence)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_global_presence_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_global_animal_presence:
-                cfg.use_global_animal_presence = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                alarm_monitor.post_alarm_event(
-                    ApiAlarmKind.animalImmobile,
-                    alarm_monitor.global_animal_presence_engaged, toggled,
-                    cfg.auto_resume_on_global_animal_presence,
-                    cfg.global_animal_presence_is_emergency_stop_condition,
-                )
-        self._use_global_presence_toggle.stateChanged.connect(use_global_presence_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
+        _, _, _, refresh_cb = self._make_alarm_entries(
+            grid_layout, "Global Animal Presence",
+            analysis.global_animal_presence_alarm, cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
-        # (alarm_cfg.global_animal_presence_is_emergency_stop_condition,
-        #  alarm_cfg.auto_resume_on_global_animal_presence)
-        make_is_emegency_allow_autoresume(
-            self._use_global_presence_toggle,
-            "global_animal_presence_is_emergency_stop_condition",
-            "auto_resume_on_global_animal_presence",
-        )
         # Device comm. error
-        grid_layout.addWidget(QLabel("<b>Use Device Comm. Error:</b>"), cur_row, cur_col)
-        toggle = self._use_device_comm_error_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_device_comm_error)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def use_dev_comm_error_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_device_comm_error:
-                cfg.use_device_comm_error = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_device_comm_error_toggle.stateChanged.connect(use_dev_comm_error_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-        # (alarm_cfg.device_comm_error_is_emergency_stop_condition,
-        #  alarm_cfg.auto_resume_on_device_comm_error)
-        make_is_emegency_allow_autoresume(
-            self._use_device_comm_error_toggle,
-            "device_comm_error_is_emergency_stop_condition",
-            "auto_resume_on_device_comm_error",
-        )
+        dev_comm_alarm = analysis.device_comm_alarm
+        _, _, _, refresh_cb = self._make_alarm_entries(grid_layout, "Device Comm. Error", dev_comm_alarm,
+                                                       cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
         # System maintenance
-        grid_layout.addWidget(QLabel("<b>Use System Maintenance:</b>"), cur_row, cur_col)
-        toggle = self._use_system_maintenance_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_system_maintenance)
-        def use_system_maintenance_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_system_maintenance:
-                cfg.use_system_maintenance = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_system_maintenance_toggle.stateChanged.connect(use_system_maintenance_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-        make_is_emegency_allow_autoresume(
-            self._use_system_maintenance_toggle,
-            "system_maintenance_is_emergency_stop_condition",
-            "auto_resume_on_system_maintenance",
-        )
+        _, _, _, refresh_cb = self._make_alarm_entries(
+            grid_layout, "System Maintenance", analysis.system_maintenance_alarm, cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
         # System fault
-        grid_layout.addWidget(QLabel("<b>Use System Fault:</b>"), cur_row, cur_col)
-        toggle = self._use_system_fault_toggle = QSwitch()
-        toggle.setChecked(alarm_cfg.use_system_fault)
-        def use_system_fault_toggle_changed(value):
-            toggled = value != 0
-            refresh_enabled_states()
-            cfg = alarm_monitor.config
-            if toggled != cfg.use_system_fault:
-                cfg.use_system_fault = toggled
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-        self._use_system_fault_toggle.stateChanged.connect(use_system_fault_toggle_changed)
-        grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        cur_row += 1
-        make_is_emegency_allow_autoresume(
-            self._use_system_fault_toggle,
-            "system_fault_is_emergency_stop_condition",
-            "auto_resume_on_system_fault",
-        )
+        _, _, _, refresh_cb = self._make_alarm_entries(
+            grid_layout, "System Fault", analysis.system_fault_alarm, cur_row, cur_col)
+        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        cur_row += 3
 
         # finally
         refresh_enabled_states()

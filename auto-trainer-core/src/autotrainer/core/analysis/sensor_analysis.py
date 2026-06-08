@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import csv
-import os
 import math
-import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Tuple, IO
@@ -15,29 +13,28 @@ from autotrainer.core.project import ProjectInfo, ProjectInterval
 from autotrainer.core.perf_monitor import PerfMonitor
 from autotrainer.core.observable_object import ObservableObject
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from .alarm_detector import AlarmDetector
 from .animal_evasion_alarm import AnimalEvasionAlarm
+from .animal_thrash_alarm import AnimalThrashAlarm
 from .autoclamp_evasion_detector import AutoClampEvasionDetector
+from .device_comm_alarm import DeviceCommAlarm
+from .presence_in_cage_alarm import PresenceInCageAlarm
 from .watchdog_monitor import WatchdogMonitor
-
-from ..configuration.alarm_configuration import EmergencyAlarmConfiguration
-from ..configuration.animal_presence_configuration import GlobalAnimalPresenceConfig
-from ..configuration.external_doors_monitor_configuration import ExternalDoorsMonitorConfig
-from ..configuration.system_fault_config import SystemFaultConfig
-from ..configuration.system_maintenance_config import SystemMaintenanceConfig
 from ..message.audio_spectrum_message import AudioSpectrumMessage
-
 from .head_fix_measurement import HeadFixMeasurement
 from .audio_spectrum_monitor import AudioSpectrumThrashMonitor
 from .headbar_pressure_monitor import HeadbarPressureMonitor
 from .load_cell_monitor import LoadCellMonitor
 from .load_cell_tare_monitor import LoadCellTareMonitor
 from .alarm_monitor import EmergencyAlarmMonitor, EmergencyReason
-from .global_animal_presence_monitor import GlobalAnimalPresenceMonitor
-from .external_doors_monitor import ExternalDoorsMonitor
-from .pellet_position_monitor import PelletMisplacedDetector, PelletMisplacedDetectorConfiguration
-from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor, AutoTunnelSweepConfiguration
-from .system_maintenance_monitor import SystemMaintenanceMonitor
-from .system_fault_monitor import SystemFaultMonitor
+from .global_animal_presence_monitor import GlobalAnimalPresenceAlarm
+from .external_doors_monitor import ExternalDoorsAlarm
+from .pellet_position_monitor import PelletMisplacedDetector
+from ..configuration.pellet_misplaced_config import PelletMisplacedDetectorConfiguration
+from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor
+from ..configuration.tunnel_sweep_config import AutoTunnelSweepConfiguration
+from .system_maintenance_alarm import SystemMaintenanceAlarm
+from .system_fault_monitor import SystemFaultAlarm
 
 logger = get_verbose_logger(__name__)
 
@@ -80,37 +77,36 @@ class SensorAnalysis(ObservableObject):
 
         self._audio_thrashing_monitor = AudioSpectrumThrashMonitor()
 
-        self._global_animal_presence_monitor = GlobalAnimalPresenceMonitor(
-            config=GlobalAnimalPresenceConfig(),
+        self._global_animal_presence_alarm = GlobalAnimalPresenceAlarm(
             load_cell_monitor=self._load_cell_monitor,
             topcam_presence=topcam_presence,
         )
 
-        self._external_doors_monitor = ExternalDoorsMonitor(ExternalDoorsMonitorConfig())
+        self._external_doors_alarm = ExternalDoorsAlarm()
 
-        self._pellet_misplaced_monitor = PelletMisplacedDetector(PelletMisplacedDetectorConfiguration())
+        self._device_comm_alarm = DeviceCommAlarm()
+
+        self._pellet_misplaced_monitor = PelletMisplacedDetector()
         self._auto_tunnel_sweep_monitor = AutoTunnelSweepMonitor(
-            AutoTunnelSweepConfiguration(),
             pellet_misplaced_detector=self._pellet_misplaced_monitor,
         )
 
         self._watchdog_monitor = WatchdogMonitor()
 
-        self._system_maintenance_monitor = SystemMaintenanceMonitor(config=SystemMaintenanceConfig())
-        self._system_fault_monitor = SystemFaultMonitor(
-            config=SystemFaultConfig(), watchdog_monitor=self._watchdog_monitor)
+        self._system_maintenance_alarm = SystemMaintenanceAlarm()
+        self._system_fault_alarm = SystemFaultAlarm(watchdog_monitor=self._watchdog_monitor)
 
-        alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor(
-            config=EmergencyAlarmConfiguration(),
+        self._animal_thrash_alarm = AnimalThrashAlarm(
+            load_cell_detector=self._load_cell_monitor,
+            audio_thrash_detector=self._audio_thrashing_monitor,
+        )
+
+        self._presence_in_cage_alarm = PresenceInCageAlarm(
             load_cell_monitor=self._load_cell_monitor,
-            load_cell_tare_monitor=self._tare_detector,
-            audio_monitor=self._audio_thrashing_monitor,
-            external_doors_monitor=self._external_doors_monitor,
-            global_animal_presence_monitor=self._global_animal_presence_monitor,
-            system_maintenance_monitor=self._system_maintenance_monitor,
-            system_fault_monitor=self._system_fault_monitor,
             topcam_presence_attrs=topcam_presence,
         )
+
+        alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor()
 
         self._autoclamp_evasion_detector = AutoClampEvasionDetector(
             loadcell_detector=self._load_cell_monitor,
@@ -122,6 +118,13 @@ class SensorAnalysis(ObservableObject):
         #  dynamically handled alarm sub-monitors:
         reg_alarm_cond = alarm_mon.register_detector
         reg_alarm_cond(EmergencyReason.ANIMAL_EVASION, self._animal_evasion_alarm)
+        reg_alarm_cond(EmergencyReason.MOUSE_THRASHING, self._animal_thrash_alarm)
+        reg_alarm_cond(EmergencyReason.SYSTEM_MAINTENANCE, self._system_maintenance_alarm)
+        reg_alarm_cond(EmergencyReason.SYSTEM_FAULT, self._system_fault_alarm)
+        reg_alarm_cond(EmergencyReason.DOORS_OPEN, self._external_doors_alarm)
+        reg_alarm_cond(EmergencyReason.GLOBAL_ANIMAL_PRESENCE, self._global_animal_presence_alarm)
+        reg_alarm_cond(EmergencyReason.IN_CAGE_AFTER_EXIT_TUNNEL, self._presence_in_cage_alarm)
+        reg_alarm_cond(EmergencyReason.DEVICE_COMM_ERROR, self._device_comm_alarm)
 
         self._perf_monitor = PerfMonitor(name="<sensor-analysis>", units="mps", report_window=30)
 
@@ -130,16 +133,34 @@ class SensorAnalysis(ObservableObject):
             self._load_cell_monitor,
             self._tare_detector,
             self._audio_thrashing_monitor,
-            self._external_doors_monitor,
-            self._global_animal_presence_monitor,
             self._pellet_misplaced_monitor,
             self._auto_tunnel_sweep_monitor,
-            self._system_maintenance_monitor,
-            self._system_fault_monitor,
             self._watchdog_monitor,
+            self._system_maintenance_alarm,
+            self._system_fault_alarm,
+            self._global_animal_presence_alarm,
+            self._presence_in_cage_alarm,
+            self._device_comm_alarm,
+            self._external_doors_alarm,
+            self._animal_thrash_alarm,
             self._autoclamp_evasion_detector,
             self._animal_evasion_alarm,
         ]
+
+        self._alarms = [
+            self._animal_thrash_alarm,
+            self._animal_evasion_alarm,
+            self._system_maintenance_alarm,
+            self._system_fault_alarm,
+            self._external_doors_alarm,
+            self._global_animal_presence_alarm,
+            self._presence_in_cage_alarm,
+            self._device_comm_alarm,
+        ]
+
+    @property
+    def alarms(self) -> List[AlarmDetector]:
+        return self._alarms
 
     @property
     def detectors(self):
@@ -204,16 +225,28 @@ class SensorAnalysis(ObservableObject):
         return self._audio_thrashing_monitor
 
     @property
+    def animal_thrashing_alarm(self) -> AnimalThrashAlarm:
+        return self._animal_thrash_alarm
+
+    @property
     def emergency_alarm_monitor(self) -> EmergencyAlarmMonitor:
         return self._alarm_monitor
 
     @property
-    def global_animal_presence_monitor(self) -> GlobalAnimalPresenceMonitor:
-        return self._global_animal_presence_monitor
+    def presence_in_cage_alarm(self) -> PresenceInCageAlarm:
+        return self._presence_in_cage_alarm
 
     @property
-    def external_doors_monitor(self) -> ExternalDoorsMonitor:
-        return self._external_doors_monitor
+    def global_animal_presence_alarm(self) -> GlobalAnimalPresenceAlarm:
+        return self._global_animal_presence_alarm
+
+    @property
+    def external_doors_alarm(self) -> ExternalDoorsAlarm:
+        return self._external_doors_alarm
+
+    @property
+    def device_comm_alarm(self) -> DeviceCommAlarm:
+        return self._device_comm_alarm
 
     @property
     def pellet_misplaced_monitor(self) -> PelletMisplacedDetector:
@@ -224,12 +257,12 @@ class SensorAnalysis(ObservableObject):
         return self._auto_tunnel_sweep_monitor
 
     @property
-    def system_maintenance_monitor(self) -> SystemMaintenanceMonitor:
-        return self._system_maintenance_monitor
+    def system_maintenance_alarm(self) -> SystemMaintenanceAlarm:
+        return self._system_maintenance_alarm
 
     @property
-    def system_fault_monitor(self) -> SystemFaultMonitor:
-        return self._system_fault_monitor
+    def system_fault_alarm(self) -> SystemFaultAlarm:
+        return self._system_fault_alarm
 
     @property
     def watchdog_monitor(self) -> WatchdogMonitor:
