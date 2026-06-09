@@ -184,11 +184,13 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     algo.pellet_hands_min_distance = algo.pellet_uncover_y_dcs / 2
     algo.uncover_context.y_dcs_valid = True
     algo.uncover_context.start_y_dcs_valid_perf_c = get_current_simulate_perf_now()
+    algo.update_pellet_seen(True)
     pellet_m.environment_changed()
     #
     assert mock_system.pellet_state_trans == []  # not yet
     #
     increase_simulate_perf_now(uncov_cfg.trigger_delay)
+    algo.update_pellet_seen(True)
     pellet_m.environment_changed()
     # and :
     assert pellet_m.state == PelletState.monitoring

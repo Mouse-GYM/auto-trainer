@@ -281,7 +281,6 @@ class TestTrainingPlan(BaseTrainingPlan):
         assert pellet_m._api_status_token is None
         # assert pellet_m.covered_state is False  # depends todo
 
-        algo.capture_status = CaptureProcessStatus.RUNNING  # do not seem necessary
         assert machine.state == SystemState.cage  # still ofc.
 
         self.increment_perf_now(1)

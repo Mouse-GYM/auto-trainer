@@ -13,11 +13,11 @@ from autotrainer.core.capture import CaptureProcessStatus
 
 
 @pytest.fixture
-def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
+def algo(monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
     del mock_get_perf_now  # used for its side effect
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
-    algo = BehaviorAlgorithm()
+    algo = BehaviorAlgorithm(project_info=project_info)
     algo.pellet_delivery_enabled = algo.pellet_cover_enabled = True
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
     return algo
