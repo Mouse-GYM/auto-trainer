@@ -20,7 +20,7 @@ from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protoco
 import yaml
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
-    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
+    ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
@@ -251,6 +251,7 @@ class AppModel(ObservableObject):
         # existing sub-process(es).
 
         self._status = AppModelStatus.IDLE
+        self._start_count = 0
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
@@ -1076,6 +1077,8 @@ class AppModel(ObservableObject):
                 logger.warning("Acquisition already starting")
                 return False
             self._acquisition_starting = True
+            self._start_count += 1
+            is_first_start = self._start_count == 1
 
         algo = self._behavior.algorithm
         analysis = self._analysis

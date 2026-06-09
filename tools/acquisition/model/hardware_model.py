@@ -3,6 +3,7 @@ import re
 import threading
 import time
 import uuid
+from functools import partial
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union, List
@@ -71,6 +72,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         super().__init__()
 
         self._lock = threading.RLock()  # **required** re-entrant lock !!
+        self._connect_count = 0
 
         self._event_manager = EventManager.default()
         self._board_status_timeout: Optional[float] = None
@@ -408,6 +410,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def cover_pellet(self) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.COVER_PELLET)
 
+    def attach_servo(self, servo: Motor) -> Optional[UUID]:
+        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_ATTACH, servo)
+
+    def detach_servo(self, servo: Motor) -> Optional[UUID]:
+        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_DETACH, servo)
+
     def play_tone(self, frequency: int, duration: float) -> Optional[UUID]:
         """Play a tone
         :param frequency: in Hz (integer)
@@ -464,6 +472,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
 
+        self._connect_count += 1
         self._last_motor_coordinates = \
         self._last_requested_set_coordinates = \
         self._last_motor_send_coordinates = _nans_offset3dTuple
@@ -481,21 +490,33 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         device_conn = self._device_conn = DeviceConnection(can_device, cmd_queue, name="can-device")
         device_conn.request_connect()
 
-        self._send_command(device_conn, SystemCommandKind.REQUEST_VERSION)
+        send_dev_cmd = partial(self._send_command, device_conn)
+        def send_dev_ack_cmd(kind, data=None):
+            tok = str(uuid.uuid4())
+            with device_conn.await_acknowledge({tok}):
+                send_dev_cmd(kind, data, context=tok)
+
+        send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
 
         # load and set motors and move configs
-        device_conn.load_default_motor_config()
+        # 1)
+        motors_config = device_conn.load_default_motor_config()
+        # 2)
         device_conn.load_default_move_config()
+        # 3)
+        if self._connect_count == 1:
+            logger.notice("Doing cover attach-release-detach on first connect")
+            send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
+            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
+            send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
+            send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
+            # also need to re-apply the config
 
-        tokens = set()
-        tok = str(uuid.uuid4())
-        tokens.add(tok)
-        with device_conn.await_acknowledge(tokens):
-            self._send_command(device_conn, SystemCommandKind.STREAM_START, context=tok)
+        send_dev_ack_cmd(SystemCommandKind.STREAM_START)
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 
-        self._send_command(device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
+        send_dev_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
 
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():
@@ -648,7 +669,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             return None
 
     # noinspection PyMethodMayBeStatic
-    def _send_command(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None, context=None) -> bool:
+    def _send_command(self,
+                      device: DeviceConnectionProtocol,
+                      cmd: SystemCommandKind,
+                      data=None,
+                      context=None) -> bool:
         if device is not None:
             device.send_message(cmd, data, context)
             return True
