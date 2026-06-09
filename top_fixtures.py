@@ -533,6 +533,8 @@ class MockSystemMachine:
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm
         algo.capture_status = CaptureProcessStatus.RECORDING
+        p_now = get_current_simulate_perf_now()
+        algo.project.start_record_timestamp = p_now
         self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 
