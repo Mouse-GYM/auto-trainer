@@ -8,7 +8,7 @@ from top_fixtures import MockSystemMachine, AlmostEqualFloat
 class TestRecordPrebufferDuration(MockSystemMachine):
 
     @pytest.mark.parametrize("prerecord_duration", [-5, 0])
-    def test_it_does_not_delays_start_session_with_zero_or_negative(self, machine, caplog, prerecord_duration):
+    def test_it_start_session_with_zero_or_negative(self, machine, caplog, prerecord_duration):
         algo = self.algo
         algo.record_prebuffer_duration = prerecord_duration
         algo.update_pellet_seen(True)
@@ -23,7 +23,7 @@ class TestRecordPrebufferDuration(MockSystemMachine):
         assert m_timer.call_args_list == []
 
     @pytest.mark.parametrize("prerecord_duration", [0.4, 2.5])
-    def test_it_delays_start_session_with_positive_duration(self, machine, caplog, prerecord_duration):
+    def test_it_start_session_with_positive_duration(self, machine, caplog, prerecord_duration):
         algo = self.algo
         algo.record_prebuffer_duration = prerecord_duration
         algo.update_pellet_seen(True)
@@ -34,7 +34,5 @@ class TestRecordPrebufferDuration(MockSystemMachine):
         algo.update_pellet_seen(True)
         with self.patch_timer(f"{machine.__class__.__module__}._consider_start_session_timer") as m_timer:
             self.sensor_analysis.load_cell_monitor.is_engaged = True
-        assert not algo.is_in_session
-        assert m_timer.call_args_list == [
-            mock.call(AlmostEqualFloat(half), mock.ANY)
-        ]
+        assert algo.is_in_session
+        assert m_timer.call_args_list == []

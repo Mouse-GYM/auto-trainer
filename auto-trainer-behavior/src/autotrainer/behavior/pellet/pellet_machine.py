@@ -491,9 +491,10 @@ class PelletMachine(StateMachine):
         elif cur_state in {PelletState.retract, PelletState.home}:
             if not can_use_command:
                 return
-            if self.can_load_pellet():
-                reason = f"load_pellet_when_{cur_state}"
-                action = self.load_pellet
+            if self.can_load_pellet(use_any_cam=True):
+                reason = "reload_pellet_when_loading"
+                def action():
+                    self.load_pellet(use_any_cam=True)
             else:
                 action, reason = self._check_send_or_cover_or_release()
 

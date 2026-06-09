@@ -219,18 +219,21 @@ def test_delivery_disabled_defaults(algo):
     #
     algo.pellet_delivery_enabled = True
     #
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     assert algo.can_load_pellet() is False
 
     algo.update_triangle_seen(True)
     assert algo.can_load_pellet() is True
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     #
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is True
     algo.pellet_cover_enabled = False
     assert algo.can_release_pellet() is True
     assert algo.can_cover_pellet() is False
+    #
+    algo.start_session(reason="manual")
+    assert algo.can_send_pellet() is True
 
 
 def test_algo_paused(algo):
@@ -241,7 +244,7 @@ def test_algo_paused(algo):
     assert algo.can_load_pellet() is False
     assert algo.start_session() is False
     algo.algo_paused = False
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     assert algo.can_cover_pellet() is True
     assert algo.triangle_recently_seen is False
     assert algo.can_load_pellet() is False  # given not triangle recently seen

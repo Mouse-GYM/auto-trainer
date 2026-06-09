@@ -33,6 +33,10 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         algo = self.algo
         cfg = algo.home_on_excessive_drift_distance_config
         cfg.enabled = True
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        self.make_load_cell_active()
+        self.mock_pellet_ack(until_none=True)
         self._cur_seq = 0
 
     def make_pose_rsp(self, triangle_pos):
@@ -83,6 +87,8 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         cfg = self.algo.home_on_excessive_drift_distance_config
         cfg.enabled = enabled
         cfg.min_samples = min_samples
+        self.make_load_cell_active()
+        self.mock_pellet_ack(until_none=True)
         diam_cfg = self.algo.diamond_triangle_config
         dist_thresh = cfg.excessive_distance_threshold
         big_drift = Offset3DTuple(dist_thresh, dist_thresh, dist_thresh)

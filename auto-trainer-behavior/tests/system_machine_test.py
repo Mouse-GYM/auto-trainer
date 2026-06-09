@@ -108,13 +108,13 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert load_attempt_count == 2
     assert mock_system.pellet_state_trans == []
     assert pellet_m._api_status_token is not None
+    assert pellet_m.state == PelletState.loading
     # pellet must be seen after loading to go to sending
     mock_system.mock_pose_response(pellet_seen=True)
     mock_system.mock_pellet_ack(until_none=True)  # ack everything
     assert mock_system.pellet_state_trans == [
         PelletState.covering,
-        PelletState.sending,
-        PelletState.monitoring,
+        PelletState.loading,
     ]
     mock_system.pellet_state_trans.clear()
 
@@ -122,14 +122,16 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert mock_system.machine_state_trans == []
 
     mock_system.mock_pose_response(pellet_seen=False)
-    assert pellet_m.state == PelletState.monitoring, "must wait missing time before load"
+    assert pellet_m.can_use_pellet_command(), "must wait missing time before load"
     mock_system.increment_perf_now(algo.pellet_missing_time)
-
-    assert pellet_m.state == PelletState.monitoring
+    mock_system.mock_pose_response(pellet_seen=False)
+    assert pellet_m.state == PelletState.loading  # still
+    assert not pellet_m.can_use_pellet_command() # but now cannot use
+    assert pellet_m._api_status_token is pellet_m._token_pellet_load
 
     mock_system.make_load_cell_active()
     assert algo.is_in_session is False, "without a pellet-seen session must not start"
-    assert pellet_m.state == PelletState.monitoring  # still monitoring
+    assert pellet_m.state == PelletState.loading  # still monitoring
     assert machine.state == SystemState.tunnel  # but tunnel
 
     # now:
@@ -140,24 +142,18 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     mock_system.mock_pose_response(pellet_seen=True)  # make pellet-seen
     assert algo.pellet_recently_seen
 
-    mock_system.mock_pellet_ack()  # ack the loading AFTER put pellet_seen
+    mock_system.mock_pellet_ack()  # ack the covering after pellet seen
 
-    assert algo.is_in_session is False
+    assert algo.is_in_session is True
     assert algo.pellet_recently_seen
 
-    mock_system.mock_pellet_ack(until_none=True)  # ack the loading AFTER put pellet_seen
-
-    assert pellet_m.state == PelletState.monitoring
+    assert pellet_m.state == PelletState.sending
     assert mock_system.pellet_state_trans == [
-        PelletState.loading,
         PelletState.covering,
         PelletState.sending,
-        PelletState.monitoring,
     ]
-
     assert algo.pellet_recently_seen
-    assert algo.is_in_session, "Once pellet seen and send acked and in monitoring"
-    mock_system.mock_pellet_ack()  # ack the sending, covering is included.
+    mock_system.mock_pellet_ack()  # ack the sending
     mock_system.make_load_cell_inactive()
     assert not algo.is_in_session
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
@@ -208,9 +204,10 @@ def test_intersession_enabled(mock_system, machine):
     mock_system.make_load_cell_active()  # this trigger a start session recording
 
     assert algo.is_in_session
-    assert pellet_m.state == PelletState.monitoring
+    assert pellet_m.state == PelletState.retract
     assert machine.state == SystemState.tunnel
     assert algo.system_state == machine.state
+    mock_system.mock_pellet_ack(until_none=True)
     assert pellet_m.state == PelletState.monitoring
 
     mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, ack_pellet=True)
@@ -230,6 +227,9 @@ def test_intersession_enabled(mock_system, machine):
         SystemState.intersession,
     ]
     assert mock_system.pellet_state_trans == [
+        PelletState.retract,
+        PelletState.sending,
+        PelletState.monitoring,
         PelletState.retract,
     ]
     assert pellet_m._api_status_token is not None, \
