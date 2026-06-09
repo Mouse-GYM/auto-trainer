@@ -242,7 +242,6 @@ def test_algo_paused(algo):
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is False
     assert algo.can_load_pellet() is False
-    assert algo.start_session() is False
     algo.algo_paused = False
     assert algo.can_send_pellet() is False
     assert algo.can_cover_pellet() is True

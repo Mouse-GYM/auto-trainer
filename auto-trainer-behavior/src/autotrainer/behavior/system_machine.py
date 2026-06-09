@@ -248,11 +248,11 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
-        self._disengage_auto_clamp()
+        with algo.set_allow_reentrant(True):
+            self._disengage_auto_clamp()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
-            with algo.set_allow_reentrant(True):
-                algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+            algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             batch_projects = self._batch_project_sessions_list
             if len(batch_projects) > 0:
@@ -308,7 +308,8 @@ class SystemMachine(StateMachine):
 
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
-        intersession.perform_segmentation(project_info)
+        with algo.set_allow_reentrant(True):
+            intersession.perform_segmentation(project_info)
         self._inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
         self._consider_close_gate_during_intersession()
 
@@ -547,7 +548,8 @@ class SystemMachine(StateMachine):
                 ApiEventKind.batchAnalysisEnded,
                 data=dict(failed_count=self._batch_failed_count))
 
-        self.exit_intersession()
+        with algo.set_allow_reentrant(True):
+            self.exit_intersession()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_property_changed(self, name: str, new_value, prev_value):
@@ -556,6 +558,7 @@ class SystemMachine(StateMachine):
                            prev_value, new_value, self.state)
             self._consider_enter_tunnel(reason="inference_begin_live_when_load_cell_engaged")
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         logger.verbose("got inference segmentation finished: %s ; err=%s prj=%s", success, error, project)
         inference = self._inference
@@ -592,7 +595,8 @@ class SystemMachine(StateMachine):
                 inter_state = self.intersession.state
                 if self._state != SystemState.cage:
                     if inter_state == IntersessionState.idle:
-                        self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
+                        with self._algorithm.set_allow_reentrant(True):
+                            self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
                     else:
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
@@ -612,9 +616,6 @@ class SystemMachine(StateMachine):
             logger.debug("auto_clamp already in progress")
             return
         is_headbar_pressure_engaged = self._analysis.headbar_pressure_monitor.is_engaged
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
-        self._timer_auto_clamp_evaluate = no_op_timer
         if not algo.head_fixation_enabled:
             logger.info("auto-clamp: disabled (no action taken)")
             return
@@ -630,6 +631,7 @@ class SystemMachine(StateMachine):
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
+        self._timer_auto_clamp_evaluate.cancel()
         p_now = get_perf_now()
         cfg = algo.active_config.head_clamp
         disengage_age = p_now - self._last_disengage_autoclamp_perf_c
@@ -873,8 +875,8 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
         clamp_cfg = self._algorithm.head_clamp_config
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
+        self._timer_auto_clamp_evaluate.cancel()  # not sure that we want this one
+        self._timer_auto_clamp_disengage.cancel()  # ensure no other disengage timer remain
         pre_duration = clamp_cfg.prerelease_duration
         if pre_duration > 0:
             intensity = clamp_cfg.prerelease_intensity
@@ -899,8 +901,8 @@ class SystemMachine(StateMachine):
             return
         self._auto_clamp_disengage_in_progress = True
         logger.info("auto-clamp: starting disengage procedure..")
-        self._timer_auto_clamp_evaluate.cancel()  # in case of
-        self._timer_auto_clamp_disengage.cancel()  # also
+        self._timer_auto_clamp_evaluate.cancel()  # no sure about this one
+        self._timer_auto_clamp_disengage.cancel()
         pellet_dev = self._pellet_device
         algo = self._algorithm
         clamp_cfg = algo.head_clamp_config
@@ -920,7 +922,8 @@ class SystemMachine(StateMachine):
             )
             timer.start()
         else:
-            self._pre_disengage_auto_clamp()
+            with BehaviorAlgorithm.set_allow_reentrant(True):
+                self._pre_disengage_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_close_gate_during_intersession(self):
@@ -1124,7 +1127,8 @@ class SystemMachine(StateMachine):
             and self._analysis.load_cell_monitor.is_engaged
         ):
             return
-        self.enter_tunnel(reason=reason)
+        with self._algorithm.set_allow_reentrant(True):
+            self.enter_tunnel(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _consider_start_session(self, reason: str = "NA"):
@@ -1205,7 +1209,8 @@ class SystemMachine(StateMachine):
             if prev_timer.finished.is_set():
                 logger.verbose("creating timer for consider_end_session within %.1f", delay)
                 timer = self._timer_consider_end_session = _consider_end_session_timer(
-                    delay, lambda: algo.end_capture_session(reason=reason))
+                    # NB: using algo.put_func_call to ensure it's executed with algo thread handler
+                    delay, lambda: algo.put_func_call(algo.end_capture_session, kwargs=dict(reason=reason), wait=False))
                 timer.start()
         else:
             algo.end_capture_session(reason=reason)

@@ -384,7 +384,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             p_now = time.perf_counter()
             if p_now - prev_perf_c_report > 5:
                 if tot_msgs > 0 or prev_tot_msgs != tot_msgs:
-                    logger.debug("%.1f msgs/s", tot_msgs / (p_now - prev_perf_c_report))
+                    logger.debug("%.1f msgs/s reentrant_size=%s",
+                                 tot_msgs / (p_now - prev_perf_c_report),
+                                 len(reentrant_list))
                     prev_tot_msgs = tot_msgs
                     tot_msgs = 0
                 else:
@@ -1109,10 +1111,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     #
 
     def start_session(self, *, reason: str = "NA"):
+        """Start a session/trial recording"""
         with self._thread_lock:
-            return self._start_capture_session(reason=reason)
+            return self._start_session(reason=reason)
 
-    def _start_capture_session(self, *, reason: str):
+    def _start_session(self, *, reason: str = "NA"):
         if self._is_in_session:
             logger.warning("%s: start_session() called but already in session", reason)
             return False
@@ -1155,7 +1158,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         with self._thread_lock:
             return self._end_capture_session(reason=reason)
 
-    def _end_capture_session(self, *, reason: RecordingEndingReason):
+    def _end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         if not self._is_in_session:
             logger.warning("%s: end_session() called but not in session (out reason: %s)",
                            reason, self._stop_session_reason)
@@ -1179,16 +1182,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
             ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
-        self.session_capture_ending(reason)
         self._event_manager.flush()
+        with self.set_allow_reentrant(True):
+            self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
     def end_session(self, result: CaptureAnalysisResult):
+        """called on end of a full "session" handling, analysis on it possibly included, if not delayed.
+        But this is still called from system machine when analysis is delayed.
+        """
         logger.notice("session processing end: %s", result)
         self._event_manager.post_event_content(
             ApiEventKind.trialEnded, data=dict(result=result))
-        self.session_ending(result)
+        self.session_ending(result)  # NB: only used via tests
 
     def reset_session_pellet_count(self):
         self.session_pellet_loaded_count = 0
