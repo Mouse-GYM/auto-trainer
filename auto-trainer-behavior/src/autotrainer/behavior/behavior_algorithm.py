@@ -59,11 +59,12 @@ class PelletUncoverContext:
         self.y_dcs_valid = False
         self.has_released = False
         self.start_min_y = math.nan
-        self.start_y_dcs_valid_perf_c = get_perf_now()
+        self.start_y_dcs_valid_perf_c = math.nan
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
         return self.has_released or (
-            self.y_dcs_valid and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
+            self.y_dcs_valid
+            and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
         )
 
 
@@ -1301,19 +1302,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if self._algo_paused:
             return False
-        cfg = self._active_config.pellet_delivery
         uncov_cfg = self._active_config.pellet_uncover
         ctx = self._uncover_ctx
-        if self.can_cover_pellet():
+        project = self._project_info
+        if project is not None and self.can_cover_pellet():
             if self._is_in_session and pellet_state == PelletState.monitoring:
-                p_now = get_perf_now()
+                p_now = self._parts_pres_ctx_any_cam.last_perf_c
                 return (
-                    self._capture_status == CaptureProcessStatus.RECORDING
+                        # this 1st condition might not be necessary anymore
+                        self._capture_status == CaptureProcessStatus.RECORDING
+                    # and math.isfinite(project.t_pellet_presented)
                     and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
-
-        return cfg.is_enabled
+        return self._active_config.pellet_delivery.is_enabled
 
         # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
         # determining consumed happens during intersession) and b) need to determine whether said limit should

@@ -755,6 +755,9 @@ class SystemMachine(StateMachine):
             algo.handle_release_pellet_offset(offset)
 
     def _handle_pellet_uncover(self, response: PoseResponse):
+        project = self._project_info
+        if project is None:
+            return
         algo = self._algorithm
         active_cfg = self._algorithm.active_config
         if not (algo.is_in_session and active_cfg.pellet_delivery.is_pellet_cover_enabled):
@@ -772,8 +775,13 @@ class SystemMachine(StateMachine):
                     min_y = part_3d.y
                 if part_3d.y > max_y:
                     max_y = part_3d.y
-        perf_now = get_perf_now()
-        valid = max_y < uncov_cfg.min_y_dcs
+        perf_now = get_perf_now()  # response.perf_c  #
+        t_presented = self._session_started_perf_c + project.t_pellet_presented
+        valid = (
+            max_y < uncov_cfg.min_y_dcs
+            and math.isfinite(t_presented)
+            and perf_now - t_presented >= uncov_cfg.trigger_delay
+        )
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
@@ -1086,8 +1094,9 @@ class SystemMachine(StateMachine):
                 self._session_pellet_sent_perf_c = perf_c
                 project = self._project_info
                 if project is not None:
-                    logger.debug("set project.pellet_presented_perf_c=%.3f", perf_c)
-                    project.t_pellet_presented = perf_c - self._algorithm.recording_start_perf_c
+                    t_presented = perf_c - self._algorithm.recording_start_perf_c
+                    logger.debug("set project.t_presented=%.3f perf=%.3f", t_presented, perf_c)
+                    project.t_pellet_presented = t_presented
         else:
             self._consider_start_session(reason="pellet-sent")
 
