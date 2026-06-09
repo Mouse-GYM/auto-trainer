@@ -505,7 +505,7 @@ class PelletMachine(StateMachine):
                 action = self.load_pellet
             else:
                 action, reason = self._check_cover_or_release()
-                if action is None and can_use_command and algo.can_retract_pellet():
+                if action is None and can_use_command and algo.can_retract_pellet(pellet_stats=cur_state):
                     reason = "retract_when_monitor"
                     action = self.move_retract
         else:

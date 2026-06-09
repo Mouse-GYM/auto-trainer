@@ -1328,10 +1328,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         #
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
-    def can_retract_pellet(self) -> bool:
-        if not self._head_fixation_enabled:
-            return False
-        return not self._is_in_session
+    def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
+        # if not self._head_fixation_enabled:
+        #     return False
+        return not self._is_in_session and pellet_state == PelletState.monitoring
 
     def can_perform_intersession_analysis(self):
         return self._active_config.pellet_delivery.is_intersession_analysis_enabled and self._session_mouse_seen
