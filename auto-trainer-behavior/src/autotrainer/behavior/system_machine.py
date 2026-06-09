@@ -1157,11 +1157,6 @@ class SystemMachine(StateMachine):
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and (
-                # waiting monitoring state, ensure pellet is in deliver position
-                pellet_machine.state == PelletState.monitoring
-                or autoclamp_enabled  # or using auto-clamp which allows start session before
-            )
         ):
             logger.debug("Not good state")
             return
