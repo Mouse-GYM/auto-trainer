@@ -1307,7 +1307,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         project = self._project_info
         if project is not None and self.can_cover_pellet():
             if self._is_in_session and pellet_state == PelletState.monitoring:
-                p_now = self._parts_pres_ctx_any_cam.last_perf_c
+                p_now = get_perf_now()  # self._parts_pres_ctx_any_cam.last_perf_c
                 return (
                         # this 1st condition might not be necessary anymore
                         self._capture_status == CaptureProcessStatus.RECORDING

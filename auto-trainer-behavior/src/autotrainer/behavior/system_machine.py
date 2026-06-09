@@ -776,11 +776,9 @@ class SystemMachine(StateMachine):
                 if part_3d.y > max_y:
                     max_y = part_3d.y
         perf_now = get_perf_now()  # response.perf_c  #
-        t_presented = self._session_started_perf_c + project.t_pellet_presented
         valid = (
             max_y < uncov_cfg.min_y_dcs
-            and math.isfinite(t_presented)
-            and perf_now - t_presented >= uncov_cfg.trigger_delay
+            and math.isfinite(project.t_pellet_presented)
         )
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
