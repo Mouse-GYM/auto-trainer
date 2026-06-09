@@ -81,7 +81,8 @@ class IntersessionMachine(StateMachine):
         if res is None:
             logger.error("perform segmentation didn't started")
             self._segmentation_configuration = None
-            self.end_analysis(project_info, False)
+            with self._algorithm.set_allow_reentrant(True):
+                self.end_analysis(project_info, False)
         else:
             self.events.on_analysis_started()
             self.post_event_content(ApiEventKind.intertrialSegmentationBegin)
@@ -101,11 +102,15 @@ class IntersessionMachine(StateMachine):
         logger.info("end_analysis(success=%s) of %s", success, project)
         seg_cfg = self._segmentation_configuration
         det_cfg = self._detection_configuration
+        self._segmentation_configuration = None
+        self._detection_configuration = None
         if det_cfg is None and seg_cfg is None:
             logger.warning("Unexpected end_analysis while no segmentation or detection configuration, project=%s",
                            project)
-        self._segmentation_configuration = None
-        self._detection_configuration = None
+        if seg_cfg is not None and seg_cfg.project != project:
+            logger.warning("Unexpected segment config project: %s vs %s", seg_cfg.project, project)
+        if det_cfg is not None and det_cfg.project != project:
+            logger.warning("Unexpected detection config project: %s vs %s", det_cfg.project, project)
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
         self._algorithm.end_session(result)
         self.events.on_analysis_ended(result)
@@ -131,21 +136,32 @@ class IntersessionMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _segmentation_complete(self, success: bool, *,
                                segment_config: SegmentationConfiguration, error: str="NA"):
+        self_seg_cfg = self._segmentation_configuration
+        self._segmentation_configuration = None
         logger.verbose("segmentation_complete: success=%s config=%s ; error=%s",
                      success, segment_config, error)
+        if self_seg_cfg is None or self_seg_cfg.project != segment_config.project:
+            logger.warning("unexcepted internal segment config project: %s vs complete seg: %s",
+                           None if self_seg_cfg is None else self_seg_cfg.project,
+                           segment_config.project)
         project = segment_config.project
         if success:
             self.post_event_content(ApiEventKind.intertrialSegmentationEnd)
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
-                self.perform_detection(segment_config)
+                def algo_action():
+                    self.perform_detection(segment_config)
             else:
                 logger.warning("cannot perform detection for %s", project)
-                self.end_analysis(project, False)
+                def algo_action():
+                    self.end_analysis(project, False)
         else:
             logger.error("perform segmentation failed. config=%s", segment_config)
             self.post_event_content(ApiEventKind.intertrialSegmentationError, data=dict(error=error))
-            self.end_analysis(project, False)
-        self._segmentation_configuration = None
+            def algo_action():
+                self.end_analysis(project, False)
+        if algo_action is not None:
+            with self._algorithm.set_allow_reentrant(True):
+                algo_action()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _detection_complete(self, success: bool, *,
@@ -155,7 +171,8 @@ class IntersessionMachine(StateMachine):
             self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error))
         else:
             self.post_event_content(ApiEventKind.intertrialDetectionEnd)
-        self.end_analysis(detection_config.project, success)
+        with self._algorithm.set_allow_reentrant(True):
+            self.end_analysis(detection_config.project, success)
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
