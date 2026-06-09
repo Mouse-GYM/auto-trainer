@@ -1232,7 +1232,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 self._autoclamp_in_progress
                 # isn't there another possibility ?
             )
-        return True
+        return self._is_in_session
 
     def would_load_pellet(
         self,
