@@ -95,6 +95,9 @@ class BaseTrainingPlan(MockSystemMachine):
         #     sub_cfg.is_emergency_condition = False  # in case of.
         system_config.save_default(trainer_config_dir)
 
+        # prevent slow exit when issue:
+        monkeypatch.setattr(CanDevice, CanDevice._check_tunnel_pellet_status_age.__name__, lambda s: None)
+
         app_model = self._app_model = AppModel(
             user_pref,
             system_message_handler=msg_handler,
@@ -269,6 +272,18 @@ class TestTrainingPlan(BaseTrainingPlan):
             f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"
         )
+        half = algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay / 2 
+        self.increment_perf_now(half)
+        self.mock_pose_response(pellet_seen=True)
+        if pellet_m.state == PelletState.home:
+            self.mock_pellet_ack(until_none=True)
+        self.increment_perf_now(half + 0.01)
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        if pellet_m.state == PelletState.sending:
+            self.mock_pellet_ack(until_none=True)
+        self.mock_pose_response(pellet_seen=True)
+
         assert pellet_m.state == PelletState.monitoring, (
             f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"
