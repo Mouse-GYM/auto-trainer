@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 from typing import Optional, Tuple
@@ -40,6 +41,11 @@ def intersession_process(
     :param debug_level: integer debug level.
     :return: information required to update behavior for future sessions
     """
+    if not math.isfinite(project.t_pellet_presented):
+        project.t_pellet_presented = 0
+    if not math.isfinite(project.t_pellet_released):
+        project.t_pellet_released = project.t_pellet_presented
+    #
     location, _, _ = project.get_session_path()
     logger.info("process intersession pose data using %s", location)
     calib_src_dir = (
@@ -78,7 +84,7 @@ def intersession_process(
             max=-1,
             method=d['method'],
             outcome=d['outcome'],
-            delay_since_presented=d['placed'] / frame_rate - project.t_pellet_presented,
+            delay_since_presented=d['placed'] / frame_rate - project.t_pellet_released,
         ) for d in results_dict["other_events"]
     ]
     return IntersessionResponse(**results_dict)

@@ -18,13 +18,9 @@ from autotrainer.core.reach_event import (
     ReachEventMethod,
 )
 from autotrainer.inference.analysis import prepare_jetson_data as prep_jet
-import autotrainer.inference.analysis._segment_reaches_f1 as segment_reaches_f11_module
+from autotrainer.inference.analysis._segment_reaches_f1 import segment_reaches_f11
 
 logger = get_verbose_logger(__name__)
-
-
-# print(segment_reaches_f11_module)
-segment_reaches_f11 = segment_reaches_f11_module.segment_reaches_f11
 
 
 def get_coeffs():
@@ -231,21 +227,15 @@ def segment_reaches_f1(
     df_3d_pellet = df_3d["Pellet"]
     t_presented = project.t_pellet_presented
     t_released = project.t_pellet_released
-    f_presented = 0
-    f_released = 0
-    if math.isfinite(t_presented):
-        f_presented = int(t_presented * frame_rate)
-    if math.isfinite(t_released):
-        f_released = int(t_released * frame_rate)
-    if f_released < f_presented:
-        f_released = f_presented
+    f_presented = int(t_presented * frame_rate)
+    f_released = int(t_released * frame_rate)
 
     # todo; using up to 25 frames arbitrarily, we might want be more precise
     r = df_3d_pellet.iloc[f_presented:f_presented + 25].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")
 
-    logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s",
-                   pellet_home, f_presented, f_released)
+    logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s t_pres=%.3f t_rel=%.3f",
+                   pellet_home, f_presented, f_released, t_presented, t_released)
 
     return segment_reaches_f11(
         df_3d=df_3d,
@@ -382,7 +372,7 @@ def segment_reaches_f2(
                         if testA and testB:
                             if debug >= 2:
                                 logger.debug('reach began at frame %d!', frame)
-                            delay_since_presented = frame / fps - project.t_pellet_presented
+                            delay_since_presented = frame / fps - project.t_pellet_released
                             reach_dict = {
                                 'init': frame,
                                 'max': None,

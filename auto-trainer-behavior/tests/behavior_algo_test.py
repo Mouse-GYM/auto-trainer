@@ -10,6 +10,7 @@ from autotrainer.core.interfaces import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.core.capture import CaptureProcessStatus
+from top_fixtures import increase_simulate_perf_now
 
 
 @pytest.fixture
@@ -233,6 +234,8 @@ def test_delivery_disabled_defaults(algo):
     assert algo.can_cover_pellet() is False
     #
     algo.start_session(reason="manual")
+    assert algo.can_send_pellet() is False
+    increase_simulate_perf_now(algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay)
     assert algo.can_send_pellet() is True
 
 
