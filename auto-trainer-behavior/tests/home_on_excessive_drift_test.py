@@ -33,10 +33,6 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         algo = self.algo
         cfg = algo.home_on_excessive_drift_distance_config
         cfg.enabled = True
-        self.mock_pose_response(pellet_seen=True)
-        self.mock_pellet_ack(until_none=True)
-        self.make_load_cell_active()
-        self.mock_pellet_ack(until_none=True)
         self._cur_seq = 0
 
     def make_pose_rsp(self, triangle_pos):
@@ -65,8 +61,16 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         expected_count = 0 if algo.home_on_excessive_drift_distance_config.enabled else min_samples
         assert algo.diamond_triangle_drift_data_points_size == expected_count
 
+    def _make_to_monitoring(self):
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        self.make_load_cell_active()
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+
     @pytest.mark.parametrize("min_samples", [5, 15])
     def test_without_drift(self, min_samples):
+        self._make_to_monitoring()
         cfg = self.algo.home_on_excessive_drift_distance_config
         cfg.min_samples = min_samples
         diam_cfg = self.algo.diamond_triangle_config
@@ -84,6 +88,7 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
     @pytest.mark.parametrize("enabled", [False, True])
     @pytest.mark.parametrize("min_samples", [5, 15])
     def test_with_drift(self, min_samples, enabled):
+        self._make_to_monitoring()
         cfg = self.algo.home_on_excessive_drift_distance_config
         cfg.enabled = enabled
         cfg.min_samples = min_samples
