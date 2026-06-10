@@ -102,6 +102,7 @@ v0_expected_result_config = {
             "is_pellet_cover_enabled": True,
             "is_intersession_analysis_enabled": True,
             "is_intersession_pellet_shift_enabled": True,
+            "autoclamp_disabled_pellet_send_wait_delay": 1.0,
             "max_pellets_per_session": 20,
             "max_pellets_per_day": 25,
             "max_pellet_missing_seconds": 10.0,
@@ -199,9 +200,9 @@ def test_load_version_1():
             'weight_active_threshold': 15.0,
             'weight_inactive_threshold': 2,
     })
-    expected_behavior = {
-            'load_cell': exp_load_cell,
-            'pellet_delivery': {
+    expected_behavior = copy.deepcopy(behavior_default_config_dict)
+    expected_behavior["load_cell"] = exp_load_cell
+    expected_behavior["pellet_delivery"].update({
                 'is_enabled': False,
                 'is_intersession_analysis_enabled': True,
                 'is_intersession_pellet_shift_enabled': True,
@@ -214,10 +215,10 @@ def test_load_version_1():
                 'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
                 'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
             }
-    }
-    for k, v in behavior_default_config_dict.items():
-        if k not in expected_behavior:
-            expected_behavior[k] = v
+    )
+    # for k, v in behavior_default_config_dict.items():
+    #     if k not in expected_behavior:
+    #         expected_behavior[k] = v
     assert dataclasses.asdict(config) == {
         'behavior': expected_behavior,
         'cameras': [{'host': None,

@@ -1239,7 +1239,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 self._autoclamp_in_progress
                 # isn't there another possibility ?
             )
-        return self._is_in_session
+        t_since_started = get_perf_now() - self._session_started_perf_c
+        return (
+            self._is_in_session
+            and t_since_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay
+        )
 
     def would_load_pellet(
         self,
