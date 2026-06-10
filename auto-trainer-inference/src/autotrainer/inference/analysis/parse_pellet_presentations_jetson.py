@@ -234,7 +234,7 @@ def segment_reaches_f1(
     r = df_3d_pellet.iloc[f_delivered:f_delivered + 25].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")
 
-    logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s t_pres=%.3f t_rel=%.3f",
+    logger.verbose("segment_reaches: using pellet_home=%s ; f_deliv=%s f_pres=%s t_deliv=%.3f t_pres=%.3f",
                    pellet_home, f_delivered, f_presented, t_delivered, t_presented)
 
     return segment_reaches_f11(
