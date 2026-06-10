@@ -120,7 +120,7 @@ class _ProjectInfo:
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
     start_record_timestamp: float = math.nan  # regular unix timestamp, in seconds
-    t_pellet_presented: float = math.nan  # in seconds (zero-based on start_recording)
+    t_pellet_delivered: float = math.nan  # in seconds (zero-based on start_recording)
     t_pellet_released: float = math.nan
 
 
@@ -141,7 +141,7 @@ class ProjectInfo(_ProjectInfo):
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
         start_record_timestamp: float = _ProjectInfo.start_record_timestamp,
-        t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
+        t_pellet_delivered: float = _ProjectInfo.t_pellet_delivered,
         t_pellet_released: float = _ProjectInfo.t_pellet_released,
         #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
@@ -180,7 +180,7 @@ class ProjectInfo(_ProjectInfo):
         self.send_position = send_position
         self.dcs_send_position = dcs_send_position
         self.start_record_timestamp = start_record_timestamp
-        self.t_pellet_presented = t_pellet_presented
+        self.t_pellet_delivered = t_pellet_delivered
         self.t_pellet_released = t_pellet_released
 
     # def __repr__(self):
@@ -398,7 +398,7 @@ class ProjectInfo(_ProjectInfo):
         with self:
             self.when = when  # noqa
             self.session = session  # noqa
-            self.start_record_timestamp = self.t_pellet_presented = self.t_pellet_released = math.nan
+            self.start_record_timestamp = self.t_pellet_delivered = self.t_pellet_released = math.nan
 
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""

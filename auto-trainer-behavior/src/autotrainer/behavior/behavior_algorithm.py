@@ -1322,7 +1322,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 return (
                         # this 1st condition might not be necessary anymore
                         self._capture_status == CaptureProcessStatus.RECORDING
-                    # and math.isfinite(project.t_pellet_presented)
                     and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False

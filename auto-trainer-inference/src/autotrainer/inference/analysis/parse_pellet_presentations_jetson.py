@@ -225,17 +225,17 @@ def segment_reaches_f1(
         df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
 
     df_3d_pellet = df_3d["Pellet"]
-    t_presented = project.t_pellet_presented
+    t_delivered = project.t_pellet_delivered
     t_released = project.t_pellet_released
-    f_presented = int(t_presented * frame_rate)
+    f_delivered = int(t_delivered * frame_rate)
     f_released = int(t_released * frame_rate)
 
     # todo; using up to 25 frames arbitrarily, we might want be more precise
-    r = df_3d_pellet.iloc[f_presented:f_presented + 25].loc[df_3d_pellet['p'] == 1]
+    r = df_3d_pellet.iloc[f_delivered:f_delivered + 25].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")
 
     logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s t_pres=%.3f t_rel=%.3f",
-                   pellet_home, f_presented, f_released, t_presented, t_released)
+                   pellet_home, f_delivered, f_released, t_delivered, t_released)
 
     return segment_reaches_f11(
         df_3d=df_3d,

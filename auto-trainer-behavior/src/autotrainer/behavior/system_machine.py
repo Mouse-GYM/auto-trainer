@@ -426,7 +426,7 @@ class SystemMachine(StateMachine):
             prj.send_position = self._pellet_device.last_set_position
             prj.dcs_send_position = dcs_send_pos
             if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
-                prj.t_pellet_presented = 0
+                prj.t_pellet_delivered = 0
             logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
             self._inference.project = prj
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
@@ -780,7 +780,7 @@ class SystemMachine(StateMachine):
         perf_now = get_perf_now()  # response.perf_c  #
         valid = (
             max_y < uncov_cfg.min_y_dcs
-            and math.isfinite(project.t_pellet_presented)
+            and math.isfinite(project.t_pellet_delivered)
         )
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
@@ -1095,9 +1095,9 @@ class SystemMachine(StateMachine):
                 self._session_pellet_sent_perf_c = perf_c
                 project = self._project_info
                 if project is not None:
-                    t_presented = perf_c - self._algorithm.recording_start_perf_c
-                    logger.debug("set project.t_presented=%.3f perf=%.3f", t_presented, perf_c)
-                    project.t_pellet_presented = t_presented
+                    t_delivered = perf_c - self._algorithm.recording_start_perf_c
+                    logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
+                    project.t_pellet_delivered = t_delivered
         else:
             self._consider_start_session(reason="pellet-sent")
 

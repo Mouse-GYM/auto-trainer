@@ -41,10 +41,10 @@ def intersession_process(
     :param debug_level: integer debug level.
     :return: information required to update behavior for future sessions
     """
-    if not math.isfinite(project.t_pellet_presented):
-        project.t_pellet_presented = 0
+    if not math.isfinite(project.t_pellet_delivered):
+        project.t_pellet_delivered = 0
     if not math.isfinite(project.t_pellet_released):
-        project.t_pellet_released = project.t_pellet_presented
+        project.t_pellet_released = project.t_pellet_delivered
     #
     location, _, _ = project.get_session_path()
     logger.info("process intersession pose data using %s", location)
