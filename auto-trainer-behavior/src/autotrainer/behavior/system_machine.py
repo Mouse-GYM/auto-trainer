@@ -1112,9 +1112,9 @@ class SystemMachine(StateMachine):
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
             perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
         if self._algorithm.is_in_session:
-            if project is not None:
-                project.t_pellet_released = perf_c - self._algorithm.recording_start_perf_c
-                logger.debug("set pellet_released_perf_c=%.3f to project=%s", perf_c, project)
+            if project is not None and not math.isfinite(project.t_pellet_presented):
+                project.t_pellet_presented = perf_c - self._algorithm.recording_start_perf_c
+                logger.debug("set pellet_presented_perf_c=%.3f to project=%s", perf_c, project)
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)

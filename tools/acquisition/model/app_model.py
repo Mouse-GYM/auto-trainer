@@ -1966,7 +1966,7 @@ class AppModel(ObservableObject):
             "notes": self.notes or "",
             "session": session,
             "t_pellet_delivered": project.t_pellet_delivered,
-            "t_pellet_released": project.t_pellet_released,
+            "t_pellet_presented": project.t_pellet_presented,
             "configuration": None,
         }
 

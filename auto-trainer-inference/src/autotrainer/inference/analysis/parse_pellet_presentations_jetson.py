@@ -226,16 +226,16 @@ def segment_reaches_f1(
 
     df_3d_pellet = df_3d["Pellet"]
     t_delivered = project.t_pellet_delivered
-    t_released = project.t_pellet_released
+    t_presented = project.t_pellet_presented
     f_delivered = int(t_delivered * frame_rate)
-    f_released = int(t_released * frame_rate)
+    f_presented = int(t_presented * frame_rate)
 
     # todo; using up to 25 frames arbitrarily, we might want be more precise
     r = df_3d_pellet.iloc[f_delivered:f_delivered + 25].loc[df_3d_pellet['p'] == 1]
     pellet_home = tuple(r[pos].median() for pos in "xyz")
 
     logger.verbose("segment_reaches: using pellet_home=%s ; f_presented=%s f_released=%s t_pres=%.3f t_rel=%.3f",
-                   pellet_home, f_delivered, f_released, t_delivered, t_released)
+                   pellet_home, f_delivered, f_presented, t_delivered, t_presented)
 
     return segment_reaches_f11(
         df_3d=df_3d,
@@ -372,7 +372,7 @@ def segment_reaches_f2(
                         if testA and testB:
                             if debug >= 2:
                                 logger.debug('reach began at frame %d!', frame)
-                            delay_since_presented = frame / fps - project.t_pellet_released
+                            delay_since_presented = frame / fps - project.t_pellet_presented
                             reach_dict = {
                                 'init': frame,
                                 'max': None,
