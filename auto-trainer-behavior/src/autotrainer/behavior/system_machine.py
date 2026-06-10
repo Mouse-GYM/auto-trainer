@@ -1144,7 +1144,6 @@ class SystemMachine(StateMachine):
         pellet_machine = self._pellet_machine
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
-        autoclamp_enabled = algo.head_fixation_enabled
         logger.verbose(
             "consider_start_session: load_cell.engaged=%s "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
@@ -1152,44 +1151,13 @@ class SystemMachine(StateMachine):
             self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
             algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
-        # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start the session,
-        # to still start it : a mouse could be in tunnel, and pellet move back from load-pellet and mouse hit/makes
-        # the pellet to fall or get it, before we got the time to notice it here..
         if not (
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
+            and algo.pellet_recently_seen
         ):
             logger.debug("Not good state")
-            return
-        if (
-                not autoclamp_enabled
-            and not math.isinf(send_begin_age)
-            and send_begin_age < send_end_age
-        ):
-            logger.debug("Wait pellet is sent")
-            # wait pellet-sent, no need further timer:
-            # we'll get a pellet_machine.events.pellet_sent() when it's received/acked
-            return
-        if not autoclamp_enabled and not algo.pellet_recently_seen:
-            logger.debug("Wait pellet seen")
-            # pellet not seen, if enabled a pellet-load will be executed,
-            # which we also consider-start-session for it.
-            return
-        #
-        if autoclamp_enabled or (math.isinf(send_begin_age) and math.isinf(send_end_age)):
-            # autoclamp enabled, or first session
-            remains = 0
-        else:
-            # This ensures that we'll have the start of video matching the very end, or ~right after,
-            # of send-pellet action/move.
-            remains = algo.record_prebuffer_duration - send_end_age
-        if remains > 0:
-            logger.verbose("Starting timer for consider_start_session in %.1f secs (record_prebuffer)", remains)
-            timer = _consider_start_session_timer(
-                remains, lambda: self._consider_start_session(reason=reason))
-            self._timer_consider_start_session = timer
-            timer.start()
             return
         algo.start_session(reason=reason)
 
