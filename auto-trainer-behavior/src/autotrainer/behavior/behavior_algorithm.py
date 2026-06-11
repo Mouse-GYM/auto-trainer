@@ -566,6 +566,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             perf_now = get_perf_now()
         with self._thread_lock:
             prev, self._capture_status = self._capture_status, status
+            if prev == status:
+                return
             self._last_capture_status_change_perf_c = perf_now
             if status == CaptureProcessStatus.RECORDING:
                 self._recording_start_perf_c = perf_now
