@@ -16,6 +16,10 @@ from top_fixtures import MockSystemMachine
 
 class TestAutoCloseGate(MockSystemMachine):
 
+    def start_session_in_tunnel(self):
+        self.mock_pose_response(pellet_seen=True)
+        super().start_session_in_tunnel(set_recording_status=True)
+
     def _init(self, machine: SystemMachine):
         super()._init(machine)
         algo = self.algo
@@ -48,6 +52,7 @@ class TestAutoCloseGate(MockSystemMachine):
             return orig(*args, **kwargs)
         monkeypatch.setattr(machine, "_consider_close_gate_during_intersession", before_consider_close_gate)
 
+        self.mock_pose_response(pellet_seen=True)
         self.start_session_in_tunnel()
         assert algo.is_in_session
         algo.update_mouse_seen(True)

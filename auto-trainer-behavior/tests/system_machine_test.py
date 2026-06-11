@@ -123,13 +123,13 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
 
     mock_system.mock_pose_response(pellet_seen=False)
     assert pellet_m.can_use_pellet_command(), "must wait missing time before load"
-    mock_system.increment_perf_now(algo.pellet_missing_time)
+    mock_system.increment_perf_now(algo.pellet_missing_time + 0.001)
     mock_system.mock_pose_response(pellet_seen=False)
     assert pellet_m.state == PelletState.loading  # still
     assert not pellet_m.can_use_pellet_command() # but now cannot use
     assert pellet_m._api_status_token is pellet_m._token_pellet_load
 
-    mock_system.make_load_cell_active()
+    mock_system.start_session_in_tunnel(set_recording_status=True)
     assert algo.is_in_session is False, "without a pellet-seen session must not start"
     assert pellet_m.state == PelletState.loading  # still monitoring
     assert machine.state == SystemState.tunnel  # but tunnel
@@ -159,7 +159,7 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
     mock_system.machine_state_trans.clear()
 
-    mock_system.make_load_cell_active()
+    mock_system.start_session_in_tunnel(set_recording_status=True)
     mock_system.mock_pose_response(pellet_seen=True)
 
     assert algo.pellet_recently_seen
@@ -201,7 +201,7 @@ def test_intersession_enabled(mock_system, machine):
     assert pellet_m._api_status_token is not None  # but we wait the cover ack
     mock_system.mock_pellet_ack()
     
-    mock_system.make_load_cell_active()  # this trigger a start session recording
+    mock_system.start_session_in_tunnel(set_recording_status=True)  # this trigger a start session recording
 
     assert algo.is_in_session
     assert pellet_m.state == PelletState.retract
@@ -235,6 +235,7 @@ def test_intersession_enabled(mock_system, machine):
     assert pellet_m._api_status_token is not None, \
         "An API status token should be in use for the previous retract"
     assert pellet_m._token_move_retract is pellet_m._api_status_token
+    mock_system.mock_pose_response(pellet_seen=True)
     mock_system.mock_pellet_ack()
     assert pellet_m._api_status_token is None
     assert pellet_m._token_move_retract is None
@@ -392,7 +393,9 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     self = mock_system
     algo = machine.algorithm
     algo.reload_diamond_triangle_config()  # ensure it's loaded
-    mock_system.start_session_in_tunnel()
+    mock_system.mock_pose_response(pellet_seen=True)
+    mock_system.start_session_in_tunnel(set_recording_status=True)
+    mock_system.mock_pellet_ack(until_none=True)
     pellet_m = machine.pellet
     diamond_cfg = machine.algorithm.diamond_triangle_config
     assert machine.state == SystemState.tunnel

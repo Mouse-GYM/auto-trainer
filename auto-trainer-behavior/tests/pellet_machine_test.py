@@ -48,7 +48,8 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     assert algo.session_pellet_loaded_count == 0
     mock_system.mock_pellet_ack()  # ack the load
     assert algo.session_pellet_loaded_count == 1  # here it is !
-    mock_system.make_load_cell_active()
+    # mock_system.make_load_cell_active()
+    mock_system.start_session_in_tunnel(set_recording_status=True)
     assert algo.session_pellet_loaded_count == 0  # back to 0 given new session/trial
     mock_system.mock_pose_response(pellet_seen=True)
     mock_system.mock_pellet_ack()  # ack the retract
@@ -255,9 +256,10 @@ def test_move_home(machine, mock_system):
     assert pellet_m._api_status_token is not None
     assert pellet_m.state == PelletState.home
     mock_system.mock_pellet_ack()
-    machine.analysis.load_cell_monitor.is_engaged = True
-    machine.enter_tunnel(reason="manual")
+    mock_system.start_session_in_tunnel(set_recording_status=True)
+    assert algo.is_in_session
     mock_system.mock_pellet_ack()
+    mock_system.mock_pose_response(pellet_seen=True)
     assert pellet_m.state == PelletState.sending
     mock_system.mock_pellet_ack()
     assert pellet_m.state == PelletState.monitoring

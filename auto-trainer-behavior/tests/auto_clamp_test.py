@@ -24,7 +24,8 @@ from autotrainer.inference.analysis import IntersessionResponse
 class _AutoClampTestCase(MockSystemMachine):
 
     def start_session_in_tunnel(self, *, engage_headbar: bool = False):
-        super().start_session_in_tunnel()
+        self.mock_pose_response(pellet_seen=True)
+        super().start_session_in_tunnel(set_recording_status=True)
         if engage_headbar:
             self.sensor_analysis.headbar_pressure_monitor.is_engaged = True
             self.mock_pellet_ack(until_none=True)
@@ -131,9 +132,6 @@ class TestEnabled(_AutoClampTestCase):
             self.start_session_in_tunnel(engage_headbar=True)
 
         update_magnet_mock = self.update_magnet_mock
-
-        assert update_magnet_mock.call_args_list == [mock.call(100.0)]
-
         assert update_magnet_mock.call_args_list == [
             mock.call(algo.auto_clamp_intensity),
         ]

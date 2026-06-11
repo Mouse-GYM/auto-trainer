@@ -283,6 +283,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
     cfg.autoclamp_disabled_pellet_send_wait_delay = 0
+    algo.record_prebuffer_duration = 0
     algo.pellet_uncover_delay = 0
     algo.pellet_uncover_y_dcs = -math.inf
     algo.session_minimum_duration = 0  # needed for most current tests
@@ -365,14 +366,17 @@ class MockSystemMachine:
 
     #
 
-    def start_session_in_tunnel(self):
+    def start_session_in_tunnel(self, set_recording_status: bool = False):
         algo = self.algo
         assert not algo.is_in_session
         assert self._machine.state == SystemState.cage
+        self.make_load_cell_active()
         self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
-        algo.start_session(reason="manual")
-        assert algo.is_in_session
+        # algo.start_session(reason="manual")
+        if set_recording_status:
+            algo.set_capture_status(CaptureProcessStatus.RECORDING)
+        # assert algo.is_in_session
         assert self._machine.state == SystemState.tunnel
 
     def exit_tunnel(self):

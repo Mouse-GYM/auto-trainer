@@ -31,6 +31,7 @@ def system_config(trainer_config_dir, tmp_path):
     for cam_member in (CameraId.Left, CameraId.Right, CameraId.Web):
         params = dict(width=300, height=200)
         cam = CameraConfiguration(name=cam_member.name, params=params)
+        cam.record_prebuffer_duration = 0
         cam.scheme = "random"
         cam.id = cam_member
         config.cameras.append(cam)

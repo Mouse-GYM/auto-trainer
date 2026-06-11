@@ -19,6 +19,7 @@ def algo(monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
     algo = BehaviorAlgorithm(project_info=project_info)
+    algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay = 0
     algo.pellet_delivery_enabled = algo.pellet_cover_enabled = True
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
     return algo
@@ -233,7 +234,9 @@ def test_delivery_disabled_defaults(algo):
     assert algo.can_release_pellet() is True
     assert algo.can_cover_pellet() is False
     #
+    algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay = 1
     algo.start_session(reason="manual")
+    algo.set_capture_status(CaptureProcessStatus.RECORDING)
     assert algo.can_send_pellet() is False
     increase_simulate_perf_now(algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay)
     assert algo.can_send_pellet() is True

@@ -254,7 +254,8 @@ class TestTrainingPlan(BaseTrainingPlan):
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
         #
-        self._load_cell.is_engaged = True
+        # self._load_cell.is_engaged = True
+        self.start_session_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
         #
         assert machine.state == SystemState.tunnel
@@ -284,6 +285,8 @@ class TestTrainingPlan(BaseTrainingPlan):
             self.mock_pellet_ack(until_none=True)
         self.mock_pose_response(pellet_seen=True)
 
+        if pellet_m.state != PelletState.monitoring:
+            x = algo.can_send_pellet()
         assert pellet_m.state == PelletState.monitoring, (
             f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"

@@ -71,7 +71,8 @@ def test_intersession(
 def test_intersession_increase_algo_counts(mock_system):
     algo = mock_system.algo
     algo.intersession_enabled = True
-    mock_system.start_session_in_tunnel()
+    mock_system.mock_pose_response(pellet_seen=True)
+    mock_system.start_session_in_tunnel(set_recording_status=True)
     assert algo.is_in_session
     algo.update_mouse_seen(True)
     res = IntersessionResponse(
