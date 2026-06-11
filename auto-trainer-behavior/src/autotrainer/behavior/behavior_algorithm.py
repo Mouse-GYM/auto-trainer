@@ -258,7 +258,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
         self._last_capture_status_change_perf_c = -math.inf
-        self._recording_start_perf_c = -math.inf
+        self._recording_start_perf_c = math.nan
 
         # self.max_pellets_per_headfix_session: int = 10  # unused
 
@@ -564,10 +564,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def set_capture_status(self, status: CaptureProcessStatus, *, perf_now: Optional[float]=None):
         if perf_now is None:
             perf_now = get_perf_now()
-        prev, self._capture_status = self._capture_status, status
-        self._last_capture_status_change_perf_c = perf_now
+        with self._thread_lock:
+            prev, self._capture_status = self._capture_status, status
+            self._last_capture_status_change_perf_c = perf_now
+            if status == CaptureProcessStatus.RECORDING:
+                self._recording_start_perf_c = perf_now
+            else:
+                self._recording_start_perf_c = math.nan
         if status == CaptureProcessStatus.RECORDING:
-            self._recording_start_perf_c = perf_now
             logger.debug("set recording_start_perf_c=%.3f", perf_now)
         # self._on_property_changed(BehaviorAlgoProps.CAPTURE_STATUS, value, prev)  # property changed event unused atm
 
@@ -1233,13 +1237,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config
         if not cfg.pellet_delivery.is_enabled:
             return False
+        if not (self._is_in_session and self._capture_status == CaptureProcessStatus.RECORDING):
+            return False
         if self._head_fixation_enabled:
-            return self._is_in_session and (
-                # self._autoclamp_engaged_perf_c >= self._session_started_perf_c or
-                self._autoclamp_in_progress
-                # isn't there another possibility ?
-            )
-        t_since_started = get_perf_now() - self._session_started_perf_c
+            return self._autoclamp_in_progress
+        t_since_started = get_perf_now() - self._recording_start_perf_c + self.record_prebuffer_duration
         return (
             self._is_in_session
             and t_since_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay
@@ -1339,9 +1341,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        # if not self._head_fixation_enabled:
-        #     return False
-        return not self._is_in_session and pellet_state == PelletState.monitoring
+        return (
+            pellet_state == PelletState.monitoring
+            and not self._algo_paused
+            and self._status in {
+                BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+                BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+            }
+            and not (self._is_in_session and self._autoclamp_in_progress)
+        )
 
     def can_perform_intersession_analysis(self):
         return self._active_config.pellet_delivery.is_intersession_analysis_enabled and self._session_mouse_seen
