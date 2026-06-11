@@ -221,6 +221,14 @@ class ProjectInfo(_ProjectInfo):
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
 
+    def get_t_pellet_delivered_or_default(self, *, default: float=0.) -> float:
+        t = self.t_pellet_delivered
+        return t if math.isfinite(t) else default
+
+    def get_t_pellet_presented_or_default(self, *, default: float=0.):
+        t = self.t_pellet_presented
+        return t if math.isfinite(t) else self.get_t_pellet_delivered_or_default(default=default)
+
     def get_day_path(self, skip_ensure: bool = False, when: Optional[datetime]=None) -> Tuple[str, str]:
         """Get the location and related datetime for given arguments.
         If when is None then self.when is used, which can eventually be None, in which case now() is used.

@@ -235,7 +235,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._recording_age_release_pellet_threshold = 0.25
         self._sess_min_duration = 1.5  # could add to config
 
-        self._recording_prebuffer_duration = 0
+        self._recording_prebuffer_duration: float = 0
 
         # active/live context:
         self._algo_paused = False
@@ -1242,7 +1242,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if self._head_fixation_enabled:
             return self._autoclamp_in_progress
         t_since_rec_started = get_perf_now() - self._recording_start_perf_c
-        # do we or do we not subtract the record prebuffer duration ?
+        prebuffer_duration = self._recording_prebuffer_duration
+        if math.isfinite(prebuffer_duration):
+            t_since_rec_started -= prebuffer_duration
         return (
             self._is_in_session
             and t_since_rec_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay

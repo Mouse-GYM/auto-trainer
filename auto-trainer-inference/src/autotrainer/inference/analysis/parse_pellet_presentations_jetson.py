@@ -225,8 +225,8 @@ def segment_reaches_f1(
         df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
 
     df_3d_pellet = df_3d["Pellet"]
-    t_delivered = project.t_pellet_delivered
-    t_presented = project.t_pellet_presented
+    t_delivered = project.get_t_pellet_delivered_or_default()
+    t_presented = project.get_t_pellet_presented_or_default()
     f_delivered = int(t_delivered * frame_rate)
     f_presented = int(t_presented * frame_rate)
 
