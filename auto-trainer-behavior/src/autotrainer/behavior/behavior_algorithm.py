@@ -1241,10 +1241,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if self._head_fixation_enabled:
             return self._autoclamp_in_progress
-        t_since_started = get_perf_now() - self._recording_start_perf_c + self.record_prebuffer_duration
+        t_since_rec_started = get_perf_now() - self._recording_start_perf_c
+        # do we or do we not subtract the record prebuffer duration ?
         return (
             self._is_in_session
-            and t_since_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay
+            and t_since_rec_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay
         )
 
     def would_load_pellet(
@@ -1341,15 +1342,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        return (
+        if not (
             pellet_state == PelletState.monitoring
             and not self._algo_paused
             and self._status in {
                 BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
                 BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
             }
-            and not (self._is_in_session and self._autoclamp_in_progress)
-        )
+        ):
+            return False
+        if not self._is_in_session:
+            return True
+        if self._head_fixation_enabled:
+            return not self._autoclamp_in_progress
+        return False
 
     def can_perform_intersession_analysis(self):
         return self._active_config.pellet_delivery.is_intersession_analysis_enabled and self._session_mouse_seen

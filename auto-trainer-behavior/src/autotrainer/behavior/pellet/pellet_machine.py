@@ -446,14 +446,14 @@ class PelletMachine(StateMachine):
             elif triangle_seen_all and not pellet_seen_any:
                 self._check_notify_pellet_load_failed(perf_now=perf_now)
 
-        if algo.algo_paused:  # really unsure we should keep,
-            # we may want to handle the user commands still when algo-paused (emergency)
-            return
-
-        if algo.system_state == SystemState.intersession:
-            if algo.intersession_state == IntersessionState.segmentation:
-                # waiting inference is back, nothing we can do
-                return
+        # if algo.algo_paused:  # really unsure we should keep,
+        #     # we may want to handle the user commands still when algo-paused (emergency)
+        #     return
+        #
+        # if algo.system_state == SystemState.intersession:
+        #     if algo.intersession_state == IntersessionState.segmentation:
+        #         # waiting inference is back, nothing we can do
+        #         return
 
         if cur_state == PelletState.loading:
             if not can_use_command:
@@ -474,7 +474,7 @@ class PelletMachine(StateMachine):
         elif cur_state == PelletState.sending:
             if not can_use_command:
                 return
-            reason = "monitor_when_sent"
+            reason = "always_monitor_when_sent"
             action = self.monitor_pellet
 
         elif cur_state in {PelletState.covering, PelletState.releasing}:
@@ -492,7 +492,7 @@ class PelletMachine(StateMachine):
             if not can_use_command:
                 return
             if self.can_load_pellet(use_any_cam=True):
-                reason = "reload_pellet_when_loading"
+                reason = "can_load_pellet_when_retract_or_home"
                 def action():
                     self.load_pellet(use_any_cam=True)
             else:
@@ -502,11 +502,11 @@ class PelletMachine(StateMachine):
             if not can_use_command:
                 return
             if self.can_load_pellet():
-                reason = "load_pellet_when_monitoring_can_load_pellet"
+                reason = "can_load_pellet_when_monitoring"
                 action = self.load_pellet
             else:
                 action, reason = self._check_cover_or_release()
-                if action is None and can_use_command and algo.can_retract_pellet(pellet_state=cur_state):
+                if action is None and algo.can_retract_pellet(pellet_state=cur_state):
                     reason = "retract_when_monitor"
                     action = self.move_retract
         else:

@@ -871,6 +871,8 @@ class SystemMachine(StateMachine):
         self._event_manager.post_event_content(ApiEventKind.autoClampDisengaged, data=dict(intensity=baseline_intensity))
         self._autoclamp_set_in_progress(False)
         self._auto_clamp_disengage_in_progress = False
+        with self._algorithm.set_allow_reentrant(True):
+            self._pellet_machine.environment_changed()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
