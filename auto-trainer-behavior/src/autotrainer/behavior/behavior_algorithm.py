@@ -384,9 +384,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             p_now = time.perf_counter()
             if p_now - prev_perf_c_report > 5:
                 if tot_msgs > 0 or prev_tot_msgs != tot_msgs:
-                    logger.debug("%.1f msgs/s reentrant_size=%s",
+                    logger.debug("%.1f msgs/s reentrant_size=%s [:3]=%s",
                                  tot_msgs / (p_now - prev_perf_c_report),
-                                 len(reentrant_list))
+                                 len(reentrant_list), reentrant_list[:3])
                     prev_tot_msgs = tot_msgs
                     tot_msgs = 0
                 else:
