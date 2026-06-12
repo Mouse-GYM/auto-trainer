@@ -446,15 +446,6 @@ class PelletMachine(StateMachine):
             elif triangle_seen_all and not pellet_seen_any:
                 self._check_notify_pellet_load_failed(perf_now=perf_now)
 
-        # if algo.algo_paused:  # really unsure we should keep,
-        #     # we may want to handle the user commands still when algo-paused (emergency)
-        #     return
-        #
-        # if algo.system_state == SystemState.intersession:
-        #     if algo.intersession_state == IntersessionState.segmentation:
-        #         # waiting inference is back, nothing we can do
-        #         return
-
         if cur_state == PelletState.loading:
             if not can_use_command:
                 # always wait the previous movement is finished
