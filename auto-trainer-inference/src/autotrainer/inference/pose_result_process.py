@@ -35,6 +35,9 @@ from .pose_result_live_process import LivePoseResultProcessWorker
 logger = get_verbose_logger(__name__)
 
 
+LIVE_WORKERS_RENEW_COUNT_THRESHOLD = int(os.getenv("AUTOTRAINER_LIVE_WORKERS_RENEW_COUNT_THRESHOLD", "256000"))
+
+
 # even better is to use __debug__ and use "python -O ..."
 # see https://docs.python.org/3/using/cmdline.html#cmdoption-O
 _local_do_debug = False
@@ -511,7 +514,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             for wrk in to_remove:
                 live_pose_workers.remove(wrk)
             # renew workers every X hours:
-            if tot_count_data_received % 256000 == 0 or pose_algo is not prev_pose_algo:
+            if tot_count_data_received % LIVE_WORKERS_RENEW_COUNT_THRESHOLD == 0 or pose_algo is not prev_pose_algo:
                 # renew every that nbr of pose_data, which at current rate of ~15-20 / second,
                 # that makes about ~4-5h of runtime for the workers.
                 logger.notice("making new workers..")
