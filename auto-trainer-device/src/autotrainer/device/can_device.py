@@ -562,7 +562,11 @@ class CanDevice(Device):
                     return True
             return False
 
-        def perform_next_compound(board: _BoardPendingContext, steps):
+        def perform_next_compound(board: _BoardPendingContext, steps: Optional[List[Dict]]):
+            if steps is None or len(steps) == 0:
+                logger.warning("Got empty compound steps. board=%s kind=%s ctx=%s",
+                               board.target, board.kind, board.ctx)
+                return
             self._prev_command_timeout = self.default_command_ack_timeout_duration
             attempt_idx = 0
             while True:
@@ -762,7 +766,7 @@ class CanDevice(Device):
                 kind = found_board_with_uuid_ack.kind
                 steps = found_board_with_uuid_ack.compound_steps
                 found_board_with_uuid_ack.compound_steps = None
-                if steps:
+                if steps is not None and len(steps) > 0:
                     # and attach to target:
                     assert target_board.compound_steps is None
                     target_board.compound_steps = steps
