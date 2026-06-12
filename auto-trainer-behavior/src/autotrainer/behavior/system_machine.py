@@ -249,7 +249,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_session.cancel()
         self._timer_consider_end_session.cancel()
         with algo.set_allow_reentrant(True):
-            self._disengage_auto_clamp()
+            self._execute_disengage_auto_clamp_if_in_progress()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_session:
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)

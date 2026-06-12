@@ -223,9 +223,9 @@ class TestEnabled(_AutoClampTestCase):
         caplog.clear()
         with caplog.at_level(logging.INFO):
             self.exit_tunnel()
-        assert "auto-clamp: starting disengage procedure.." in caplog.text
+        assert f"Disengaging auto-clamp to intensity {self.algo.baseline_intensity}" in caplog.text
 
-    def test_keep_disengage_when_exit_tunnel(self, caplog):
+    def test_fully_disengage_when_exit_tunnel(self, caplog):
         algo = self.algo
         algo.auto_clamp_release_load_count = 1  # for doing a single load-pellet to trigger disengage
         algo.active_config.head_clamp.prerelease_duration = 3  # > 0 for having multi-steps disengage procedure
@@ -241,8 +241,11 @@ class TestEnabled(_AutoClampTestCase):
         self.tunnel_dev.reset_mock()  # ensure cleared
         with caplog.at_level(logging.DEBUG):
             self.exit_tunnel()
-        assert "skipping new disengage while disengage already in progress" in caplog.text
-        assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0
+        assert self.tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(self.algo.baseline_intensity)]
+        assert (
+            f"Disengaging auto-clamp to intensity {self.algo.baseline_intensity}"
+            in caplog.text
+        )
 
     def test_before_reengage_delay(self, caplog):
         algo = self.algo
