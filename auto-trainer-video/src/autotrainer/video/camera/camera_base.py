@@ -1,9 +1,12 @@
 import dataclasses
 import logging
+import math
 import time
 from typing import Tuple, Optional, ClassVar, Dict, Any
 
 import numpy
+
+from autotrainer.core import get_perf_now
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,8 @@ class CameraBase:
         self._capture_start = 0
         self._last_when = 0
         self._last_frame_id = -1
+        self._last_frame_perf_c = -math.inf
+        self._last_frame_time = -math.inf
 
     @property
     def name(self) -> str:
@@ -84,6 +89,15 @@ class CameraBase:
     def frame_id(self) -> int:
         """Returns the last frame id (frame counter)"""
         return self._last_frame_id
+    
+    @property
+    def frame_perf_c(self) -> float:
+        """Returns the last frame system perf_counter, as precise as possible"""
+        return self._last_frame_perf_c
+
+    @property
+    def frame_unix_time(self) -> float:
+        return self._last_frame_time
 
     def init(self) -> None:
         """ Actions that should be taken once after camera creation, but should not happen in the constructor.
@@ -118,6 +132,8 @@ class CameraBase:
             self._last_when = self._capture_start = time.time_ns()
 
         self._last_when = time.time_ns()
+        self._last_frame_perf_c = get_perf_now()
+        self._last_frame_time = time.time()
 
         self._frame_count += 1
         self._last_frame_id += 1

@@ -346,7 +346,7 @@ class OfflineInputProcess:
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)
         p_before = get_perf_now()
-        perf_timeout = p_before + 2
+        perf_timeout = p_before + 5
         count_loops = 0
         while True:
             check_correct_status()

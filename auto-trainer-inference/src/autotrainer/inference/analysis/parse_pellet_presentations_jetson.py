@@ -1,4 +1,5 @@
 import inspect
+import math
 import os
 import glob
 import pickle
@@ -17,13 +18,9 @@ from autotrainer.core.reach_event import (
     ReachEventMethod,
 )
 from autotrainer.inference.analysis import prepare_jetson_data as prep_jet
-import autotrainer.inference.analysis._segment_reaches_f1 as segment_reaches_f11_module
+from autotrainer.inference.analysis._segment_reaches_f1 import segment_reaches_f11
 
 logger = get_verbose_logger(__name__)
-
-
-# print(segment_reaches_f11_module)
-segment_reaches_f11 = segment_reaches_f11_module.segment_reaches_f11
 
 
 def get_coeffs():
@@ -97,6 +94,7 @@ def segment_reaches(
     coeffs = get_coeffs()
 
     dist_p, Z_dist_p, dist_hvpp_R, pellet_events, pellet_home, frames_on_found = segment_reaches_f1(
+        project=project_info,
         df_3d=df_3d,
         frame_rate=frame_rate,
         coeffs=coeffs,
@@ -108,6 +106,7 @@ def segment_reaches(
         logger.verbose("segment_reaches_f1: events=%s", pellet_events)
 
     pellets_consumed, pellets_presented, successful_reaches, total_reaches, rh_max_vp_list, reach_events = segment_reaches_f2(
+        project=project_info,
         fps=frame_rate,
         df_3d=df_3d,
         coeffs=coeffs,
@@ -200,6 +199,7 @@ def segment_reaches(
 
 def segment_reaches_f1(
     *,
+    project: ProjectInfo,
     df_3d: pd.DataFrame,
     frame_rate: int,
     coeffs: np.ndarray,
@@ -224,20 +224,18 @@ def segment_reaches_f1(
         # speed_vec_filt[df_3d[bp]['p'] == 0] = np.nan
         df_3d.loc[:, (bp, 'speed')] = speed_vec_filt
 
-    if center_method[0] > 0 and center_method[1] == 'Pellet':
-        pellet_home = [0, 0, 0]
-    else:
-        # how many frames to use at start for getting pellet home pos:
-        n_frames_mean = 50   # todo
-        pellet_home = []
-        df_3d_pellet = df_3d["Pellet"]
-        for pos in ('x', 'y', 'z'):
-            # using n_frames_mean first frames where p == 1 :
-            ploc = df_3d_pellet.iloc[:n_frames_mean].loc[df_3d_pellet['p'] == 1, pos].median()
-            pellet_home.append(ploc)
+    df_3d_pellet = df_3d["Pellet"]
+    t_delivered = project.get_t_pellet_delivered_or_default()
+    t_presented = project.get_t_pellet_presented_or_default()
+    f_delivered = int(t_delivered * frame_rate)
+    f_presented = int(t_presented * frame_rate)
 
-    pellet_home = (pellet_home[0], pellet_home[1], pellet_home[2])
-    logger.verbose("segment_reaches: using pellet_home=%s", pellet_home)
+    # todo; using up to 25 frames arbitrarily, we might want be more precise
+    r = df_3d_pellet.iloc[f_delivered:f_delivered + 25].loc[df_3d_pellet['p'] == 1]
+    pellet_home = tuple(r[pos].median() for pos in "xyz")
+
+    logger.verbose("segment_reaches: using pellet_home=%s ; f_deliv=%s f_pres=%s t_deliv=%.3f t_pres=%.3f",
+                   pellet_home, f_delivered, f_presented, t_delivered, t_presented)
 
     return segment_reaches_f11(
         df_3d=df_3d,
@@ -249,6 +247,7 @@ def segment_reaches_f1(
 
 def segment_reaches_f2(
     *,
+    project: ProjectInfo,
     fps: int,
     df_3d: pd.DataFrame,
     coeffs,
@@ -373,15 +372,7 @@ def segment_reaches_f2(
                         if testA and testB:
                             if debug >= 2:
                                 logger.debug('reach began at frame %d!', frame)
-                            delay_since_presented = frame / fps
-                            # for now considering presented moment as the video start itself, so frame / fps.
-                            # eventual todo: this could otherwise be calculated as :
-                            #   A = session_start_perf_c + reach_init_frame / fps
-                            #       # which is ~= start of the reach-init, in perf_counter clock so
-                            #   B = max(pellet_sent_perf_c, session_start_perf_c)
-                            #       # which is ~= "pellet-presented" (arrived at deliver/send position)
-                            # and then doing:
-                            #   delay_since_presented = A - B
+                            delay_since_presented = frame / fps - project.t_pellet_presented
                             reach_dict = {
                                 'init': frame,
                                 'max': None,

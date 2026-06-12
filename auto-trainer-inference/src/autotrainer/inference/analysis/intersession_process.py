@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 from typing import Optional, Tuple
@@ -78,7 +79,7 @@ def intersession_process(
             max=-1,
             method=d['method'],
             outcome=d['outcome'],
-            delay_since_presented=d['placed'] / frame_rate,
+            delay_since_presented=d['placed'] / frame_rate - project.get_t_pellet_presented_or_default(),
         ) for d in results_dict["other_events"]
     ]
     return IntersessionResponse(**results_dict)

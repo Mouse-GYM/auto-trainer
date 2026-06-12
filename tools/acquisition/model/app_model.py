@@ -20,7 +20,7 @@ from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protoco
 import yaml
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
-    ApiAlarmStatus, ApiAlarmKind, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
+    ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
@@ -38,10 +38,11 @@ from autotrainer.core import (
     SystemStatusMessageKind,
     SensorAnalysis,
     Offset3DTuple,
-    Motor,
+    get_perf_now,
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
+from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -397,7 +398,9 @@ class AppModel(ObservableObject):
         inference.pose_response_ready += self._on_pose_response_ready
         inference.detection_result_ready += self._on_detection_result_ready
         preferences.property_changed += self._on_preferences_property_changed
-        behavior_model.algorithm.property_changed += self._on_behavior_algo_property_changed
+        algo = behavior_model.algorithm
+        algo.property_changed += self._on_behavior_algo_property_changed
+        algo.session_capture_ending += self._on_session_capture_ended
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
@@ -577,13 +580,14 @@ class AppModel(ObservableObject):
         # we never know the session could be just stopped,
         # so check:
         if algo.is_in_session:
+            pellet_m = self._behavior.system_machine.pellet
             logger.verbose("consider_release_pellet: calling try_next_state ; "
                            "pellet_recently_seen=%s age=%.2f",
                            algo.pellet_recently_seen, algo.pellet_presence_age)
             # this is called via a timer, which are not necessarily very precise,
             # and to be safe on all side, do not check again, the actual age could even be slightly less than the
             # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            if algo.can_release_pellet():
+            if algo.can_release_pellet(pellet_state=pellet_m.state):
                 self._behavior.system_machine.pellet.environment_changed(
                     pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-recording-aged-enough")
                 # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,
@@ -617,10 +621,18 @@ class AppModel(ObservableObject):
             logger.info("Handling %s ; data=%s", cmd, extra_info)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
-                cam_idx, new_status = args
+                cam_idx, new_status, *r_args = args
                 if self._cameras[cam_idx].is_primary:
-                    algo.capture_status = new_status  # first
                     self._timer_recording_age_enough.cancel()
+                    if new_status == CaptureProcessStatus.RECORDING:
+                        first_frame_perf, first_frame_when, first_frame_time, *r_args = r_args
+                        p_now = first_frame_perf
+                        project = self._project_info
+                        if project is not None:
+                            project.start_record_timestamp = first_frame_time
+                    else:
+                        p_now = get_perf_now()
+                    algo.set_capture_status(new_status, perf_now=p_now)
                     if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
                         new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
                             algo.recording_age_release_pellet_threshold, self._consider_release_pellet
@@ -1244,7 +1256,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, session=None)
+        self._save_project_metadata(project_info, when=datetime.now(), session=None)
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1605,8 +1617,8 @@ class AppModel(ObservableObject):
         self._is_recording_trigger = notification.context
         project = self._project_info
         if notification.context and project is not None:
-            now = datetime.now()
-            self._save_metadata(now, project.get_metadata_file(project.session, when=now), project.session)
+            self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
+                                project.session)
 
     def _update_status_text_overlay(self):
         parts = []
@@ -1705,6 +1717,14 @@ class AppModel(ObservableObject):
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
+
+    def _on_session_capture_ended(self, reason: RecordingEndingReason):
+        project = self._project_info
+        if project is not None:
+            self._save_project_metadata(project)
+        # self._behavior.system_machine.on_session_capture_ended(reason)
+        # NB: had to keep in system_machine for many tests.
+        # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
@@ -1931,20 +1951,23 @@ class AppModel(ObservableObject):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
         when = when if when is not None else (project_info.when if project_info.when is not None else datetime.now())
         file_name = project_info.get_metadata_file(session, when)
-        self._save_metadata(when, file_name, session)
+        self._save_metadata(project_info, when, file_name, session)
 
-    def _save_metadata(self, when: datetime, file_name: str, session: int = None):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: int = None):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
             "date": when.strftime("%Y%m%d_%H%M%S"),
             "created": when.timestamp(),
             "createdUtc": when_as_utc.timestamp(),  # same than created
+            "start_record_timestamp": project.start_record_timestamp,
             "serialNumber": self._preferences.serial_number or "",
             "appVersion": self._app_version,
             "animalName": self.animal_name,
             "notes": self.notes or "",
             "session": session,
-            "configuration": None
+            "t_pellet_delivered": project.t_pellet_delivered,
+            "t_pellet_presented": project.t_pellet_presented,
+            "configuration": None,
         }
 
         configuration = self._create_configuration()
@@ -2235,7 +2258,7 @@ class AppModel(ObservableObject):
         #
         self.check_max_pellet_loaded()
 
-    def _on_pellet_sent(self):
+    def _on_pellet_sent(self, *, perf_c: Optional[float]=None):
         selected = self._selected_animal
         status = self._status
         recent = self._behavior.algorithm.pellet_recently_seen

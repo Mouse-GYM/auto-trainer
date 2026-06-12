@@ -3,8 +3,8 @@ from __future__ import annotations
 import ctypes
 import dataclasses
 import logging
+import math
 import multiprocessing.managers
-import multiprocessing as mp
 import os
 import os.path
 import sys
@@ -119,6 +119,9 @@ class _ProjectInfo:
     session: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
+    start_record_timestamp: float = math.nan  # regular unix timestamp, in seconds
+    t_pellet_delivered: float = math.nan  # in seconds (zero-based on start_recording)
+    t_pellet_presented: float = math.nan
 
 
 @dataclass
@@ -137,6 +140,10 @@ class ProjectInfo(_ProjectInfo):
         session: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
+        start_record_timestamp: float = _ProjectInfo.start_record_timestamp,
+        t_pellet_delivered: float = _ProjectInfo.t_pellet_delivered,
+        t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
+        #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
         super().__init__()
@@ -152,32 +159,35 @@ class ProjectInfo(_ProjectInfo):
             _session = RawValueHolder(session)
             if when is None:
                 raise ValueError("Cannot create ProjectInfo with session but without when")
-        self.root = root
-        self.device_id = device_id
-        self._when = _when
-        self.ensure_exists = ensure_exists
-        self.camera_1 = camera_1
-        self.camera_2 = camera_2
-        self.send_position = send_position
-        self.dcs_send_position = dcs_send_position
-        self._session = _session
-        if self._session is None and self._when is None:
+        if _session is None and _when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
-            self._session = ctx.Value(ctypes.c_uint32, 1)
+            _session = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
-            self._when = ctx.Value(ctypes.c_double,  # double required, not float !!
+            _when = ctx.Value(ctypes.c_double,  # double required, not float !!
                                    _get_datetime_now().timestamp(),
                                    # with mp_manager on 3.8 we would need to access private _getvalue
                                    # lock=(session_shared_obj if mp_manager is None
                                    #       else session_shared_obj._getvalue()).get_lock()
                                    # see:
                                    )
+        self.root = root
+        self.device_id = device_id
+        self._when = _when
+        self._session = _session
+        self.ensure_exists = ensure_exists
+        self.camera_1 = camera_1
+        self.camera_2 = camera_2
+        self.send_position = send_position
+        self.dcs_send_position = dcs_send_position
+        self.start_record_timestamp = start_record_timestamp
+        self.t_pellet_delivered = t_pellet_delivered
+        self.t_pellet_presented = t_pellet_presented
 
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
-            f"send_pos={self.send_position}, dcs_send_pos={self.dcs_send_position})"
-        )
+    # def __repr__(self):
+    #     return (
+    #         f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
+    #         f"send_pos={self.send_position}, dcs_send_pos={self.dcs_send_position})"
+    #     )
 
     def __eq__(self, other):
         if isinstance(other, ProjectInfo):
@@ -210,6 +220,14 @@ class ProjectInfo(_ProjectInfo):
 
     def is_valid(self):
         return self.root is not None and len(self.root) > 0
+
+    def get_t_pellet_delivered_or_default(self, *, default: float=0.) -> float:
+        t = self.t_pellet_delivered
+        return t if math.isfinite(t) else default
+
+    def get_t_pellet_presented_or_default(self, *, default: float=0.):
+        t = self.t_pellet_presented
+        return t if math.isfinite(t) else self.get_t_pellet_delivered_or_default(default=default)
 
     def get_day_path(self, skip_ensure: bool = False, when: Optional[datetime]=None) -> Tuple[str, str]:
         """Get the location and related datetime for given arguments.
@@ -384,6 +402,12 @@ class ProjectInfo(_ProjectInfo):
         logger.success("Calculated next session index=%s when=%s",
                        self.session, self.when)
 
+    def _reset_vals(self, when, session):
+        with self:
+            self.when = when  # noqa
+            self.session = session  # noqa
+            self.start_record_timestamp = self.t_pellet_delivered = self.t_pellet_presented = math.nan
+
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
         if when is None:
@@ -404,9 +428,7 @@ class ProjectInfo(_ProjectInfo):
             except FileExistsError:
                 pass
             else:
-                with self:
-                    self.session = 1
-                    self.when = when
+                self._reset_vals(when, 1)
                 return
         if prev_when.date() < when.date():
             # actually the day directory could be already created from possible other writers to it,
@@ -423,9 +445,7 @@ class ProjectInfo(_ProjectInfo):
                 pass
             else:
                 logger.info("found fast next session: %s", tentative_p)
-                with self:
-                    self.session = new_session_nbr
-                    self.when = when
+                self._reset_vals(when, new_session_nbr)
                 return
 
         # slower code way
@@ -440,17 +460,13 @@ class ProjectInfo(_ProjectInfo):
         session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
         if len(session_vals) == 0:
             logger.debug("no existing sessions found")
-            with self:
-                self.session = 1
-                self.when = when
+            self._reset_vals(when, 1)
         else:
             logger.debug("found %s existing session directories", len(session_vals))
             session_vals.sort(reverse=True)
             greater_val = session_vals[0]
             logger.info("last session index for day: %s", greater_val)
-            with self:
-                self.session = greater_val + 1
-                self.when = when
+            self._reset_vals(when, greater_val + 1)
 
     def get_log_file_path(self, when: Optional[datetime] = None, *, auto_new: bool=True) -> Path:
         when = self._get_when_or_now(when)
@@ -475,8 +491,6 @@ class ProjectInfo(_ProjectInfo):
             dct = {
                 field_name: getattr(self, field_name)
                 for field_name, field in
-                ((field.name.lstrip("_"), field)
-                for field in dataclasses.fields(self)
-                )
+                ((field.name.lstrip("_"), field) for field in dataclasses.fields(self))
             }
         return self.__class__(**dct)

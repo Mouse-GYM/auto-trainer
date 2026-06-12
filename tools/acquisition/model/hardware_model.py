@@ -709,7 +709,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
             )
 
-    def _ack_received(self, token: UUID):
+    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())

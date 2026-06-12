@@ -2,11 +2,12 @@ import functools
 import logging
 import queue
 import threading
+import math
 import time
 from functools import partial
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union, Any, Optional
+from typing import Callable, Union, Any, Optional, Protocol
 
 from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject
@@ -16,6 +17,13 @@ from .system_status_message import SystemStatusMessageKind
 logger = get_verbose_logger(__name__)
 
 TERMINATE = -1001
+
+
+
+class AckReceivedHandlerT(Protocol):
+
+    def __call__(self, token: str, *, perf_c: Optional[float]=None):
+        """Acknowledge of given token"""
 
 
 class MessageHandler(ObservableObject):
@@ -61,7 +69,7 @@ class MessageHandler(ObservableObject):
 
     # type hints helper:
     # dynamic event:
-    ack_received: Callable[[str], None]
+    ack_received: AckReceivedHandlerT
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
@@ -111,8 +119,9 @@ class MessageHandler(ObservableObject):
                 break
             #
             if msg == SystemStatusMessageKind.ACKNOWLEDGE:
+                tok, perf_c = data
                 try:
-                    self.ack_received(data)
+                    self.ack_received(tok, perf_c=perf_c)
                 except Exception as err:
                     logger.exception("Error during ack_received callback: %s", err)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:

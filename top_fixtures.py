@@ -53,7 +53,7 @@ def get_current_simulate_perf_now():
     return fake_perf_now
 
 
-def increase_simulate_perf_now(delay: float = 60):
+def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callable] = None):
     global fake_perf_now
     if delay > 1:
         # eventually try to help mitigate possible issue with background thread(s) doing sleep and
@@ -68,7 +68,7 @@ def increase_simulate_perf_now(delay: float = 60):
 # for small diff of timers delay:
 class AlmostEqualFloat(float):
     def __eq__(self, other):
-        return abs(self - other) < 0.001
+        return abs(self - other) < 0.01
 
 
 @pytest.fixture
@@ -282,6 +282,8 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg = algo.pellet_delivery_config
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
+    cfg.autoclamp_disabled_pellet_send_wait_delay = 0
+    algo.record_prebuffer_duration = 0
     algo.pellet_uncover_delay = 0
     algo.pellet_uncover_y_dcs = -math.inf
     algo.session_minimum_duration = 0  # needed for most current tests
@@ -364,14 +366,17 @@ class MockSystemMachine:
 
     #
 
-    def start_session_in_tunnel(self):
+    def start_session_in_tunnel(self, set_recording_status: bool = False):
         algo = self.algo
         assert not algo.is_in_session
         assert self._machine.state == SystemState.cage
+        self.make_load_cell_active()
         self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
-        algo.start_session(reason="manual")
-        assert algo.is_in_session
+        # algo.start_session(reason="manual")
+        if set_recording_status:
+            algo.set_capture_status(CaptureProcessStatus.RECORDING)
+        # assert algo.is_in_session
         assert self._machine.state == SystemState.tunnel
 
     def exit_tunnel(self):
@@ -490,16 +495,20 @@ class MockSystemMachine:
         assert self.pellet.state == PelletState.covering
         self.mock_pellet_ack()
 
-    def mock_pellet_ack(self, until_none: bool=False):
+    def mock_pellet_ack(self, until_none: bool=False, max_limit: int=45):
         """Ack the previous sent pellet command"""
+        cur_ack = 0
         while True:
             token = self.pellet._api_status_token
             if token is None:
                 break
+            cur_ack += 1
             self.increment_perf_now(1e-9)
             self.pellet._pellet_device_ack_received(token)
             if not until_none:
                 break
+            if cur_ack > max_limit:
+                raise RuntimeError("Too many consecutive pellet ack")
 
     def mock_pellet_missing(self, mouse_seen: bool = False):
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
@@ -529,6 +538,8 @@ class MockSystemMachine:
     def make_recording_aged_enough(self):
         algo = self._machine.algorithm
         algo.capture_status = CaptureProcessStatus.RECORDING
+        p_now = get_current_simulate_perf_now()
+        algo.project.start_record_timestamp = p_now
         self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 

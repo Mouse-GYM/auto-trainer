@@ -326,6 +326,7 @@ class VideoCapture(Process):
         cnt_net_q_put = 0
         is_record_active = False
         cam_frame_id = -1
+        count_frames_received = 0
         when_secs = math.nan
         attrs = self._attrs
         is_primary = attrs.is_primary
@@ -374,7 +375,7 @@ class VideoCapture(Process):
             while True:
                 if (
                     idx >= len(frames_prebuffer_list)
-                    or frame_perf_now - frames_prebuffer_list[idx][3] < attrs.record_prebuffer_duration
+                    or frame_perf_c - frames_prebuffer_list[idx][3] < attrs.record_prebuffer_duration
                 ):
                     break
                 idx += 1
@@ -435,7 +436,7 @@ class VideoCapture(Process):
                 record_q_list = self._record_queue_list = []
             if cam_frame_id <= synced_frame_idx:
                 # don't miss this one too
-                rec_q_put([(cam_frame_id, frame, when, frame_perf_now)])
+                rec_q_put([(cam_frame_id, frame, when, frame_perf_c)])
             rec_q_put([])  # empty list is mark for EOR for recorder thread
 
             synced_frame_idx = None  # don't forget now.
@@ -451,7 +452,7 @@ class VideoCapture(Process):
                 logger.info(
                     "sending EOF_RECORDING batch frame indices to signify eof recording. "
                     "last frame_id: %s when=%.4f perf=%.4f",
-                    cam_frame_id, when_secs, frame_perf_now)
+                    cam_frame_id, when_secs, frame_perf_c)
                 net_q.put_frame_index_category(empty_frame, FrameIndexCategory.EOF_RECORDING,
                                                cam_idx=net_q_idx, timeout=5)
 
@@ -464,7 +465,7 @@ class VideoCapture(Process):
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
 
-        frame_perf_now = math.nan
+        frame_perf_c = math.nan
         save_err = None
 
         while True:
@@ -477,7 +478,7 @@ class VideoCapture(Process):
 
             prev_frame_when_secs = when_secs
             prev_frame_id = cam_frame_id
-            prev_frame_perf_now = frame_perf_now
+            prev_frame_perf_now = frame_perf_c
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
@@ -520,40 +521,43 @@ class VideoCapture(Process):
                     fault_count += 1
                     continue
 
+                perf_now = time.perf_counter()
+
                 cam_frame_id = camera.frame_id
                 # NB: the frame 'when' can be in different clock than what we can assume,
                 # using time.time() and .perf_counter() for precision :
-                frame_perf_now = time.perf_counter()
-                frame_time = time.time()
+                frame_perf_c = camera.frame_perf_c
+                frame_time = camera.frame_unix_time
+                count_frames_received += 1
+                frame_late_delay = perf_now - frame_perf_c
                 #
                 when_secs = when / 1e9
-                perf_frame_dropped = (
-                    0
-                    if not math.isfinite(prev_frame_perf_now)
-                    else int((frame_perf_now - prev_frame_perf_now - 1.5 * frame_normal_delay) / frame_normal_delay)
-                )
+                # perf_frame_dropped = (
+                #     0
+                #     if not math.isfinite(prev_frame_perf_now)
+                #     else int((frame_perf_now - prev_frame_perf_now - 1.5 * frame_normal_delay) / frame_normal_delay)
+                # )
                 if (
                     inference is not None
                     and (
                         cam_frame_id != prev_frame_id + 1
-                        or perf_frame_dropped > 0
+                        # or frame_late_delay > 0.15  ~arbitrary
                     )
                 ):
                     effective_frame_dropped = cam_frame_id - prev_frame_id - 1
-                    logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s (perf_dropped=%s) "
+                    logger.warning("frame_id=%s (prev=%s) detected frame dropped=%s "
                                    "diff_when=%.3f prev_when=%.3f frame_when=%.3f "
                                    "diff_perf=%.3f prev_perf=%.3f frame_perf=%.3f",
                                     cam_frame_id, prev_frame_id,
-                                   effective_frame_dropped, perf_frame_dropped,
-                                   when_secs - prev_frame_when_secs,
+                                   effective_frame_dropped, when_secs - prev_frame_when_secs,
                                    prev_frame_when_secs, when_secs,
-                                   frame_perf_now - prev_frame_perf_now, prev_frame_perf_now, frame_perf_now)
+                                   frame_perf_c - prev_frame_perf_now, prev_frame_perf_now, frame_perf_c)
 
-                if cam_frame_id == 0:
+                if count_frames_received == 1:
                     self._record.first_frame_time = frame_time
                     self._record.first_frame_when = when
-                    logger.success("captured first frame id=%s ; cam_when=%.4f perf_now=%.4f",
-                                   cam_frame_id, when_secs, frame_perf_now)
+                    logger.success("captured first frame id=%s ; cam_when=%.4f cam_perf_c=%.4f",
+                                   cam_frame_id, when_secs, frame_perf_c)
                 elif inference is not None and (cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300):
                     if (
                         cam_frame_id % log_cam_frame_info_delay_frame_count == 0
@@ -562,8 +566,8 @@ class VideoCapture(Process):
                         or (cam_frame_id < 32 and cam_frame_id % 4 == 0)
                         or cam_frame_id < 4
                     ):
-                        logger.debug("got frame_id=%s cam_when=%.4f perf_now=%.4f",
-                                     cam_frame_id, when_secs, frame_perf_now)
+                        logger.debug("got frame_id=%s frame_when=%.4f frame_perf=%.4f delay=%.4f",
+                                     cam_frame_id, when_secs, frame_perf_c, perf_now - frame_perf_c)
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
@@ -617,7 +621,7 @@ class VideoCapture(Process):
                             else frames_prebuffer_list[0][2]
                         )
                         first_frame_p_now = (
-                            frame_perf_now
+                            frame_perf_c
                             if len(frames_prebuffer_list) == 0
                             else frames_prebuffer_list[0][3]
                         )
@@ -637,7 +641,7 @@ class VideoCapture(Process):
                                 [(fix, f, fw, p) for f, fw, _, p, fix in frames_prebuffer_list]
                             )
                             frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
-                        rec_q_put([(cam_frame_id, frame, when, frame_perf_now)])  # thread queue
+                        rec_q_put([(cam_frame_id, frame, when, frame_perf_c)])  # thread queue
                         record_q_list = (
                             self._record_queue_list
                         ) = []  # ensure we (re)start clean
@@ -648,8 +652,10 @@ class VideoCapture(Process):
                         if is_primary and msg_q is not None:
                             if __debug__:
                                 logger.debug("is_primary: Putting CaptureProcessStatus.RECORDING")
+                            #
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
-                                       (self._camera_idx, CaptureProcessStatus.RECORDING)))
+                                       (self._camera_idx, CaptureProcessStatus.RECORDING,
+                                        first_frame_p_now, first_frame_when, first_frame_time)))
                         else:
                             if __debug__:
                                 logger.debug("not is_primary or msg_q None"
@@ -661,14 +667,14 @@ class VideoCapture(Process):
                         if cam_frame_id < synced_frame_idx:
                             # still put
                             record_q_list.append(
-                                (cam_frame_id, frame, when, frame_perf_now)
+                                (cam_frame_id, frame, when, frame_perf_c)
                             )
                         else:
                             perform_stop_recording()
 
                 elif record_start_stop_frame_idx is not None:
                     # normal recording case in progress
-                    record_q_list.append((cam_frame_id, frame, when, frame_perf_now))
+                    record_q_list.append((cam_frame_id, frame, when, frame_perf_c))
                     if len(record_q_list) >= self._record_batch_size:
                         rec_q_put(record_q_list)
                         record_q_list = self._record_queue_list = []
@@ -683,10 +689,10 @@ class VideoCapture(Process):
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
-                    vid_detection.update_frame(when, frame, frame_perf_now)
+                    vid_detection.update_frame(when, frame, frame_perf_c)
 
                 if not (is_record_active and record_start_stop_frame_idx is not None) and attrs.record_prebuffer_duration > 0:
-                    update_frames_prebuffer(frame, when, frame_time, frame_perf_now, cam_frame_id)
+                    update_frames_prebuffer(frame, when, frame_time, frame_perf_c, cam_frame_id)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)

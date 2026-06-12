@@ -14,7 +14,7 @@ from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgor
     IntersessionState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
-from autotrainer.core import Offset3DTuple, EventManager
+from autotrainer.core import Offset3DTuple, EventManager, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
@@ -65,11 +65,39 @@ class BaseTrainingPlan(MockSystemMachine):
         system_config.save_default(trainer_config_dir)
 
     @pytest.fixture()
-    def app_model(self, machine, user_pref, fake_system_msg_handler,
-                  system_config, calib_dir, training_plans, sensor_analysis, diamond_triangle_config):
+    def app_model(
+        self,
+        machine,
+        user_pref,
+        fake_system_msg_handler,
+        system_config,
+        trainer_config_dir,
+        calib_dir,
+        training_plans,
+        sensor_analysis,
+        diamond_triangle_config,
+        monkeypatch,
+    ):
         machine._msg_handler = fake_system_msg_handler
         user_pref.save()
         msg_handler = machine._msg_handler
+
+        # set and save some specific config we want to ease the below sessions test:
+        algo_cfg = system_config.behavior
+        algo_cfg.head_clamp.before_reengage_delay = 0
+        # alarm_cfg = algo_cfg.emergency_alarm
+        # for sub_cfg in (
+        #     alarm_cfg.global_animal_presence,
+        #     alarm_cfg.system_fault,
+        #     alarm_cfg.system_maintenance,
+        #     alarm_cfg.device_comm_error,
+        # ):
+        #     sub_cfg.is_emergency_condition = False  # in case of.
+        system_config.save_default(trainer_config_dir)
+
+        # prevent slow exit when issue:
+        monkeypatch.setattr(CanDevice, CanDevice._check_tunnel_pellet_status_age.__name__, lambda s: None)
+
         app_model = self._app_model = AppModel(
             user_pref,
             system_message_handler=msg_handler,
@@ -104,13 +132,10 @@ class BaseTrainingPlan(MockSystemMachine):
 
         app_model.training_mode = TrainingMode.AUTOMATIC
         app_model.capture_start(target_status=AppModelStatus.ANIMAL_IN_TRAINING, wait_connected=False)
-        # force pellet machine state to monitoring:
-        app_model.behavior.system_machine.pellet.state = PelletState.monitoring
-        # AFTER capture_start
 
         algo.pellet_delivery_enabled = True
 
-        self.mock_pellet_ack(until_none=True)  # for whole send-pellet/cover pellet sequence(s)
+        self.mock_pellet_ack(until_none=True)  # for eventual whole start send-pellet/cover pellet sequence(s)
 
         try:
             yield app_model
@@ -122,7 +147,7 @@ class BaseTrainingPlan(MockSystemMachine):
         tokens = list(self._app_model.hardware._pending_tokens)
         logger.info("acking %s pending tokens", len(tokens))
         for tok in tokens:
-            self.msg_handler.ack_received(tok)
+            self.msg_handler.ack_received(tok, perf_c=get_perf_now())
         if wait_acked:
             for tok in tokens:
                 logger.debug("waiting tock %s", tok)
@@ -222,21 +247,50 @@ class TestTrainingPlan(BaseTrainingPlan):
         algo = app_model.behavior.algorithm
         if hands_min_dist is not None:
             algo.pellet_hands_min_distance = hands_min_dist
+        # NB: at least one of the training phase is setting pellet-delivery-enabled to False, reset it here:
+        algo.pellet_delivery_enabled = True
         #
         pellet_m = self._machine.pellet
-        assert pellet_m.state == PelletState.monitoring
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
         #
-        algo.update_triangle_seen(True)
-        algo.update_pellet_seen(True)
-        #
-        self._load_cell.is_engaged = True
+        # self._load_cell.is_engaged = True
+        self.start_session_in_tunnel(set_recording_status=True)
+        self.mock_pellet_ack(until_none=True)
         #
         assert machine.state == SystemState.tunnel
-        algo.update_triangle_seen(True)
-        algo.update_pellet_seen(True)
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
         assert algo.pellet_recently_seen
-        assert algo.is_in_session
-        assert pellet_m.state == PelletState.monitoring  # still
+        if algo.head_fixation_enabled:
+            for _ in range(2):
+                self.sensor_analysis.headbar_pressure_monitor.is_engaged = True
+                self.mock_pellet_ack(until_none=True)
+                self.mock_pose_response(pellet_seen=True)
+                self.sensor_analysis.headbar_pressure_monitor.is_engaged = False
+        self.mock_pellet_ack(until_none=True)
+        assert algo.is_in_session, (
+            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
+            f"{pellet_m.state=} {algo.status=}"
+        )
+        half = algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay / 2 
+        self.increment_perf_now(half)
+        self.mock_pose_response(pellet_seen=True)
+        if pellet_m.state == PelletState.home:
+            self.mock_pellet_ack(until_none=True)
+        self.increment_perf_now(half + 0.01)
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        if pellet_m.state == PelletState.sending:
+            self.mock_pellet_ack(until_none=True)
+        self.mock_pose_response(pellet_seen=True)
+
+        if pellet_m.state != PelletState.monitoring:
+            x = algo.can_send_pellet()
+        assert pellet_m.state == PelletState.monitoring, (
+            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
+            f"{pellet_m.state=} {algo.status=}"
+        )
         # assert algo.can_release_pellet()  some training phase sets cover-pellet-enabled to True..
         #   .. making can_release_pellet() False.
         with contextlib.ExitStack() as stack:
@@ -269,13 +323,9 @@ class TestTrainingPlan(BaseTrainingPlan):
         # so that pellet-send will be allowed with ack of previous retract:
 
         self.mock_pellet_ack()  # for retract
-        assert pellet_m.state == PelletState.sending
-        self.mock_pellet_ack()  # for send
-        assert pellet_m.state == PelletState.monitoring
         assert pellet_m._api_status_token is None
         # assert pellet_m.covered_state is False  # depends todo
 
-        algo.capture_status = CaptureProcessStatus.RUNNING  # do not seem necessary
         assert machine.state == SystemState.cage  # still ofc.
 
         self.increment_perf_now(1)

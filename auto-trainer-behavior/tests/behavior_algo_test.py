@@ -10,14 +10,16 @@ from autotrainer.core.interfaces import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.core.capture import CaptureProcessStatus
+from top_fixtures import increase_simulate_perf_now
 
 
 @pytest.fixture
-def algo(monkeypatch, mock_get_perf_now) -> BehaviorAlgorithm:
+def algo(monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
     del mock_get_perf_now  # used for its side effect
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True
-    algo = BehaviorAlgorithm()
+    algo = BehaviorAlgorithm(project_info=project_info)
+    algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay = 0
     algo.pellet_delivery_enabled = algo.pellet_cover_enabled = True
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
     return algo
@@ -219,18 +221,25 @@ def test_delivery_disabled_defaults(algo):
     #
     algo.pellet_delivery_enabled = True
     #
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     assert algo.can_load_pellet() is False
 
     algo.update_triangle_seen(True)
     assert algo.can_load_pellet() is True
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     #
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is True
     algo.pellet_cover_enabled = False
     assert algo.can_release_pellet() is True
     assert algo.can_cover_pellet() is False
+    #
+    algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay = 1
+    algo.start_session(reason="manual")
+    algo.set_capture_status(CaptureProcessStatus.RECORDING)
+    assert algo.can_send_pellet() is False
+    increase_simulate_perf_now(algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay)
+    assert algo.can_send_pellet() is True
 
 
 def test_algo_paused(algo):
@@ -240,7 +249,7 @@ def test_algo_paused(algo):
     assert algo.can_cover_pellet() is False
     assert algo.can_load_pellet() is False
     algo.algo_paused = False
-    assert algo.can_send_pellet() is True
+    assert algo.can_send_pellet() is False
     assert algo.can_cover_pellet() is True
     assert algo.triangle_recently_seen is False
     assert algo.can_load_pellet() is False  # given not triangle recently seen

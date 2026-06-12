@@ -109,7 +109,10 @@ class PelletDeliveryConfiguration:
     """
 
     is_enabled: bool = False
-    """When disabled not automatic behavior movement will be peformed, but eventually on application start"""
+    """When disabled no automatic behavior movement will be peformed, but eventually on application start"""
+
+    autoclamp_disabled_pellet_send_wait_delay: float = 1
+    """How long to wait before send_pellet when autoclamp disabled"""
 
     is_pellet_cover_enabled: bool = False
     """If enabled: cover pellet when session starts, and wait uncover condition"""

@@ -27,8 +27,9 @@ class BaseAutoEndSession(MockSystemMachine):
         return super().patch_timer("autotrainer.behavior.system_machine._consider_auto_end_session_timer")
 
     def test_its_canceled_on_end_session(self, machine):
+        self.mock_pose_response(pellet_seen=True)
         with self.patch_timer() as m_timer:
-            self.start_session_in_tunnel()
+            self.start_session_in_tunnel(set_recording_status=True)
         assert m_timer.return_value.cancel.call_args_list == []
         self.exit_tunnel()
         assert not self.algo.is_in_session
@@ -45,8 +46,9 @@ class TestWithMissingNoseActivity(BaseAutoEndSession):
     def test_it_triggers(self, machine, timeout_delay_minutes):
         algo = self.algo
         algo.active_config.auto_end_session.no_activity_delay_minutes = timeout_delay_minutes
+        self.mock_pose_response(pellet_seen=True)
         with self.patch_timer() as m_timer:
-            self.start_session_in_tunnel()
+            self.start_session_in_tunnel(set_recording_status=True)
 
         delay_seconds = AlmostEqualFloat(timeout_delay_minutes * 60)
         assert m_timer.call_args_list == [
@@ -79,8 +81,9 @@ class TestWithMissingNoseActivity(BaseAutoEndSession):
         algo = self.algo
         timeout_delay = timeout_delay_minutes * 60
         algo.active_config.auto_end_session.no_activity_delay_minutes = timeout_delay_minutes
+        self.mock_pose_response(pellet_seen=True)
         with self.patch_timer() as m_timer:
-            self.start_session_in_tunnel()
+            self.start_session_in_tunnel(set_recording_status=True)
         self.increment_perf_now(timeout_delay // 2)
         algo.update_mouse_seen(True)
         with self.patch_timer() as m_timer_2:
@@ -103,8 +106,9 @@ class TestWithAnimalTunnelMissingActivity(BaseAutoEndSession):
     def test_it_triggers(self, machine):
         algo = self.algo
         cfg = algo.active_config.auto_end_session
+        self.mock_pose_response(pellet_seen=True)
         with self.patch_timer() as m_timer:
-            self.start_session_in_tunnel()
+            self.start_session_in_tunnel(set_recording_status=True)
         delay = AlmostEqualFloat(cfg.animal_tunnel_no_activity_delay)
         assert m_timer.call_args_list == [
             mock.call(delay, machine._consider_auto_end_session)

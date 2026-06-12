@@ -2,16 +2,19 @@ import ast
 import atexit
 import dataclasses
 import logging
+import math
+import statistics
+import time
 from enum import IntEnum
 from typing import Tuple, List, Dict, Optional, Type
 
 import numpy
 import PySpin
 
+from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 from .camera_base import CameraBase
-
 
 logger = get_verbose_logger(__name__)
 
@@ -97,6 +100,10 @@ class SpinCam(CameraBase):
         self._node_map = None
         self._node_map_tl_device = None
         self._start_frames = []
+        self._current_cam_frame_2_perf_offset = math.nan
+        self._current_cam_frame_2_time_offset = math.nan
+        self._consecutive_late_acquire = 0
+        self._was_late_last = False
 
         super().__init__(name)
 
@@ -218,6 +225,7 @@ class SpinCam(CameraBase):
         spincam = self._camera
         spincam.Init()
 
+        self._consecutive_late_acquire = 0
         self._acquisition_started = False
 
         self._node_map = spincam.GetNodeMap()
@@ -324,6 +332,59 @@ class SpinCam(CameraBase):
         logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
         self._camera = None
 
+    def _capture(self):
+        p_timeout = time.perf_counter() + 15  # eventual todo: allow config
+        try_count = 0
+        t_prev_after = p_prev_after = -math.inf
+        while True:
+            try_count += 1
+            if time.perf_counter() > p_timeout:
+                raise RuntimeError("Failed capture a frame in time")
+            t_before = time.time()
+            p_before = time.perf_counter()
+            try:
+                image_result = self._camera.GetNextImage(1)  # 1 millisecond timeout
+                p_after = time.perf_counter()
+                t_after = time.time()
+            except PySpin.SpinnakerException:
+                t_prev_after = t_before
+                p_prev_after = p_before
+                continue
+            if image_result.IsIncomplete():
+                image_result.Release()
+                t_prev_after = t_after
+                p_prev_after = p_after
+                continue
+            frame_id = image_result.GetFrameID()
+            frame_when = image_result.GetTimeStamp()
+            frame_when_sec = frame_when / 1e9
+            if try_count > 1:
+                # best case: we retried at least once, with a 1 millisecond timeout,
+                # so we can estimate as:
+                estimated_frame_perf_c = (2 * p_prev_after + 3 * p_before) / 5  # good enough
+                estimated_frame_time = (2 * t_prev_after + 3 * t_before) / 5
+                self._current_cam_frame_2_perf_offset = estimated_frame_perf_c - frame_when_sec
+                self._current_cam_frame_2_time_offset = estimated_frame_time - frame_when_sec
+                self._consecutive_late_acquire = 0
+            else:
+                if not math.isfinite(self._current_cam_frame_2_perf_offset):
+                    estimated_frame_perf_c = p_before  # best we can guess
+                    estimated_frame_time = t_before
+                else:
+                    estimated_frame_perf_c = frame_when_sec + self._current_cam_frame_2_perf_offset
+                    estimated_frame_time = frame_when_sec + self._current_cam_frame_2_time_offset
+                late_delay = (p_before + p_after) / 2 - estimated_frame_perf_c
+                if self._consecutive_late_acquire == 0 and late_delay > 0.050:  # 0.050 semi-arbitrary
+                    logger.warning("late acquire: frame_id=%s p_before=%.3f p_after=%.3f when=%.3f perf_c=%.3f late_delay=%.3f",
+                                   frame_id, p_before, p_after, frame_when_sec, estimated_frame_perf_c, late_delay)
+                self._consecutive_late_acquire += 1
+                if self._consecutive_late_acquire > 150 * 5:
+                    logger.warning("very long running late acquires ; frame=%s when=%.3f perf_c=%.3f late_delay=%.1f",
+                                   self._frame_count, frame_when_sec, estimated_frame_perf_c, late_delay)
+                    self._consecutive_late_acquire = 0
+            return image_result, frame_when, estimated_frame_perf_c, estimated_frame_time
+        # end while True.
+
     def capture(self) -> Tuple[numpy.ndarray, int]:
         first_capture = False
         if not self._acquisition_started:
@@ -338,13 +399,11 @@ class SpinCam(CameraBase):
 
         expected_shape = (self._height, self._width)
 
-        image_result = self._camera.GetNextImage()
-        if image_result.IsIncomplete():
-            # fail early
-            image_result.Release()
-            raise RuntimeError(f"Incomplete spincam image on frame_idx={self._frame_count}")
+        image_result, frame_when, frame_perf, frame_time = self._capture()
 
-        self._last_when = image_result.GetTimeStamp()
+        self._last_when = frame_when
+        self._last_frame_perf_c = frame_perf
+        self._last_frame_time = frame_time
         self._last_frame_id = image_result.GetFrameID()
 
         frame = orig_frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
@@ -354,8 +413,8 @@ class SpinCam(CameraBase):
 
         if first_capture:
             self._capture_start = self._last_when
-            logger.notice("first frame: shape=%s (expected=%s) dtype=%s itemsize=%s",
-                          frame.shape, expected_shape, frame.dtype, frame.itemsize)
+            logger.notice("first frame: shape=%s (expected=%s) dtype=%s itemsize=%s ; ts=%.3f",
+                          frame.shape, expected_shape, frame.dtype, frame.itemsize, self._last_when)
             if frame.shape != expected_shape:
                 logger.warning("Frame shape not as expected: %s vs %s", frame.shape, expected_shape)
 

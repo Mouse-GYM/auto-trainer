@@ -1,5 +1,6 @@
 import logging
 import queue
+from typing import Optional
 
 from autotrainer.core import (ObservableObject, ProjectInterval, SystemMessageHandler,
                               SystemCommandKind, SensorAnalysis, Motor, EventManager, MessageHandler)
@@ -210,7 +211,7 @@ class AppModel(ObservableObject):
             self.config = value
 
     @staticmethod
-    def reader_ack_received(ack):
+    def reader_ack_received(ack, *, perf_c: Optional[float]=None):
         logger.info(f"ack context received: {ack}")
 
     def _enable_data_stream(self):

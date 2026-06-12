@@ -24,6 +24,7 @@ from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemC
     calculate_std_dev_manual, ProjectInfo, get_perf_now
 from autotrainer.core.analysis.autoclamp_evasion_detector import AutoClampEvasionDetector
 from autotrainer.core.animal.animal_subject import AnimalPelletCounts
+from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -1351,17 +1352,13 @@ class MainWindow(QMainWindow):
             print("starting new simulate session")
             self.load_cell_trigger_action.trigger()
             do_sleep()
+            t_end = time.perf_counter() + 10
+            while algo.capture_status != CaptureProcessStatus.RECORDING:
+                time.sleep(0.05)
+                if time.perf_counter() > t_end:
+                    print(f"awaited RECORDING but is still {algo.capture_status}")
+                    break
             for idx in range(n_trials):
-                print("wait monitoring")
-                while pellet_m.state != PelletState.monitoring:
-                    if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
-                        return
-                    time.sleep(0.1)
-                time.sleep(random.uniform(monitor_sleep, 2 * monitor_sleep))
-                if random.random() <= rand_mouse_seen:
-                    print("setting mouse seen")
-                    algo.update_mouse_seen()
-                    do_sleep()
                 if random.random() <= rand_headfix_trigger:
                     # self.force_headbar_detector_action.setChecked(True)
                     set_headfix = True
@@ -1374,6 +1371,23 @@ class MainWindow(QMainWindow):
                             do_sleep()
                             algo.update_mouse_seen()
                         do_sleep()
+                print("wait monitoring")
+                t_end = time.perf_counter() + 15
+                while pellet_m.state != PelletState.monitoring:
+                    if algo.head_fixation_enabled:
+                        # new autoclamp
+                        break
+                    if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                        return
+                    time.sleep(0.1)
+                    if time.perf_counter() > t_end:
+                        print(f"waited monitoring but still {pellet_m.state}")
+                        break
+                time.sleep(random.uniform(monitor_sleep, 2 * monitor_sleep))
+                if random.random() <= rand_mouse_seen:
+                    print("setting mouse seen")
+                    algo.update_mouse_seen()
+                    do_sleep()
                 else:
                     set_headfix = False
                 if random.random() <= rand_hands_near_pellet:

@@ -23,6 +23,13 @@ from autotrainer.inference.analysis import IntersessionResponse
 
 class _AutoClampTestCase(MockSystemMachine):
 
+    def start_session_in_tunnel(self, *, engage_headbar: bool = False):
+        self.mock_pose_response(pellet_seen=True)
+        super().start_session_in_tunnel(set_recording_status=True)
+        if engage_headbar:
+            self.sensor_analysis.headbar_pressure_monitor.is_engaged = True
+            self.mock_pellet_ack(until_none=True)
+
     @property
     def headbar_pressure(self):
         return self.sensor_analysis.headbar_pressure_monitor
@@ -34,8 +41,7 @@ class _AutoClampTestCase(MockSystemMachine):
     def test_when_intersession_with_exit_tunnel(self, machine, caplog):
         algo = self.algo
         algo.intersession_enabled = True
-        pressure_mon = self.sensor_analysis.headbar_pressure_monitor
-        self.start_session_in_tunnel()
+        self.start_session_in_tunnel(engage_headbar=False)
         assert self.update_magnet_mock.call_args_list == []
         algo.update_mouse_seen(True)  # to have intersession started
         with self.mock_intersession_analysis():
@@ -43,7 +49,7 @@ class _AutoClampTestCase(MockSystemMachine):
             assert machine.state == SystemState.tunnel
             assert machine.intersession.state == IntersessionState.idle
             with caplog.at_level(logging.INFO):
-                pressure_mon.is_engaged = True
+                self.headbar_pressure.is_engaged = True
             machine.exit_tunnel()
             assert machine.state == SystemState.intersession
             assert machine.intersession.state == IntersessionState.segmentation
@@ -122,16 +128,10 @@ class TestEnabled(_AutoClampTestCase):
         cfg.prerelease_duration = prerelease_duration
         cfg.prerelease_intensity = prerelease_intensity
 
-        self.start_session_in_tunnel()
+        with self.patch_timer("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer") as consider_disengage_timer:
+            self.start_session_in_tunnel(engage_headbar=True)
 
         update_magnet_mock = self.update_magnet_mock
-
-        assert update_magnet_mock.call_args_list == []
-
-        pressure_mon = self.sensor_analysis.headbar_pressure_monitor
-        with self.patch_timer("autotrainer.behavior.system_machine._consider_disengage_autoclamp_timer") as consider_disengage_timer:
-            pressure_mon.is_engaged = True
-
         assert update_magnet_mock.call_args_list == [
             mock.call(algo.auto_clamp_intensity),
         ]
@@ -217,9 +217,8 @@ class TestEnabled(_AutoClampTestCase):
         assert "auto-clamp disabled (backing off to baseline intensity)" in caplog.text
 
     def test_does_disengage_when_exit_tunnel(self, caplog):
-        self.start_session_in_tunnel()
         with caplog.at_level(logging.DEBUG):
-            self.headbar_pressure.is_engaged = True
+            self.start_session_in_tunnel(engage_headbar=True)
         assert "auto-clamp setting position to" in caplog.text
         caplog.clear()
         with caplog.at_level(logging.INFO):
@@ -280,12 +279,17 @@ class TestEnabled(_AutoClampTestCase):
         algo = self.algo
         algo.intersession_enabled = True
         algo.batch_session_recording_config.maximum_batch_size = 1
-        self.start_session_in_tunnel()
+        algo.head_fixation_enabled = False
+        self.start_session_in_tunnel(engage_headbar=False)
         with self.mock_intersession_analysis():
-            algo.update_mouse_seen(True)  # ensure analysis will run
+            # algo.update_mouse_seen(True)  # ensure analysis will run
+            self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.pellet.load_pellet(force=True)  # force load-pellet to trigger end-capture -> intersession
+            self.mock_pellet_ack(until_none=True)
             assert self._machine.state == SystemState.intersession
+            algo.head_fixation_enabled = True
             with caplog.at_level(logging.DEBUG):
                 self.headbar_pressure.is_engaged = True
+            self.headbar_pressure.is_engaged = False  # but back to False
         assert "auto-clamp: intersession not idle (no action taken)" in caplog.text
         assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0

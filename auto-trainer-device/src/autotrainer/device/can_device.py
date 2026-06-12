@@ -136,6 +136,8 @@ class _BoardPendingContext:
     ctx: Optional[str] = None  # current command context (token)
     kind: Optional[Any] = None  # "kind", can be different things, actually unused
     uuid: Optional[int] = None # currently awaited uuid ack
+    uuid_ack_perf_c: float = -math.inf
+    skip_uuid_ack_perf_c: bool = False
     ack_perf_timeout: float = math.inf  # perf timeout for current uuid ack
     prev_command: Optional[Tuple[str, Any, str]] = None
     prev_command_relative: bool = False
@@ -560,11 +562,11 @@ class CanDevice(Device):
                     return True
             return False
 
-        def perform_next_compound(steps):
+        def perform_next_compound(board: _BoardPendingContext, steps):
             self._prev_command_timeout = self.default_command_ack_timeout_duration
             attempt_idx = 0
             while True:
-                success = self._perform_next_compound_step(steps)
+                success = self._perform_next_compound_step(board, steps)
                 if success:
                     break
                 attempt_idx += 1
@@ -608,14 +610,21 @@ class CanDevice(Device):
             kind, data, ctx = raw
             found_board_with_uuid_ack = None
             if kind is _uuid_ack:
+                msg_uuid, msg_perf_c = data
                 for target, board_ctx in boards_pending_ctx.items():
-                    if board_ctx.uuid is not None and board_ctx.uuid == data:
+                    if board_ctx.uuid is not None and board_ctx.uuid == msg_uuid:
                         found_board_with_uuid_ack = board_ctx
                         ctx = board_ctx.ctx
                         cur_commands.insert(0, (_uuid_ack, data, ctx))
                         board_ctx.uuid = None
                         board_ctx.repeated_command_count = 0
                         board_ctx.prev_command = None
+                        logger.debug("uuid_ack_perf_c=%.3f board=%s ctx=%s kind=%s",
+                                     msg_perf_c, board_ctx.target, ctx, board_ctx.kind)
+                        if board_ctx.skip_uuid_ack_perf_c:
+                            board_ctx.skip_uuid_ack_perf_c = False
+                        else:  # if board_ctx.ctx is not None and board_ctx.kind is not None:
+                            board_ctx.uuid_ack_perf_c = msg_perf_c
                         if board_ctx.uuid_ack_timeout_engaged:
                             board_ctx.uuid_ack_timeout_engaged = False
                             if not boards_has_ack_timeout_engaged():
@@ -742,7 +751,7 @@ class CanDevice(Device):
                 kind, steps = data
                 target_board.kind = kind
                 target_board.compound_steps = steps
-                perform_next_compound(steps)
+                perform_next_compound(target_board, steps)
 
             elif kind is _uuid_ack:
                 assert found_board_with_uuid_ack is not None
@@ -762,7 +771,7 @@ class CanDevice(Device):
                     if found_board_with_uuid_ack is not target_board:
                         found_board_with_uuid_ack.ctx = None
                         found_board_with_uuid_ack.kind = None
-                    perform_next_compound(steps)
+                    perform_next_compound(target_board, steps)
                 else:
                     assert target_board is found_board_with_uuid_ack
 
@@ -835,17 +844,19 @@ class CanDevice(Device):
                 has_compound_left = compound_steps is not None and len(compound_steps) > 0
                 if not has_compound_left:
                     target_board.compound_steps = None
-                    logger.success("finished executing %s ; ctx=%s board=%s", kind, ctx, target_board.ctx)
+                    logger.success("finished executing %s ; target_board=%s ctx=%s board=%s perf_c=%.3f",
+                                   kind, target_board.target, ctx, target_board.ctx, target_board.uuid_ack_perf_c)
                     if ctx is not None:
-                        self._acknowledge_command(ctx)
+                        self._acknowledge_command(ctx, perf_c=target_board.uuid_ack_perf_c)
                         target_board.ctx = None
                     target_board.kind = None
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
-        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s",
-                     msg.target, msg.uuid, cur_can_uuid)
-        self._put_to_cmd_queue((_uuid_ack, msg.uuid, None))
+        perf_c = msg.perf_c
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s ; perf_c=%.3f",
+                     msg.target, msg.uuid, cur_can_uuid, perf_c)
+        self._put_to_cmd_queue((_uuid_ack, (msg.uuid, perf_c), None))
 
     @property
     def api(self):
@@ -924,7 +935,8 @@ class CanDevice(Device):
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
         assert self._compound_movement is None
         self._compound_movement = move_steps
-        return self._perform_next_compound_step(move_steps)
+        board = self._find_steps_next_board("sequence", move_steps)
+        return self._perform_next_compound_step(board, move_steps)
 
     def _find_step_board(self, step) -> Optional[Target]:
         if 'x' in step:
@@ -1252,7 +1264,7 @@ class CanDevice(Device):
         compound_movements[1:1] = steps
         return True
 
-    def _perform_next_compound_step(self, compound_movements: List[Dict[str, Any]]) -> bool:
+    def _perform_next_compound_step(self, board: _BoardPendingContext, compound_movements: List[Dict[str, Any]]) -> bool:
         """
         Issue the next step in a multi-step motor sequence.
         """
@@ -1328,6 +1340,8 @@ class CanDevice(Device):
             motor = Motor.TONE
             freq, duration = step['tone'].split(',')  # noqa  # (hz), (sec)
             success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+            if success:
+                board.skip_uuid_ack_perf_c = True
 
         elif 'predefined' in step:
 
@@ -1336,8 +1350,6 @@ class CanDevice(Device):
             if predefined == 'send':
                 motor = Motor.PELLET_X_MOTOR  # could choose Y or Z
                 success = self._interface.fixed_position()
-                if success:
-                    self._prev_target_command = Target.PELLET_DEVICE
 
             elif predefined == 'cover':
                 motor = Motor.PELLET_COVER_SERVO

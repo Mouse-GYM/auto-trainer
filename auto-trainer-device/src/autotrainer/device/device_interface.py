@@ -64,6 +64,10 @@ class Source:
     # init=False: preserve the original behavior/semantic of constructor with position args
     # for subclasses adding other fields.
 
+    @property
+    def perf_c(self) -> float:
+        return self.index / 1e9
+
 
 @dataclass
 class MotorSource(Source):

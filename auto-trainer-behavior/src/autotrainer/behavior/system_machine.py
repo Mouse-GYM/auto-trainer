@@ -1,3 +1,4 @@
+import dataclasses
 import math
 from functools import partial
 from itertools import chain
@@ -51,6 +52,8 @@ _consider_close_gate_timer = make_daemon_timer
 
 
 class SystemMachine(StateMachine):
+
+    # _events_class
 
     states = list(SystemState)
 
@@ -113,6 +116,7 @@ class SystemMachine(StateMachine):
         self._enter_tunnel_pellet_seen = False
 
         self._session_started_perf_c = -math.inf
+        self._session_pellet_sent_perf_c: Optional[float] = None
 
         self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
@@ -125,7 +129,7 @@ class SystemMachine(StateMachine):
         del algorithm  # using algo
 
         algo.session_starting += self._on_session_capture_started
-        algo.session_capture_ending += self._on_session_capture_ended
+        algo.session_capture_ending += self.on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
@@ -164,6 +168,7 @@ class SystemMachine(StateMachine):
         pellet_events.pellet_loaded += self._on_pellet_loaded
         pellet_events.pellet_sent += self._on_pellet_sent
         pellet_events.pellet_load_failed += self._on_pellet_load_failed
+        pellet_events.pellet_released += self._on_pellet_released
         self._last_pellet_loaded_perf_c = -math.inf
         self._last_pellet_loading_perf_c = -math.inf
         self._last_pellet_failed_loaded_perf_c = -math.inf
@@ -297,8 +302,9 @@ class SystemMachine(StateMachine):
             self._batch_project_sessions_finished = 0
             wait_stop_recorded = True
 
-        if self._pellet_machine.state == PelletState.monitoring:
-            self._pellet_machine.move_retract()
+        if self._pellet_machine.state in {PelletState.monitoring, PelletState.covering, PelletState.sending}:
+            with algo.set_allow_reentrant(True):
+                self._pellet_machine.move_retract()
 
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
@@ -403,10 +409,15 @@ class SystemMachine(StateMachine):
     def _on_session_capture_started(self):
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         prj = self._project_info
+        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         if prj is None or dcs_send_pos is None:
             logger.warning("project None or current dcs_send_pos None (DCS)")
-        self._session_started_perf_c = get_perf_now()
-        logger.info("session_capture_started: dcs_send_pos=%s prj.when=%s",
+        p_now = self._session_started_perf_c = get_perf_now()
+        pellet_m = self._pellet_machine
+        self._session_pellet_sent_perf_c = p_now if (
+            pellet_m.state == PelletState.monitoring and pellet_recent_seen
+        ) else None
+        logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, None if prj is None else prj.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
@@ -414,12 +425,14 @@ class SystemMachine(StateMachine):
         if prj is not None:
             prj.send_position = self._pellet_device.last_set_position
             prj.dcs_send_position = dcs_send_pos
+            if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
+                prj.t_pellet_delivered = 0
             logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
             self._inference.project = prj
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_session_capture_ended(self, reason: RecordingEndingReason):
+    def on_session_capture_ended(self, reason: RecordingEndingReason):
         self._timer_consider_auto_end_session.cancel()
         if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
             logger.notice("Forcing tare load cell due to %s", reason)
@@ -429,7 +442,12 @@ class SystemMachine(StateMachine):
         cur_project = self._project_info
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
+            logger.verbose("capture_ended: project=%s", vars(cur_project))
         algo = self._algorithm
+        # not sure necessary:
+        if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
+            with algo.set_allow_reentrant(True):
+                self._pellet_machine.move_retract()
         #
         can_perform_analysis = (
             cur_project is not None
@@ -739,6 +757,9 @@ class SystemMachine(StateMachine):
             algo.handle_release_pellet_offset(offset)
 
     def _handle_pellet_uncover(self, response: PoseResponse):
+        project = self._project_info
+        if project is None:
+            return
         algo = self._algorithm
         active_cfg = self._algorithm.active_config
         if not (algo.is_in_session and active_cfg.pellet_delivery.is_pellet_cover_enabled):
@@ -756,12 +777,15 @@ class SystemMachine(StateMachine):
                     min_y = part_3d.y
                 if part_3d.y > max_y:
                     max_y = part_3d.y
-        perf_now = get_perf_now()
-        valid = max_y < uncov_cfg.min_y_dcs
+        perf_now = get_perf_now()  # response.perf_c  #
+        valid = (
+            max_y < uncov_cfg.min_y_dcs
+            and math.isfinite(project.t_pellet_delivered)
+        )
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
-            logger.verbose("setting pellet-uncover valid ; max_dist=%.1f", max_y)
+            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f", min_y, max_y)
             ctx.start_min_y = min_y
         elif not valid and prev_valid:
             logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
@@ -815,7 +839,9 @@ class SystemMachine(StateMachine):
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and self._pellet_machine.state == PelletState.monitoring
+            and (
+                self._pellet_machine.state == PelletState.monitoring
+                or algo.head_fixation_enabled)  # or using auto-clamp which allows start session before
         ):
             # this is mainly for when app/acquisition starts :
             # if load-cell is engaged before inference is live then we need this case/if.
@@ -828,6 +854,7 @@ class SystemMachine(StateMachine):
 
     def _autoclamp_set_in_progress(self, prog: bool):
         self._auto_clamp_in_progress = prog
+        self._algorithm.autoclamp_in_progress = prog
         det = self._analysis.autoclamp_evasion_detector
         det.autoclamp_in_progress = prog
 
@@ -844,6 +871,8 @@ class SystemMachine(StateMachine):
         self._event_manager.post_event_content(ApiEventKind.autoClampDisengaged, data=dict(intensity=baseline_intensity))
         self._autoclamp_set_in_progress(False)
         self._auto_clamp_disengage_in_progress = False
+        with self._algorithm.set_allow_reentrant(True):
+            self._pellet_machine.environment_changed()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pre_disengage_auto_clamp(self):
@@ -1047,6 +1076,7 @@ class SystemMachine(StateMachine):
         logger.verbose("received pellet_loaded p_now=%.4f", self._last_pellet_loaded_perf_c)
         self._algorithm.pellet_loaded()
         self._analysis.system_maintenance_alarm.update_failed_pellet_load(consecutive=0)
+        self._consider_start_session(reason="pellet_loaded")
 
     def _on_pellet_load_failed(self, *, consecutive: int):
         logger.verbose("received pellet_load_failed consecutive=%s", consecutive)
@@ -1060,9 +1090,33 @@ class SystemMachine(StateMachine):
         elif new_value == PelletState.releasing:
             self._algorithm.pellet_uncover_context.has_released = True
 
-    def _on_pellet_sent(self):
+    def _on_pellet_sent(self, *, perf_c: float):
         self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
-        self._consider_start_session(reason="pellet-sent")
+        if self._algorithm.is_in_session:
+            if self._session_pellet_sent_perf_c is None:
+                self._session_pellet_sent_perf_c = perf_c
+                project = self._project_info
+                if project is not None:
+                    t_delivered = perf_c - self._algorithm.recording_start_perf_c
+                    logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
+                    project.t_pellet_delivered = t_delivered
+        else:
+            self._consider_start_session(reason="pellet-sent")
+
+    def _on_pellet_released(self, *, perf_c: float):
+        project = self._project_info
+        if project is None:
+            return
+        # for some reason the cover arm looks to sometimes still be finishing its move up to ~2-3 frames after
+        # the perf_c we receive, it might be it's related to its inertia.
+        perf_c += 0.012  # small correction for best result
+        logger.debug(
+            "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
+            perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
+        if self._algorithm.is_in_session:
+            if project is not None and not math.isfinite(project.t_pellet_presented):
+                project.t_pellet_presented = perf_c - self._algorithm.recording_start_perf_c
+                logger.debug("set pellet_presented_perf_c=%.3f to project=%s", perf_c, project)
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
@@ -1099,41 +1153,13 @@ class SystemMachine(StateMachine):
             self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
             algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
-        # NB/TODO: maybe we should consider if pellet was seen and disappeared before we start the session,
-        # to still start it : a mouse could be in tunnel, and pellet move back from load-pellet and mouse hit/makes
-        # the pellet to fall or get it, before we got the time to notice it here..
         if not (
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and pellet_machine.state == PelletState.monitoring
-            # waiting monitoring state, ensure pellet is in deliver position
+            and algo.pellet_recently_seen
         ):
             logger.debug("Not good state")
-            return
-        if not math.isinf(send_begin_age) and send_begin_age < send_end_age:
-            logger.debug("Wait pellet is sent")
-            # wait pellet-sent, no need further timer:
-            # we'll get a pellet_machine.events.pellet_sent() when it's received/acked
-            return
-        if not algo.pellet_recently_seen:
-            logger.debug("Wait pellet seen")
-            # pellet not seen, if enabled a pellet-load will be executed,
-            # which we also consider-start-session for it.
-            return
-        #
-        if math.isinf(send_begin_age) and math.isinf(send_end_age):
-            remains = 0  # first session
-        else:
-            # This ensures that we'll have the start of video matching the very end, or ~right after,
-            # of send-pellet action/move.
-            remains = algo.record_prebuffer_duration - send_end_age
-        if remains > 0:
-            logger.verbose("Starting timer for consider_start_session in %.1f secs (record_prebuffer)", remains)
-            timer = _consider_start_session_timer(
-                remains, lambda: self._consider_start_session(reason=reason))
-            self._timer_consider_start_session = timer
-            timer.start()
             return
         algo.start_session(reason=reason)
 

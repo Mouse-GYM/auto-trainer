@@ -50,6 +50,7 @@ class TestShiftXYZ(MockSystemMachine):
 
     def make_session(self, stack: contextlib.ExitStack, reach_events, rh_max_vp_list):
         algo = self.algo
+        self.mock_pellet_ack(until_none=True)
         assert algo.is_in_session
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
@@ -66,8 +67,10 @@ class TestShiftXYZ(MockSystemMachine):
             self.mock_intersession_analysis(results=rsp, project=project, stack=stack)
         )
         self.mock_pose_response(pellet_seen=False)
+        self.mock_pellet_ack(until_none=True)
         self.increment_perf_now(cfg.pellet_delivery.max_pellet_missing_seconds)
         self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+        
         # pellet not seen for missing delay
         #   -> load pellet triggered -> stop-session-recording -> not algo.is_in_session
         assert not algo.is_in_session
@@ -84,6 +87,7 @@ class TestShiftXYZ(MockSystemMachine):
         fps = 150  # currently hardcoded in intersession_process
         system = self.system_machine
         algo = self.algo
+        self.mock_pose_response(pellet_seen=True)
         cfg = algo.active_config
         pellet_dev = self.pellet_dev
         #
@@ -98,8 +102,9 @@ class TestShiftXYZ(MockSystemMachine):
         #
         expected_shift = Offset3DTuple(-2.0375, 3.4875, 0)
         self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
-        self.start_session_in_tunnel()
-        assert algo.is_in_session
+        self.mock_pose_response(pellet_seen=True)
+        self.start_session_in_tunnel(set_recording_status=True)
+        self.mock_pellet_ack(until_none=True)
         caplog.clear()
         caplog.set_level(logging.INFO)
         reach_events = make_reach_events(2 * (
@@ -167,8 +172,11 @@ class TestShiftXYZ(MockSystemMachine):
         )
         #
         expected_shift = Offset3DTuple(0, 0.5, 0)
+        self.mock_pose_response(pellet_seen=True)
+        self.start_session_in_tunnel(set_recording_status=True)
+        self.mock_pellet_ack(until_none=True)
+
         self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
-        self.start_session_in_tunnel()
         caplog.clear()
         caplog.set_level(logging.INFO)
         with FifoExitStack() as stack:

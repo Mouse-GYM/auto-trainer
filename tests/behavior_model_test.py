@@ -54,6 +54,8 @@ class TestEmergency(MockSystemMachine):
     @pytest.mark.parametrize("baseline_intensity", [0, 5, 100])
     def test_pause_then_resume(self, app_model, baseline_intensity):
         algo = app_model.behavior.algorithm
+        self.pellet.state = PelletState.loading
+        self.pellet_state_trans.clear()
         algo.baseline_intensity = baseline_intensity
         assert not algo.algo_paused
         tunnel_dev = self.tunnel_dev
@@ -83,8 +85,7 @@ class TestEmergency(MockSystemMachine):
         assert self.pellet_state_trans == [
             PelletState.home,
             PelletState.covering,
-            PelletState.sending,
-            PelletState.monitoring,
+            PelletState.home,
         ]
         # assert pellet_m.send_pellet.call_args_list == [mock.call()]  # is now handled by pellet_machine
 
