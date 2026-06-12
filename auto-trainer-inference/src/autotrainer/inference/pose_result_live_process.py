@@ -2,12 +2,15 @@
 
 import sys
 import functools
+import math
 import multiprocessing.managers
 import queue
 import signal
 import logging.config
+import time
 from typing import Optional, Union, Dict, List, Tuple
 
+from autotrainer.core import get_perf_now
 from autotrainer.core.logging import (
     get_verbose_logger,
     setup_logging,
@@ -22,6 +25,11 @@ logger = get_verbose_logger(__name__)
 
 
 class LivePoseResultProcessWorker(multiprocessing.Process):
+    """Dedicated process worker, with "is_ready" event handling,
+    This is necessary since the start of a new worker takes up to ~3-4-5 seconds sometimes, depending on system load.
+    And during that start/import time you don't want to use the new worker yet.
+    Or else it would delay the live data stream of that amount of time.
+    """
 
     def __init__(
         self,
@@ -37,14 +45,12 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
         mp_ctx = get_mp_ctx()
         self._is_ready_event = mp_ctx.Event()
         self._stop_requested = mp_ctx.Event()
+        self._stop_request_perf_c = math.nan
         self._input_q = input_q
         self._pose_algo = pose_algo
         self._monitored_parts_offsets = monitored_parts_offsets
         self._output_q = output_q
         self._generation = generation
-        logger.debug("starting %s", self)
-        self.start()
-        logger.verbose("started ok %s", self)
 
     @property
     def generation(self) -> int:
@@ -60,9 +66,13 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
     def request_stop(self):
         if self.is_alive():
             self._stop_requested.set()
+            self._stop_request_perf_c = get_perf_now()
         else:
             self.join(0)  # just to ensure collect the exit code
             logger.warning("worker already stopped: %s", self)
+
+    def stop_request_age(self) -> float:
+        return get_perf_now() - self._stop_request_perf_c
 
     def run(self):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -72,16 +82,27 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
         else:
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()
+        warn_full = False
+        p_next_log_info = 0
+        count_processed = 0
+        count_out_full = 0
+        log_every_delay = 60
         logger.verbose("setting ready to work")
         self._is_ready_event.set()
-        warn_full = False
         while True:
             if self._stop_requested.is_set():
                 break
+            p_now = time.perf_counter()
+            if p_now > p_next_log_info:
+                logger.debug("%.2f / sec tot=%s out_full=%s",
+                             count_processed / log_every_delay, count_processed, count_out_full)
+                count_processed = count_out_full = 0
+                p_next_log_info = p_now + log_every_delay
             try:
                 pose_data = self._input_q.get(timeout=0.1)
             except queue.Empty:
                 continue
+            count_processed += 1
             rsp = self._pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
             data = (
                 InferenceMonitorDataMsg.POSE_RESULT_READY,  # cmd
@@ -90,9 +111,13 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
             try:
                 self._output_q.put(data, block=False)
             except queue.Full:
+                count_out_full += 1
                 if not warn_full:
                     warn_full = True
                     logger.warning("output queue full")
             else:
-                warn_full = False
+                if warn_full:
+                    logger.info("recovered from output queue full. count=%s", count_out_full)
+                    count_out_full = 0
+                    warn_full = False
         logger.debug("exiting")

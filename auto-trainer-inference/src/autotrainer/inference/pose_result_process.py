@@ -75,10 +75,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         msg_queue: multiprocessing.Queue,
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
-        mp_manager: multiprocessing.managers.SyncManager,
         watchdog_perf_c: Synchronized,
     ):
-        mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
+        mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
         self._log_dict_config = log_dict_config
         super().__init__(
@@ -107,7 +106,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._feed_intersession_project: Optional[ProjectInfo] = None
         self._feed_intersession_error: Optional[str] = None
         self._tot_live_workers = 3  # nbr live workers to use
-        self._live_input_q = mp_manager.Queue(maxsize=16)  # for live 3d processing
+        self._live_input_q = mp_ctx.Queue(maxsize=16)  # for live 3d processing
+        self._live_new_workers: List[LivePoseResultProcessWorker] = []
+        self._live_pose_workers: List[LivePoseResultProcessWorker] = []
+        self._live_old_workers: List[LivePoseResultProcessWorker] = []
 
     @property
     def stop_recorded(self) -> synchronize.Event:
@@ -139,6 +141,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 break
             flushed += 1
+        self._terminate_workers()
         logger.debug("Exiting ; cmd_thread alive: %s ; cmd_queue_flushed=%s", cmd_thread.is_alive(), flushed)
 
     def _make_new_worker(self, pose_algo, generation):
@@ -149,6 +152,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             input_q=self._live_input_q,
             generation=generation,
         )
+        logger.debug("starting %s", worker)
+        worker.start()
+        logger.verbose("started ok %s", worker)
         return worker
 
     def _monitor_cmd_queue(self):
@@ -287,6 +293,30 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                        project_info.session, final_pose_data.shape[0])
         return final_pose_data.shape
 
+    def _terminate_workers(self):
+        all_workers = self._live_pose_workers + self._live_new_workers + self._live_old_workers
+        logger.debug("terminating live workers: %s", all_workers)
+        for wrk in all_workers:
+            wrk.request_stop()
+        p_end = time.perf_counter() + 1
+        for wrk in tuple(all_workers):
+            p_now = time.perf_counter()
+            wrk.join(0 if p_now > p_end else p_end - p_now)
+            if not wrk.is_alive():
+                all_workers.remove(wrk)
+        for wrk in all_workers:
+            wrk.terminate()
+        p_end = time.perf_counter() + 1
+        for wrk in tuple(all_workers):
+            p_now = time.perf_counter()
+            wrk.join(0 if p_now > p_end else p_end - p_now)
+            if not wrk.is_alive():
+                all_workers.remove(wrk)
+        for wrk in all_workers:
+            signal.signal(signal.SIGKILL, wrk.pid)
+        for lst in (self._live_pose_workers, self._live_old_workers, self._live_new_workers):
+            lst.clear()
+
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
         frames_indices: Optional[numpy.ndarray]
@@ -306,9 +336,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         cnt_data_received = 0
         pose_data = []
         prev_pose_algo = None
-        live_new_workers: List[LivePoseResultProcessWorker] = []
-        live_pose_workers: List[LivePoseResultProcessWorker] = []
-        live_old_workers: List[LivePoseResultProcessWorker] = []
+        live_new_workers = self._live_new_workers
+        live_pose_workers = self._live_pose_workers
+        live_old_workers = self._live_old_workers
         live_workers_generation = 0
 
         thread_post_process: Optional[threading.Thread] = None
@@ -417,14 +447,21 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if mode == InferenceMode.Live:
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
-                    skip_update = data_queue_size > 4
+                    live_q_size = self._live_input_q.qsize()
+                    skip_update = data_queue_size > 2 or live_q_size > 8 or data_queue_size + live_q_size > 12
                     if skip_update:
                         skip_next_pose_data = 1 + data_queue_size // 3
-                        logger.warning("data queue size=%s skip_next=%s",
-                                       data_queue_size, skip_next_pose_data)
+                        logger.warning("data queue size=%s live_q_size=%s skip_next=%s",
+                                       data_queue_size, live_q_size, skip_next_pose_data)
                     else:
                         skip_next_pose_data = 0
-                    t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
+                    if live_q_size >= 16:
+                        pass
+                        # keep current t_perf_live_check_data_queue_size
+                        # so that next turn will also get skip_update=True,
+                        # if still too high number of output async tasks in progress.
+                    else:
+                        t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
                 else:
                     skip_update = False
             else:
@@ -443,20 +480,27 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if pose_algo is None:
                 continue
 
+            # check for new worker(s) ready:
             if len(live_new_workers) > 0:
-                # check for new worker(s) ready
                 for wrk in tuple(live_new_workers):
                     if wrk.is_ready():
                         logger.verbose("using new ready worker %s", wrk)
                         live_new_workers.remove(wrk)
                         live_pose_workers.append(wrk)
-            elif len(live_pose_workers) > self._tot_live_workers:
-                # only when pose_algo renewed or new worker replacing older
+
+            has_current_gen = any(
+                wrk.generation == live_workers_generation and wrk.is_alive()
+                for wrk in live_pose_workers
+            )
+            if has_current_gen:
+                # consider exit/terminate previous workers, but only when there is at least one new ready.
+                # this is only when pose_algo renewed or new worker replacing older
                 for wrk in tuple(live_pose_workers):
                     if pose_algo is not wrk.pose_algo or wrk.generation != live_workers_generation:
                         wrk.request_stop()
                         live_pose_workers.remove(wrk)
                         live_old_workers.append(wrk)
+
             to_remove = set()
             for wrk in live_pose_workers:
                 if not wrk.is_alive():
@@ -466,6 +510,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
             for wrk in to_remove:
                 live_pose_workers.remove(wrk)
+            # renew workers every X hours:
             if tot_count_data_received % 256000 == 0 or pose_algo is not prev_pose_algo:
                 # renew every that nbr of pose_data, which at current rate of ~15-20 / second,
                 # that makes about ~4-5h of runtime for the workers.
@@ -473,8 +518,25 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 live_workers_generation += 1
                 for _ in range(self._tot_live_workers):
                     live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
+            # check for finished old workers:
             for wrk in tuple(live_old_workers):
-                if not wrk.is_alive():
+                if wrk.is_alive():
+                    age = wrk.stop_request_age()
+                    # some in case of checks:
+                    if age > 9:
+                        # ensure it does not stay forever in list.
+                        live_old_workers.remove(wrk)
+                        # even if totally blocked. this could happen if you SIGSTOP a process eventually
+                        # (although not sure that this would survives to the SIGKILL),
+                        # or if there is really something hang/blocked on kernel side for the process eventually.
+                        # but I doubt this code path will be ever taken.
+                    elif age > 6:
+                        logger.warning("killing old worker not yet exited: %s", wrk)
+                        signal.signal(signal.SIGKILL, wrk.pid)
+                    elif age > 3:
+                        logger.warning("terminating old worker not yet exited: %s", wrk)
+                        wrk.terminate()
+                else:
                     wrk.join(0)
                     logger.debug("joined old worker %s", wrk)
                     live_old_workers.remove(wrk)
@@ -712,4 +774,5 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 logger.exception("_monitor_data_queue: loop error processing mode=%s %s: %s",
                                  mode, type(pose_data), err)
 
+        # end while self._is_running
 
