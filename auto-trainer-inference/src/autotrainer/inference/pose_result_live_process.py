@@ -65,13 +65,14 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
 
     def request_stop(self):
         if self.is_alive():
+            logger.debug("requesting stop to %s", self)
             self._stop_requested.set()
             self._stop_request_perf_c = get_perf_now()
         else:
             self.join(0)  # just to ensure collect the exit code
             logger.warning("worker already stopped: %s", self)
 
-    def stop_request_age(self) -> float:
+    def get_stop_request_age(self) -> float:
         return get_perf_now() - self._stop_request_perf_c
 
     def run(self):
@@ -83,10 +84,10 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()
         warn_full = False
-        p_next_log_info = 0
         count_processed = 0
         count_out_full = 0
         log_every_delay = 60
+        p_next_log_info = time.perf_counter() + log_every_delay
         logger.verbose("setting ready to work")
         self._is_ready_event.set()
         while True:

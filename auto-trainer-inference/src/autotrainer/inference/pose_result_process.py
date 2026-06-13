@@ -11,7 +11,7 @@ from itertools import chain
 from multiprocessing import synchronize
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
-from typing import Optional, List, TextIO, Tuple, Deque
+from typing import Optional, List, TextIO, Tuple, Callable, Dict
 
 import h5py
 import numpy
@@ -342,6 +342,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         live_new_workers = self._live_new_workers
         live_pose_workers = self._live_pose_workers
         live_old_workers = self._live_old_workers
+        live_check_worker_tasks: Dict[LivePoseResultProcessWorker, Callable] = {}
         live_workers_generation = 0
 
         thread_post_process: Optional[threading.Thread] = None
@@ -406,6 +407,22 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 nonlocal skip_next_pose_data
                 skip_next_pose_data = 0
             return next_pose_data, next_mode, next_frames_indices
+
+        def live_old_worker_give_up(w: LivePoseResultProcessWorker):
+            if w.get_stop_request_age() >= 75:
+                logger.warning("giving up waiting on old worker not exited yet: %s", wrk)
+                # ensure it does not stay forever in list.
+                del live_check_worker_tasks[w]
+                # even if totally blocked. this could happen if you SIGSTOP a process eventually
+                # (although not sure that this would survive to the SIGKILL),
+                # or if there is really something hang/blocked on kernel side for the process eventually.
+                # but I doubt this code path will be ever taken.
+
+        def live_old_worker_check_kill(w: LivePoseResultProcessWorker):
+            if w.get_stop_request_age() >= 60:
+                logger.warning("killing old worker not yet exited: %s", wrk)
+                signal.signal(signal.SIGKILL, wrk.pid)
+                live_check_worker_tasks[w] = live_old_worker_give_up
 
         cur_local_prj = self._project
         tot_count_data_received = 0
@@ -524,25 +541,20 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             # check for finished old workers:
             for wrk in tuple(live_old_workers):
                 if wrk.is_alive():
-                    age = wrk.stop_request_age()
-                    # some in case of checks:
-                    if age > 9:
-                        # ensure it does not stay forever in list.
-                        live_old_workers.remove(wrk)
-                        # even if totally blocked. this could happen if you SIGSTOP a process eventually
-                        # (although not sure that this would survives to the SIGKILL),
-                        # or if there is really something hang/blocked on kernel side for the process eventually.
-                        # but I doubt this code path will be ever taken.
-                    elif age > 6:
-                        logger.warning("killing old worker not yet exited: %s", wrk)
-                        signal.signal(signal.SIGKILL, wrk.pid)
-                    elif age > 3:
+                    age = wrk.get_stop_request_age()
+                    if age >= 30:
                         logger.warning("terminating old worker not yet exited: %s", wrk)
                         wrk.terminate()
+                        live_old_workers.remove(wrk)
+                        live_check_worker_tasks[wrk] = live_old_worker_check_kill
                 else:
                     wrk.join(0)
                     logger.debug("joined old worker %s", wrk)
                     live_old_workers.remove(wrk)
+
+            # eventual checks for old workers exiting very slowly:
+            for wrk, tsk in tuple(live_check_worker_tasks.items()):
+                tsk(wrk)
 
             prev_pose_algo = pose_algo  # NB: after previous blocks
 
