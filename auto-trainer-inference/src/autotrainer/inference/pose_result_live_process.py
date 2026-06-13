@@ -76,8 +76,11 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
     def get_stop_request_age(self) -> float:
         return get_perf_now() - self._stop_request_perf_c
 
+    def _interrupted(self, sig, frame):
+        self._stop_requested.set()
+
     def run(self):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, self._interrupted)
         log_dict_config = self._log_dict_config
         if log_dict_config is None:
             setup_logging(logger_level=logging.DEBUG)
