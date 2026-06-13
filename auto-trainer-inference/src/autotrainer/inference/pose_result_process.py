@@ -35,7 +35,9 @@ from .pose_result_live_process import LivePoseResultProcessWorker
 logger = get_verbose_logger(__name__)
 
 
-LIVE_WORKERS_RENEW_COUNT_THRESHOLD = int(os.getenv("AUTOTRAINER_LIVE_WORKERS_RENEW_COUNT_THRESHOLD", "256000"))
+# default 4 hours renew delay:
+LIVE_WORKERS_RENEW_TIMER_DELAY = float(os.getenv("AUTOTRAINER_LIVE_WORKERS_RENEW_TIMER_DELAY",
+                                                 4 * 60 * 60))
 
 
 # even better is to use __debug__ and use "python -O ..."
@@ -426,6 +428,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         cur_local_prj = self._project
         tot_count_data_received = 0
+        last_generation_renew_perf_c = get_perf_now()
 
         # main loop
         while self._is_running:
@@ -530,12 +533,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
             for wrk in to_remove:
                 live_pose_workers.remove(wrk)
-            # renew workers every X hours:
-            if tot_count_data_received % LIVE_WORKERS_RENEW_COUNT_THRESHOLD == 0 or pose_algo is not prev_pose_algo:
+            # renew workers every X delay:
+            if (perf_now - last_generation_renew_perf_c >= LIVE_WORKERS_RENEW_TIMER_DELAY
+                or pose_algo is not prev_pose_algo
+            ):
                 # renew every that nbr of pose_data, which at current rate of ~15-20 / second,
                 # that makes about ~4-5h of runtime for the workers.
-                logger.notice("making new workers..")
                 live_workers_generation += 1
+                last_generation_renew_perf_c = perf_now
+                logger.notice("making new workers generation-%s..", live_workers_generation)
                 for _ in range(self._tot_live_workers):
                     live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
             # check for finished old workers:
