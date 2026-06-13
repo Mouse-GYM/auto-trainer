@@ -321,7 +321,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if not wrk.is_alive():
                 all_workers.remove(wrk)
         for wrk in all_workers:
-            signal.signal(signal.SIGKILL, wrk.pid)
+            os.kill(wrk.pid, signal.SIGKILL)
         for lst in (self._live_pose_workers, self._live_old_workers, self._live_new_workers):
             lst.clear()
 
@@ -426,7 +426,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         def live_old_worker_check_kill(w: LivePoseResultProcessWorker):
             if w.get_stop_request_age() >= 60:
                 logger.warning("killing old worker not yet exited: %s", wrk)
-                signal.signal(signal.SIGKILL, wrk.pid)
+                os.kill(wrk.pid, signal.SIGKILL)
                 live_check_worker_tasks[w] = live_old_worker_give_up
 
         cur_local_prj = self._project
