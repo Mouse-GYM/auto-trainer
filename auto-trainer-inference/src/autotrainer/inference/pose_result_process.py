@@ -19,7 +19,8 @@ import numpy
 from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook, \
+    get_multiprocess_log_queue
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
@@ -84,12 +85,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
-        self._log_dict_config = log_dict_config
+        logger.verbose("using log_config=%s", log_dict_config)
         super().__init__(
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(
                 project=project,
+                log_dict_config=log_dict_config,
             ),
             # daemon=True,
             # cannot use anymore daemon=True given using multiprocess.pool.Pool,
@@ -120,9 +122,9 @@ class InferenceMonitorDataProc(multiprocessing.Process):
     def stop_recorded(self) -> synchronize.Event:
         return self._stop_recorded
 
-    def _do_run(self, *, project):
+    def _do_run(self, *, project, log_dict_config):
+        self._log_dict_config = log_dict_config
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        log_dict_config = self._log_dict_config
         if log_dict_config is None:
             setup_logging()
         else:
@@ -156,6 +158,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             output_q=self._msg_queue,
             input_q=self._live_input_q,
             generation=generation,
+            log_config=self._log_dict_config,
         )
         logger.debug("starting %s", worker)
         worker.start()

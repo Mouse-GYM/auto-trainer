@@ -14,8 +14,13 @@ import numpy
 import numpy as np
 
 from autotrainer.core import FixedArrayMultiQueue, PerfMonitor, get_perf_now
-from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, \
-    setup_logging, install_log_exception_hook
+from autotrainer.core.logging import (
+    get_verbose_logger,
+    make_log_dict_config,
+    setup_logging,
+    install_log_exception_hook,
+    get_multiprocess_log_queue,
+)
 from autotrainer.core.frame_index import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel

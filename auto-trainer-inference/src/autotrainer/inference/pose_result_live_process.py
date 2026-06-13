@@ -39,9 +39,10 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
         input_q: multiprocessing.Queue,
         output_q: multiprocessing.Queue,
         generation: int,
+        log_config: Optional[Dict] = None,
     ):
         super().__init__(name="LivePoseProcess", daemon=True)
-        self._log_dict_config = make_log_dict_config()
+        self._log_dict_config = make_log_dict_config() if log_config is None else log_config
         mp_ctx = get_mp_ctx()
         self._is_ready_event = mp_ctx.Event()
         self._stop_requested = mp_ctx.Event()
@@ -83,6 +84,7 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
         else:
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()
+        # logging.getLogger("autotrainer").setLevel(logging.DEBUG)
         warn_full = False
         count_processed = 0
         count_out_full = 0
