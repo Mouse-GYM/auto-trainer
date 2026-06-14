@@ -420,7 +420,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if not w.is_alive():
                 w.join(0)
                 logger.debug("joined old worker %s", w)
-            elif w.get_stop_request_age() >= 75:
+                del live_check_worker_tasks[w]
+            elif w.get_stop_request_age() >= 150:
                 logger.warning("giving up waiting on old worker not exited yet: %s", wrk)
                 # ensure it does not stay forever in list.
                 del live_check_worker_tasks[w]
@@ -433,7 +434,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if not w.is_alive():
                 w.join(0)
                 logger.debug("joined old worker %s", w)
-            elif w.get_stop_request_age() >= 60:
+                del live_check_worker_tasks[w]
+            elif w.get_stop_request_age() >= 120:
                 logger.warning("killing old worker not yet exited: %s", wrk)
                 try:
                     os.kill(wrk.pid, signal.SIGKILL)
@@ -563,7 +565,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             for wrk in tuple(live_old_workers):
                 if wrk.is_alive():
                     age = wrk.get_stop_request_age()
-                    if age >= 30:
+                    if age >= 90:
                         logger.warning("terminating old worker not yet exited: %s", wrk)
                         wrk.terminate()
                         live_old_workers.remove(wrk)
