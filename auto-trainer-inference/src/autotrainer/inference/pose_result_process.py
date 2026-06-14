@@ -321,7 +321,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if not wrk.is_alive():
                 all_workers.remove(wrk)
         for wrk in all_workers:
-            os.kill(wrk.pid, signal.SIGKILL)
+            try:
+                os.kill(wrk.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         for lst in (self._live_pose_workers, self._live_old_workers, self._live_new_workers):
             lst.clear()
 
@@ -414,7 +417,10 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             return next_pose_data, next_mode, next_frames_indices
 
         def live_old_worker_give_up(w: LivePoseResultProcessWorker):
-            if w.get_stop_request_age() >= 75:
+            if not w.is_alive():
+                w.join(0)
+                logger.debug("joined old worker %s", w)
+            elif w.get_stop_request_age() >= 75:
                 logger.warning("giving up waiting on old worker not exited yet: %s", wrk)
                 # ensure it does not stay forever in list.
                 del live_check_worker_tasks[w]
@@ -424,9 +430,15 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 # but I doubt this code path will be ever taken.
 
         def live_old_worker_check_kill(w: LivePoseResultProcessWorker):
-            if w.get_stop_request_age() >= 60:
+            if not w.is_alive():
+                w.join(0)
+                logger.debug("joined old worker %s", w)
+            elif w.get_stop_request_age() >= 60:
                 logger.warning("killing old worker not yet exited: %s", wrk)
-                os.kill(wrk.pid, signal.SIGKILL)
+                try:
+                    os.kill(wrk.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 live_check_worker_tasks[w] = live_old_worker_give_up
 
         cur_local_prj = self._project
