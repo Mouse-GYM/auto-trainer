@@ -688,8 +688,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             self._live_input_q.put((pose_data, live_pose_sequence), block=False)
                         except queue.Full:
                             pass
-                        else:
-                            live_pose_sequence += 1
+                        live_pose_sequence += 1
+                        # always increase, even on queue full, so that consumers can infer there was drop, in case of.
 
                 elif mode == InferenceMode.Offline:
 
