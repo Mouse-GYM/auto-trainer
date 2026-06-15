@@ -94,7 +94,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 log_dict_config=log_dict_config,
             ),
             # daemon=True,
-            # cannot use anymore daemon=True given using multiprocess.pool.Pool,
+            # cannot use anymore daemon=True given using multiprocess.Process,
             # which refuse to work with daemon=True. This should be ok though.
         )
         self._project = project
@@ -117,6 +117,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._live_new_workers: List[LivePoseResultProcessWorker] = []
         self._live_pose_workers: List[LivePoseResultProcessWorker] = []
         self._live_old_workers: List[LivePoseResultProcessWorker] = []
+        self._live_generation_renew_age = LIVE_WORKERS_RENEW_TIMER_DELAY
 
     @property
     def stop_recorded(self) -> synchronize.Event:
@@ -352,6 +353,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         live_old_workers = self._live_old_workers
         live_check_worker_tasks: Dict[LivePoseResultProcessWorker, Callable] = {}
         live_workers_generation = 0
+        live_pose_sequence = 0
 
         thread_post_process: Optional[threading.Thread] = None
         ib_pose_data_list = []
@@ -421,7 +423,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 w.join(0)
                 logger.debug("joined old worker %s", w)
                 del live_check_worker_tasks[w]
-            elif w.get_stop_request_age() >= 150:
+            elif w.get_stop_request_age() >= 240:
                 logger.warning("giving up waiting on old worker not exited yet: %s", wrk)
                 # ensure it does not stay forever in list.
                 del live_check_worker_tasks[w]
@@ -435,7 +437,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 w.join(0)
                 logger.debug("joined old worker %s", w)
                 del live_check_worker_tasks[w]
-            elif w.get_stop_request_age() >= 120:
+            elif w.get_stop_request_age() >= 180:
                 logger.warning("killing old worker not yet exited: %s", wrk)
                 try:
                     os.kill(wrk.pid, signal.SIGKILL)
@@ -450,7 +452,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         # main loop
         while self._is_running:
 
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             self._watchdog_perf_c.value = perf_now
 
             if perf_now > perf_c_log_counters:
@@ -472,7 +474,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 continue
 
             tot_count_data_received += 1
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
 
             if prev_mode != mode:
                 logger.verbose("Detected inference mode change -> %s frames=%s",
@@ -551,7 +553,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             for wrk in to_remove:
                 live_pose_workers.remove(wrk)
             # renew workers every X delay:
-            if (perf_now - last_generation_renew_perf_c >= LIVE_WORKERS_RENEW_TIMER_DELAY
+            if (perf_now - last_generation_renew_perf_c >= self._live_generation_renew_age
                 or pose_algo is not prev_pose_algo
             ):
                 # renew every that nbr of pose_data, which at current rate of ~15-20 / second,
@@ -565,7 +567,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             for wrk in tuple(live_old_workers):
                 if wrk.is_alive():
                     age = wrk.get_stop_request_age()
-                    if age >= 90:
+                    if age >= 150:
                         logger.warning("terminating old worker not yet exited: %s", wrk)
                         wrk.terminate()
                         live_old_workers.remove(wrk)
@@ -683,9 +685,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
                     if len(live_pose_workers) > 0:
                         try:
-                            self._live_input_q.put(pose_data, block=False)
+                            self._live_input_q.put((pose_data, live_pose_sequence), block=False)
                         except queue.Full:
                             pass
+                        else:
+                            live_pose_sequence += 1
 
                 elif mode == InferenceMode.Offline:
 

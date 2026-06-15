@@ -384,6 +384,7 @@ class PoseAlgorithm:
         all_frames: List[numpy.ndarray],
         *,
         pairs_3d_offsets: Pairs3dOffsetT = (),
+        sequence: Optional[int] = None,
     ) -> PoseResponse:
         """
         Process the frames from the pose model and return a PoseResponse.
@@ -397,12 +398,14 @@ class PoseAlgorithm:
         right_frames = all_frames[1::2]
 
         return self.process_frames(left_frames, right_frames,
-                                   pairs_3d_offsets=pairs_3d_offsets)
+                                   pairs_3d_offsets=pairs_3d_offsets,
+                                   sequence=sequence)
 
     def process_frames(
         self,
         *per_cam_frames: List[numpy.ndarray],
         pairs_3d_offsets: Pairs3dOffsetT,
+        sequence: Optional[int] = None,
     ) -> PoseResponse:
         """
         Function to process frames with all cameras frame results separated. Each frame is
@@ -516,8 +519,10 @@ class PoseAlgorithm:
                         loc2 = locations_3d[part2]
                         parts_3d_offsets[part1][part2] = Offset3DTuple(loc2 - loc1)
 
+        if sequence is None:
+            sequence = self._sequence
         response = PoseResponse(
-            sequence=self._sequence,
+            sequence=sequence,
             parts_flags=(parts_flag_1, parts_flag_2, parts_flag_3),
             locations=[locations_1, locations_2],
             parts_3d_offsets=dict(parts_3d_offsets),

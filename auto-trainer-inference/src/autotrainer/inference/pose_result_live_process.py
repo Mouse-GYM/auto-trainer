@@ -1,5 +1,5 @@
 # process pool usage for live inference 3d-triangulation
-
+import dataclasses
 import sys
 import functools
 import math
@@ -71,7 +71,7 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
             self._stop_request_perf_c = get_perf_now()
         else:
             self.join(0)  # just to ensure collect the exit code
-            logger.warning("worker already stopped: %s", self)
+            logger.verbose("worker already stopped: %s", self)
 
     def get_stop_request_age(self) -> float:
         return get_perf_now() - self._stop_request_perf_c
@@ -105,11 +105,12 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
                 count_processed = count_out_full = 0
                 p_next_log_info = p_now + log_every_delay
             try:
-                pose_data = self._input_q.get(timeout=0.1)
+                pose_data, seq_nr = self._input_q.get(timeout=0.1)
             except queue.Empty:
                 continue
             count_processed += 1
-            rsp = self._pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
+            rsp = self._pose_algo.process(
+                pose_data, pairs_3d_offsets=self._monitored_parts_offsets, sequence=seq_nr)
             data = (
                 InferenceMonitorDataMsg.POSE_RESULT_READY,  # cmd
                 ((rsp,), None)  # args, kwargs
