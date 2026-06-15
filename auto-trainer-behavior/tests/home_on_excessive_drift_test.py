@@ -124,7 +124,7 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         #
         self.mock_pose_response(pellet_seen=True)
         # algo.update_pellet_seen(True)
-        algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay = 0
+        algo.active_config.pellet_delivery.pellet_send_wait_delay = 0
         algo.record_prebuffer_duration = 0
         self.start_session_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
