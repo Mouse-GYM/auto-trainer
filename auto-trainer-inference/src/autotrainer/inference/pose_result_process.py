@@ -1,6 +1,6 @@
-
+import collections
 import logging.config
-import multiprocessing.pool
+import multiprocessing.managers
 import os
 import queue
 import statistics
@@ -11,7 +11,7 @@ from itertools import chain
 from multiprocessing import synchronize
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
-from typing import Optional, List, TextIO, Tuple
+from typing import Optional, List, TextIO, Tuple, Callable, Dict
 
 import h5py
 import numpy
@@ -19,7 +19,8 @@ import numpy
 from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx
-from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook, \
+    get_multiprocess_log_queue
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
 from .analysis.intersession_inference import intersession_inference
@@ -30,9 +31,14 @@ from .h5_tools import (
     write_h5_batch,
     close_h5_fhs,
 )
-from .pose_result_live_process import pool_init_process_pose_data, pool_process_pose_data
+from .pose_result_live_process import LivePoseResultProcessWorker
 
 logger = get_verbose_logger(__name__)
+
+
+# default 4 hours renew delay:
+LIVE_WORKERS_RENEW_TIMER_DELAY = float(os.getenv("AUTOTRAINER_LIVE_WORKERS_RENEW_TIMER_DELAY",
+                                                 4 * 60 * 60))
 
 
 # even better is to use __debug__ and use "python -O ..."
@@ -75,17 +81,17 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         msg_queue: multiprocessing.Queue,
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
-        mp_manager=None,
         watchdog_perf_c: Synchronized,
     ):
-        mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
+        mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
-        self._log_dict_config = log_dict_config
+        logger.verbose("using log_config=%s", log_dict_config)
         super().__init__(
             name=self.__class__.__name__,
             target=self._do_run,
             kwargs=dict(
                 project=project,
+                log_dict_config=log_dict_config,
             ),
             # daemon=True,
             # cannot use anymore daemon=True given using multiprocess.pool.Pool,
@@ -104,17 +110,21 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._watchdog_perf_c = watchdog_perf_c
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
-        self._process_pool: Optional[multiprocessing.pool.Pool] = None
         self._feed_intersession_project: Optional[ProjectInfo] = None
         self._feed_intersession_error: Optional[str] = None
+        self._tot_live_workers = 3  # nbr live workers to use
+        self._live_input_q = mp_ctx.Queue(maxsize=16)  # for live 3d processing
+        self._live_new_workers: List[LivePoseResultProcessWorker] = []
+        self._live_pose_workers: List[LivePoseResultProcessWorker] = []
+        self._live_old_workers: List[LivePoseResultProcessWorker] = []
 
     @property
     def stop_recorded(self) -> synchronize.Event:
         return self._stop_recorded
 
-    def _do_run(self, *, project):
+    def _do_run(self, *, project, log_dict_config):
+        self._log_dict_config = log_dict_config
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        log_dict_config = self._log_dict_config
         if log_dict_config is None:
             setup_logging()
         else:
@@ -130,7 +140,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             logger.exception("Fatal error: %s", err)
         self._is_running = False  # before below put
         self._cmd_queue.put(None)  # ensure monitor cmd thread will exit too
-        self._close_process_pool()
         cmd_thread.join(3)
         flushed = 0
         while True:
@@ -139,33 +148,22 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 break
             flushed += 1
+        self._terminate_workers()
         logger.debug("Exiting ; cmd_thread alive: %s ; cmd_queue_flushed=%s", cmd_thread.is_alive(), flushed)
 
-    def _close_process_pool(self):
-        prev = self._process_pool
-        if prev is None:
-            return
-        logger.verbose("Terminating previous process pool %s", prev)
-        self._process_pool = None
-        try:
-            # prev.close()
-            prev.terminate()
-            prev.join()
-        except Exception as err:
-            logger.error("Error closing previous pool: %s", err)
-        else:
-            logger.debug("previous pool closed")
-
-    def _init_process_pool(self, pose_algo: PoseAlgorithm):
-        self._close_process_pool()
-        logger.notice("Initializing new workers process pool")
-        self._process_pool = get_mp_ctx().Pool(
-            processes=4,
-            initializer=pool_init_process_pose_data,
-            initargs=(pose_algo, self._msg_queue, self._monitored_parts_offsets, self._log_dict_config),
-            maxtasksperchild=4 * 4096,  # pose output rate is ~18-20 results / sec
-            # given processes=4 atm, then that gives about ~1 hour of runtime for each task worker
+    def _make_new_worker(self, pose_algo, generation):
+        worker = LivePoseResultProcessWorker(
+            pose_algo=pose_algo,
+            monitored_parts_offsets=self._monitored_parts_offsets,
+            output_q=self._msg_queue,
+            input_q=self._live_input_q,
+            generation=generation,
+            log_config=self._log_dict_config,
         )
+        logger.debug("starting %s", worker)
+        worker.start()
+        logger.verbose("started ok %s", worker)
+        return worker
 
     def _monitor_cmd_queue(self):
         while self._is_running:
@@ -186,8 +184,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 self._feed_intersession_error = error
             self._cmd_ack_event.set()
 
-    def _send_msg(self, msg, *args, **kwargs):
-        self._msg_queue.put((msg, (args, kwargs)))
+    def _send_msg(self, msg, *args, block_msg_queue_put: bool=True, **kwargs):
+        self._msg_queue.put((msg, (args, kwargs)), block=block_msg_queue_put)
 
     def _intersession_offline_process(
         self,
@@ -303,6 +301,33 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                        project_info.session, final_pose_data.shape[0])
         return final_pose_data.shape
 
+    def _terminate_workers(self):
+        all_workers = self._live_pose_workers + self._live_new_workers + self._live_old_workers
+        logger.debug("terminating live workers: %s", all_workers)
+        for wrk in all_workers:
+            wrk.request_stop()
+        p_end = time.perf_counter() + 1
+        for wrk in tuple(all_workers):
+            p_now = time.perf_counter()
+            wrk.join(0 if p_now > p_end else p_end - p_now)
+            if not wrk.is_alive():
+                all_workers.remove(wrk)
+        for wrk in all_workers:
+            wrk.terminate()
+        p_end = time.perf_counter() + 1
+        for wrk in tuple(all_workers):
+            p_now = time.perf_counter()
+            wrk.join(0 if p_now > p_end else p_end - p_now)
+            if not wrk.is_alive():
+                all_workers.remove(wrk)
+        for wrk in all_workers:
+            try:
+                os.kill(wrk.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        for lst in (self._live_pose_workers, self._live_old_workers, self._live_new_workers):
+            lst.clear()
+
     def _monitor_data_queue(self, project: ProjectInfo):
         pose_data: Optional[List[numpy.ndarray]]
         frames_indices: Optional[numpy.ndarray]
@@ -320,9 +345,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         next_prev_mode = None
         tot_written_to_live = None
         cnt_data_received = 0
-        skip_update = False
         pose_data = []
         prev_pose_algo = None
+        live_new_workers = self._live_new_workers
+        live_pose_workers = self._live_pose_workers
+        live_old_workers = self._live_old_workers
+        live_check_worker_tasks: Dict[LivePoseResultProcessWorker, Callable] = {}
+        live_workers_generation = 0
 
         thread_post_process: Optional[threading.Thread] = None
         ib_pose_data_list = []
@@ -337,8 +366,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         perf_c_log_counters = time.perf_counter()
         t_perf_live_check_data_queue_size = time.perf_counter() + 5
-
-        async_data_tasks: List[multiprocessing.pool.ApplyResult] = []  # for pose_algo.process async work tasks
 
         def get_next_pose_data(timeout: Optional[float] = 0.25):
             nonlocal pose_data
@@ -389,7 +416,36 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 skip_next_pose_data = 0
             return next_pose_data, next_mode, next_frames_indices
 
+        def live_old_worker_give_up(w: LivePoseResultProcessWorker):
+            if not w.is_alive():
+                w.join(0)
+                logger.debug("joined old worker %s", w)
+                del live_check_worker_tasks[w]
+            elif w.get_stop_request_age() >= 150:
+                logger.warning("giving up waiting on old worker not exited yet: %s", wrk)
+                # ensure it does not stay forever in list.
+                del live_check_worker_tasks[w]
+                # even if totally blocked. this could happen if you SIGSTOP a process eventually
+                # (although not sure that this would survive to the SIGKILL),
+                # or if there is really something hang/blocked on kernel side for the process eventually.
+                # but I doubt this code path will be ever taken.
+
+        def live_old_worker_check_kill(w: LivePoseResultProcessWorker):
+            if not w.is_alive():
+                w.join(0)
+                logger.debug("joined old worker %s", w)
+                del live_check_worker_tasks[w]
+            elif w.get_stop_request_age() >= 120:
+                logger.warning("killing old worker not yet exited: %s", wrk)
+                try:
+                    os.kill(wrk.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                live_check_worker_tasks[w] = live_old_worker_give_up
+
         cur_local_prj = self._project
+        tot_count_data_received = 0
+        last_generation_renew_perf_c = get_perf_now()
 
         # main loop
         while self._is_running:
@@ -408,17 +464,6 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 tot_skipped = 0
                 writes_h5_live_durations.clear()
 
-            # purge current ready async results from waiting list:
-            while len(async_data_tasks) > 0:
-                older_async_res = async_data_tasks[0]
-                if not older_async_res.ready():
-                    break
-                del async_data_tasks[0]
-                try:
-                    older_async_res.get()
-                except Exception as err:
-                    logger.exception("Async result error: %s", err)
-
             prev_mode = next_prev_mode  # don't forget
 
             try:
@@ -426,6 +471,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             except queue.Empty:
                 continue
 
+            tot_count_data_received += 1
             perf_now = time.perf_counter()
 
             if prev_mode != mode:
@@ -441,22 +487,21 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             if mode == InferenceMode.Live:
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
-                    async_size = len(async_data_tasks)
-                    skip_update = data_queue_size > 2 or async_size > 8 or data_queue_size + async_size > 12
+                    live_q_size = self._live_input_q.qsize()
+                    skip_update = data_queue_size > 2 or live_q_size > 8 or data_queue_size + live_q_size > 12
                     if skip_update:
-                        skip_next_pose_data = 1 + (data_queue_size + async_size) // 3
-                        logger.warning("data queue size=%s async=%s ; skip_next=%s",
-                                       data_queue_size, len(async_data_tasks), skip_next_pose_data)
+                        skip_next_pose_data = 1 + data_queue_size // 3
+                        logger.warning("data queue size=%s live_q_size=%s skip_next=%s",
+                                       data_queue_size, live_q_size, skip_next_pose_data)
                     else:
                         skip_next_pose_data = 0
-                    if async_size >= 16:
+                    if live_q_size >= 16:
                         pass
                         # keep current t_perf_live_check_data_queue_size
                         # so that next turn will also get skip_update=True,
                         # if still too high number of output async tasks in progress.
                     else:
                         t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
-
                 else:
                     skip_update = False
             else:
@@ -474,13 +519,67 @@ class InferenceMonitorDataProc(multiprocessing.Process):
             pose_algo = self._pose_algo
             if pose_algo is None:
                 continue
-            pose_algo: PoseAlgorithm
-            if pose_algo is not prev_pose_algo:
-                # this is for when pose_algo is changed
-                async_data_tasks.clear()
-                self._init_process_pool(pose_algo)
-                prev_pose_algo = pose_algo
-            pool = self._process_pool  # after init process pool
+
+            # check for new worker(s) ready:
+            if len(live_new_workers) > 0:
+                for wrk in tuple(live_new_workers):
+                    if wrk.is_ready():
+                        logger.verbose("using new ready worker %s", wrk)
+                        live_new_workers.remove(wrk)
+                        live_pose_workers.append(wrk)
+
+            has_current_gen = any(
+                wrk.generation == live_workers_generation and wrk.is_alive()
+                for wrk in live_pose_workers
+            )
+            if has_current_gen:
+                # consider exit/terminate previous workers, but only when there is at least one new ready.
+                # this is only when pose_algo renewed or new worker replacing older
+                for wrk in tuple(live_pose_workers):
+                    if pose_algo is not wrk.pose_algo or wrk.generation != live_workers_generation:
+                        wrk.request_stop()
+                        live_pose_workers.remove(wrk)
+                        live_old_workers.append(wrk)
+
+            to_remove = set()
+            for wrk in live_pose_workers:
+                if not wrk.is_alive():
+                    wrk.join(0)
+                    logger.warning("detected unexpected dead live worker: %s", wrk)
+                    to_remove.add(wrk)
+                    live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
+            for wrk in to_remove:
+                live_pose_workers.remove(wrk)
+            # renew workers every X delay:
+            if (perf_now - last_generation_renew_perf_c >= LIVE_WORKERS_RENEW_TIMER_DELAY
+                or pose_algo is not prev_pose_algo
+            ):
+                # renew every that nbr of pose_data, which at current rate of ~15-20 / second,
+                # that makes about ~4-5h of runtime for the workers.
+                live_workers_generation += 1
+                last_generation_renew_perf_c = perf_now
+                logger.notice("making new workers generation-%s..", live_workers_generation)
+                for _ in range(self._tot_live_workers):
+                    live_new_workers.append(self._make_new_worker(pose_algo, live_workers_generation))
+            # check for finished old workers:
+            for wrk in tuple(live_old_workers):
+                if wrk.is_alive():
+                    age = wrk.get_stop_request_age()
+                    if age >= 90:
+                        logger.warning("terminating old worker not yet exited: %s", wrk)
+                        wrk.terminate()
+                        live_old_workers.remove(wrk)
+                        live_check_worker_tasks[wrk] = live_old_worker_check_kill
+                else:
+                    wrk.join(0)
+                    logger.debug("joined old worker %s", wrk)
+                    live_old_workers.remove(wrk)
+
+            # eventual checks for old workers exiting very slowly:
+            for wrk, tsk in tuple(live_check_worker_tasks.items()):
+                tsk(wrk)
+
+            prev_pose_algo = pose_algo  # NB: after previous blocks
 
             if (
                 not recording_in_progress
@@ -582,7 +681,11 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             logger.verbose("Skipping incomplete frame index pose_data: %s",frames_indices.tolist())
                         continue
 
-                    async_data_tasks.append(pool.apply_async(pool_process_pose_data, args=(pose_data,)))
+                    if len(live_pose_workers) > 0:
+                        try:
+                            self._live_input_q.put(pose_data, block=False)
+                        except queue.Full:
+                            pass
 
                 elif mode == InferenceMode.Offline:
 
@@ -709,4 +812,5 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 logger.exception("_monitor_data_queue: loop error processing mode=%s %s: %s",
                                  mode, type(pose_data), err)
 
+        # end while self._is_running
 

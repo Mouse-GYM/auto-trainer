@@ -2,55 +2,128 @@
 
 import sys
 import functools
-import multiprocessing
+import math
+import multiprocessing.managers
 import queue
-from typing import Optional, Union
+import signal
+import logging.config
+import time
+from typing import Optional, Union, Dict, List, Tuple
 
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.multiproc import pool_init
+from autotrainer.core import get_perf_now
+from autotrainer.core.logging import (
+    get_verbose_logger,
+    setup_logging,
+    install_log_exception_hook,
+    make_log_dict_config,
+)
+from autotrainer.core.multiproc import pool_init, get_mp_ctx
 from autotrainer.inference import PoseAlgorithm, InferenceMonitorDataMsg
 
 
 logger = get_verbose_logger(__name__)
 
 
-_output_data_queue: Optional[Union[queue.Queue, multiprocessing.Queue]] = None
-_pose_algo_process = None
-_consecutive_output_queue_full_count = 0
+class LivePoseResultProcessWorker(multiprocessing.Process):
+    """Dedicated process worker, with "is_ready" event handling,
+    This is necessary since the start of a new worker takes up to ~3-4-5 seconds sometimes, depending on system load.
+    And during that start/import time you don't want to use the new worker yet.
+    Or else it would delay the live data stream of that amount of time.
+    """
 
+    def __init__(
+        self,
+        *,
+        pose_algo: PoseAlgorithm,
+        monitored_parts_offsets: List[Tuple[str, str]],
+        input_q: multiprocessing.Queue,
+        output_q: multiprocessing.Queue,
+        generation: int,
+        log_config: Optional[Dict] = None,
+    ):
+        super().__init__(name="LivePoseProcess", daemon=True)
+        self._log_dict_config = make_log_dict_config() if log_config is None else log_config
+        mp_ctx = get_mp_ctx()
+        self._is_ready_event = mp_ctx.Event()
+        self._stop_requested = mp_ctx.Event()
+        self._stop_request_perf_c = math.nan
+        self._input_q = input_q
+        self._pose_algo = pose_algo
+        self._monitored_parts_offsets = monitored_parts_offsets
+        self._output_q = output_q
+        self._generation = generation
 
-def pool_init_process_pose_data(pose_algo: PoseAlgorithm, output_data_queue, monitored_parts_offsets, log_config):
-    pool_init(log_config)
-    global _pose_algo_process, _output_data_queue
-    _output_data_queue = output_data_queue
-    # interestingly the output_data_queue we get here is a `queue.Queue` ; ie a thread queue,
-    # while the one which is passed to this process pool init func is a `multiprocessing.Queue`,
-    # might be on this receiving side it's wrapped into such a thread queue proxy eventually...
-    _pose_algo_process = functools.partial(pose_algo.process, pairs_3d_offsets=monitored_parts_offsets)
-    logger.success("Initialized with %s and %s ; q=%s", pose_algo, monitored_parts_offsets, output_data_queue)
+    @property
+    def generation(self) -> int:
+        return self._generation
 
+    @property
+    def pose_algo(self) -> PoseAlgorithm:
+        return self._pose_algo
 
-def pool_process_pose_data(pose_data):
-    global _consecutive_output_queue_full_count
-    # logger.debug("received workload %s ; q=%s - %s", type(pose_data), q, type(q))
-    if _output_data_queue is None:
-        raise RuntimeError("unconfigured pool worker")
-    rsp = _pose_algo_process(pose_data)  # noqa
-    data = (
-        InferenceMonitorDataMsg.POSE_RESULT_READY,  # cmd
-        ((rsp,), None)  # args, kwargs
-    )
-    # this is used for live processing,
-    # prefer to not block, so that if consumer (main process) becomes too slow for some reason,
-    # this will possibly help that.
-    try:
-        _output_data_queue.put(data, block=False)
-    except queue.Full:
-        logger.verbose("output queue full, skipped data")
-        _consecutive_output_queue_full_count += 1
-        if _consecutive_output_queue_full_count > 32:
-            sys.exit(-1)  # make the worker to exit, normally
-            # raise RuntimeError(f"too many consecutive queue put full {_consecutive_output_queue_full_count}")
-    else:
-        _consecutive_output_queue_full_count = 0
-    # same as _send_msg in InferenceMonitorDataProc.
+    def is_ready(self):
+        return self._is_ready_event.is_set()
+
+    def request_stop(self):
+        if self.is_alive():
+            logger.debug("requesting stop to %s", self)
+            self._stop_requested.set()
+            self._stop_request_perf_c = get_perf_now()
+        else:
+            self.join(0)  # just to ensure collect the exit code
+            logger.warning("worker already stopped: %s", self)
+
+    def get_stop_request_age(self) -> float:
+        return get_perf_now() - self._stop_request_perf_c
+
+    def _interrupted(self, sig, frame):
+        self._stop_requested.set()
+
+    def run(self):
+        signal.signal(signal.SIGINT, self._interrupted)
+        log_dict_config = self._log_dict_config
+        if log_dict_config is None:
+            setup_logging(logger_level=logging.DEBUG)
+        else:
+            logging.config.dictConfig(log_dict_config)
+            install_log_exception_hook()
+        # logging.getLogger("autotrainer").setLevel(logging.DEBUG)
+        warn_full = False
+        count_processed = 0
+        count_out_full = 0
+        log_every_delay = 60
+        p_next_log_info = time.perf_counter() + log_every_delay
+        logger.verbose("setting ready to work")
+        self._is_ready_event.set()
+        while True:
+            if self._stop_requested.is_set():
+                break
+            p_now = time.perf_counter()
+            if p_now > p_next_log_info:
+                logger.debug("%.2f / sec tot=%s out_full=%s",
+                             count_processed / log_every_delay, count_processed, count_out_full)
+                count_processed = count_out_full = 0
+                p_next_log_info = p_now + log_every_delay
+            try:
+                pose_data = self._input_q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            count_processed += 1
+            rsp = self._pose_algo.process(pose_data, pairs_3d_offsets=self._monitored_parts_offsets)
+            data = (
+                InferenceMonitorDataMsg.POSE_RESULT_READY,  # cmd
+                ((rsp,), None)  # args, kwargs
+            )
+            try:
+                self._output_q.put(data, block=False)
+            except queue.Full:
+                count_out_full += 1
+                if not warn_full:
+                    warn_full = True
+                    logger.warning("output queue full")
+            else:
+                if warn_full:
+                    logger.info("recovered from output queue full. count=%s", count_out_full)
+                    count_out_full = 0
+                    warn_full = False
+        logger.debug("exiting")

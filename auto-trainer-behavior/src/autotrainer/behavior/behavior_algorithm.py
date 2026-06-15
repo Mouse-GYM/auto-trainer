@@ -379,16 +379,19 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         logger.verbose("Running for handling/executing all algo decision/transition ..")
         prev_perf_c_report = time.perf_counter()
         tot_msgs = 0
+        tot_input_msgs = 0
         prev_tot_msgs = None
+        log_every_delay = 5
         while True:
             p_now = time.perf_counter()
-            if p_now - prev_perf_c_report > 5:
+            if p_now - prev_perf_c_report > log_every_delay:
                 if tot_msgs > 0 or prev_tot_msgs != tot_msgs:
-                    logger.debug("%.1f msgs/s reentrant_size=%s",
-                                 tot_msgs / (p_now - prev_perf_c_report),
-                                 len(reentrant_list))
+                    d = p_now - prev_perf_c_report
+                    logger.debug("%.1f msgs/s (input_q=%.1f) reentrant_size=%s [:3]=%s",
+                                 tot_msgs / d, tot_input_msgs / d,
+                                 len(reentrant_list), reentrant_list[:3])
                     prev_tot_msgs = tot_msgs
-                    tot_msgs = 0
+                    tot_msgs = tot_input_msgs = 0
                 else:
                     prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
@@ -401,6 +404,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     raw = input_queue.get(timeout=1)
                 except queue.Empty:
                     continue
+                tot_input_msgs += 1
                 # we use eventual event from raw args below, so can task_done directly:
                 input_queue.task_done()
                 if raw is None:
