@@ -8,7 +8,7 @@ from typing import Optional
 
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
-                              EventManager, Offset3DTuple, MotorConfigurations)
+                              EventManager, Offset3DTuple, MotorConfigurations, SystemStatusMessageKind)
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovements)
 
@@ -66,6 +66,7 @@ class AppModel(ObservableObject):
         self._ext_button = None
 
         self._stimuli = None
+        self._color_led = None
         self._config = None
 
         self._command_pending = False
@@ -277,6 +278,15 @@ class AppModel(ObservableObject):
         self._on_property_changed(MessageHandler.STIMULI_PROPERTY, value, prev)
 
     @property
+    def color_led(self):
+        return self._color_led
+
+    @color_led.setter
+    def color_led(self, value):
+        prev, self._color_led = self._color_led, value
+        self._on_property_changed(MessageHandler.COLOR_LED, value, prev)
+
+    @property
     def config(self):
         return self._config
 
@@ -293,11 +303,19 @@ class AppModel(ObservableObject):
     def send_pellet(self):
         self._send_command(SystemCommandKind.SEND_PELLET, context=uuid.uuid4())
 
+    def move_retract(self, *, force: bool=False):
+        self._send_command(SystemCommandKind.SEND_RETRACT, context=uuid.uuid4(), force=force)
+
     def release_pellet(self):
         self._send_command(SystemCommandKind.RELEASE_PELLET, context=uuid.uuid4())
 
     def cover_pellet(self):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
+
+    def set_color_led(self, r, g, b):
+        """0 -> 255"""
+        self._send_command(SystemCommandKind.SET_RGB_LED, (r, g, b),
+                           context=uuid.uuid4())
 
     def _exec_xyz(self, value, *, system_cmd):
         return self._send_command(system_cmd, value, context=uuid.uuid4())
@@ -423,8 +441,10 @@ class AppModel(ObservableObject):
             self.ext_button = value
         elif name == MessageHandler.STIMULI_PROPERTY:
             self.stimuli = value
-        elif name == "config":
+        elif name == MessageHandler.CONFIG_PROPERTY:
             self.config = value
+        elif name == MessageHandler.COLOR_LED:
+            self.color_led = value
 
     def reader_ack_received(self, ack, *, perf_c: Optional[float]=None):
         logger.info(f"ack context received: {ack}")
@@ -432,8 +452,8 @@ class AppModel(ObservableObject):
             self._last_command = None
             self.command_pending = False
 
-    def _send_command(self, message, data=None, *, context=None):
-        if self._last_command is not None:
+    def _send_command(self, message, data=None, *, context=None, force: bool=False):
+        if self._last_command is not None and not force:
             logger.verbose("ignoring command %s while existing command is in process with context=%s",
                            message, self._last_command)
             return

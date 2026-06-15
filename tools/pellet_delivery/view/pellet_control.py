@@ -100,6 +100,14 @@ class PelletControl(QWidget):
         self._send_button.clicked.connect(lambda: self._app_model.send_pellet())
         b_layout.addWidget(self._send_button)
 
+        button = self._retract_button = QPushButton("Retract")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        def on_retract():
+            self._app_model.send_pellet()  # ensure relative to deliver position
+            self._app_model.move_retract(force=True)
+        button.clicked.connect(on_retract)
+        b_layout.addWidget(button)
+
         b_layout.addStretch(1)
 
         self._release_button = QPushButton("Release")
