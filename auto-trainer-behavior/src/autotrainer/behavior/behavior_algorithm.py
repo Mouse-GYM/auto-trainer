@@ -1245,7 +1245,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if not (self._is_in_session and self._capture_status == CaptureProcessStatus.RECORDING):
             return False
-        if self._head_fixation_enabled:
+        if self._head_fixation_enabled and cfg.head_clamp.wait_engaged_before_send_pellet:
             return self._autoclamp_in_progress
         t_since_rec_started = get_perf_now() - self._recording_start_perf_c
         prebuffer_duration = self._recording_prebuffer_duration
@@ -1361,7 +1361,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if not self._is_in_session:
             return True
-        if self._head_fixation_enabled:
+        if self._head_fixation_enabled and self._active_config.head_clamp.wait_engaged_before_send_pellet:
             return not self._autoclamp_in_progress
         return False
 

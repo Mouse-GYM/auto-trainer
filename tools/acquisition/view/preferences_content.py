@@ -519,6 +519,17 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
         #
+        right_grid_layout.addWidget(QLabel("Wait Engaged Before Send-Pellet:"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(algo.active_config.head_clamp.wait_engaged_before_send_pellet)
+        add_enabled_state(lambda t=toggle: t.setEnabled(self._auto_clamp_enabled_toggle.isChecked()))
+        def update_wait_engaged_before_send_pellet(value):
+            toggled = value != 0
+            algo.active_config.head_clamp.wait_engaged_before_send_pellet = toggled
+        toggle.stateChanged.connect(update_wait_engaged_before_send_pellet)
+        right_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        cur_row += 1
+        #
         right_grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox(None)
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
