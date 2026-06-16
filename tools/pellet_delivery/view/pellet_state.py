@@ -73,7 +73,7 @@ def _create_led_panel(app_model: AppModel):
         c = QColorDialog.getColor(c, None, "Select Color")
         if c.isValid():
             # convert from 255 to % :
-            rgb = tuple(int(v / 2.5) for v in (c.red(), c.green(), c.blue()))
+            rgb = tuple(int(v / 2.55) for v in (c.red(), c.green(), c.blue()))
             app_model.set_color_led(*rgb)
 
     checkbox.clicked.connect(on_led_color_click)
