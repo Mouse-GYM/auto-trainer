@@ -548,7 +548,7 @@ class PreferencesContent(QWidget):
         #
         right_grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox(None)
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(self._auto_clamp_enabled_toggle.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(1023)
         spinbox.setWrapping(False)
