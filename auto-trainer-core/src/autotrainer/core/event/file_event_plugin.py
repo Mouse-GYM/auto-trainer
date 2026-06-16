@@ -63,8 +63,13 @@ class FileEventPlugin(EventManagerPlugin):
             ))
 
     def flush(self):
-        if self._event_file is not None:
-            self._event_file.flush()
+        fh = self._event_file
+        if fh is not None:
+            try:
+                fh.flush()
+            except IOError as err:
+                # this could happen if another thread is closing the file at the same time
+                logger.verbose("flush on %s failed: %s", fh, err)
 
     def close(self) -> None:
         event_file = self._event_file
@@ -106,10 +111,9 @@ class FileEventPlugin(EventManagerPlugin):
                 self._event_file = fh
                 self._dict_writer = dict_writer
                 logger.info(f"event file opened at {event_file_info.file}")
-            except Exception as ex:
+            except Exception as err:
                 if not self._bad_file_attempt:
                     # Don't spam log if there are write/access issues with wherever project info is pointing.  Can reset
                     # the flag the next tile the project changes.
-                    logger.error(f"unable to write to {event_file_info.file}")
-                    logger.error(ex)
+                    logger.error("unable to write to %s: %s", event_file_info.file, err)
                     self._bad_file_attempt = True

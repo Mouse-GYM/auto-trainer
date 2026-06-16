@@ -416,7 +416,6 @@ class AppModel(ObservableObject):
         analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
         analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
-
         self._timer_send_status = no_op_timer
 
         def send_system_status_and_reschedule():
