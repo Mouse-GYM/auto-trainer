@@ -114,7 +114,7 @@ class PelletStateWidget(QWidget):
         if col_led is None:
             col_led = ColorLed(red=0, green=0, blue=0)
         # convert to 0->255
-        rgb = tuple(int(v * 255 / 100) for v in (col_led.red, col_led.green, col_led.blue))
+        rgb = tuple(round(v * 2.55) for v in (col_led.red, col_led.green, col_led.blue))
         for c, w in zip(rgb, self._leds_widgets):
             w.setText(f"{c}")
         checkbox = self._color_led_widget
