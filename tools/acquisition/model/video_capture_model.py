@@ -361,7 +361,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
                                                       video_rotate_interval=rotate_interval,
                                                       image_interval=image_interval)
-            self._watchdog_capture_perf_c.value = time.perf_counter()  # get_perf_now()
+            # Leave the watchdog counter unset (nan) until the capture child writes its first
+            # real timestamp; the monitor ignores nan. Seeding a live perf_counter here makes the
+            # counter age in real time while the child is still spawning, which on slow spawn-based
+            # startup (notably macOS) can exceed the timeout and raise a false "element(s) timedout"
+            # before capture has even begun.
+            self._watchdog_capture_perf_c.value = math.nan
             vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
                                                              project_info=self._project)
             vid_capture.start()
