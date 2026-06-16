@@ -4,7 +4,7 @@ from typing import Tuple, Optional, Dict, List
 
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QStackedLayout, \
-    QDoubleSpinBox
+    QDoubleSpinBox, QComboBox
 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
@@ -186,6 +186,16 @@ class AnalysisContent(ContentWidget):
         spinbox.setValue(analysis.load_cell_monitor.load_cell_engaged_threshold)
         layout.addWidget(spinbox)
 
+        combo = self._measurement_graph_combo = QComboBox()
+        pref_graph_name = self._user_pref.measurement_graph
+        for idx, graph in enumerate(AVAILABLE_GRAPHS):
+            combo.addItem(graph.display, graph)
+            if graph.name == pref_graph_name:
+                combo.setCurrentIndex(idx)
+        combo.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(combo, stretch=1, alignment=Qt.AlignmentFlag.AlignRight)
+        combo.currentIndexChanged.connect(self._on_graph_combox_changed)
+
         self._footer.setLayout(layout)
 
         self._card_widget.footer.setContent(self._footer)
@@ -234,6 +244,13 @@ class AnalysisContent(ContentWidget):
         self._headbar_switch_engaged.setState(self._analysis.is_headbar_switch_engaged)
         self._headbar_pressure_monitor_engaged.setState(self._analysis.headbar_pressure_monitor.is_engaged)
 
+    def _on_graph_combox_changed(self, idx: int):
+        graph = self._measurement_graph_combo.itemData(idx)
+        if graph is not None:
+            self._user_pref.measurement_graph = graph.name
+        else:
+            logger.warning("graph None")
+
     @invoke_method
     def _measurement_received(self, measurements: Tuple[List[float], List[bool], List[float], List[float], List[float]]):
         # weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals
@@ -277,3 +294,11 @@ class AnalysisContent(ContentWidget):
     def _on_user_pref_changed(self, name: str, value, old_value):
         if name == UserPreferences.MEASUREMENT_GRAPH:
             self.measurement_graph_changed.emit(value)
+            pref_graph_name = value
+            combo = self._measurement_graph_combo
+            for idx, graph in enumerate(AVAILABLE_GRAPHS):
+                if graph.name == pref_graph_name:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(idx)
+                    combo.blockSignals(False)
+                    break
