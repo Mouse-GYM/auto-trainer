@@ -356,9 +356,11 @@ class PressureReading(Source):
 
 @dataclass
 class ColorLed(Source):
-    red: int = 0
-    green: int = 0
-    blue: int = 0
+    """As integer % [0, 100] value"""
+
+    red: int = 0  # [0, 100]
+    green: int = 0  # [0, 100]
+    blue: int = 0  # [0, 100]
 
 
 @dataclass
