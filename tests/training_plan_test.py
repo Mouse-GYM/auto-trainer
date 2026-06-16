@@ -273,7 +273,7 @@ class TestTrainingPlan(BaseTrainingPlan):
             f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"
         )
-        half = algo.active_config.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay / 2 
+        half = algo.active_config.pellet_delivery.pellet_send_wait_delay / 2
         self.increment_perf_now(half)
         self.mock_pose_response(pellet_seen=True)
         if pellet_m.state == PelletState.home:

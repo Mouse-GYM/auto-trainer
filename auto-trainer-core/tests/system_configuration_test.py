@@ -102,7 +102,7 @@ v0_expected_result_config = {
             "is_pellet_cover_enabled": True,
             "is_intersession_analysis_enabled": True,
             "is_intersession_pellet_shift_enabled": True,
-            "autoclamp_disabled_pellet_send_wait_delay": 1.0,
+            "pellet_send_wait_delay": 1.0,
             "max_pellets_per_session": 20,
             "max_pellets_per_day": 25,
             "max_pellet_missing_seconds": 10.0,

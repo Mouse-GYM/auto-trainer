@@ -261,6 +261,22 @@ class PreferencesContent(QWidget):
         toggle.stateChanged.connect(deliver_pellet_state_changed)
         cur_row += 1
         #
+        left_grid_layout.addWidget(QLabel("Pellet Send Wait Delay"), cur_row, cur_col)
+        spinbox = QDoubleSpinBox()
+        spinbox.setToolTip("Delay before send-pellet after start-recording")
+        spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
+        spinbox.setValue(algo.active_config.pellet_delivery.pellet_send_wait_delay)
+        add_enabled_state(
+            lambda s=spinbox: s.setEnabled(
+                self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()
+            )
+        )
+        def on_pellet_send_delay_changed(value: float):
+            algo.active_config.pellet_delivery.pellet_send_wait_delay = value
+        spinbox.valueChanged.connect(on_pellet_send_delay_changed)
+        left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
+        cur_row += 1
+
         # pelletDelivery:maxPelletMissingSeconds
         left_grid_layout.addWidget(QLabel("Pellet missing seconds:"), cur_row, cur_col)
         spinbox = self._deliver_pellet_missing_seconds_spinbox = QDoubleSpinBox()
