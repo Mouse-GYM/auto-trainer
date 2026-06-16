@@ -155,7 +155,7 @@ class HeadClampConfiguration:
     """
 
     enabled: bool = False
-    wait_engaged_before_send_pellet: bool = False
+    wait_engaged_before_send_pellet: bool = True
 
     baseline_intensity: float = 0.0
     auto_clamp_intensity: float = 100.0
