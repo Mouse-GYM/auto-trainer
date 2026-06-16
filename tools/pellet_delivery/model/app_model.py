@@ -313,7 +313,7 @@ class AppModel(ObservableObject):
         self._send_command(SystemCommandKind.COVER_PELLET, context=uuid.uuid4())
 
     def set_color_led(self, r, g, b):
-        """0 -> 255"""
+        """0 -> 100"""
         self._send_command(SystemCommandKind.SET_RGB_LED, (r, g, b),
                            context=uuid.uuid4())
 

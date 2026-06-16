@@ -68,10 +68,12 @@ def _create_led_panel(app_model: AppModel):
         cl = app_model.color_led
         if cl is None:
             cl = ColorLed(red=0, green=0, blue=0)
+        # convert from % to 255:
         c = QColor(*(int(v * 2.55) for v in (cl.red, cl.green, cl.blue)))
         c = QColorDialog.getColor(c, None, "Select Color")
         if c.isValid():
-            rgb = tuple(v for v in (c.red(), c.green(), c.blue()))
+            # convert from 255 to % :
+            rgb = tuple(int(v / 2.5) for v in (c.red(), c.green(), c.blue()))
             app_model.set_color_led(*rgb)
 
     checkbox.clicked.connect(on_led_color_click)
@@ -83,6 +85,7 @@ def _create_led_panel(app_model: AppModel):
 
 
 class PelletStateWidget(QWidget):
+
     def __init__(self, app_model: AppModel):
         super().__init__()
 
@@ -101,11 +104,10 @@ class PelletStateWidget(QWidget):
         inputs, panel = _create_led_panel(self._app_model)
         self._leds_widgets = inputs[:3]
         self._color_led_widget = inputs[3]
-
         self._set_color_led(app_model.color_led)
 
         layout.addWidget(panel)
-
+        self.setEnabled(False)
         self.setLayout(layout)
 
     def _set_color_led(self, col_led: ColorLed):
@@ -116,8 +118,7 @@ class PelletStateWidget(QWidget):
         for c, w in zip(rgb, self._leds_widgets):
             w.setText(f"{c}")
         checkbox = self._color_led_widget
-        col_code = "#" + "".join(f"{hex(val)[2:]:0>2}"
-                                 for val in rgb)
+        col_code = "#" + "".join(f"{hex(val)[2:]:0>2}" for val in rgb)
         checkbox.setStyleSheet("""
             QCheckBox {
                 spacing: 10px;
