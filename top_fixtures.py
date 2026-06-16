@@ -282,7 +282,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     cfg = algo.pellet_delivery_config
     cfg.is_enabled = True
     cfg.is_pellet_cover_enabled = True
-    cfg.autoclamp_disabled_pellet_send_wait_delay = 0
+    cfg.pellet_send_wait_delay = 0
     algo.record_prebuffer_duration = 0
     algo.pellet_uncover_delay = 0
     algo.pellet_uncover_y_dcs = -math.inf

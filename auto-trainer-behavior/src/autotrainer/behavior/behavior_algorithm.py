@@ -1253,7 +1253,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             t_since_rec_started -= prebuffer_duration
         return (
             self._is_in_session
-            and t_since_rec_started >= cfg.pellet_delivery.autoclamp_disabled_pellet_send_wait_delay
+            and t_since_rec_started >= cfg.pellet_delivery.pellet_send_wait_delay
         )
 
     def would_load_pellet(

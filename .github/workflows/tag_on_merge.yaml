@@ -1,0 +1,68 @@
+name: Tag on PR merge
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - develop
+permissions:
+  contents: write
+jobs:
+  tag:
+    name: Tag merged commit with next patch version
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Compute and create next version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Find the most recent tagged commit (by commit date) whose tags look like vMAJOR.MINOR.PATCH.
+          latest_tagged_commit=$(
+            git for-each-ref --sort=-creatordate --format='%(objectname) %(refname:short)' refs/tags \
+            | while read -r commit tag; do
+                if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  # Resolve annotated tags to the commit they point to.
+                  echo "$(git rev-list -n 1 "${tag}")"
+                  break
+                fi
+              done
+          )
+
+          if [[ -z "${latest_tagged_commit:-}" ]]; then
+            echo "No existing semver tag found; starting at v0.0.1"
+            next="v0.0.1"
+          else
+            echo "Most recent tagged commit: ${latest_tagged_commit}"
+            # Among all semver tags on that commit, pick the highest by major, then minor, then patch.
+            highest=$(
+              git tag --points-at "${latest_tagged_commit}" \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sed 's/^v//' \
+              | sort -t. -k1,1n -k2,2n -k3,3n \
+              | tail -n 1
+            )
+            echo "Highest version on that commit: v${highest}"
+            major="${highest%%.*}"
+            rest="${highest#*.}"
+            minor="${rest%%.*}"
+            patch="${rest##*.}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+
+          echo "Next version: ${next}"
+
+          if git rev-parse -q --verify "refs/tags/${next}" >/dev/null; then
+            echo "Tag ${next} already exists; nothing to do."
+            exit 0
+          fi
+
+          git tag "${next}" "${{ github.event.pull_request.merge_commit_sha }}"
+          git push origin "refs/tags/${next}"
+          echo "Created and pushed tag ${next}"
