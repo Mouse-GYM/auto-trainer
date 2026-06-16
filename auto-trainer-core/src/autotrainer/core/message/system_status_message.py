@@ -79,6 +79,9 @@ class SystemStatusMessageKind(IntEnum):
     AUDIO_SPECTRUM = 402
     """Message will contain the audio spectrum data as an array list of float values."""
 
+    COLOR_LED = 403
+    """Message is the original ColorLed message"""
+
     MOTOR_CONFIGURATION = 501
 
     TUNNEL_GATE_OPEN_STATUS = 600

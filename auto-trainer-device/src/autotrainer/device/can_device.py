@@ -472,10 +472,20 @@ class CanDevice(Device):
                 send_msg(SystemStatusMessageKind.SPARE_DOOR, m.door3 != 0),
                 send_msg(SystemStatusMessageKind.EXT_BUTTON, m.ext_button != 0)
 
+        prev_color_led = (None, -math.inf)
+        def handle_color_led(m: ColorLed):
+            nonlocal prev_color_led
+            new_data = (m.red, m.green, m.blue)
+            p_now = get_perf_now()
+            prev_data, prev_perf_c = prev_color_led
+            if new_data != prev_data or p_now - prev_perf_c > self.same_data_refresh_delay:
+                self._api.send_message(SystemStatusMessageKind.COLOR_LED, m)
+                prev_color_led = (new_data, p_now)
+
         self._data_handlers = {
             Status: _no_op_handler,  # No-op for Status messages
             Tone: _no_op_handler,
-            ColorLed: _no_op_handler,
+            ColorLed: handle_color_led,
             AnalogOutput: _no_op_handler,
 
             LoadCellReading: self._handle_load_cell_reading,

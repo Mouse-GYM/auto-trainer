@@ -119,7 +119,10 @@ class SystemMessageHandler(MessageHandler):
             self.property_changed(MessageHandler.STIMULI_PROPERTY, data, None)
 
         elif msg == SystemStatusMessageKind.MOTOR_CONFIGURATION:
-            self._on_property_changed("config", data, None)
+            self._on_property_changed(MessageHandler.CONFIG_PROPERTY, data, None)
+
+        elif msg == SystemStatusMessageKind.COLOR_LED:
+            self._on_property_changed(MessageHandler.COLOR_LED, data, None)
 
         else:
             logger.warning("unhandled msg %s", msg)

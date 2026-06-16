@@ -67,6 +67,8 @@ class MessageHandler(ObservableObject):
     STIMULI_PROPERTY = "stimuli"
     CONFIG_PROPERTY = "config"
 
+    COLOR_LED = "color_led"
+
     # type hints helper:
     # dynamic event:
     ack_received: AckReceivedHandlerT
