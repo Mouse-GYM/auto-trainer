@@ -1192,7 +1192,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
             ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
-        self._event_manager.flush()
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values

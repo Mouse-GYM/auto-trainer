@@ -244,9 +244,15 @@ class EventManager:
         got_data = False
         do_process = self._process_event
 
+        last_p_flush = time.perf_counter()
+
         while True:
             if got_data:
                 input_q.task_done()
+            p_now = time.perf_counter()
+            if p_now - last_p_flush > 5:
+                self.flush()
+                last_p_flush = p_now
             try:
                 # Workaround or current Jetson behavior w/ queue.get(timeout=).
                 info = input_q.get(timeout=0.5)
