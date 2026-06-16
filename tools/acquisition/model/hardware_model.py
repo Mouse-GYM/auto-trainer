@@ -16,7 +16,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                StepperConfig, ServoConfig, Device)
+                                StepperConfig, ServoConfig, Device, ColorLed)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
@@ -110,6 +110,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._cover_arm_position: float = math.nan
         self._load_arm_position: float = math.nan
+
+        self._color_led: Optional[ColorLed] = None
 
         self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
@@ -260,6 +262,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @property
     def motor_send_coordinates(self) -> Offset3DTuple:
         return self._last_motor_send_coordinates
+
+    @property
+    def color_led(self) -> Optional[ColorLed]:
+        return self._color_led
 
     @property
     def front_door_open(self):
@@ -648,6 +654,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             elif version.find("tunnel") != -1:
                 clean_v = _reg_tunnel_version_clean.sub("", version).strip()
                 self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, clean_v, old_value)
+
+        elif name == props.COLOR_LED:
+            self._color_led = value
 
     def _send_with_token(self, device: Optional[DeviceConnectionProtocol], cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         with self._lock:

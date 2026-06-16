@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol
 
 import yaml
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
@@ -1701,16 +1702,22 @@ class AppModel(ObservableObject):
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
-        self._hardware.set_color_led(*color)
+        cur_led = self._hardware.color_led
+        if cur_led is None or (
+            color != (cur_led.red, cur_led.green, cur_led.blue)
+        ):
+            self._hardware.set_color_led(*color)
 
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
-        if name == alarm_mon.CONFIG:
-            self._update_led_color()
-        elif name == alarm_mon.IS_ENGAGED:
+        if name == alarm_mon.IS_ENGAGED:
             self._update_led_color()
         elif name == alarm_mon.ALARM_DETECTOR_PROPERTY_CHANGED:
-            self._update_led_color()
+            detector = value[0]
+            detector: AlarmDetector
+            sub_name = value[1]
+            if sub_name in (detector.IS_ENGAGED, detector.CONFIG):
+                self._update_led_color()
 
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()

@@ -69,7 +69,8 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
 
     @property
     def alarms(self) -> Dict[str, AlarmDetectorContext]:
-        return self._alarms
+        with self._lock:
+            return dict(self._alarms)
 
     def get_alarm_detector(self, name: AlarmDetectorNameT) -> Optional[AlarmDetector]:
         with self._lock:
@@ -167,4 +168,4 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
         logger.verbose("%s: %s=%r", detector.name, name, value)
         if name == detector.IS_ENGAGED:
             self.check_state()
-        self.property_changed(self.ALARM_DETECTOR_PROPERTY_CHANGED, (detector.name, name, value), old_value)
+        self.property_changed(self.ALARM_DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
