@@ -523,7 +523,7 @@ class PreferencesContent(QWidget):
         label = QLabel("<b>Auto-Clamp:</b>")
         headclamp_cfg = algo.active_config.head_clamp
         right_grid_layout.addWidget(label, cur_row, cur_col)
-        toggle = self._auto_clamp_enabled_toggle = QSwitch()
+        toggle = auto_clamp_enabled_toggle = QSwitch()
         toggle.setChecked(algo.head_fixation_enabled)
         # auto-clamp enabled:
         def toggle_changed(value):
@@ -538,7 +538,7 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(QLabel("Wait Engaged Before Send-Pellet:"), cur_row, cur_col)
         toggle = QSwitch()
         toggle.setChecked(algo.active_config.head_clamp.wait_engaged_before_send_pellet)
-        add_enabled_state(lambda t=toggle: t.setEnabled(self._auto_clamp_enabled_toggle.isChecked()))
+        add_enabled_state(lambda t=toggle: t.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         def update_wait_engaged_before_send_pellet(value):
             toggled = value != 0
             algo.active_config.head_clamp.wait_engaged_before_send_pellet = toggled
@@ -548,7 +548,7 @@ class PreferencesContent(QWidget):
         #
         right_grid_layout.addWidget(QLabel("Threshold:"), cur_row, cur_col)
         spinbox = QDoubleSpinBox(None)
-        add_enabled_state(lambda s=spinbox: s.setEnabled(self._auto_clamp_enabled_toggle.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(1023)
         spinbox.setWrapping(False)
@@ -566,7 +566,7 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(label, cur_row, cur_col)
         spinbox = pre_release_dur_spinbox = QDoubleSpinBox(None)
         spinbox.setToolTip(tooltip)
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setSingleStep(1)
@@ -579,7 +579,7 @@ class PreferencesContent(QWidget):
         cur_row += 1
         right_grid_layout.addWidget(QLabel("PreRelease intensity (%):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox(None)
-        add_enabled_state(lambda s=spinbox, t=toggle, s2=pre_release_dur_spinbox: s.setEnabled(t.isChecked() and s2.value() > 0))
+        add_enabled_state(lambda s=spinbox, s2=pre_release_dur_spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked() and s2.value() > 0))
         spinbox.setRange(0, 100)
         spinbox.setDecimals(0)
         spinbox.setSingleStep(1)
@@ -592,7 +592,7 @@ class PreferencesContent(QWidget):
 
         right_grid_layout.addWidget(QLabel("Release tone freq (Hz) :"), cur_row, cur_col)
         spinbox = QSpinBox()
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(_DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_release_tone_freq)
@@ -605,7 +605,7 @@ class PreferencesContent(QWidget):
         # headClamp:autoClampReleaseToneDelay
         right_grid_layout.addWidget(QLabel("Release tone delay (sec.) :"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setValue(algo.auto_clamp_release_tone_delay)
         def auto_clamp_release_tone_delay_changed(value):
             algo.auto_clamp_release_tone_delay = value
@@ -619,7 +619,7 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(label, cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setToolTip(tooltip)
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(algo.auto_clamp_before_reengage_delay)
@@ -639,7 +639,7 @@ class PreferencesContent(QWidget):
                 set_row_col_visible(right_grid_layout, *r, is_fixed_duration)
 
         combo = QComboBox()
-        add_enabled_state(lambda e=combo, t=toggle: e.setEnabled(t.isChecked()))
+        add_enabled_state(lambda e=combo: e.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         for i in HeadClampReleaseMode:
             combo.addItem(i.value)
         combo.setCurrentText(headclamp_cfg.release_mode)
@@ -660,7 +660,7 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(label, cur_row, cur_col)
         activity_rows = [(cur_row, cur_col)]
         spinbox = QDoubleSpinBox()
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setValue(algo.auto_clamp_no_activity_release_delay)
         def auto_clamp_no_activity_release_delay_changed(value):
@@ -675,7 +675,7 @@ class PreferencesContent(QWidget):
         right_grid_layout.addWidget(label, cur_row, cur_col)
         activity_rows.append((cur_row, cur_col))
         spinbox = QSpinBox()
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(1_000_000)
         spinbox.setValue(algo.auto_clamp_release_load_count)
@@ -696,10 +696,10 @@ class PreferencesContent(QWidget):
         widget.setLayout(hbox)
         spinbox = QDoubleSpinBox()
         combo = QComboBox()
-        add_enabled_state(lambda c=combo, t=toggle: c.setEnabled(t.isChecked()))
+        add_enabled_state(lambda c=combo: c.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         hbox.addWidget(spinbox, stretch=1)
         hbox.addWidget(combo)
-        add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
+        add_enabled_state(lambda s=spinbox: s.setEnabled(auto_clamp_enabled_toggle.isChecked()))
         spinbox.setMinimum(0)
         spinbox.setMaximum(60 * 60 * 60)  # 60 hours
         spinbox.setDecimals(3)
