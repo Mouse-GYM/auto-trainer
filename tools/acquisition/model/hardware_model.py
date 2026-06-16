@@ -433,6 +433,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_OFF)
 
+    def set_color_led(self, r: int, g: int, b: int):
+        """0 -> 100"""
+        return self._send_with_token(self._device_conn, SystemCommandKind.SET_RGB_LED, (r, g, b))
+
     def load_config(self, config: HardwareConfiguration):
         self.set_device_ack_timeout(config.min_ack_timeout)
         self.set_board_status_timeout(config.board_status_timeout)
@@ -720,7 +724,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         else:
             self._refresh_cmd_in_progress(commands_in_prog)
 
-    def wait_pending_command_acked(self, token, *, timeout: float = 3):
+    def wait_pending_command_acked(
+        self,
+        token,
+        *,
+        timeout: float = 3,
+        raise_on_timeout: bool = True,
+    ):
         p_start = time.perf_counter()
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
@@ -734,4 +744,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             if p_now > p_timeout:
                 break
             time.sleep(0.0025)  # 2.5 ms
-        raise RuntimeError(f"timeout waiting ack of pending token={token}")
+        if raise_on_timeout:
+            raise RuntimeError(f"timeout waiting ack of pending token={token}")
+        logger.warning("timeout waiting ack token %s, but continuing", token)

@@ -60,10 +60,16 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
     config_cls = EmergencyAlarmConfiguration
     default_timer_delay = 1
 
+    ALARM_DETECTOR_PROPERTY_CHANGED = "alarm_detector_property_changed"
+
     def __init__(self):
         super().__init__()
         self._alarms: Dict[str, AlarmDetectorContext] = {}
         self._engaged_reasons: Set[EmergencyReason] = set()
+
+    @property
+    def alarms(self) -> Dict[str, AlarmDetectorContext]:
+        return self._alarms
 
     def get_alarm_detector(self, name: AlarmDetectorNameT) -> Optional[AlarmDetector]:
         with self._lock:
@@ -157,8 +163,8 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
                 self._engaged_reasons = reasons
             self.is_engaged = True
 
-    def _on_detector_property_changed(self, detector: AlarmDetector, name: str, value, _):
+    def _on_detector_property_changed(self, detector: AlarmDetector, name: str, value, old_value):
         logger.verbose("%s: %s=%r", detector.name, name, value)
         if name == detector.IS_ENGAGED:
             self.check_state()
-
+        self.property_changed(self.ALARM_DETECTOR_PROPERTY_CHANGED, (detector.name, name, value), old_value)

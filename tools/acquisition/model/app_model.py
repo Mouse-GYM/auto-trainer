@@ -1334,6 +1334,9 @@ class AppModel(ObservableObject):
 
     def _capture_stop(self):
 
+        tok = self._hardware.set_color_led(0, 0, 0)
+        self._hardware.wait_pending_command_acked(tok, timeout=2, raise_on_timeout=False)
+
         self._detach_training_plan()  # always
 
         watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
@@ -1341,7 +1344,7 @@ class AppModel(ObservableObject):
             watchdog_mon_unregister(item)
 
         self._inference.stop()
-        self.hardware.disconnect()
+        self._hardware.disconnect()
 
         for camera in self._cameras:
             watchdog_mon_unregister(f"camera.{camera.name}")
@@ -1687,10 +1690,27 @@ class AppModel(ObservableObject):
         elif name == prefs.CAGE_CLEAN_PREVIOUS_DAY:
             self._refresh_cage_clean_data()
 
+    def _update_led_color(self):
+        alarm_mon = self._analysis.emergency_alarm_monitor
+        if alarm_mon.is_engaged:
+            color = (100, 0, 0)  # red
+        else:
+            is_warn = any(
+                det.is_engaged and det.config.use and not det.config.is_emergency_condition
+                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
+            )
+            color = (100, 100, 0) if is_warn else (0, 100, 0)
+            # yellow or green
+        self._hardware.set_color_led(*color)
+
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.CONFIG:
-            pass
+            self._update_led_color()
+        elif name == alarm_mon.IS_ENGAGED:
+            self._update_led_color()
+        elif name == alarm_mon.ALARM_DETECTOR_PROPERTY_CHANGED:
+            self._update_led_color()
 
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()
