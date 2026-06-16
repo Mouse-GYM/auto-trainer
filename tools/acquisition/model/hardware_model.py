@@ -16,7 +16,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                StepperConfig, ServoConfig, Device)
+                                StepperConfig, ServoConfig, Device, ColorLed)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
@@ -110,6 +110,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._cover_arm_position: float = math.nan
         self._load_arm_position: float = math.nan
+
+        self._color_led: Optional[ColorLed] = None
 
         self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
@@ -260,6 +262,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @property
     def motor_send_coordinates(self) -> Offset3DTuple:
         return self._last_motor_send_coordinates
+
+    @property
+    def color_led(self) -> Optional[ColorLed]:
+        return self._color_led
 
     @property
     def front_door_open(self):
@@ -432,6 +438,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_OFF)
+
+    def set_color_led(self, r: int, g: int, b: int):
+        """0 -> 100"""
+        return self._send_with_token(self._device_conn, SystemCommandKind.SET_RGB_LED, (r, g, b))
 
     def load_config(self, config: HardwareConfiguration):
         self.set_device_ack_timeout(config.min_ack_timeout)
@@ -645,6 +655,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 clean_v = _reg_tunnel_version_clean.sub("", version).strip()
                 self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, clean_v, old_value)
 
+        elif name == props.COLOR_LED:
+            self._color_led = value
+
     def _send_with_token(self, device: Optional[DeviceConnectionProtocol], cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         with self._lock:
             # ensure only 1 command can be sent at the same time
@@ -720,7 +733,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         else:
             self._refresh_cmd_in_progress(commands_in_prog)
 
-    def wait_pending_command_acked(self, token, *, timeout: float = 3):
+    def wait_pending_command_acked(
+        self,
+        token,
+        *,
+        timeout: float = 3,
+        raise_on_timeout: bool = True,
+    ):
         p_start = time.perf_counter()
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
@@ -734,4 +753,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             if p_now > p_timeout:
                 break
             time.sleep(0.0025)  # 2.5 ms
-        raise RuntimeError(f"timeout waiting ack of pending token={token}")
+        if raise_on_timeout:
+            raise RuntimeError(f"timeout waiting ack of pending token={token}")
+        logger.warning("timeout waiting ack token %s, but continuing", token)
