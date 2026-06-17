@@ -208,3 +208,6 @@ auto-trainer-inference/tests/index_error/20250806/agx001/trial059/20250806_agx00
 auto-trainer-inference/tests/index_error/20250806/agx001/trial059/20250806_agx001_trial059_pelletHistory.pickle
 auto-trainer-inference/tests/index_error/20250806/agx001/trial059/20250806_agx001_trial059_reach_events.h5
 auto-trainer-inference/tests/index_error/20250806/agx001/trial059/20250806_agx001_trial059_right_filtered2D.h5
+
+# Pyright LSP config (machine-specific conda env path)
+pyrightconfig.json
