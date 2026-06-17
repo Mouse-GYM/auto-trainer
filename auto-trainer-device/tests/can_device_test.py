@@ -1,11 +1,35 @@
+import logging
+import math
+import queue
+import threading
+import uuid
+from functools import partial
+
 import pytest
+from autotrainer.core import RawValueHolder
 
 from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
-from autotrainer.device import (CanDevice, DeviceApi, Target, LoadCellReading,
-                                PressureReading, SensorStatus, MagnetDigitalInputs,
-                                Motor, StepperStatus, ServoStatus, ServoConfig,
-                                StepperConfig
-                                )
+from autotrainer.device import (
+    CanDevice,
+    DeviceApi,
+    Target,
+    LoadCellReading,
+    PressureReading,
+    SensorStatus,
+    MagnetDigitalInputs,
+    Motor,
+    StepperStatus,
+    ServoStatus,
+    ServoConfig,
+    StepperConfig,
+    MotorSteps,
+    DeviceConnection,
+)
+from autotrainer.device.can_device import (
+    default_move_retract,
+    default_load_pellet,
+    default_send_pellet,
+)
 
 _expected = None
 
@@ -14,13 +38,65 @@ def data_callback(kind: int, response):
     del response  # uncheck atm
 
 
+@pytest.fixture
+def expected_tok() -> RawValueHolder:
+    value = RawValueHolder(value=None)
+    return value
+
+
+def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHolder):
+    # print(msg_kind, data)
+    if msg_kind == SystemStatusMessageKind.ACKNOWLEDGE:
+        tok, perf_c = data
+        tokens_acked.append(tok)
+        if tok is not None and expected_tok is not None and tok == expected_tok.value:
+            expected_tok.value = None
+            if event is not None:
+                event.set()
+
+
+@pytest.fixture
+def tokens_acked():
+    return []
+
+
+@pytest.fixture
+def expected_tok_event():
+    return threading.Event()
+
+
+@pytest.fixture
+def device_conn(device):
+    msg_q = queue.Queue()
+    msg_cb = device.api.message_callback
+    dc = DeviceConnection(device, message_queue=msg_q)
+    dc.request_connect()
+    device.api.message_callback = msg_cb
+    try:
+        yield dc
+    finally:
+        dc.request_disconnect()
+
+
 @pytest.fixture  # (scope="module")
-def device():
+def device(expected_tok_event, expected_tok, tokens_acked) -> CanDevice:  # noqa
     device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
     # unneeded, at least with emulation iface:
     # device._interface.magnet_address = 0x40
     # device._interface.pellet_address = 0x01
-    yield device
+    # device.notify_message(_REQUEST_CONNECT)
+    device.api.message_callback = partial(
+        api_msg_cb,
+        tokens_acked=tokens_acked,
+        expected_tok=expected_tok,
+        event=expected_tok_event,
+    )
+    device.connect()
+    device.device_interface.open()
+    try:
+        yield device  # noqa
+    finally:
+        device.disconnect()
 
 
 @pytest.mark.parametrize("kind, tag, data", [
@@ -45,7 +121,9 @@ def device():
     (SystemCommandKind.DELAY, 119, None),
     (SystemCommandKind.READ_MOTOR_CONFIGURATION, 120, None),
     (SystemCommandKind.WRITE_MOTOR_CONFIGURATION, 121, (Motor.PELLET_X_MOTOR, StepperConfig())),
-    (SystemCommandKind.SEND_FIXED_XYZ, 122, None)
+    (SystemCommandKind.SEND_FIXED_XYZ, 122, None),
+    (SystemCommandKind.SEND_FIXED_XYZ, 123, None),
+    (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, 124, default_move_retract()),
 ])
 def test_notify_command(device, kind, tag, data):
     device.notify_message(kind, data, tag)
@@ -63,7 +141,7 @@ def test_notify_command(device, kind, tag, data):
     (ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0, 0, 0, 0),
      SystemStatusMessageKind.MOTOR_CONFIGURATION),
     (StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0, 0, False),
-     SystemStatusMessageKind.MOTOR_CONFIGURATION)
+     SystemStatusMessageKind.MOTOR_CONFIGURATION),
 ])
 def test_notify_data(device, data, kind):
     global _expected
@@ -72,3 +150,70 @@ def test_notify_data(device, data, kind):
         _expected = kind
 
     device.notify_data([data])
+
+
+@pytest.mark.parametrize("kind,data", (
+    (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, default_move_retract()),
+    (SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, default_load_pellet()),
+    (SystemCommandKind.SET_SEND_PELLET_PROCEDURE, default_send_pellet()),
+))
+def test_set_procedures(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    kind,
+    data,
+):
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device.notify_message(kind, data, context=ctx)
+    expected_tok_event.wait(3)  # should be quite faster
+    assert ctx in tokens_acked
+
+
+def test_move_retract(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+):
+    # we rely on that on start:
+    dev_positions = device.device_interface._positions  # noqa
+    assert dev_positions[Motor.PELLET_X_MOTOR] == 0
+    assert dev_positions[Motor.PELLET_Y_MOTOR] == 0
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device.notify_message(SystemCommandKind.SEND_RETRACT, None, context=ctx)
+    expected_tok_event.wait(3)
+    assert ctx in tokens_acked
+    tokens_acked.clear()
+    # emulation iface doesn't check motor limits, so the result position is 0 + retract_offset,
+    # default one being -15, so we get -15 :
+    assert math.isclose(dev_positions[Motor.PELLET_Y_MOTOR], -15, abs_tol=0.1)
+    #
+    expected_tok_event.clear()
+    expected_tok.value = ctx
+    device.notify_message(SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE,
+                          MotorSteps("custom", [{'y_rel': 20}, {'x_rel': -5}]),
+                          context=ctx)
+    expected_tok_event.wait(3)
+    assert ctx in tokens_acked
+    tokens_acked.clear()
+    expected_tok_event.clear()
+    expected_tok.value = ctx
+    device.notify_message(SystemCommandKind.SEND_RETRACT, None, context=ctx)
+    expected_tok_event.wait(3)
+    assert ctx in tokens_acked
+    # tokens_acked.clear()
+    assert math.isclose(dev_positions[Motor.PELLET_X_MOTOR], -5, abs_tol=0.1)  # -5
+    assert math.isclose(dev_positions[Motor.PELLET_Y_MOTOR], 5, abs_tol=0.1)  # -15 + 20 == 5
+
+
+def test_can_connect_twice(device, caplog):
+    with caplog.at_level(logging.DEBUG):
+        device.connect()
+    assert "CAN command Handler thread already alive" in caplog.text
+    assert device.connected
+    assert device.device_interface.is_open is True

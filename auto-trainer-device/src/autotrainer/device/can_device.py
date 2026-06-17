@@ -209,8 +209,6 @@ class CanDevice(Device):
         self._measurement_buffer_count = buffer_size
         self._measurements: List[HeadFixMeasurement] = []
 
-        self._retract_distance = -15
-
         self._current_pressure = 0
         self._current_digital = False
         self._current_temperature = 0
@@ -832,7 +830,7 @@ class CanDevice(Device):
                 target_board.ctx = ctx
             #
             compound = self._compound_movement
-            if compound is not None:  # on start_sequence commands
+            if compound is not None and len(compound) > 0:  # on start_sequence commands
                 assert target_board.compound_steps is None, f"{target_board.compound_steps=}"
                 target_board.compound_steps = compound
                 self._compound_movement = None
@@ -916,7 +914,7 @@ class CanDevice(Device):
         self._prev_command_timeout = self.default_command_ack_timeout_duration
         if self._commands_handler_thread is not None:
             logger.verbose("CAN command Handler thread already alive")
-            self._disconnect()
+            self.disconnect()
 
         self._clear_caches()
         self._init_default_move_configs()
@@ -962,7 +960,7 @@ class CanDevice(Device):
         """
         move_steps = movements.steps
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
-        assert self._compound_movement is None
+        assert self._compound_movement is None or len(self._compound_movement) == 0
         self._compound_movement = move_steps
         board = self._find_steps_next_board("sequence", move_steps)
         return self._perform_next_compound_step(board, move_steps)
@@ -1539,7 +1537,7 @@ def default_release_pellet() -> MotorSteps:
 
 def default_open_gate() -> MotorSteps:
     """
-    Create the default motor step sequence for releasing a pellet.
+    Create the default motor step sequence for open gate.
 
     Returns:
         A MotorSteps object containing the open gate sequence
@@ -1549,7 +1547,7 @@ def default_open_gate() -> MotorSteps:
 
 def default_close_gate() -> MotorSteps:
     """
-    Create the default motor step sequence for releasing a pellet.
+    Create the default motor step sequence for close gate.
 
     Returns:
         A MotorSteps object containing the close gate sequence
@@ -1559,7 +1557,7 @@ def default_close_gate() -> MotorSteps:
 
 def default_move_retract() -> MotorSteps:
     """
-    Create the default motor step sequence for releasing a pellet.
+    Create the default motor step sequence for move retract.
 
     Returns:
         A MotorSteps object containing the move retract sequence
