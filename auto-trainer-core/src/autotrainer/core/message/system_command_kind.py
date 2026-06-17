@@ -62,6 +62,8 @@ class SystemCommandKind(IntEnum):
     TUNNEL_FAN_OFF = 230
     TUNNEL_FAN_SET = 231
 
+    SET_MOVE_RETRACT_PROCEDURE = 232
+
     # General actions.
     PLAY_TONE = 301
     SET_RGB_LED = 302
