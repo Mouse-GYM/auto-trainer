@@ -255,6 +255,20 @@ class CanDevice(Device):
         self._previous_servo_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
         self._prev_tunnel_gate_open_perf_c: Tuple[bool, float] = (None, -math.inf)
 
+        self._boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
+            None: _BoardPendingContext(
+                target=None, uuid_ack_timeout_engaged_property_name=""
+            ),
+            Target.PELLET_DEVICE: _BoardPendingContext(
+                target=Target.PELLET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+            Target.MAGNET_DEVICE: _BoardPendingContext(
+                target=Target.MAGNET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+        }
+
     def _init_default_move_configs(self):
         self._load_pellet = default_load_pellet()
         self._send_pellet = default_send_pellet()
@@ -559,21 +573,18 @@ class CanDevice(Device):
         logger.verbose("exiting")
 
     def _command_handler(self):
+        try:
+            self.__command_handler()
+        except BaseException as err:
+            logger.exception("command handler crashed: %s", err)
+            raise
+
+    def __command_handler(self):
         cur_commands = []
         t_perf_last_command_with_uuid = None
         input_q = self._commands_queue
         has_read_from_queue = False
-        boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
-            None: _BoardPendingContext(target=None, uuid_ack_timeout_engaged_property_name=""),
-            Target.PELLET_DEVICE: _BoardPendingContext(
-                target=Target.PELLET_DEVICE,
-                uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
-            ),
-            Target.MAGNET_DEVICE: _BoardPendingContext(
-                target=Target.MAGNET_DEVICE,
-                uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
-            ),
-        }
+        boards_pending_ctx = self._boards_pending_ctx
 
         def boards_has_ack_timeout_engaged():
             for board in boards_pending_ctx.values():
@@ -732,7 +743,7 @@ class CanDevice(Device):
                 assert found_board_with_uuid_ack is not None
                 steps = found_board_with_uuid_ack.compound_steps
                 if steps:
-                    target_board = boards_pending_ctx[self._find_steps_next_board(found_board_with_uuid_ack.kind, steps)]
+                    target_board = boards_pending_ctx[self._find_steps_next_board_target(found_board_with_uuid_ack.kind, steps)]
                     if target_board is not found_board_with_uuid_ack and not target_board.is_available():
                         # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
@@ -962,7 +973,8 @@ class CanDevice(Device):
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
         assert self._compound_movement is None or len(self._compound_movement) == 0
         self._compound_movement = move_steps
-        board = self._find_steps_next_board("sequence", move_steps)
+        tgt = self._find_steps_next_board_target("sequence", move_steps)
+        board = self._boards_pending_ctx[tgt]
         return self._perform_next_compound_step(board, move_steps)
 
     def _find_step_board(self, step) -> Optional[Target]:
@@ -1009,7 +1021,7 @@ class CanDevice(Device):
             return None
         return target_of_motor(motor)
 
-    def _find_steps_next_board(self, kind, steps) -> Optional[Target]:
+    def _find_steps_next_board_target(self, kind, steps) -> Optional[Target]:
         if len(steps) == 0:
             logger.warning("find_steps_next_board: got empty steps ; kind=%s", kind)
             return None
@@ -1024,10 +1036,10 @@ class CanDevice(Device):
         # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
             kind, steps = data
-            return self._find_steps_next_board(kind, steps)
+            return self._find_steps_next_board_target(kind, steps)
         elif kind is _retry_compound:
             kind, step, steps = data
-            return self._find_steps_next_board(kind, [step] + steps)
+            return self._find_steps_next_board_target(kind, [step] + steps)
         elif kind is _retry_full:
             kind, data = data
             return self._find_command_next_board(kind, data)
@@ -1447,8 +1459,8 @@ class CanDevice(Device):
         assert motor is not None, "all possible compound steps relate to a specific Motor"
 
         if success:
-            if 'x_rel' in step or 'y_rel' in step or 'z_rel' in step:
-                board.prev_command_relative = True
+            if "x_rel" in step or "y_rel" in step or "z_rel" in step:
+                self._prev_command_is_relative = True
 
             after_uuid = self._interface.uuid()
             compound_movements.pop(0)  # remove the one that was just executed successfully

@@ -2,8 +2,10 @@ import logging
 import math
 import queue
 import threading
+import time
 import uuid
 from functools import partial
+from unittest import mock
 
 import pytest
 from autotrainer.core import RawValueHolder
@@ -217,3 +219,48 @@ def test_can_connect_twice(device, caplog):
     assert "CAN command Handler thread already alive" in caplog.text
     assert device.connected
     assert device.device_interface.is_open is True
+
+
+def test_rel_move_fail(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+    monkeypatch,
+    caplog,
+):
+    orig_move_y = device.device_interface.move_motor_y
+    def ret_move(*args, **kwargs):
+        # consume one uuid, but don't insert ack into return messages as with emulation iface
+        device.device_interface.next_uuid()
+        # restore orig move:
+        device.device_interface.move_motor_y = orig_move_y
+        # return True to fake command written to CAN bus ok:
+        return True
+    m = mock.MagicMock()
+    m.side_effect = ret_move
+    device.device_interface.move_motor_y = m
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device.default_command_ack_timeout_duration = 0.5
+
+    ack_timeout_engaged = False
+    def dev_prop_changed(name, value, old):
+        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
+            nonlocal ack_timeout_engaged
+            ack_timeout_engaged = value
+
+    device.property_changed += dev_prop_changed
+
+    device.notify_message(SystemCommandKind.SEND_RETRACT, None, context=ctx)
+    timeout = time.perf_counter() + 4
+    while time.perf_counter() < timeout:
+        if not device._commands_handler_thread.is_alive():
+            break
+        time.sleep(0.1)
+    assert ctx not in tokens_acked
+    assert ack_timeout_engaged
+    assert not device._commands_handler_thread.is_alive()  # it crashed with RuntimeError
+    assert "refusing retry given relative" in caplog.text
+    assert "command handler crashed" in caplog.text

@@ -20,7 +20,7 @@ import os
 import typing
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import List, Union, Optional, Dict, Any
+from typing import List, Union, Optional, Dict, Any, Tuple
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.core.message import Motor
@@ -430,6 +430,14 @@ class DeviceInterface:
         self._tunnel_status_perf_c = -math.inf
         self._pellet_status_perf_c = -math.inf
 
+    @classmethod
+    def uuid(cls) -> int:
+        raise NotImplementedError
+
+    @classmethod
+    def next_uuid(cls) -> int:
+        raise NotImplementedError
+
     @property
     def motors_position(self) -> Offset3DTuple:
         raise NotImplementedError
@@ -500,6 +508,69 @@ class DeviceInterface:
                 self._motors_drift = no_drift
         return True
 
+    def move_motor_x(
+        self,
+        position: Union[float, Tuple[float, float]],
+        save_as_fixed: bool = False,
+        *,
+        relative: bool = False,
+    ) -> bool:
+        """
+         Move the X-direction motor
+
+        Args:
+            position: Either a position (float) or a (position, rate (%)) pair
+            save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+            relative: Relative movement or absolute, default absolute.
+
+         Returns:
+             bool: True if successful else False
+         """
+        raise NotImplementedError
+
+    def move_motor_y(
+        self,
+        position: Union[float, Tuple[float, float]],
+        save_as_fixed: bool = False,
+        *,
+        relative: bool = False,
+    ) -> bool:
+        """
+         Move the Y-direction motor
+
+        Args:
+            position: Either a position (float) or a (position, rate (%)) pair
+            save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+            relative: Relative movement or absolute, default absolute.
+
+         Returns:
+             bool: True if successful else False
+         """
+        raise NotImplementedError
+
+    def move_motor_z(
+        self,
+        position: Union[float, Tuple[float, float]],
+        save_as_fixed: bool = False,
+        *,
+        relative: bool = False,
+    ) -> bool:
+        """
+         Move the Z-direction motor
+
+        Args:
+            position: Either a position (float) or a (position, rate (%)) pair
+            save_as_fixed: Save the position as a new fixed location for this motor
+                If True then the position is only saved-as-fixed, the motor is not moved.
+            relative: Relative movement or absolute, default absolute.
+
+         Returns:
+             bool: True if successful else False
+         """
+        raise NotImplementedError
+
     def set_motors_drift(self, drifts: Offset3DTuple):
         prev_drifts = self._motors_drift
         logger.debug("Received new motors drift: %s ; prev=%s",
@@ -528,10 +599,6 @@ class DeviceInterface:
         # previous loop could have modified drifts, so assign after the loop:
         self._motors_drift = drifts
         return True
-
-    def move_motor(self, motor: Motor, position, *, save_as_fixed: bool = False, relative: bool = False):
-        # only for steppers, XYZ
-        raise NotImplementedError
 
     def servo_attach(self, motor: Motor):
         raise NotImplementedError
