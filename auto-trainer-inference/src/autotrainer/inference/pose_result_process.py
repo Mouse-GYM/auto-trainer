@@ -36,9 +36,9 @@ from .pose_result_live_process import LivePoseResultProcessWorker
 logger = get_verbose_logger(__name__)
 
 
-# default 4 hours renew delay:
+# default 1 hour renew delay:
 LIVE_WORKERS_RENEW_TIMER_DELAY = float(os.getenv("AUTOTRAINER_LIVE_WORKERS_RENEW_TIMER_DELAY",
-                                                 4 * 60 * 60))
+                                                 60 * 60))
 
 
 # even better is to use __debug__ and use "python -O ..."
@@ -112,8 +112,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._is_running = True
         self._feed_intersession_project: Optional[ProjectInfo] = None
         self._feed_intersession_error: Optional[str] = None
-        self._tot_live_workers = 3  # nbr live workers to use
-        self._live_input_q = mp_ctx.Queue(maxsize=16)  # for live 3d processing
+        self._tot_live_workers = 4  # nbr live workers to use
+        self._live_input_q = mp_ctx.Queue(maxsize=32)  # for live 3d processing
         self._live_new_workers: List[LivePoseResultProcessWorker] = []
         self._live_pose_workers: List[LivePoseResultProcessWorker] = []
         self._live_old_workers: List[LivePoseResultProcessWorker] = []
@@ -490,20 +490,20 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 if perf_now >= t_perf_live_check_data_queue_size:
                     data_queue_size = self._data_queue.qsize()
                     live_q_size = self._live_input_q.qsize()
-                    skip_update = data_queue_size > 2 or live_q_size > 8 or data_queue_size + live_q_size > 12
+                    skip_update = data_queue_size > 2 or live_q_size > 16 or data_queue_size + live_q_size > 24
                     if skip_update:
                         skip_next_pose_data = 1 + data_queue_size // 3
                         logger.warning("data queue size=%s live_q_size=%s skip_next=%s",
                                        data_queue_size, live_q_size, skip_next_pose_data)
                     else:
                         skip_next_pose_data = 0
-                    if live_q_size >= 16:
+                    if live_q_size >= 24:
                         pass
                         # keep current t_perf_live_check_data_queue_size
                         # so that next turn will also get skip_update=True,
                         # if still too high number of output async tasks in progress.
                     else:
-                        t_perf_live_check_data_queue_size = perf_now + (0.15 if skip_update else 1)
+                        t_perf_live_check_data_queue_size = perf_now + (0.25 if skip_update else 1.5)
                 else:
                     skip_update = False
             else:
