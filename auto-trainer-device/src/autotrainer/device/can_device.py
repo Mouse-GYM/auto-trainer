@@ -134,7 +134,7 @@ class _BoardPendingContext:
     uuid_ack_timeout_engaged_property_name: str  # but actually unused
     target: Optional[Target]
     ctx: Optional[str] = None  # current command context (token)
-    kind: Optional[Any] = None  # "kind", can be different things, actually unused
+    kind: Optional[Any] = None  # "kind", can be different things
     uuid: Optional[int] = None # currently awaited uuid ack
     uuid_ack_perf_c: float = -math.inf
     skip_uuid_ack_perf_c: bool = False
@@ -209,20 +209,13 @@ class CanDevice(Device):
         self._measurement_buffer_count = buffer_size
         self._measurements: List[HeadFixMeasurement] = []
 
-        self._retract_distance = -15
-
         self._current_pressure = 0
         self._current_digital = False
         self._current_temperature = 0
         self._current_humidity = 0
         self._current_audio = []
 
-        self._load_pellet = default_load_pellet()
-        self._send_pellet = default_send_pellet()
-        self._cover_pellet = default_cover_pellet()
-        self._release_pellet = default_release_pellet()
-        self._open_tunnel_gate = default_open_gate()
-        self._close_tunnel_gate = default_close_gate()
+        self._init_default_move_configs()
         self._compound_movement: Optional[List[Dict[str, Any]]] = None
 
         self._last_limit_switch: Dict[Motor, Optional[bool]] = {
@@ -257,11 +250,41 @@ class CanDevice(Device):
         self._commands_handler_thread: Optional[threading.Thread] = None
         self._commands_handler_watchdog_perf_c = math.nan
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
-        self._prev_target_command: Optional[Target] = None  # actually unused
         # internal data cache:
         self._previous_stepper_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
         self._previous_servo_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
         self._prev_tunnel_gate_open_perf_c: Tuple[bool, float] = (None, -math.inf)
+
+        self._boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
+            None: _BoardPendingContext(
+                target=None, uuid_ack_timeout_engaged_property_name=""
+            ),
+            Target.PELLET_DEVICE: _BoardPendingContext(
+                target=Target.PELLET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+            Target.MAGNET_DEVICE: _BoardPendingContext(
+                target=Target.MAGNET_DEVICE,
+                uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
+            ),
+        }
+
+    def _init_default_move_configs(self):
+        self._load_pellet = default_load_pellet()
+        self._send_pellet = default_send_pellet()
+        self._cover_pellet = default_cover_pellet()
+        self._release_pellet = default_release_pellet()
+        self._open_tunnel_gate = default_open_gate()
+        self._close_tunnel_gate = default_close_gate()
+        self._move_retract = default_move_retract()
+
+    def _clear_caches(self):
+        for cache in (
+            self._previous_stepper_status_pos_perf_c,
+            self._previous_servo_status_pos_perf_c,
+        ):
+            cache.clear()
+        self._prev_tunnel_gate_open_perf_c = (None, -math.inf)
 
     def _init_handlers(self):
 
@@ -308,6 +331,11 @@ class CanDevice(Device):
                 logger.warning("set_release_pellet_proc: empty proc: %s", proc)
             return True
 
+        def set_move_retract_proc(proc):
+            prev, self._move_retract = self._move_retract, proc
+            logger.verbose("replaced retract proc by %s (prev=%s)", proc, prev)
+            return True
+
         def apply_set_or_move(func, motor, *args, **kwargs):
             has_relative = "relative" in kwargs
             is_relative = has_relative and kwargs["relative"]
@@ -348,8 +376,6 @@ class CanDevice(Device):
             SystemCommandKind.MOVE_Z: partial(apply_set_or_move, self._interface.move_motor_z,
                                               Motor.PELLET_Z_MOTOR),
 
-            SystemCommandKind.SEND_RETRACT: self._send_retract,
-
             # NB: at the moment SEND_TO_LIMITS == SEND_HOME basically
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._start_sequence(MotorSteps(
@@ -376,6 +402,8 @@ class CanDevice(Device):
             SystemCommandKind.RELEASE_PELLET: lambda _: self._start_sequence(self._release_pellet),
             SystemCommandKind.COVER_PELLET: lambda _: self._start_sequence(self._cover_pellet),
 
+            SystemCommandKind.SEND_RETRACT: lambda _: self._start_sequence(self._move_retract),
+
             # on the other side we don't have "predefined" for open/close gate:
             SystemCommandKind.OPEN_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._open_tunnel_gate),
             SystemCommandKind.CLOSE_TUNNEL_GATE: lambda _: handle_servo_sequence(Motor.TUNNEL_GATE_SERVO, self._close_tunnel_gate),
@@ -401,6 +429,8 @@ class CanDevice(Device):
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE: set_cover_pellet_proc,
 
             SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE: set_release_pellet_proc,
+
+            SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE: set_move_retract_proc,
 
             SystemCommandKind.UPDATE_SCALE_TARE: lambda _: self._interface.tare_load_cell(),
 
@@ -529,13 +559,6 @@ class CanDevice(Device):
             raise RuntimeError("CAN command handler thread not anymore alive: %s", cmd_thread)
         self._commands_queue.put(obj)
 
-    def _send_retract(self, _):
-        self._prev_command_is_relative = True
-        cfg = self._motor_configs[Motor.PELLET_Y_MOTOR]
-        if cfg.uuid_ack_timeout is not None:
-            self._prev_command_timeout = cfg.uuid_ack_timeout
-        return self._interface.move_motor_y(self._retract_distance, relative=True)
-
     def _check_tunnel_pellet_status_age(self):
         logger.verbose("running")
         while not self._want_exit.wait(1):  # no need check more often
@@ -550,21 +573,18 @@ class CanDevice(Device):
         logger.verbose("exiting")
 
     def _command_handler(self):
+        try:
+            self.__command_handler()
+        except BaseException as err:
+            logger.exception("command handler crashed: %s", err)
+            raise
+
+    def __command_handler(self):
         cur_commands = []
         t_perf_last_command_with_uuid = None
         input_q = self._commands_queue
         has_read_from_queue = False
-        boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
-            None: _BoardPendingContext(target=None, uuid_ack_timeout_engaged_property_name=""),
-            Target.PELLET_DEVICE: _BoardPendingContext(
-                target=Target.PELLET_DEVICE,
-                uuid_ack_timeout_engaged_property_name=self.PELLET_UUID_ACK_TIMEOUT_ENGAGED,
-            ),
-            Target.MAGNET_DEVICE: _BoardPendingContext(
-                target=Target.MAGNET_DEVICE,
-                uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
-            ),
-        }
+        boards_pending_ctx = self._boards_pending_ctx
 
         def boards_has_ack_timeout_engaged():
             for board in boards_pending_ctx.values():
@@ -723,7 +743,7 @@ class CanDevice(Device):
                 assert found_board_with_uuid_ack is not None
                 steps = found_board_with_uuid_ack.compound_steps
                 if steps:
-                    target_board = boards_pending_ctx[self._find_steps_next_board(found_board_with_uuid_ack.kind, steps)]
+                    target_board = boards_pending_ctx[self._find_steps_next_board_target(found_board_with_uuid_ack.kind, steps)]
                     if target_board is not found_board_with_uuid_ack and not target_board.is_available():
                         # target board has to finish some operation
                         cur_commands.pop(0)  # still pop it.
@@ -821,7 +841,7 @@ class CanDevice(Device):
                 target_board.ctx = ctx
             #
             compound = self._compound_movement
-            if compound is not None:  # on start_sequence commands
+            if compound is not None and len(compound) > 0:  # on start_sequence commands
                 assert target_board.compound_steps is None, f"{target_board.compound_steps=}"
                 target_board.compound_steps = compound
                 self._compound_movement = None
@@ -903,15 +923,19 @@ class CanDevice(Device):
         # which means we have already obtained the addr of desired devices.
         self._want_exit.clear()
         self._prev_command_timeout = self.default_command_ack_timeout_duration
-        if self._commands_handler_thread is not None and self._commands_handler_thread.is_alive():
+        if self._commands_handler_thread is not None:
             logger.verbose("CAN command Handler thread already alive")
-        else:
-            logger.info("Starting CanCommandHandler thread handler")
-            self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
-            thread = threading.Thread(
-                target=self._command_handler, name="CanCommandHandler", daemon=True)
-            thread.start()
-            self._commands_handler_thread = thread  # only assign after start
+            self.disconnect()
+
+        self._clear_caches()
+        self._init_default_move_configs()
+
+        logger.info("Starting CanCommandHandler thread handler")
+        self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+        thread = threading.Thread(
+            target=self._command_handler, name="CanCommandHandler", daemon=True)
+        thread.start()
+        self._commands_handler_thread = thread  # only assign after start
         thread = self._tunnel_pellet_status_check_thread
         if thread is not None and thread.is_alive():
             logger.debug("TunnelPelletStatus check thread already alive")
@@ -928,7 +952,7 @@ class CanDevice(Device):
                 cmd_queue.put(None)
             cmd_thread.join(3)
             if cmd_thread.is_alive():
-                logger.warning("%s still alive", cmd_thread)
+                logger.warning("CanCommand handler thread still alive: %s", cmd_thread)
             self._commands_handler_thread = None
             # cmd_queue.join()  # not totally necessary here
         thread = self._tunnel_pellet_status_check_thread
@@ -947,17 +971,18 @@ class CanDevice(Device):
         """
         move_steps = movements.steps
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
-        assert self._compound_movement is None
+        assert self._compound_movement is None or len(self._compound_movement) == 0
         self._compound_movement = move_steps
-        board = self._find_steps_next_board("sequence", move_steps)
+        tgt = self._find_steps_next_board_target("sequence", move_steps)
+        board = self._boards_pending_ctx[tgt]
         return self._perform_next_compound_step(board, move_steps)
 
     def _find_step_board(self, step) -> Optional[Target]:
-        if 'x' in step:
+        if 'x' in step or 'x_rel' in step:
             motor = Motor.PELLET_X_MOTOR
-        elif 'y' in step:
+        elif 'y' in step or 'y_rel' in step:
             motor = Motor.PELLET_Y_MOTOR
-        elif 'z' in step:
+        elif 'z' in step or 'z_rel' in step:
             motor = Motor.PELLET_Z_MOTOR
         elif 'load_arm' in step:
             motor = Motor.PELLET_LOAD_SERVO
@@ -996,7 +1021,7 @@ class CanDevice(Device):
             return None
         return target_of_motor(motor)
 
-    def _find_steps_next_board(self, kind, steps) -> Optional[Target]:
+    def _find_steps_next_board_target(self, kind, steps) -> Optional[Target]:
         if len(steps) == 0:
             logger.warning("find_steps_next_board: got empty steps ; kind=%s", kind)
             return None
@@ -1011,10 +1036,10 @@ class CanDevice(Device):
         # would need update if at least some of the devices change of board(target)
         if kind is _next_compound:
             kind, steps = data
-            return self._find_steps_next_board(kind, steps)
+            return self._find_steps_next_board_target(kind, steps)
         elif kind is _retry_compound:
             kind, step, steps = data
-            return self._find_steps_next_board(kind, [step] + steps)
+            return self._find_steps_next_board_target(kind, [step] + steps)
         elif kind is _retry_full:
             kind, data = data
             return self._find_command_next_board(kind, data)
@@ -1080,6 +1105,7 @@ class CanDevice(Device):
             SystemCommandKind.SET_SEND_PELLET_PROCEDURE,
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
             SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE,
+            SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE,
         }:
             # is no CAN operation
             return None
@@ -1284,7 +1310,7 @@ class CanDevice(Device):
         """
         step = compound_movements[0]
         orig_step = step.copy()
-        logger.debug("executing next compound step: %s (remains=%s)",
+        logger.debug("executing next compound step: %s (remains after=%s)",
                      step,
                      len(compound_movements) - 1,  # don't include current one
                      )
@@ -1415,14 +1441,28 @@ class CanDevice(Device):
             motor: Motor = step['_internal_func_motor']  # noqa
             success = func()  # noqa
 
+        elif 'x_rel' in step:
+            motor = Motor.PELLET_X_MOTOR
+            success = self._interface.move_motor_x(step['x_rel'], relative=True)
+
+        elif 'y_rel' in step:
+            motor = Motor.PELLET_Y_MOTOR
+            success = self._interface.move_motor_y(step['y_rel'], relative=True)
+
+        elif 'z_rel' in step:
+            motor = Motor.PELLET_Z_MOTOR
+            success = self._interface.move_motor_z(step['z_rel'], relative=True)
+
         else:
             raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
 
         assert motor is not None, "all possible compound steps relate to a specific Motor"
 
         if success:
+            if "x_rel" in step or "y_rel" in step or "z_rel" in step:
+                self._prev_command_is_relative = True
+
             after_uuid = self._interface.uuid()
-            self._prev_target_command = target_of_motor(motor)
             compound_movements.pop(0)  # remove the one that was just executed successfully
             logger.debug("executed %s write command ; uuid: before=%s after=%s",
                          orig_step, before_uuid, after_uuid)
@@ -1509,19 +1549,29 @@ def default_release_pellet() -> MotorSteps:
 
 def default_open_gate() -> MotorSteps:
     """
-    Create the default motor step sequence for releasing a pellet.
+    Create the default motor step sequence for open gate.
 
     Returns:
-        A MotorSteps object containing the release pellet sequence
+        A MotorSteps object containing the open gate sequence
     """
     return MotorSteps("open_gate", [{'_servo_min_pos': Motor.TUNNEL_GATE_SERVO}])
 
 
 def default_close_gate() -> MotorSteps:
     """
-    Create the default motor step sequence for releasing a pellet.
+    Create the default motor step sequence for close gate.
 
     Returns:
-        A MotorSteps object containing the release pellet sequence
+        A MotorSteps object containing the close gate sequence
     """
     return MotorSteps("close_gate", [{'_servo_max_pos': Motor.TUNNEL_GATE_SERVO}])
+
+
+def default_move_retract() -> MotorSteps:
+    """
+    Create the default motor step sequence for move retract.
+
+    Returns:
+        A MotorSteps object containing the move retract sequence
+    """
+    return MotorSteps("move_retract", [{'y_rel': -15}])

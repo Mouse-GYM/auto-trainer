@@ -185,10 +185,17 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
-        self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet)
-        self.send_message(SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet)
-        self.send_message(SystemCommandKind.SET_COVER_PELLET_PROCEDURE, data.cover_pellet)
-        self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet)
+        for kind, steps in (
+            (SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet),
+            (SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet),
+            (SystemCommandKind.SET_COVER_PELLET_PROCEDURE, data.cover_pellet),
+            (SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet),
+            (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, data.move_retract),
+        ):
+            if steps.is_empty:
+                logger.notice("config compound %s empty, not using. builtin default config will remain.", kind)
+            else:
+                self.send_message(kind, steps)
 
     def use_motor_configurations(self, data: MotorConfigurations):
         logger.notice("Setting motor configurations")
@@ -228,6 +235,9 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def set_release_procedure(self, release_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, release_steps)
+
+    def set_retract_procedure(self, steps: MotorSteps):
+        self.send_message(SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, steps)
 
     def set_motor_configuration(self, config: Union[ServoConfig, StepperConfig]):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)

@@ -63,3 +63,7 @@ class CompoundMovementDataSet(Protocol):
 
     @property
     def close_tunnel_gate(self) -> MotorSteps: ...
+
+    @property
+    def move_retract(self) -> MotorSteps:
+        """The move retract"""

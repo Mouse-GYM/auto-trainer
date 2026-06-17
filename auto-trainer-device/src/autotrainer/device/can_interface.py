@@ -39,7 +39,7 @@ else:
         warnings.warn(f"expected pyjerrycan >= 1.2.0 ; got {jerry_v}", UserWarning)
 
 
-from autotrainer.core import get_perf_now
+from autotrainer.core import get_perf_now, Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 from .device_interface import (
     DeviceInterface,
@@ -434,11 +434,8 @@ class CanInterface(DeviceInterface):
 
         no_op = lambda msg: None
 
-        self._last_positions: Dict[Motor, Optional[float]] = {
-            Motor.PELLET_X_MOTOR: None,
-            Motor.PELLET_Y_MOTOR: None,
-            Motor.PELLET_Z_MOTOR: None,
-        }
+        self._last_positions = Offset3DTuple.get_nan()
+        self._prev_send_pos = Offset3DTuple.get_nan()
 
         self._last_gpio_status_perf: Dict[int, Tuple[
             Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
@@ -780,6 +777,10 @@ class CanInterface(DeviceInterface):
             bool: Connection to hardware is open (True) or closed (False)
         """
         return self._is_open
+
+    @property
+    def motors_position(self) -> Offset3DTuple:
+        return self._last_positions
 
     def open(self) -> bool:
         """
@@ -1217,7 +1218,6 @@ class CanInterface(DeviceInterface):
                 # this allows to only account 1 time for the possible auto-corrected drift
                 relative = False
                 position += axis_prev_send_pos
-            self._prev_send_pos = self._prev_send_pos.replace(**{char_coord: position})
 
         corrected_position = position
         if save_as_fixed and self._auto_correct_motor_drift:
@@ -1237,10 +1237,13 @@ class CanInterface(DeviceInterface):
         turns_acceleration = mm_to_turns(config.maximum_acceleration)
 
         if relative:
-            if not save_as_fixed and motor in self._last_positions:
-                last_pos = self._last_positions[motor]
-                if last_pos is None:
-                    logger.error("Motor %s: refusing relative movement with no last_pos known", motor)
+            assert not save_as_fixed
+            motor_idx = _motor_to_axis_idx_map.get(motor, None)
+            if motor_idx is not None:
+                last_pos = self._last_positions[motor_idx]
+                if not math.isfinite(last_pos):
+                    logger.error("Motor %s: refusing relative movement with no last_pos known: %s",
+                                 motor, last_pos)
                     return False
                 tentative = last_pos + position
                 if tentative < 0:
@@ -1251,10 +1254,6 @@ class CanInterface(DeviceInterface):
                     position = _STEPPER_MAX_POS - last_pos
                     turns_position = mm_to_turns(position)
                     logger.verbose("Limiting relative move to %s", position)
-                # force set our last receive position:
-                self._last_positions[motor] += position
-                # so that multiple consecutive relative movement (without having received a stepper status in between),
-                # won't make the checks to be missed.
         else:
             # absolute move
             if turns_position < 0:
@@ -1960,8 +1959,14 @@ class CanInterface(DeviceInterface):
         status = self._translate_stepper_status(message)
         if status is None:
             return None
-        if status.motor in self._last_positions:
-            self._last_positions[status.motor] = status.position
+        motor_idx = _motor_to_axis_idx_map.get(status.motor, None)
+        if motor_idx is not None:
+            new_pos = list(self._last_positions)
+            new_pos[motor_idx] = status.position
+            new_send_pos = list(self._prev_send_pos)
+            self._last_positions = new_pos
+            new_send_pos[motor_idx] = status.send_position
+            self._prev_send_pos = Offset3DTuple(*new_send_pos)
         return status
 
     def _translate_stepper_status(self, message) -> Optional[StepperStatus]:

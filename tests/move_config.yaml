@@ -1,31 +1,10 @@
-#    - type: magnet
-#      value: 40
-#    - type: predefined
-#      value: scoop
-#    - type: predefined
-#      value: cover
-
-#    - type: predefined
-#      value: retrieve
-#    - type: predefined
-#      value: release
-#    - type: predefined
-#      value: home
-#    - type: x
-#      value: 0
-#    - type: z
-#      value: 10
-#    - type: barrier_arm
-#      value: 78
-#    - type: delay
-#      value: 1
-    
 actions:
+  move_retract:
+    - type: y_rel
+      value: -25
   load_pellet:
     - type: y
       value: 0
-#    - type: z
-#      value: 10
     - type: barrier_arm
       value: 110
     - type: x
@@ -40,26 +19,16 @@ actions:
       value: 10
     - type: tone
       value: 5000,0.3
-#    - type: predefined
-#      value: home
-#    - type: predefined
-#      value: send
     - type: barrier_arm
       value: 80
-#    - type: tone
-#      value: 6000,0.3
   send_pellet:
     - type: predefined
       value: send
   cover_pellet:
     - type: barrier_arm
       value: 80
-#    - type: predefined
-#      value: cover
   release_pellet:
     - type: barrier_arm
       value: 95
     - type: tone
       value: 6000,0.3
-      
-      

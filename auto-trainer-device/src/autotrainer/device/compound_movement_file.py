@@ -2,11 +2,12 @@
 Class to manage compound movement configuration YAML file or YAML dictionary.
 
 In either case, the YAML key for contents is "actions".
-It can have 4 subgroups:
+It can have 5 subgroups:
 * "load_pellet" - a sequence of commands for loading a pellet
 * "send_pellet" - a sequence of commands for sending the pellet to the cage
 * "cover_pellet" - a sequence of commands for covering the pellet
 * "release_pellet" - a sequence of commands for uncovering the pellet
+* "move_retract" - a sequence of commands for retracting the pellet
 """
 import enum
 from pathlib import Path
@@ -25,6 +26,7 @@ class CompoundMovementKind(str, enum.Enum):
     SEND_PELLET = "send_pellet"
     COVER_PELLET = "cover_pellet"
     RELEASE_PELLET = "release_pellet"
+    MOVE_RETRACT = "move_retract"
 
 
 CompoundMovementByStringValue = {
@@ -139,3 +141,7 @@ class CompoundMovements(CompoundMovementDataSet):
     @property
     def release_pellet(self) -> MotorSteps:
         return self._movements[CompoundMovementKind.RELEASE_PELLET]
+
+    @property
+    def move_retract(self) -> MotorSteps:
+        return self._movements[CompoundMovementKind.MOVE_RETRACT]
