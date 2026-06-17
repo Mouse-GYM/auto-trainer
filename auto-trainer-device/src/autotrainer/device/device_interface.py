@@ -427,9 +427,12 @@ class DeviceInterface:
         self._active_motors_drift = _zero_position
         self._max_motor_drift_error_threshold = 2  # mm
         self._motors_drift_error = [False, False, False]
-        self._prev_send_pos = _zero_position
         self._tunnel_status_perf_c = -math.inf
         self._pellet_status_perf_c = -math.inf
+
+    @property
+    def motors_position(self) -> Offset3DTuple:
+        raise NotImplementedError
 
     def round_float(self, value: float) -> float:
         return value if self.float_precision is None else round(value, self.float_precision)

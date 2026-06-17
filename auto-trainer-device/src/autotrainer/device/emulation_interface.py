@@ -14,7 +14,7 @@ from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                PelletDigitalInputs, DoorData, Acknowledge
                                )
 from .can_interface import motor_to_str
-
+from ..core import Offset3DTuple
 
 logger = get_verbose_logger(__name__)
 
@@ -141,6 +141,13 @@ class EmulationInterface(DeviceInterface):
 
     def _set_magnet_address(self, addr):
         pass
+
+    @property
+    def motors_position(self):
+        return Offset3DTuple(
+            self._positions[k]
+            for k in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR)
+        )
 
     @property
     def is_open(self) -> bool:
