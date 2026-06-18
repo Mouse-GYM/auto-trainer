@@ -42,7 +42,7 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 48
+    version: int = 50
 
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
