@@ -1349,14 +1349,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        if not (
-            pellet_state == PelletState.monitoring
-            and not self._algo_paused
-            and self._status in {
-                BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
-                BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
-            }
-        ):
+        if self._algo_paused or self._status not in {
+            BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+            BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+        }:
             return False
         if not self._is_in_session:
             return True
