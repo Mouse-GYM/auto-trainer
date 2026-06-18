@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import yaml
 
 from autotrainer.core.logging import get_verbose_logger
@@ -34,6 +35,10 @@ class SystemConfigurationLoader(yaml.SafeLoader):
     safe_load: bool = False
 
 
+class SystemConfigurationDumper(yaml.SafeDumper):
+    """Dedicated yaml dumper for SystemConfiguration"""
+
+
 class SystemConfigurationSafeLoader(SystemConfigurationLoader):
 
     safe_load = True
@@ -66,8 +71,29 @@ SystemConfigurationLoader.add_constructor(_shift_xyz_tag, construct_offset3d_tup
 
 #
 
-class SystemConfigurationDumper(yaml.SafeDumper):
-    """Dedicated yaml dumper for SystemConfiguration"""
+def time_representer(dumper, data):
+    """Converts datetime.time into an ISO format string for YAML."""
+    return dumper.represent_scalar('tag:yaml.org,2002:timestamp', data.isoformat())
+
+
+def time_constructor(loader, node):
+    """Parses a YAML timestamp scalar specifically into a datetime.time object."""
+    value = loader.construct_scalar(node)
+    # Handle cases where microsecond is or isn't present
+    try:
+        return datetime.time.fromisoformat(value)
+    except ValueError:
+        # Fallback for alternative or truncated ISO formats
+        return datetime.datetime.strptime(value, "%H:%M:%S").time()
+
+# NB: has to be set on both:
+yaml.SafeDumper.add_representer(datetime.time, time_representer)
+yaml.SafeLoader.add_constructor('tag:yaml.org,2002:timestamp', time_constructor)
+
+SystemConfigurationLoader.add_constructor('tag:yaml.org,2002:timestamp', time_constructor)
+SystemConfigurationDumper.add_representer(datetime.time, time_representer)
+
+#
 
 
 def repr_offset3d_tuple(dumper: SystemConfigurationDumper, obj: Offset3DTuple):
