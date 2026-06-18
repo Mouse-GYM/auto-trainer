@@ -1313,16 +1313,19 @@ class CanDevice(Device):
             rel_val = step['send_x_rel']
             motor = Motor.PELLET_X_MOTOR
             meth = self._interface.move_motor_x
+            m_idx = 0
         elif 'send_y_rel' in step:
             rel_val = step['send_y_rel']
             motor = Motor.PELLET_Y_MOTOR
             meth = self._interface.move_motor_y
+            m_idx = 1
         else:
             assert 'send_z_rel' in step
             rel_val = step['send_z_rel']
             motor = Motor.PELLET_Z_MOTOR
             meth = self._interface.move_motor_z
-        m_idx = self._motor_to_coordinate_idx[motor]
+            m_idx = 2
+        # calculate position:
         new_pos = self._last_send_pos[m_idx] + rel_val
         if not math.isfinite(new_pos):
             logger.warning(
