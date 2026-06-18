@@ -43,6 +43,7 @@ from autotrainer.core import (
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
+from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
@@ -1704,9 +1705,14 @@ class AppModel(ObservableObject):
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
-            cur_hour = datetime.now().time()
-            if cfg_led.start_ignore_hour <= cur_hour <= cfg_led.stop_ignore_hour:
-                color = (0, 0, 0)
+            cur_time = datetime.now().time()
+            # handle overnight too:
+            if cfg_led.start_ignore_hour < cfg_led.stop_ignore_hour:
+                if cfg_led.start_ignore_hour <= cur_time <= cfg_led.stop_ignore_hour:
+                    color = (0, 0, 0)
+            else:
+                if cfg_led.stop_ignore_hour <= cur_time <= cfg_led.start_ignore_hour:
+                    color = (0, 0, 0)
 
         cur_led = self._hardware.color_led
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
@@ -2002,10 +2008,10 @@ class AppModel(ObservableObject):
 
         configuration = self._create_configuration()
 
-        # out = info.copy()
-        # out["configuration"] = asdict(configuration)
-        # with open(file_name + ".json", "w") as file:
-        #     json.dump(out, file)
+        out = info.copy()
+        out["configuration"] = asdict(configuration)
+        with open(file_name + ".json", "w") as file:
+            json.dump(out, file, cls=SystemConfigurationJSONEncoder)
 
         out = info.copy()
         out["configuration"] = configuration

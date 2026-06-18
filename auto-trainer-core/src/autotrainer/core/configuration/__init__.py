@@ -71,13 +71,15 @@ SystemConfigurationLoader.add_constructor(_shift_xyz_tag, construct_offset3d_tup
 
 #
 
+_time_tag = "!Time"
+
 def time_representer(dumper, data):
     """Converts datetime.time into an ISO format string for YAML."""
-    return dumper.represent_scalar('tag:yaml.org,2002:timestamp', data.isoformat())
+    return dumper.represent_scalar(_time_tag, data.isoformat())
 
 
 def time_constructor(loader, node):
-    """Parses a YAML timestamp scalar specifically into a datetime.time object."""
+    """Parses a !Time scalar specifically into a datetime.time object."""
     value = loader.construct_scalar(node)
     # Handle cases where microsecond is or isn't present
     try:
@@ -86,11 +88,8 @@ def time_constructor(loader, node):
         # Fallback for alternative or truncated ISO formats
         return datetime.datetime.strptime(value, "%H:%M:%S").time()
 
-# NB: has to be set on both:
-yaml.SafeDumper.add_representer(datetime.time, time_representer)
-yaml.SafeLoader.add_constructor('tag:yaml.org,2002:timestamp', time_constructor)
 
-SystemConfigurationLoader.add_constructor('tag:yaml.org,2002:timestamp', time_constructor)
+SystemConfigurationLoader.add_constructor(_time_tag, time_constructor)
 SystemConfigurationDumper.add_representer(datetime.time, time_representer)
 
 #
