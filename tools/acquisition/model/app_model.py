@@ -2002,10 +2002,11 @@ class AppModel(ObservableObject):
 
         configuration = self._create_configuration()
 
-        out = info.copy()
-        out["configuration"] = asdict(configuration)
-        with open(file_name + ".json", "w") as file:
-            json.dump(out, file)
+        # out = info.copy()
+        # out["configuration"] = asdict(configuration)
+        # with open(file_name + ".json", "w") as file:
+        #     json.dump(out, file)
+
         out = info.copy()
         out["configuration"] = configuration
         with open(file_name + ".yaml", "w") as file:
