@@ -2270,9 +2270,11 @@ class AppModel(ObservableObject):
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
+        self._hardware.set_color_led(100, 0, 0)  # RGB, %
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
+        self._update_led_color()
 
     # pellet machine events
 
