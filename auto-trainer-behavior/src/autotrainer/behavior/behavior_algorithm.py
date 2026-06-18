@@ -1352,6 +1352,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if self._algo_paused or self._status not in {
             BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
             BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+        } or pellet_state in {
+            # PelletState.home,  # not sure
+            PelletState.retract,  # prevent executing the command again and again and..
         }:
             return False
         if not self._is_in_session:
