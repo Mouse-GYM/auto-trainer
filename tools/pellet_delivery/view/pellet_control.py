@@ -83,42 +83,39 @@ class PelletControl(QWidget):
         b_layout.setContentsMargins(2, 2, 2, 2)
         b_layout.setSpacing(8)
 
-        self._home_button = QPushButton("Home")
-        self._home_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._home_button.clicked.connect(lambda: self._app_model.send_home())
-        b_layout.addWidget(self._home_button)
-
-        b_layout.addStretch(1)
-
-        self._load_button = QPushButton("Load")
-        self._load_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._load_button.clicked.connect(lambda: self._app_model.load_pellet())
-        b_layout.addWidget(self._load_button)
-
-        self._send_button = QPushButton("Send")
-        self._send_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._send_button.clicked.connect(lambda: self._app_model.send_pellet())
-        b_layout.addWidget(self._send_button)
-
-        button = self._retract_button = QPushButton("Retract")
+        button = self._home_button = QPushButton("Home")
         button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        def on_retract():
-            self._app_model.send_pellet()  # ensure relative to deliver position
-            self._app_model.move_retract(force=True)
-        button.clicked.connect(on_retract)
+        button.clicked.connect(self._app_model.send_home)
         b_layout.addWidget(button)
 
         b_layout.addStretch(1)
 
-        self._release_button = QPushButton("Release")
-        self._release_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._release_button.clicked.connect(lambda: self._app_model.release_pellet())
-        b_layout.addWidget(self._release_button)
+        button = self._load_button = QPushButton("Load")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        button.clicked.connect(self._app_model.load_pellet)
+        b_layout.addWidget(button)
 
-        self._cover_button = QPushButton("Cover")
-        self._cover_button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
-        self._cover_button.clicked.connect(lambda: self._app_model.cover_pellet())
-        b_layout.addWidget(self._cover_button)
+        button = self._send_button = QPushButton("Send")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        button.clicked.connect(self._app_model.send_pellet)
+        b_layout.addWidget(button)
+
+        button = self._retract_button = QPushButton("Retract")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        button.clicked.connect(self._app_model.move_retract)
+        b_layout.addWidget(button)
+
+        b_layout.addStretch(1)
+
+        button = self._release_button = QPushButton("Release")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        button.clicked.connect(self._app_model.release_pellet)
+        b_layout.addWidget(button)
+
+        button = self._cover_button = QPushButton("Cover")
+        button.setMinimumWidth(_MIN_CONTROL_BUTTON_WIDTH)
+        button.clicked.connect(self._app_model.cover_pellet)
+        b_layout.addWidget(button)
 
         b_layout.addStretch(1)
 
