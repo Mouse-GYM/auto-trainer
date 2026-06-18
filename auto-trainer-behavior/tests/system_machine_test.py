@@ -114,7 +114,7 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     mock_system.mock_pellet_ack(until_none=True)  # ack everything
     assert mock_system.pellet_state_trans == [
         PelletState.covering,
-        PelletState.loading,
+        PelletState.retract,
     ]
     mock_system.pellet_state_trans.clear()
 
@@ -149,6 +149,7 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
 
     assert pellet_m.state == PelletState.sending
     assert mock_system.pellet_state_trans == [
+        PelletState.loading,
         PelletState.covering,
         PelletState.sending,
     ]

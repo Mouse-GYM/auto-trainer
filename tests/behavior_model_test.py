@@ -85,7 +85,7 @@ class TestEmergency(MockSystemMachine):
         assert self.pellet_state_trans == [
             PelletState.home,
             PelletState.covering,
-            PelletState.home,
+            PelletState.retract,
         ]
         # assert pellet_m.send_pellet.call_args_list == [mock.call()]  # is now handled by pellet_machine
 
