@@ -150,7 +150,7 @@ class _BoardPendingContext:
                 self.ctx is None
             and self.uuid is None
             and self.prev_command is None
-            and self.compound_steps is None
+            and (self.compound_steps is None or len(self.compound_steps) == 0)
         )
 
 
