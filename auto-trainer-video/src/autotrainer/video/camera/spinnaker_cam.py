@@ -58,7 +58,7 @@ class AcquisitionMode(IntEnum):
 @dataclasses.dataclass
 class SpinCamDefaultParams:
     exposure: float = 140
-    fps: int = 150
+    fps: float = 150.
     hbin: int = 4
     vbin: int = 4
     width: int = 256
@@ -116,7 +116,7 @@ class SpinCam(CameraBase):
             return v
 
         self._exposure: float = get_def("exposure")
-        self._fps: int = get_def("fps")
+        self._fps: float = get_def("fps")
         self._horizontal_binning: int = get_def("hbin")
         self._vertical_binning: int = get_def("vbin")
         self._width: int = get_def("width")
@@ -277,7 +277,7 @@ class SpinCam(CameraBase):
         self._set_bounded_float_property_node(cam.ExposureTime, self._exposure)
         # then FPS:
         self._set_bounded_bool_property_node(cam.AcquisitionFrameRateEnable, True)
-        self._set_bounded_int_property_node(cam.AcquisitionFrameRate, self._fps)
+        self._set_bounded_float_property_node(cam.AcquisitionFrameRate, self._fps)
 
         # binning first
         self._set_bounded_int_property_node(cam.BinningHorizontal, self._horizontal_binning)
