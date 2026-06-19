@@ -1349,6 +1349,7 @@ class MainWindow(QMainWindow):
         for sess_idx in range(n_sessions):
             if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                 return
+            set_headfix = False
             print("starting new simulate session")
             self.load_cell_trigger_action.trigger()
             do_sleep()
@@ -1359,6 +1360,7 @@ class MainWindow(QMainWindow):
                     print(f"awaited RECORDING but is still {algo.capture_status}")
                     break
             for idx in range(n_trials):
+                set_headfix = False
                 if random.random() <= rand_headfix_trigger:
                     # self.force_headbar_detector_action.setChecked(True)
                     set_headfix = True
