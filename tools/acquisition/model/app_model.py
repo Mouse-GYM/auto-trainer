@@ -1706,13 +1706,13 @@ class AppModel(ObservableObject):
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
             cur_time = datetime.now().time()
-            # handle overnight too:
-            if cfg_led.start_ignore_hour < cfg_led.stop_ignore_hour:
-                if cfg_led.start_ignore_hour <= cur_time <= cfg_led.stop_ignore_hour:
-                    color = (0, 0, 0)
-            else:
-                if cfg_led.stop_ignore_hour <= cur_time <= cfg_led.start_ignore_hour:
-                    color = (0, 0, 0)
+            start, stop = cfg_led.start_ignore_hour, cfg_led.stop_ignore_hour
+            in_ignore_window = (
+                (start <= cur_time <= stop) if start < stop
+                else (cur_time >= start or cur_time <= stop)
+            )
+            if in_ignore_window:
+                color = (0, 0, 0)
 
         cur_led = self._hardware.color_led
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
