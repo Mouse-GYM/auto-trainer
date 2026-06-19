@@ -408,14 +408,9 @@ class PelletMachine(StateMachine):
 
         algo = self._algorithm
         reason: str = "unknown"
-        retrying = False
 
         def logit():
-            if retrying:
-                func = logger.spam if reason != "release_when_sent_cover_enabled" else logger.debug
-            else:
-                func = logger.verbose
-            func(
+            logger.verbose(
                 "try_next_state cur=%s from %s: %s -> from_inference=%s in_session=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
                 "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
                 "algo_system_state=%s intersession_state=%s "
@@ -426,13 +421,6 @@ class PelletMachine(StateMachine):
                 algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
                 algo.system_state, algo.intersession_state, algo.pellet_presence_age, self._covered_state,
             )
-
-        def log_could_retry_shortly():
-            # retry shortly currently disabled.
-            nonlocal reason, retrying
-            retrying = True
-            reason = f"would have retried shortly {reason}"
-            logit()
 
         perf_now = get_perf_now()
         cur_state = self._state
