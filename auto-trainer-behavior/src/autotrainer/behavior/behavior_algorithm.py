@@ -1242,6 +1242,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config
         if not cfg.pellet_delivery.is_enabled:
             return False
+        if cfg.pellet_delivery.deliver_when_in_cage:
+            if self._system_state in {SystemState.cage, SystemState.tunnel}:
+                if self.is_pellet_recently_seen(use_any_cam=True):
+                    return True
+                return False
         if not (self._is_in_session and self._capture_status == CaptureProcessStatus.RECORDING):
             return False
         if self._head_fixation_enabled and cfg.head_clamp.wait_engaged_before_send_pellet:
@@ -1358,6 +1363,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             }
         ):
             return False
+        if self._active_config.pellet_delivery.deliver_when_in_cage:
+            return self._system_state == SystemState.intersession
         if not self._is_in_session:
             return True
         if self._head_fixation_enabled and self._active_config.head_clamp.wait_engaged_before_send_pellet:
