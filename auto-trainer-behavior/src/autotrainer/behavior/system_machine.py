@@ -166,6 +166,7 @@ class SystemMachine(StateMachine):
         pellet_events.state_changed += self._on_pellet_state_changed
         pellet_events.pellet_loading += self._on_pellet_loading
         pellet_events.pellet_loaded += self._on_pellet_loaded
+        pellet_events.pellet_sending += self._on_pellet_sending
         pellet_events.pellet_sent += self._on_pellet_sent
         pellet_events.pellet_load_failed += self._on_pellet_load_failed
         pellet_events.pellet_released += self._on_pellet_released
@@ -272,6 +273,12 @@ class SystemMachine(StateMachine):
         batch_list = self._batch_project_sessions_list
         logger.verbose("enter_intersession: reason=%s, n_batch=%s, in-session=%s",
                        reason, len(batch_list), algo.is_in_session)
+
+        # ensure goes to retract for intersession, if is/was still monitoring (or sending):
+        if self._pellet_machine.state in {PelletState.monitoring, PelletState.sending}:
+            with algo.set_allow_reentrant(True):
+                self._pellet_machine.move_retract()
+
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
             logger.verbose("setting project_info to intersession and inference")
@@ -301,10 +308,6 @@ class SystemMachine(StateMachine):
                 )
             self._batch_project_sessions_finished = 0
             wait_stop_recorded = True
-
-        if self._pellet_machine.state in {PelletState.monitoring, PelletState.covering, PelletState.sending}:
-            with algo.set_allow_reentrant(True):
-                self._pellet_machine.move_retract()
 
         logger.info("processing session project %s", project_info)
         algo.session_processing_starting()
@@ -443,12 +446,16 @@ class SystemMachine(StateMachine):
         if cur_project is not None:
             cur_project = cur_project.to_local_value()
             logger.verbose("capture_ended: project=%s", vars(cur_project))
+
         algo = self._algorithm
-        # not sure necessary:
-        if self._pellet_machine.state == PelletState.monitoring and algo.head_fixation_enabled:
+        if algo.active_config.pellet_delivery.deliver_when_in_cage:
+            # if deliver-when-in-cage then stays at current position, whatever it is,
+            # it will be resumed/continued once intersession finishes (and inference comes back live).
+            pass
+        elif self._pellet_machine.state == PelletState.monitoring:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
-        #
+
         can_perform_analysis = (
             cur_project is not None
             and algo.can_perform_intersession_analysis()
@@ -569,7 +576,6 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_headbar_pressure_monitor_property_changed(self, name: str, value, _):
-
         if name == HeadbarPressureMonitor.IS_ENGAGED_PROPERTY:
             self._event_manager.post_event_content(
                 ApiEventKind.headFixationForceDetectorChanged, data=dict(is_enabled=value))
@@ -767,6 +773,8 @@ class SystemMachine(StateMachine):
         pellet_m = self._pellet_machine
         if pellet_m.covered_state is False:  # already uncovered/released
             return
+        if not math.isfinite(project.t_pellet_delivered):  # wait pellet is delivered
+            return
         uncov_cfg = active_cfg.pellet_uncover
         min_y = math.inf
         max_y = -math.inf
@@ -777,11 +785,8 @@ class SystemMachine(StateMachine):
                     min_y = part_3d.y
                 if part_3d.y > max_y:
                     max_y = part_3d.y
-        perf_now = get_perf_now()  # response.perf_c  #
-        valid = (
-            max_y < uncov_cfg.min_y_dcs
-            and math.isfinite(project.t_pellet_delivered)
-        )
+        perf_now = get_perf_now()
+        valid = max_y < uncov_cfg.min_y_dcs
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
@@ -789,9 +794,13 @@ class SystemMachine(StateMachine):
             ctx.start_min_y = min_y
         elif not valid and prev_valid:
             logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
-        if not valid:
+        if valid:
+            if not math.isfinite(ctx.start_y_dcs_valid_perf_c):
+                ctx.start_y_dcs_valid_perf_c = perf_now
+        else:
             # as well, so that compare with minimum duration threshold give expected result
             ctx.start_y_dcs_valid_perf_c = perf_now
+
         ctx.y_dcs_valid = valid
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -1085,10 +1094,21 @@ class SystemMachine(StateMachine):
 
     def _on_pellet_state_changed(self, old_value, new_value):
         logger.verbose("pellet_state_changed: %s -> %s", old_value, new_value)
+        algo = self._algorithm
         if new_value == PelletState.monitoring:
-            self._consider_start_session(reason="pellet-monitoring")
+            if algo.is_in_session:
+                project = self._project_info
+                if project is not None:
+                    if not math.isfinite(project.t_pellet_delivered):
+                        project.t_pellet_delivered = algo.capture_status_age
+            else:
+                self._consider_start_session(reason="pellet-monitoring")
         elif new_value == PelletState.releasing:
-            self._algorithm.pellet_uncover_context.has_released = True
+            if algo.is_in_session:
+                algo.pellet_uncover_context.has_released = True
+
+    def _on_pellet_sending(self):
+        self._consider_start_session(reason="pellet-sending")
 
     def _on_pellet_sent(self, *, perf_c: float):
         self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
@@ -1157,7 +1177,7 @@ class SystemMachine(StateMachine):
             self._state == SystemState.tunnel
             and not algo.is_in_session
             and self._analysis.load_cell_monitor.is_engaged
-            and algo.pellet_recently_seen
+            and algo.is_pellet_recently_seen()
         ):
             logger.debug("Not good state")
             return

@@ -145,6 +145,8 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     def _before_send_pellet(self, *, force: bool=False):
+        algo = self._algorithm
+
         # check for auto-home when load+retract counts >= threshold:
         tot_count = self._load_retract_current_count
         trigger_count = DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME
@@ -153,22 +155,18 @@ class PelletMachine(StateMachine):
             logger.notice("Forcing a send_home to reset to limits due to load + retract "
                           "count greater-or-equal than threshold: %s vs %s", self._load_retract_current_count,
                           trigger_count)
-            self._event_manager.post_event_content(ApiEventKind.pelletHomeReset, data=dict(cycles=tot_count))
-            self._pellet_device.send_home()
             self._load_retract_current_count = 0
+            self._event_manager.post_event_content(ApiEventKind.pelletHomeReset, data=dict(cycles=tot_count))
+            with algo.set_allow_reentrant(True):
+                self._pellet_device.send_home()
 
         # apply the pellet cover or release here right before sending
-        algo = self._algorithm
         # use can_cover which checks for both cover_pellet_enabled AND pellet_delivery_enabled:
-        if algo.can_cover_pellet():
-            if self._covered_state is not True:
-                with algo.set_allow_reentrant(True):
-                    self.cover_pellet()
-        elif algo.can_release_pellet(pellet_state=self._state):
-            # maybe auto-behavior/commands are not enabled given system/app not in good mode
-            if self._covered_state is not False:
-                with algo.set_allow_reentrant(True):
-                    self.release_pellet()
+        action, reason = self._check_cover_or_release()
+        if action is not None:
+            logger.debug("doing %s prior to pellet-send", reason)
+            with algo.set_allow_reentrant(True):
+                action()
         token = self._pellet_device.send_pellet()
         if token is None:
             raise PelletDeviceCommandFailed
@@ -369,8 +367,6 @@ class PelletMachine(StateMachine):
                                   caller=caller, is_from_inference=is_from_inference)
 
     def _check_cover_or_release(self):
-        if not self._algorithm.is_pellet_recently_seen():
-            return None, None
         action = reason = None
         can_release = self.can_release_pellet()
         can_cover = self.can_cover_pellet()
@@ -384,15 +380,20 @@ class PelletMachine(StateMachine):
                 action = self.cover_pellet
         return action, reason
 
-    def _check_send_or_retract_or_cover_or_release(self):
-        if self.can_send_pellet():
-            action = self.send_pellet
-            reason = f"send_pellet_when_{self._state}"
-        elif self._algorithm.can_retract_pellet(pellet_state=self._state):
+    def _check_retract_or_cover_or_release(self):
+        if self._algorithm.can_retract_pellet(pellet_state=self._state):
             action = self.move_retract
             reason = f"move_retract_when_{self._state}"
         else:
             action, reason = self._check_cover_or_release()
+        return action, reason
+
+    def _check_send_or_retract_or_cover_or_release(self):
+        if self.can_send_pellet():
+            action = self.send_pellet
+            reason = f"send_pellet_when_{self._state}"
+        else:
+            action, reason = self._check_retract_or_cover_or_release()
         return action, reason
 
     def __try_next_state(
@@ -441,28 +442,24 @@ class PelletMachine(StateMachine):
 
         if can_use_command:  # wait no move in progress
             pellet_seen_all = all_cams_ctx.get_part_seen(SceneElement.Pellet)
-            triangle_seen_all = all_cams_ctx.get_part_seen(SceneElement.Triangle)
+            triangle_seen_any = any_cams_ctx.get_part_seen(SceneElement.Triangle)
             pellet_seen_any = any_cams_ctx.get_part_seen(SceneElement.Pellet)
 
             if pellet_seen_all:
                 self._check_notify_pellet_loaded_ok(perf_now=perf_now)
-            elif triangle_seen_all and not pellet_seen_any:
+
+            elif triangle_seen_any and not pellet_seen_any:
                 self._check_notify_pellet_load_failed(perf_now=perf_now)
 
-        if cur_state == PelletState.loading:
+        if cur_state in {PelletState.loading, PelletState.retract, PelletState.home}:
             if not can_use_command:
                 # always wait the previous movement is finished
                 return
-            # this is going to be called at end of intersession after going to detection phase,
-            # basically when inference is back to live
             if self.can_load_pellet(use_any_cam=True):
-                reason = "reload_pellet_when_loading"
+                reason = f"load_pellet_when_{cur_state}"
                 def action():
                     self.load_pellet(use_any_cam=True)
             else:
-                # current state is loaded,
-                # even if pellet is not seen, send it to deliver,
-                # the end position of load-pellet sequence might not be (entirely or on all units) visible by camera,
                 action, reason = self._check_send_or_retract_or_cover_or_release()
 
         elif cur_state == PelletState.sending:
@@ -482,16 +479,6 @@ class PelletMachine(StateMachine):
             # then the state will remains after, until another command/trigger/state-change is executed.
             action, reason = self._check_send_or_retract_or_cover_or_release()
 
-        elif cur_state in {PelletState.retract, PelletState.home}:
-            if not can_use_command:
-                return
-            if self.can_load_pellet(use_any_cam=True):
-                reason = "can_load_pellet_when_retract_or_home"
-                def action():
-                    self.load_pellet(use_any_cam=True)
-            else:
-                action, reason = self._check_send_or_retract_or_cover_or_release()
-
         elif cur_state == PelletState.monitoring:
             if not can_use_command:
                 return
@@ -499,10 +486,8 @@ class PelletMachine(StateMachine):
                 reason = "can_load_pellet_when_monitoring"
                 action = self.load_pellet
             else:
-                action, reason = self._check_cover_or_release()
-                if action is None and algo.can_retract_pellet(pellet_state=cur_state):
-                    reason = "retract_when_monitor"
-                    action = self.move_retract
+                action, reason = self._check_retract_or_cover_or_release()
+
         else:
             logger.warning("unknown state: %s", cur_state)
             action = None

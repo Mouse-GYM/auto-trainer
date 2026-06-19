@@ -62,6 +62,7 @@ class PelletUncoverContext:
         self.start_y_dcs_valid_perf_c = math.nan
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
+        # logger.verbose("can_uncover: p_now=%.2f self=%s cfg=%s", perf_now, self, cfg)
         return self.has_released or (
             self.y_dcs_valid
             and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
@@ -697,6 +698,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @property
     def head_fixation_enabled(self) -> bool:
+        """head fixation == autoclamp"""
         # NB: not saved in config
         return self._head_fixation_enabled
 
@@ -1329,11 +1331,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         if self._algo_paused:
             return False
         uncov_cfg = self._active_config.pellet_uncover
-        ctx = self._uncover_ctx
-        project = self._project_info
-        if project is not None and self.can_cover_pellet():
+        if self.can_cover_pellet():
+            ctx = self._uncover_ctx
             if self._is_in_session and pellet_state == PelletState.monitoring:
-                p_now = get_perf_now()  # self._parts_pres_ctx_any_cam.last_perf_c
+                p_now = get_perf_now()
                 return (
                         # this 1st condition might not be necessary anymore
                         self._capture_status == CaptureProcessStatus.RECORDING
