@@ -1407,7 +1407,7 @@ class MainWindow(QMainWindow):
                         do_sleep()
                 time.sleep(random.uniform(load_sleep, 2 * load_sleep))
                 print("loading pellet")
-                pellet_m.load_pellet(force=True)  # this basically simulate pellet dropped or eaten
+                pellet_m.load_pellet(reason="simulate", force=True)  # this basically simulate pellet dropped or eaten
                 do_sleep()
                 print("waiting pellet monitoring or retract")
                 while pellet_m.state not in {PelletState.monitoring, PelletState.retract}:

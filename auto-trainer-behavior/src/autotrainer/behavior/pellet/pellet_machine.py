@@ -1,5 +1,6 @@
 import math
 import os
+from functools import partial
 from typing import Callable, Optional, get_type_hints, Protocol
 
 from transitions import Machine
@@ -131,9 +132,9 @@ class PelletMachine(StateMachine):
         self._api_status_token = self._token_move_home = token
         self.post_event_content(ApiEventKind.pelletHomeBegin, data=dict(context=token))
 
-    def _before_load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
-        del force, use_any_cam  # only used for condition can_load_pellet
-        logger.verbose("before_load_pellet")
+    def _before_load_pellet(self, *, reason: str="NA", force: bool=False, use_any_cam: bool=False):
+        logger.verbose("before_load_pellet: force=%s use_any_cam=%s reason=%s",
+                       force, use_any_cam, reason)
         token = self._pellet_device.load_pellet()
         if token is None:
             raise PelletDeviceCommandFailed
@@ -197,7 +198,7 @@ class PelletMachine(StateMachine):
             self._prev_can_home = can
         return can
 
-    def can_load_pellet(self, *, force: bool=False, use_any_cam: bool = False):
+    def can_load_pellet(self, *, reason: str="NA", force: bool=False, use_any_cam: bool = False):
         """Is more: *should* or *has to* load pellet"""
         can_use = self.can_use_pellet_command()
         can = force or (
@@ -446,7 +447,7 @@ class PelletMachine(StateMachine):
             if self.can_load_pellet(use_any_cam=True):
                 reason = f"load_pellet_when_{cur_state}"
                 def action():
-                    self.load_pellet(use_any_cam=True)
+                    self.load_pellet(use_any_cam=True, reason=reason)
             else:
                 action, reason = self._check_send_or_retract_or_cover_or_release()
 
@@ -472,7 +473,7 @@ class PelletMachine(StateMachine):
                 return
             if self.can_load_pellet():
                 reason = "can_load_pellet_when_monitoring"
-                action = self.load_pellet
+                action = partial(self.load_pellet, reason=reason)
             else:
                 action, reason = self._check_retract_or_cover_or_release()
 
@@ -510,10 +511,10 @@ class PelletMachine(StateMachine):
     def may_move_retract(self):
         """May move retract"""
 
-    def load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
+    def load_pellet(self, *, reason: str="NA", force: bool=False, use_any_cam: bool=False):
         """Load pellet"""
 
-    def may_load_pellet(self, *, force: bool=False, use_any_cam: bool=False):
+    def may_load_pellet(self, *, reason: str="NA", force: bool=False, use_any_cam: bool=False):
         """May load pellet"""
 
     def send_pellet(self, *, force: bool=False):

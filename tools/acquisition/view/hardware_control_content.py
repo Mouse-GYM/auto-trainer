@@ -201,7 +201,8 @@ class HardwareControlContent(ContentWidget):
         button = self._load_button = QPushButton("Load")
         add_cmd_widget(button)
         button.clicked.connect(
-            lambda: log_hardware_cmd(partial(pellet_machine.load_pellet, force=True)))
+            lambda: log_hardware_cmd(
+                partial(pellet_machine.load_pellet, force=True, reason="manual_button")))
         button_layout.addWidget(button)
         #
         button = self._send_button = QPushButton("Send")
