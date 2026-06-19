@@ -1,8 +1,12 @@
+import datetime as dtm
 from unittest import mock
 
 import pytest
 
 from autotrainer.behavior.pellet import PelletState
+from tools.acquisition.model.app_model import AppModel
+
+from tools.acquisition.model.app_model_status import AppModelStatus
 from top_fixtures import MockSystemMachine
 
 
@@ -127,3 +131,64 @@ class TestEmergency(MockSystemMachine):
         # now:
         app_model.behavior.emergency_resume(source="user-button")
         assert not algo.algo_paused
+
+
+mid_day = dtm.datetime(2026,1,1, 12, 0)
+mid_night = dtm.datetime(2026, 1, 1, 0, 0)
+
+
+class TestColorLed:
+
+    @pytest.fixture()
+    def app_model(self, app_model) -> AppModel:
+        self._app_model = app_model
+        app_model.status = AppModelStatus.ACQUIRING  # force
+        fault_alarm = self.fault_alarm = app_model.analysis.system_fault_alarm
+        # ensure used as emergency condition:
+        fault_alarm.config.use = True
+        fault_alarm.config.is_emergency_condition = True
+        self.led_alarm_cfg = app_model.behavior.algorithm.active_config.led_alarm
+        alarm_mon = app_model.analysis.emergency_alarm_monitor
+        # force not use daemon, so that below set of is_engaged are all handled in this thread.
+        alarm_mon.use_daemon = False
+        alarm_mon.restart()
+        return app_model
+
+    @property
+    def get_color(self):
+        return self._app_model.behavior.get_led_color
+
+    def test_start_stop_same_day(self, app_model):
+        get_color = self.get_color
+        fault_alarm = self.fault_alarm
+        #
+        assert get_color(now=mid_day) == (0, 0, 0)
+        assert get_color(now=mid_night) == (0, 100, 0)
+        #
+        fault_alarm.is_engaged = True
+        assert get_color(now=mid_day) == (100, 0, 0)
+        assert get_color(now=mid_night) == (100, 0, 0)
+        #
+        fault_alarm.config.is_emergency_condition = False
+        fault_alarm.property_changed(fault_alarm.CONFIG, fault_alarm.config, None)
+        assert get_color(now=mid_day) == (0, 0, 0)
+        assert get_color(now=mid_night) == (100, 100, 0)
+
+    def test_start_stop_not_same_day(self, app_model: AppModel):
+        get_color = self.get_color
+        fault_alarm = self.fault_alarm
+        #
+        self.led_alarm_cfg.start_ignore_hour = dtm.time(22, 0)
+        self.led_alarm_cfg.stop_ignore_hour = dtm.time(10, 0)
+        #
+        assert get_color(now=mid_night) == (0, 0, 0)
+        assert get_color(now=mid_day) == (0, 100, 0)
+        #
+        fault_alarm.is_engaged = True
+        assert get_color(now=mid_day) == (100, 0, 0)
+        assert get_color(now=mid_night) == (100, 0, 0)
+        #
+        fault_alarm.config.is_emergency_condition = False
+        fault_alarm.property_changed(fault_alarm.CONFIG, fault_alarm.config, None)
+        assert get_color(now=mid_night) == (0, 0, 0)
+        assert get_color(now=mid_day) == (100, 100, 0)

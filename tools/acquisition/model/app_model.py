@@ -43,6 +43,7 @@ from autotrainer.core import (
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
+from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
@@ -417,16 +418,17 @@ class AppModel(ObservableObject):
         analysis.watchdog_monitor.property_changed += self._on_watchdog_property_changed
         analysis.autoclamp_evasion_detector.property_changed += self._on_autoclamp_evasion_property_changed
 
-        self._timer_send_status = no_op_timer
+        self._timer_one_minute_repeat = no_op_timer
 
-        def send_system_status_and_reschedule():
+        def one_minute_timer_handle_and_reschedule():
+            self._update_led_color()
             self._send_api_system_status()
             delay = 60
-            timer = self._timer_send_status = make_daemon_timer(delay, send_system_status_and_reschedule)
+            timer = self._timer_one_minute_repeat = make_daemon_timer(delay, one_minute_timer_handle_and_reschedule)
             timer.start()
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
 
-        send_system_status_and_reschedule()
+        one_minute_timer_handle_and_reschedule()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
@@ -1531,7 +1533,7 @@ class AppModel(ObservableObject):
         logger.debug("AppModel.on_close")
 
         for timer in (
-                self._timer_send_status,
+                self._timer_one_minute_repeat,
                 self._timer_recording_age_enough,
                 self._timer_daily,
         ):
@@ -1692,20 +1694,9 @@ class AppModel(ObservableObject):
             self._refresh_cage_clean_data()
 
     def _update_led_color(self):
-        alarm_mon = self._analysis.emergency_alarm_monitor
-        if alarm_mon.is_engaged:
-            color = (100, 0, 0)  # red
-        else:
-            is_warn = any(
-                det.is_engaged and det.config.use and not det.config.is_emergency_condition
-                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
-            )
-            color = (100, 100, 0) if is_warn else (0, 100, 0)
-            # yellow or green
+        color = self._behavior.get_led_color()
         cur_led = self._hardware.color_led
-        if cur_led is None or (
-            color != (cur_led.red, cur_led.green, cur_led.blue)
-        ):
+        if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
             self._hardware.set_color_led(*color)
 
     def _on_alarm_monitor_property_changed(self, name, value, _):
@@ -2001,7 +1992,8 @@ class AppModel(ObservableObject):
         out = info.copy()
         out["configuration"] = asdict(configuration)
         with open(file_name + ".json", "w") as file:
-            json.dump(out, file)
+            json.dump(out, file, cls=SystemConfigurationJSONEncoder)
+
         out = info.copy()
         out["configuration"] = configuration
         with open(file_name + ".yaml", "w") as file:
@@ -2270,9 +2262,11 @@ class AppModel(ObservableObject):
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
+        self._update_led_color()
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
+        self._update_led_color()
 
     # pellet machine events
 
