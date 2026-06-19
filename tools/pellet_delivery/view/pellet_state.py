@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor
 from autotrainer.core import MessageHandler, get_verbose_logger
 from autotrainer.device import ColorLed
 from autotrainer.pyside import CardWidget, StatusIcon, QSwitch
+from autotrainer.pyside.content_widget import invoke_method
 from tools.pellet_delivery.model.app_model import AppModel
 
 
@@ -115,6 +116,7 @@ class PelletStateWidget(QWidget):
             col_led = ColorLed(red=0, green=0, blue=0)
         # convert to 0->255
         rgb = tuple(round(v * 2.55) for v in (col_led.red, col_led.green, col_led.blue))
+        logger.verbose("refreshing color led: %s", rgb)
         for c, w in zip(rgb, self._leds_widgets):
             w.setText(f"{c}")
         checkbox = self._color_led_widget
@@ -158,6 +160,7 @@ class PelletStateWidget(QWidget):
         """
         )
 
+    @invoke_method
     def _model_property_changed(self, name: str, value, _old_value):
         app_model = self._app_model
         if name == "is_connected":
