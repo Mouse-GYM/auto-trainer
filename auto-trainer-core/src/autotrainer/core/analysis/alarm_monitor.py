@@ -166,6 +166,6 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
 
     def _on_detector_property_changed(self, detector: AlarmDetector, name: str, value, old_value):
         logger.verbose("%s: %s=%r", detector.name, name, value)
-        if name == detector.IS_ENGAGED:
+        if name in (detector.IS_ENGAGED, detector.CONFIG):
             self.check_state()
         self.property_changed(self.ALARM_DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)

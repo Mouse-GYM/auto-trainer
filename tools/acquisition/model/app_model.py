@@ -421,7 +421,7 @@ class AppModel(ObservableObject):
         self._timer_one_minute_repeat = no_op_timer
 
         def one_minute_timer_handle_and_reschedule():
-            self._update_led_color(force_alarm=self._behavior.algorithm.algo_paused)
+            self._update_led_color()
             self._send_api_system_status()
             delay = 60
             timer = self._timer_one_minute_repeat = make_daemon_timer(delay, one_minute_timer_handle_and_reschedule)
@@ -1693,27 +1693,8 @@ class AppModel(ObservableObject):
         elif name == prefs.CAGE_CLEAN_PREVIOUS_DAY:
             self._refresh_cage_clean_data()
 
-    def _update_led_color(self, *, force_alarm: bool=False):
-        cfg_led = self._behavior.algorithm.active_config.led_alarm
-        alarm_mon = self._analysis.emergency_alarm_monitor
-        if force_alarm or alarm_mon.is_engaged:
-            color = (100, 0, 0)  # red
-        else:
-            is_warn = any(
-                det.is_engaged and det.config.use and not det.config.is_emergency_condition
-                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
-            )
-            color = (100, 100, 0) if is_warn else (0, 100, 0)
-            # yellow or green
-            cur_time = datetime.now().time()
-            start, stop = cfg_led.start_ignore_hour, cfg_led.stop_ignore_hour
-            in_ignore_window = (
-                (start <= cur_time <= stop) if start < stop
-                else (cur_time >= start or cur_time <= stop)
-            )
-            if in_ignore_window:
-                color = (0, 0, 0)
-
+    def _update_led_color(self):
+        color = self._behavior.get_led_color()
         cur_led = self._hardware.color_led
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
             self._hardware.set_color_led(*color)
@@ -2281,7 +2262,7 @@ class AppModel(ObservableObject):
     def _on_emergency_stopped(self, source: str):
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._update_led_color(force_alarm=True)
+        self._update_led_color()
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
