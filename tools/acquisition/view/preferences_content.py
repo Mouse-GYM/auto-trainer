@@ -261,6 +261,18 @@ class PreferencesContent(QWidget):
         toggle.stateChanged.connect(deliver_pellet_state_changed)
         cur_row += 1
         #
+        left_grid_layout.addWidget(QLabel("Deliver When In Cage"), cur_row, cur_col)
+        toggle = QSwitch()
+        toggle.setChecked(algo.active_config.pellet_delivery.deliver_when_in_cage)
+        add_enabled_state(
+            lambda t=toggle: t.setEnabled(self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()))
+        left_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
+        def deliver_when_in_cage_changed(x: int):
+            enabled = x != 0
+            algo.active_config.pellet_delivery.deliver_when_in_cage = enabled
+        toggle.stateChanged.connect(deliver_when_in_cage_changed)
+        cur_row += 1
+
         left_grid_layout.addWidget(QLabel("Pellet Send Wait Delay"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         spinbox.setToolTip("Delay before send-pellet after start-recording")
