@@ -1,17 +1,12 @@
-import copy
 import dataclasses
-import multiprocessing
+from datetime import datetime
 from typing import Optional, Callable
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntersessionState
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
-from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
-from autotrainer.behavior.state_machine import StateMachine
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
-from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
-from autotrainer.core.configuration.behavior_configuration import ShiftXYZHandlerConfig
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -256,3 +251,29 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         self._source_emergency = None
         post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         self.emergency_resumed(source)
+
+    def get_led_color(self, *, now: Optional[datetime]=None):
+        if now is None:
+            now = datetime.now()
+        algo = self._system_machine.algorithm
+        cfg_led = algo.active_config.led_alarm
+        alarm_mon = self._analysis.emergency_alarm_monitor
+        if alarm_mon.is_engaged or algo.algo_paused:
+            color = (100, 0, 0)  # red
+        else:
+            is_warn = any(
+                det.is_engaged and det.config.use and not det.config.is_emergency_condition
+                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
+            )
+            color = (100, 100, 0) if is_warn else (0, 100, 0)
+            # yellow or green
+            cur_time = now.time()
+            start, stop = cfg_led.start_ignore_hour, cfg_led.stop_ignore_hour
+            in_ignore_window = (
+                (start <= cur_time <= stop)
+                if start < stop
+                else (cur_time >= start or cur_time <= stop)
+            )
+            if in_ignore_window:
+                color = (0, 0, 0)
+        return color

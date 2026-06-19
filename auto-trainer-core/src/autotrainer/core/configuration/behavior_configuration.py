@@ -1,6 +1,6 @@
 import dataclasses
+import datetime
 import enum
-from datetime import date
 from dataclasses import dataclass, field
 from typing import Type, Optional, Dict
 from typing_extensions import Self
@@ -217,6 +217,13 @@ class CageCleaningConfig:
 
 
 @dataclass
+class LEDAlarmConfig:
+
+    start_ignore_hour: datetime.time = datetime.time(10, 0)
+    stop_ignore_hour: datetime.time = datetime.time(20, 0)
+
+
+@dataclass
 class _BehaviorConfiguration:
     pellet_delivery: PelletDeliveryConfiguration = field(default_factory=PelletDeliveryConfiguration)
     pellet_uncover: PelletUncoverConfiguration = field(default_factory=PelletUncoverConfiguration)
@@ -235,6 +242,7 @@ class _BehaviorConfiguration:
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
     autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
+    led_alarm: LEDAlarmConfig = field(default_factory=LEDAlarmConfig)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -315,6 +323,7 @@ _tag_2_cls = dict(
     AnimalThrashAlarmConfig=AnimalThrashAlarmConfig,
     PresenceInCageAlarmConfig=PresenceInCageAlarmConfig,
     DeviceCommAlarmConfig=DeviceCommAlarmConfig,
+    LEDAlarmConfig=LEDAlarmConfig,
 )
 
 
