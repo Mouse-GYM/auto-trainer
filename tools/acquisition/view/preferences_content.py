@@ -261,17 +261,17 @@ class PreferencesContent(QWidget):
         toggle.stateChanged.connect(deliver_pellet_state_changed)
         cur_row += 1
         #
-        left_grid_layout.addWidget(QLabel("Deliver When In Cage"), cur_row, cur_col)
+        left_grid_layout.addWidget(QLabel("Retract Enabled"), cur_row, cur_col)
         toggle = QSwitch()
-        toggle.setChecked(algo.active_config.pellet_delivery.deliver_when_in_cage)
+        toggle.setChecked(algo.active_config.pellet_delivery.retract_enabled)
         add_enabled_state(
             lambda t=toggle: t.setEnabled(self._deliver_pellet_toggle.isEnabled() and self._deliver_pellet_toggle.isChecked()))
         left_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def deliver_when_in_cage_changed(x: int):
+        def retract_enabled_changed(x: int):
             enabled = x != 0
-            algo.active_config.pellet_delivery.deliver_when_in_cage = enabled
+            algo.active_config.pellet_delivery.retract_enabled = enabled
             refresh_enabled_states()
-        toggle.stateChanged.connect(deliver_when_in_cage_changed)
+        toggle.stateChanged.connect(retract_enabled_changed)
         cur_row += 1
 
         left_grid_layout.addWidget(QLabel("Pellet Send Wait Delay"), cur_row, cur_col)
@@ -283,7 +283,7 @@ class PreferencesContent(QWidget):
             s.setEnabled(
                 self._deliver_pellet_toggle.isEnabled()
                 and self._deliver_pellet_toggle.isChecked()
-                and not algo.active_config.pellet_delivery.deliver_when_in_cage))
+                and algo.active_config.pellet_delivery.retract_enabled))
         def on_pellet_send_delay_changed(value: float):
             algo.active_config.pellet_delivery.pellet_send_wait_delay = value
         spinbox.valueChanged.connect(on_pellet_send_delay_changed)
@@ -553,7 +553,7 @@ class PreferencesContent(QWidget):
         toggle.setChecked(algo.active_config.head_clamp.wait_engaged_before_send_pellet)
         add_enabled_state(lambda t=toggle:
             t.setEnabled(auto_clamp_enabled_toggle.isChecked()
-                         and not algo.active_config.pellet_delivery.deliver_when_in_cage))
+                         and algo.active_config.pellet_delivery.retract_enabled))
         def update_wait_engaged_before_send_pellet(value):
             toggled = value != 0
             algo.active_config.head_clamp.wait_engaged_before_send_pellet = toggled

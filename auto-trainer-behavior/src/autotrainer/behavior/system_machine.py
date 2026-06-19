@@ -448,8 +448,8 @@ class SystemMachine(StateMachine):
             logger.verbose("capture_ended: project=%s", vars(cur_project))
 
         algo = self._algorithm
-        if algo.active_config.pellet_delivery.deliver_when_in_cage:
-            # if deliver-when-in-cage then stays at current position, whatever it is,
+        if not algo.active_config.pellet_delivery.retract_enabled:
+            # then stays at current position, whatever it is,
             # it will be resumed/continued once intersession finishes (and inference comes back live).
             pass
         elif self._pellet_machine.state == PelletState.monitoring:

@@ -1244,7 +1244,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config
         if not cfg.pellet_delivery.is_enabled:
             return False
-        if cfg.pellet_delivery.deliver_when_in_cage:
+        if not cfg.pellet_delivery.retract_enabled:
             if self._system_state in {SystemState.cage, SystemState.tunnel}:
                 if self.is_pellet_recently_seen(use_any_cam=True):
                     return True
@@ -1363,7 +1363,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             PelletState.retract,  # prevent executing the command again and again and..
         }:
             return False
-        if self._active_config.pellet_delivery.deliver_when_in_cage:
+        if not self._active_config.pellet_delivery.retract_enabled:
             return self._system_state == SystemState.intersession
         if not self._is_in_session:
             return True
