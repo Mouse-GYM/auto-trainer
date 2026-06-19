@@ -1309,8 +1309,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
-                                      perf_now=perf_now)
+        need_load = self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
+                                           perf_now=perf_now)
+        if need_load:
+            if self._system_state == SystemState.intersession:
+                logger.verbose("refusing can_load_pellet given intersession")
+                return False
+            return True
+        return False
 
     @property
     def pellet_uncover_context(self) -> PelletUncoverContext:
