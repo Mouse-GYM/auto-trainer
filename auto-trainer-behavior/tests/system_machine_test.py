@@ -196,7 +196,7 @@ def test_intersession_enabled(mock_system, machine):
     # first pellet-seen make the pellet to be covered:
     assert mock_system.pellet_state_trans == [
         PelletState.covering,
-        PelletState.monitoring,
+        PelletState.retract,
     ]
     mock_system.pellet_state_trans.clear()
     assert pellet_m._api_status_token is not None  # but we wait the cover ack
@@ -209,9 +209,10 @@ def test_intersession_enabled(mock_system, machine):
     assert machine.state == SystemState.tunnel
     assert algo.system_state == machine.state
     mock_system.mock_pellet_ack(until_none=True)
-    assert pellet_m.state == PelletState.monitoring
+    assert pellet_m.state == PelletState.retract
 
     mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, ack_pellet=True)
+    mock_system.mock_pellet_ack(until_none=True)
 
     assert pellet_m.state == PelletState.monitoring
 
@@ -228,7 +229,6 @@ def test_intersession_enabled(mock_system, machine):
         SystemState.intersession,
     ]
     assert mock_system.pellet_state_trans == [
-        PelletState.retract,
         PelletState.sending,
         PelletState.monitoring,
         PelletState.retract,
