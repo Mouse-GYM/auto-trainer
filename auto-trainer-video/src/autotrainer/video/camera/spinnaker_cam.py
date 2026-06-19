@@ -276,8 +276,8 @@ class SpinCam(CameraBase):
         # exposure first:
         self._set_bounded_float_property_node(cam.ExposureTime, self._exposure)
         # then FPS:
-        cam.AcquisitionFrameRateEnable.SetValue(True)
-        cam.AcquisitionFrameRate.SetValue(self._fps)
+        self._set_bounded_bool_property_node(cam.AcquisitionFrameRateEnable, True)
+        self._set_bounded_int_property_node(cam.AcquisitionFrameRate, self._fps)
 
         # binning first
         self._set_bounded_int_property_node(cam.BinningHorizontal, self._horizontal_binning)
