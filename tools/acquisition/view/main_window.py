@@ -1332,12 +1332,13 @@ class MainWindow(QMainWindow):
         n_sessions: int = 1,
         n_trials: int = 1,
         step_sleep: float = 0.2,
-        monitor_sleep: float = 0.75,
-        load_sleep: float = 0.75,
-        sess_sleep: float = 0.75,
+        monitor_sleep: float = 0.5,
+        load_sleep: float = 0.25,
+        sess_sleep: float = 0.5,
         rand_mouse_seen: float = 1,
         rand_hands_near_pellet: float = 1,
         rand_headfix_trigger = 0.5,
+        wait_released: bool=True,
         print: Callable[[str], None] = lambda s: logger.info(s),  # for interactive logs output
     ):
         app = self._app_model
@@ -1365,7 +1366,7 @@ class MainWindow(QMainWindow):
                     # self.force_headbar_detector_action.setChecked(True)
                     set_headfix = True
                     do_sleep()
-                    for _ in range(random.randint(1, 4)):
+                    for _ in range(random.randint(1, 3)):
                         print("setting headfix trigger")
                         # self.force_headbar_detector_action.toggle()
                         self.force_headbar_detector_action.trigger()
@@ -1407,6 +1408,18 @@ class MainWindow(QMainWindow):
                             do_sleep()
                             algo.update_mouse_seen()
                         do_sleep()
+                if wait_released:
+                    print("waiting released")
+                    t_end = time.perf_counter() + 3
+                    while True:
+                        if pellet_m.covered_state is False:
+                            print("is released")
+                            break
+                        if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
+                            return
+                        if time.perf_counter() > t_end:
+                            break
+                        time.sleep(0.1)
                 time.sleep(random.uniform(load_sleep, 2 * load_sleep))
                 print("loading pellet")
                 pellet_m.load_pellet(reason="simulate", force=True)  # this basically simulate pellet dropped or eaten
