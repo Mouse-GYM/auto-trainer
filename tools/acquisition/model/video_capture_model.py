@@ -9,6 +9,7 @@ from multiprocessing.sharedctypes import (
     SynchronizedString,
     Synchronized,
 )
+from multiprocessing.synchronize import Semaphore as Semaphoretype
 from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
 from multiprocessing import synchronize
 from threading import Event
@@ -78,6 +79,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         presence_detection: Optional[PresenceDetectionAttrs] = None,
         synced_cam_recording: Optional[Synchronized] = None,
         synced_cam_frame_index: Optional[Synchronized] = None,
+        record_stop_sema: Optional[Semaphoretype] = None,
     ):
         super().__init__()
 
@@ -95,6 +97,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._presence_detection = presence_detection
         self._synced_cam_recording = synced_cam_recording
         self._synced_cam_frame_index = synced_cam_frame_index
+        self._record_stop_sema = record_stop_sema
 
         self._camera_source: CaptureCameraAttrs = CaptureCameraAttrs(name="", url="")
         self._camera_properties = {}
@@ -354,6 +357,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                 watchdog_perf_c=self._watchdog_capture_perf_c,
                 synced_cam_record_enabled=self._synced_cam_recording,
                 synced_cam_frame_index=self._synced_cam_frame_index,
+                record_stop_sema=self._record_stop_sema,
             )
 
             rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1

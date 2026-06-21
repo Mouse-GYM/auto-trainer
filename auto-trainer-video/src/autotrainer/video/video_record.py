@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import math
-import multiprocessing
-import os
-import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
@@ -79,6 +77,8 @@ class VideoRecord(Thread):
         self,
         properties: VideoRecordProperties,
         input_queue: Queue,
+        *,
+        record_stop_sema: Optional[SemaphoreType] = None,
     ):
         super().__init__(name=properties.name, daemon=True)
         self._project_info = properties.project_info
@@ -91,6 +91,7 @@ class VideoRecord(Thread):
         self._image_interval = properties.image_interval
 
         self._input_queue: Queue = input_queue
+        self._record_stop_sema = record_stop_sema
 
         self._is_running = True
 
@@ -149,6 +150,7 @@ class VideoRecord(Thread):
         prev_perf_now = prev_frame_when = None
         tot_written = 0
         consecutive_failures = 0
+        record_stop_sema = self._record_stop_sema
 
         while self._is_running:
 
@@ -166,6 +168,9 @@ class VideoRecord(Thread):
                     logger.info("Closed video file: tot frames written: %s ; last_perf_now=%s",
                                 tot_written, prev_perf_now)
                     tot_written = 0
+                    if record_stop_sema is not None:
+                        record_stop_sema.release()
+                        logger.verbose("released record_stop_sema: %s", record_stop_sema)
                     continue
 
                 for frame_id, frame, frame_when, frame_perf_now in queue_list:

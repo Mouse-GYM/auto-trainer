@@ -1,9 +1,11 @@
+import math
 import multiprocessing
 import queue
 import threading
 import time
 from itertools import chain
 from multiprocessing import synchronize
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from typing import Tuple, Optional, Dict, List
 
@@ -79,7 +81,8 @@ class OfflineInputProcess:
         frames_per_cam: int,
         nr_cams: int,
         msg_queue: multiprocessing.Queue,
-        event_cb_ack: multiprocessing.Event,
+        event_cb_ack: multiprocessing.synchronize.Event,
+        record_stop_sema: Optional[SemaphoreType] = None,
     ):
         self._cur_project_info: Optional[ProjectInfo] = None
         self._live_requested = False
@@ -90,6 +93,7 @@ class OfflineInputProcess:
         self._frames_per_batch = frames_per_cam * nr_cams
         self._msg_queue = msg_queue
         self._stop_recorded = stop_recorded
+        self._record_stop_sema = record_stop_sema
         self._event_cb_ack = event_cb_ack
         # NB: using 3 entire different frame buffers,
         # to allow the consumer/reader (pose itself) to process 1 such buffer,
@@ -116,6 +120,7 @@ class OfflineInputProcess:
         self._cur_cams_buffer_idx = [0] * self._nr_cams
         self._cur_thread: Optional[threading.Thread] = None
         self._empty_frame = numpy.zeros(self._frame_shape, dtype=numpy.uint8)
+        self._first_get_output_log_perf_c = -math.inf
 
     def _send_msg(self, kind, data=None):
         self._msg_queue.put((kind, data))
@@ -186,7 +191,10 @@ class OfflineInputProcess:
             # offline detection takes ~2-3 seconds to process.
             raise queue.Empty
         if self._cur_batch_nr == 0:
-            logger.verbose("first get_output")
+            p_now = get_perf_now()
+            if p_now - self._first_get_output_log_perf_c > 1:
+                logger.verbose("first get_output")
+                self._first_get_output_log_perf_c = p_now
         if self._live_requested or not self._sema_ready.acquire(timeout=timeout):
             raise queue.Empty
         cur = self._cur_buffer_r
@@ -335,13 +343,32 @@ class OfflineInputProcess:
             logger.debug("waiting stop_recorded on %s", self._stop_recorded)
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
-                    raise RuntimeError("timeout waiting for intersession stop_recorded event")
+                    logger.warning("timeout waiting for intersession stop_recorded event ; but continuing")
+                    # raise RuntimeError("timeout waiting for intersession stop_recorded event")
                 check_correct_status()
             self._stop_recorded.clear()
-            logger.notice("got stop_recorded")
+            logger.debug("got stop_recorded")
 
-        # This is to double ensure to not get "moov-atom-not-found" in stderr output from opencv library.
-        # NB: not anymore necessary since also controlling pose process + data_monitor with frames indices commands.
+        if wait_stop_recorded:
+            # same for the video files:
+            # This is to ensure to not get "moov-atom-not-found" in stderr output from opencv library.
+            record_stop_sema = self._record_stop_sema
+            if record_stop_sema is not None:
+                count_acquired = 0
+                t_before = time.perf_counter()
+                t_end = t_before + 10  # sometimes record thread might be ~long to flush/close,
+                # especially at high FPS.
+                logger.debug("waiting record_stop_sema %s ; t_end=%.1f", record_stop_sema, t_end)
+                while count_acquired < n_cams:
+                    to = t_end - time.perf_counter()
+                    if record_stop_sema.acquire(timeout=to):
+                        count_acquired += 1
+                    else:
+                        raise RuntimeError("timeout waiting for record_stop_sema=%s timeout=%.2f now=%.2f",
+                                           record_stop_sema, to, time.perf_counter())
+                logger.verbose("acquired record_stop_sema=%s. waited=%.2f",
+                               record_stop_sema, time.perf_counter() - t_before)
+
         videos_frame_count: Dict[int, int] = {}
         video_paths = [cams_paths[cdx][0] for cdx in range(n_cams)]
         logger.verbose("checking can open video files %s", video_paths)

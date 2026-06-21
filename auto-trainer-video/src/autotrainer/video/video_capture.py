@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from functools import partial
 from multiprocessing import Process
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedString
 from typing import Callable, Dict, Union, Optional, List, Tuple
 
@@ -135,6 +136,10 @@ class CaptureAttrs:
     record_prebuffer_duration: float = 0
 
     camera_index: int = -1
+
+    record_stop_sema: Optional[SemaphoreType] = None
+    """Use by record thread to signal when it has closed its video file,
+    so that offline reader thread can know when it can open the files for offline processing"""
 
 
 class VideoCapture(Process):
@@ -270,7 +275,8 @@ class VideoCapture(Process):
             self._record_properties.frame_size = (camera.width, camera.height)
             self._record_properties.fps = camera.fps
 
-            vid_rec = self._record = VideoRecord(self._record_properties, rec_queue)
+            vid_rec = self._record = VideoRecord(
+                self._record_properties, rec_queue, record_stop_sema=self._attrs.record_stop_sema)
             vid_rec.start()
 
             det_attrs = self._attrs.presence_detection_attrs

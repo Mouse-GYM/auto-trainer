@@ -1,11 +1,13 @@
 import logging.config
-from multiprocessing.sharedctypes import Synchronized
 import queue
+import re
 import signal
 import threading
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue, synchronize
+from multiprocessing.sharedctypes import Synchronized
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from queue import Empty
 from typing import Optional, Dict
@@ -19,7 +21,6 @@ from autotrainer.core.logging import (
     make_log_dict_config,
     setup_logging,
     install_log_exception_hook,
-    get_multiprocess_log_queue,
 )
 from autotrainer.core.frame_index import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
@@ -85,6 +86,7 @@ class PoseProcess(Process):
         stop_recorded_event: synchronize.Event,
         offline_input_event_cb_ack: synchronize.Event,
         watchdog_perf_c: Synchronized,
+        record_stop_sema: Optional[SemaphoreType] = None,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -103,7 +105,6 @@ class PoseProcess(Process):
         )
         self._pose_model: PoseModel
         self._model_location = model_location
-
         self._live_input_queue = live_queue
         self._cmd_queue = cmd_queue
         self._cmd_queue_ack = cmd_queue_ack
@@ -112,15 +113,13 @@ class PoseProcess(Process):
         self._stop_recorded_event = stop_recorded_event
         self._offline_input_event_cb_ack = offline_input_event_cb_ack
         self._watchdog_perf_c = watchdog_perf_c
-
-        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
-                                         enable_log=False)
-
         self._mode = InferenceMode.Live
-        self._input_queue = self._live_input_queue
-
+        self._input_queue = live_queue
+        self._record_stop_sema = record_stop_sema
         self._process_live_when_ready = False
         self._is_running = True
+        self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
+                                         enable_log=False)
         #
 
     def _do_run(self, *, log_dict_config: Optional[Dict]):
@@ -175,6 +174,7 @@ class PoseProcess(Process):
             nr_cams=input_q.camera_count,
             msg_queue=self._msg_queue,
             event_cb_ack=self._offline_input_event_cb_ack,
+            record_stop_sema=self._record_stop_sema,
         )
 
         try:

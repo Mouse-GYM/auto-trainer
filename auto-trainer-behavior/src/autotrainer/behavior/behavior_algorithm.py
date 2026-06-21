@@ -177,6 +177,7 @@ class BehaviorAlgoStatus(str, enum.Enum):
 class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
+    session_starting_before_record_start: BehaviorAlgoEvents.session_starting_before_record_start
     session_starting: BehaviorAlgoEvents.session_starting
     session_capture_ending: BehaviorAlgoEvents.session_capture_ending
 
@@ -1150,6 +1151,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # ensure we look at their state on start:
         self._session_mouse_seen = False
         self._uncover_ctx.reset()  # always
+
+        self.session_starting_before_record_start()
 
         # this is what send the trigger the enable recording at camera level,
         # but must be done after calculate next session index !!

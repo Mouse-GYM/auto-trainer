@@ -7,6 +7,7 @@ import signal
 import threading
 import time
 from multiprocessing import synchronize
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
@@ -44,6 +45,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         pose_algorithm: PoseAlgorithm,
         *,
         calib_dir: Optional[Path] = None,
+        record_stop_sema: Optional[SemaphoreType] = None,
         mp_manager=None,
     ):
         super().__init__()
@@ -59,6 +61,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._notif_msg_queue = mp_ctx.Queue(maxsize=64)  # msg queue for messages from pose-process and from data-monitor process to main process
         self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
         self._data_monitor_cmd_ack_event = mp_ctx.Event()
+        self._record_stop_sema = record_stop_sema
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_segmentation_thread: Optional[Thread] = None
@@ -288,6 +291,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             stop_recorded_event=data_monitor_proc.stop_recorded,
             offline_input_event_cb_ack=self._mp_manager.Event(),
             watchdog_perf_c=self._pose_process_watchdog_perf_c,
+            record_stop_sema=self._record_stop_sema,
         )
         proc.start()
 

@@ -249,6 +249,7 @@ class BehaviorAlgoEvents:
     # NB: *assigned/defined* here,
     # but used as typehints in BehaviorAlgoProtocol below.
 
+    session_starting_before_record_start = EventHandler[Callable[[], None]]
     session_starting = EventHandler[Callable[[], None]]
     session_capture_ending = EventHandler[Callable[[RecordingEndingReason], None]]
 
@@ -324,6 +325,8 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
         """Reset the configuration to what it was when it was first loaded"""
 
     # 3) events:
+
+    session_starting_before_record_start: BehaviorAlgoEvents.session_starting_before_record_start
 
     session_starting: BehaviorAlgoEvents.session_starting
     """Emitted when a new trial recording starts"""
