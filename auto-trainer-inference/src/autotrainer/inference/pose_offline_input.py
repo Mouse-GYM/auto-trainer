@@ -14,7 +14,6 @@ import numpy
 import numpy as np
 
 from autotrainer.core import ProjectInfo, FrameIndexCategory, get_perf_now, get_verbose_logger
-from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.inference import InferenceMonitorDataMsg
 
 from autotrainer.inference.h5_tools import get_h5_frame_index, open_h5_file, close_h5_fhs

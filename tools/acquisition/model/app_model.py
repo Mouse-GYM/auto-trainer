@@ -304,7 +304,7 @@ class AppModel(ObservableObject):
         # this is used to sync the start record frame of both cameras:
         self._cams_record_enabled = mp_ctx.Value("b", False)
         self._cams_synced_frame_index = mp_ctx.Value("i", -1)
-        
+
         self._record_stop_sema = mp_ctx.Semaphore(0)
         # and this is used to notify the end of recording from the 2 camera video_record threads to the offline one,
         # so that the later doesn't try to open the video files, before they are finished written to and closed.
@@ -410,13 +410,14 @@ class AppModel(ObservableObject):
         inference.property_changed += self._on_inference_property_changed
         inference.pose_response_ready += self._on_pose_response_ready
         inference.detection_result_ready += self._on_detection_result_ready
+
         preferences.property_changed += self._on_preferences_property_changed
+
         algo = behavior_model.algorithm
         algo.property_changed += self._on_behavior_algo_property_changed
         algo.session_starting_before_record_start += self._on_session_starting_before_record_start
-        algo.session_starting += self._on_session_capture_starting
-
         algo.session_capture_ending += self._on_session_capture_ended
+
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
@@ -1759,9 +1760,6 @@ class AppModel(ObservableObject):
                 if not self._record_stop_sema.acquire(block=False):  # - 1
                     logger.critical("unexpected record_stop_sema value change, is video_record or offline unsync ?")
             logger.debug("record_stop_sema value=%s", self._record_stop_sema.get_value())
-
-    def _on_session_capture_starting(self):
-        pass
 
     def _on_session_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info

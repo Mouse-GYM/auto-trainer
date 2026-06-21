@@ -377,15 +377,15 @@ class VideoCapture(Process):
         frames_prebuffer_list: List[Tuple[numpy.ndarray, Union[int, float], float, float, int]] = []
         #                           frame, frame_when, time, perf_now, frame-idx
         def update_frames_prebuffer(f, fw, t, p, fidx):
-            idx = 0
+            idx = len(frames_prebuffer_list) - 1
             while True:
-                if (
-                    idx >= len(frames_prebuffer_list)
-                    or frame_perf_c - frames_prebuffer_list[idx][3] < attrs.record_prebuffer_duration
-                ):
+                # keep always more, for sync purpose, see primary_acquire below.
+                if idx <= 10:
                     break
-                idx += 1
-            del frames_prebuffer_list[:idx]
+                if frame_perf_c - frames_prebuffer_list[idx][3] >= attrs.record_prebuffer_duration:
+                    del frames_prebuffer_list[:idx - 10]  # keep more !
+                    break
+                idx -= 1
             frames_prebuffer_list.append((f, fw, t, p, fidx))
 
         # primary_acquire/release:
@@ -399,7 +399,7 @@ class VideoCapture(Process):
                 return
             if not is_primary:  # non-primary cams get synced via secondary_acquire()
                 return
-            target_idx = frame_idx - len(frames_prebuffer_list)
+            target_idx = frame_idx - len(frames_prebuffer_list) + 5  # see update_frames_prebuffer
             with prim_cam_record_enabled:  # acquire lock
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx
@@ -573,7 +573,7 @@ class VideoCapture(Process):
                         or cam_frame_id < 4
                     ):
                         logger.debug("got frame_id=%s frame_when=%.4f frame_perf=%.4f delay=%.4f",
-                                     cam_frame_id, when_secs, frame_perf_c, perf_now - frame_perf_c)
+                                     cam_frame_id, when_secs, frame_perf_c, frame_late_delay)
 
                 if img_q is not None:
                     # image queue goes to GUI video reader frame, currently FixedArrayQueue
@@ -599,18 +599,17 @@ class VideoCapture(Process):
                         synced_frame_idx = None
                     if record_start_stop_frame_idx is not None:
                         record_start_stop_frame_idx: int
-                        cut_idx = 0
+                        cut_idx = len(frames_prebuffer_list) - 1
                         # use the frame_id to be sure:
-                        while cut_idx < len(frames_prebuffer_list):
-                            if frames_prebuffer_list[cut_idx][-1] >= record_start_stop_frame_idx:
+                        while cut_idx >= 0:
+                            if frames_prebuffer_list[cut_idx][-1] < record_start_stop_frame_idx:
+                                logger.debug(
+                                    "cutting frames_prebuffer_list by %s ; frame_id=%s len(prebuff)=%s",
+                                    cut_idx, cam_frame_id, len(frames_prebuffer_list),
+                                )
+                                del frames_prebuffer_list[:cut_idx + 1]
                                 break
-                            cut_idx += 1
-                        if cut_idx > 0:
-                            logger.debug(
-                                "cutting frames_prebuffer_list by %s ; frame_id=%s len(prebuff)=%s",
-                                cut_idx, cam_frame_id, len(frames_prebuffer_list),
-                            )
-                            del frames_prebuffer_list[:cut_idx]
+                            cut_idx -= 1
                         #
                         first_frame_id = (
                             cam_frame_id if len(frames_prebuffer_list) == 0
