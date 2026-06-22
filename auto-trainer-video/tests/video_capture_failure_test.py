@@ -1,7 +1,6 @@
 import time
 from multiprocessing import Queue, Value, Array
 
-from autotrainer.video import CaptureCameraAttrs, CaptureAttrs, VideoCapture
 from autotrainer.core.capture import CaptureProcessStatus
 
 
@@ -16,26 +15,14 @@ def wait_for_status(status: Value, expected: CaptureProcessStatus, timeout: int)
     return elapsed <= timeout
 
 
-def test_video_capture_invalid_camera():
-    cmd_queue = Queue()
-    image_queue = Queue()
-    status = Value("i", CaptureProcessStatus.UNKNOWN)
-    frame = Value("i", 0)
-    errors = Array("c", bytes(512))
+def test_video_capture_invalid_camera(video_capture):
 
-    camera = CaptureCameraAttrs(name="test", url="spinnaker://000000")
+    assert video_capture._status.value == CaptureProcessStatus.INITIALIZED
 
-    attrs = CaptureAttrs(command_queue=cmd_queue, status=status, image_queue=image_queue, camera=camera,
-                         frame=frame, errors=errors)
+    assert len(video_capture._errors.value.decode()) == 0
 
-    process = VideoCapture(attrs)
+    video_capture.start()
 
-    assert status.value == CaptureProcessStatus.INITIALIZED
+    assert wait_for_status(video_capture._status, CaptureProcessStatus.FAILED, timeout=4)
 
-    assert len(errors.value.decode()) == 0
-
-    process.start()
-
-    assert wait_for_status(status, CaptureProcessStatus.FAILED, timeout=4)
-
-    assert len(errors.value.decode()) > 0
+    assert len(video_capture._errors.value.decode()) > 0

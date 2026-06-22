@@ -291,6 +291,7 @@ class VideoRecord(Thread):
             self._name, interval=self._interval_mode, allow_overwrite=True)
         logger.notice("<%s>: video record to %s", self.name, video_file)
 
+        Path(video_file).parent.mkdir(parents=True, exist_ok=True)
         vid_writer = cv2.VideoWriter(
             video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps, (self._width, self._height))
         if not vid_writer.isOpened():

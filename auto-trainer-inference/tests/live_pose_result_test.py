@@ -22,26 +22,11 @@ from autotrainer.inference import (
     pose_result_process,
 )
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-
+from top_fixtures import collect_log_queue_to_caplog
 
 frames_idc_online_no_recording = np.asarray([(-1, -1, -1), (-1, -1, -1)])
 
 zero_pose_data = np.zeros((2, 42, 3), dtype=float)
-
-
-def collect_log_queue_to_caplog(log_queue):
-    # Drain the queue after the process completes and inject into caplog
-    while not log_queue.empty():
-        record = log_queue.get()
-        logging.getLogger(record.name).handle(record)
-
-
-@pytest.fixture
-def capture_multiprocess_logs(caplog):
-    """Listens to a multiprocessing queue and forwards entries to caplog."""
-    log_queue = multiprocessing.Queue()
-    yield log_queue
-    collect_log_queue_to_caplog(log_queue)
 
 
 @pytest.fixture()

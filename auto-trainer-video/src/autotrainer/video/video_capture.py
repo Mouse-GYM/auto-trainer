@@ -406,8 +406,16 @@ class VideoCapture(Process):
                 return
             if not is_primary:  # non-primary cams get synced via secondary_acquire()
                 return
-            target_idx = frame_idx - len(frames_prebuffer_list) + _PREBUFFER_SYNC_OFFSET  # see update_frames_prebuffer
-            target_idx = min(target_idx, frame_idx)
+            target_idx = frame_idx
+            if enabled:
+                idx = len(frames_prebuffer_list) - 1
+                while idx >= 0:
+                    if perf_now - frames_prebuffer_list[idx][3] > attrs.record_prebuffer_duration:
+                        logger.debug("will use frames_prebuffer_list at %s for synced_frame_idx", idx)
+                        break
+                    idx -= 1
+                if len(frames_prebuffer_list) > 0:
+                    target_idx = frames_prebuffer_list[idx if idx >= 0 else 0][-1]
             with prim_cam_record_enabled:  # acquire lock
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx

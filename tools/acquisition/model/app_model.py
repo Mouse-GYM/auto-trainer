@@ -1,3 +1,4 @@
+import ctypes
 import dataclasses
 import enum
 import json
@@ -302,8 +303,8 @@ class AppModel(ObservableObject):
         # end not sure
 
         # this is used to sync the start record frame of both cameras:
-        self._cams_record_enabled = mp_ctx.Value("b", False)
-        self._cams_synced_frame_index = mp_ctx.Value("i", -1)
+        self._cams_record_enabled = mp_ctx.Value(ctypes.c_bool, False)
+        self._cams_synced_frame_index = mp_ctx.Value(ctypes.c_int64, -1)
 
         self._record_stop_sema = mp_ctx.Semaphore(0)
         # and this is used to notify the end of recording from the 2 camera video_record threads to the offline one,

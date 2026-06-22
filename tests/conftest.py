@@ -16,13 +16,6 @@ import top_fixtures
 
 
 @pytest.fixture
-def trainer_config_dir(tmp_path):
-    cfg_dir = tmp_path.joinpath("Autotrainer")
-    cfg_dir.mkdir()
-    return cfg_dir
-
-
-@pytest.fixture
 def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
     # mostly ~all default params are good, but we need:
@@ -43,29 +36,6 @@ def system_config(trainer_config_dir, tmp_path):
 @pytest.fixture
 def config_file_path(trainer_config_dir):
     return trainer_config_dir.joinpath(SystemConfiguration.make_default_yaml_config_path(trainer_config_dir))
-
-
-@pytest.fixture
-def animals_dir(tmp_path):
-    path = tmp_path.joinpath("animals")
-    path.mkdir()
-    return path
-
-
-@pytest.fixture
-def settings_ini_path(tmp_path):
-    return tmp_path.joinpath("settings.ini")
-
-
-@pytest.fixture
-def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
-    pref = UserPreferences(settings_file_path=settings_ini_path)
-    pref.configuration_location = trainer_config_dir
-    pref.animal_location = animals_dir
-    p = tmp_path.joinpath("logs")
-    p.mkdir()
-    pref.log_location = p
-    return pref
 
 
 @pytest.fixture

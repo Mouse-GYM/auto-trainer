@@ -198,7 +198,8 @@ class TestTrainingPlan(BaseTrainingPlan):
             assert "Received processed shift xyz: " not in caplog.text
             assert plan.current_phase == plan_start_phase
             caplog.clear()
-            self._make_session(app_model, machine, results[session_idx])
+            with caplog.at_level(logging.DEBUG):
+                self._make_session(app_model, machine, results[session_idx])
             if session_idx == 0:
                 assert plan.current_phase == plan_start_phase
                 assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False

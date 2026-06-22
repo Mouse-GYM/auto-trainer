@@ -1,7 +1,9 @@
 import collections
+import copy
 import contextlib
 import logging
 import math
+import multiprocessing
 import queue
 import threading
 import time
@@ -14,6 +16,7 @@ from unittest import mock
 # from collections.abc import Generator
 
 import pytest
+import verboselogs
 
 import autotrainer.core
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
@@ -32,6 +35,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 from tools.acquisition.model.behavior_model import BehaviorModel
 from tools.acquisition.model.hardware_model import HardwareModel
+from tools.acquisition.model.user_preferences import UserPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +122,87 @@ def diamond_config_path(monkeypatch):
 @pytest.fixture
 def diamond_triangle_config(diamond_config_path) -> DiamondTriangleOffsetConfig:
     return DiamondTriangleOffsetConfig.load_config(diamond_config_path)
+
+
+
+@pytest.fixture
+def trainer_config_dir(tmp_path):
+    cfg_dir = tmp_path.joinpath("Autotrainer")
+    cfg_dir.mkdir()
+    return cfg_dir
+
+
+@pytest.fixture
+def animals_dir(tmp_path):
+    path = tmp_path.joinpath("animals")
+    path.mkdir()
+    return path
+
+
+@pytest.fixture
+def settings_ini_path(tmp_path):
+    return tmp_path.joinpath("settings.ini")
+
+
+@pytest.fixture
+def user_pref(
+    tmp_path,
+    trainer_config_dir,
+    animals_dir,
+    settings_ini_path,
+) -> UserPreferences:  # noqa
+    pref = UserPreferences(settings_file_path=settings_ini_path)
+    pref.configuration_location = trainer_config_dir
+    pref.animal_location = animals_dir
+    p = tmp_path.joinpath("logs")
+    p.mkdir()
+    pref.log_location = p
+    pref.log_level = int(verboselogs.VERBOSE)
+    return pref
+
+
+def collect_log_queue_to_caplog(log_queue):
+    # Drain the queue after the process completes and inject into caplog
+    while not log_queue.empty():
+        record = log_queue.get()
+        logging.getLogger(record.name).handle(record)
+
+
+@pytest.fixture
+def capture_multiprocess_logs(caplog) -> multiprocessing.Queue:  # noqa
+    """Listens to a multiprocessing queue and forwards entries to caplog."""
+    log_queue = multiprocessing.Queue()
+    try:
+        yield log_queue  # noqa
+    finally:
+        collect_log_queue_to_caplog(log_queue)
+        log_queue.close()
+
+
+@pytest.fixture
+def make_log_dict_multiproc(capture_multiprocess_logs, monkeypatch):
+    def wrapped_make_log_dict():
+        return {
+            'version': 1,
+            'disable_existing_loggers': False,
+            'handlers': {
+                'queue': {
+                    'class': 'autotrainer.core.logging.WithThreadIdQueueHandler',
+                    'queue': capture_multiprocess_logs,
+                    'level': logging.NOTSET,  # pass everything to the listener
+                }
+            },
+            # root logger is here:
+            'root': {
+                'handlers': ['queue'],
+                # with its own level here:
+                'level': logging.NOTSET,  # root_log_level,
+                # FORCE NOTSET to relay everything so that file handler can properly get DEBUG as well
+            },
+            # but eventual level of other loggers have to be defined here:
+            'loggers': copy.deepcopy(autotrainer.core.logging._limit_loggers_level),  # noqa
+        }
+    return wrapped_make_log_dict
 
 
 ##
