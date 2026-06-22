@@ -499,6 +499,7 @@ class SpinCam(CameraBase):
         # AccessException thrown in node 'TriggerActivation' while calling 'TriggerActivation.SetIntValue()' (file 'EnumerationT.h', line 83) [-2006]
 
     def _configure_as_secondary(self, cam: PySpin.Camera):
+        cam.AcquisitionFrameRateEnable.SetValue(False)
         cam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
         cam.TriggerSelector.SetValue(PySpin.TriggerSelector_FrameStart)
         cam.TriggerSource.SetValue(PySpin.TriggerSource_Line3)

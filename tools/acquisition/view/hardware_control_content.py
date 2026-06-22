@@ -192,31 +192,35 @@ class HardwareControlContent(ContentWidget):
         button_layout = QVBoxLayout()
         button_layout.setSpacing(4)
         #
-        button = self._home_button = QPushButton("Home")
+        button = QPushButton("Home")
         add_cmd_widget(button)
         button.clicked.connect(
             lambda: log_hardware_cmd(partial(pellet_machine.move_home, force=True)))
         button_layout.addWidget(button)
         #
-        button = self._load_button = QPushButton("Load")
+        button = QPushButton("Load")
         add_cmd_widget(button)
         button.clicked.connect(
-            lambda: log_hardware_cmd(partial(pellet_machine.load_pellet, force=True)))
+            lambda: log_hardware_cmd(partial(pellet_machine.load_pellet, force=True, reason="manual_button")))
         button_layout.addWidget(button)
         #
-        button = self._send_button = QPushButton("Send")
+        button = QPushButton("Send")
         add_cmd_widget(button)
-        self._send_button.clicked.connect(
-            lambda: log_hardware_cmd(partial(pellet_machine.send_pellet, force=True)))
+        button.clicked.connect(lambda: log_hardware_cmd(partial(pellet_machine.send_pellet, force=True)))
         button_layout.addWidget(button)
         #
-        button = self._release_button = QPushButton("Release")
+        button = QPushButton("Retract")
+        add_cmd_widget(button)
+        button.clicked.connect(lambda: log_hardware_cmd(partial(pellet_machine.move_retract, force=True)))
+        button_layout.addWidget(button)
+        #
+        button = QPushButton("Release")
         add_cmd_widget(button)
         button.clicked.connect(
             lambda: log_hardware_cmd(partial(pellet_machine.release_pellet, force=True)))
         button_layout.addWidget(button)
         #
-        button = self._cover_button = QPushButton("Cover")
+        button = QPushButton("Cover")
         add_cmd_widget(button)
         button.clicked.connect(
             lambda: log_hardware_cmd(partial(pellet_machine.cover_pellet, force=True)))

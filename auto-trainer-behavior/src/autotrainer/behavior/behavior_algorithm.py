@@ -62,6 +62,7 @@ class PelletUncoverContext:
         self.start_y_dcs_valid_perf_c = math.nan
 
     def can_uncover(self, perf_now, cfg: PelletUncoverConfiguration):
+        # logger.verbose("can_uncover: p_now=%.2f self=%s cfg=%s", perf_now, self, cfg)
         return self.has_released or (
             self.y_dcs_valid
             and perf_now - self.start_y_dcs_valid_perf_c >= cfg.trigger_delay
@@ -233,7 +234,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._baseline_intensity = self._active_config.head_clamp.baseline_intensity
 
         # NB: not saved in config:
-        self._recording_age_release_pellet_threshold = 0.25
         self._sess_min_duration = 1.5  # could add to config
 
         self._recording_prebuffer_duration: float = 0
@@ -592,11 +592,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
-    def recording_age_release_pellet_threshold(self) -> float:
-        """Desired delay to wait once camera recording-started is detected, to then after release the pellet"""
-        return self._recording_age_release_pellet_threshold
-
-    @property
     def is_in_session(self) -> bool:
         """Is in capture/recording session"""
         return self._is_in_session
@@ -698,6 +693,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @property
     def head_fixation_enabled(self) -> bool:
+        """head fixation == autoclamp"""
         # NB: not saved in config
         return self._head_fixation_enabled
 
@@ -1245,7 +1241,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config
         if not cfg.pellet_delivery.is_enabled:
             return False
-        if cfg.pellet_delivery.deliver_when_in_cage:
+        if not cfg.pellet_delivery.retract_enabled:
             if self._system_state in {SystemState.cage, SystemState.tunnel}:
                 if self.is_pellet_recently_seen(use_any_cam=True):
                     return True
@@ -1310,8 +1306,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cfg = self._active_config.pellet_delivery
         if not cfg.is_enabled or self._algo_paused:
             return False
-        return self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
-                                      perf_now=perf_now)
+        need_load = self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
+                                           perf_now=perf_now)
+        if need_load:
+            if self._system_state == SystemState.intersession:
+                logger.verbose("refusing can_load_pellet given intersession")
+                return False
+            return True
+        return False
 
     @property
     def pellet_uncover_context(self) -> PelletUncoverContext:
@@ -1331,19 +1333,20 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if self._algo_paused:
             return False
+        if not self._active_config.pellet_delivery.is_enabled:
+            return False
         uncov_cfg = self._active_config.pellet_uncover
-        ctx = self._uncover_ctx
-        project = self._project_info
-        if project is not None and self.can_cover_pellet():
+        if self.can_cover_pellet():
+            ctx = self._uncover_ctx
             if self._is_in_session and pellet_state == PelletState.monitoring:
-                p_now = get_perf_now()  # self._parts_pres_ctx_any_cam.last_perf_c
+                p_now = get_perf_now()
                 return (
                         # this 1st condition might not be necessary anymore
                         self._capture_status == CaptureProcessStatus.RECORDING
                     and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
-        return self._active_config.pellet_delivery.is_enabled
+        return True
 
         # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
         # determining consumed happens during intersession) and b) need to determine whether said limit should
@@ -1357,16 +1360,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        if not (
-            pellet_state == PelletState.monitoring
-            and not self._algo_paused
-            and self._status in {
-                BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
-                BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
-            }
-        ):
+        if self._algo_paused or self._status not in {
+            BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+            BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+        } or pellet_state in {
+            # PelletState.home,  # not sure
+            PelletState.retract,  # prevent executing the command again and again and..
+        }:
             return False
-        if self._active_config.pellet_delivery.deliver_when_in_cage:
+        if not self._active_config.pellet_delivery.retract_enabled:
             return self._system_state == SystemState.intersession
         if not self._is_in_session:
             return True

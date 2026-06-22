@@ -117,8 +117,8 @@ class PelletDeliveryConfiguration:
     is_pellet_cover_enabled: bool = False
     """If enabled: cover pellet when session starts, and wait uncover condition"""
 
-    deliver_when_in_cage: bool = False
-    """If enabled: pellet is pre-sent to deliver location when animal in cage"""
+    retract_enabled: bool = True
+    """If enabled: pellet is retracted by default. And wait send condition before pellet-send"""
 
     # not really related to pellet delivery but has been here since start:
     is_intersession_analysis_enabled: bool = False
