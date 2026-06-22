@@ -1751,15 +1751,11 @@ class AppModel(ObservableObject):
             self._update_status_text_overlay()
 
     def _on_session_starting_before_record_start(self):
-        value = self._record_stop_sema.get_value()
-        if value > 0:
-            # ensure record_stop_sema is back to 0 from any previous run.
-            # on trials batching it's effectively not acquired/consumed directly from offline reader.
-            logger.verbose("setting record_stop_sema value to 0. correct=%s", value)
-            for _ in range(value):
-                if not self._record_stop_sema.acquire(block=False):  # - 1
-                    logger.critical("unexpected record_stop_sema value change, is video_record or offline unsync ?")
-            logger.debug("record_stop_sema value=%s", self._record_stop_sema.get_value())
+        drained = 0
+        while self._record_stop_sema.acquire(block=False):
+            drained += 1
+        if drained:
+            logger.verbose("drained record_stop_sema by %s", drained)
 
     def _on_session_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info
