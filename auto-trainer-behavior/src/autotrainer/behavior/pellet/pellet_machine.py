@@ -442,7 +442,7 @@ class PelletMachine(StateMachine):
 
         if (algo.system_state == SystemState.intersession
             and cur_state != PelletState.retract
-            and algo.can_retract_pellet()
+            and algo.can_retract_pellet(pellet_state=cur_state)
         ):
             with algo.set_allow_reentrant(True):
                 self.move_retract()
