@@ -440,6 +440,14 @@ class PelletMachine(StateMachine):
             elif triangle_seen_any and not pellet_seen_any:
                 self._check_notify_pellet_load_failed(perf_now=perf_now)
 
+        if (algo.system_state == SystemState.intersession
+            and cur_state != PelletState.retract
+            and algo.can_retract_pellet()
+        ):
+            with algo.set_allow_reentrant(True):
+                self.move_retract()
+            return
+
         if cur_state in {PelletState.loading, PelletState.retract, PelletState.home}:
             if not can_use_command:
                 # always wait the previous movement is finished
