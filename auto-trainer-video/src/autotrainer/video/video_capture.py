@@ -653,7 +653,7 @@ class VideoCapture(Process):
                                 # ( frame, frame_when, frame_perf_now )
                                 [(fix, f, fw, p) for f, fw, _, p, fix in frames_prebuffer_list]
                             )
-                            frames_prebuffer_list = []  # reminder: don't use .clear(): record_q is thread queue
+                            frames_prebuffer_list = []  # thread safety, don't use .clear()
                         rec_q_put([(cam_frame_id, frame, when, frame_perf_c)])  # thread queue
                         record_q_list = (
                             self._record_queue_list

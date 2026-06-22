@@ -22,3 +22,10 @@ class TestStatus:
         else:
             assert isinstance(algo_status, BehaviorAlgoStatus)
             assert algo_status.name == app_model_status.name
+
+
+def test_it_drain_record_stop_sema_on_session_recording_start(app_model):
+    app_model._record_stop_sema.release()
+    app_model._record_stop_sema.release()
+    app_model.behavior.algorithm.start_session(reason="manual")
+    assert app_model._record_stop_sema.acquire(block=False) is False, "cannot acquire after: it should be back to 0"

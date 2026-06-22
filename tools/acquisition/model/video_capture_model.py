@@ -13,7 +13,6 @@ from multiprocessing.synchronize import Semaphore as SemaphoreType
 from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
 from threading import Event
 import urllib
-from urllib.parse import urlparse
 
 import numpy
 from numpy import ndarray
