@@ -120,8 +120,8 @@ def device(expected_tok_event, expected_tok, tokens_acked) -> CanDevice:  # noqa
     (SystemCommandKind.RELEASE_PELLET, 116, None),
     (SystemCommandKind.COVER_PELLET, 117, None),
     (SystemCommandKind.PLAY_TONE, 118, None),
-    (SystemCommandKind.DELAY, 119, None),
-    (SystemCommandKind.READ_MOTOR_CONFIGURATION, 120, None),
+    (SystemCommandKind.DELAY, 119, 0.5),
+    (SystemCommandKind.READ_MOTOR_CONFIGURATION, 120, Motor.PELLET_X_MOTOR),
     (SystemCommandKind.WRITE_MOTOR_CONFIGURATION, 121, (Motor.PELLET_X_MOTOR, StepperConfig())),
     (SystemCommandKind.SEND_FIXED_XYZ, 122, None),
     (SystemCommandKind.SEND_FIXED_XYZ, 123, None),
@@ -174,7 +174,7 @@ def test_set_procedures(
     assert ctx in tokens_acked
 
 
-def test_move_retract(
+def test_move_relative(
     expected_tok,
     expected_tok_event,
     tokens_acked,
@@ -221,7 +221,7 @@ def test_can_connect_twice(device, caplog):
     assert device.device_interface.is_open is True
 
 
-def test_rel_move_fail(
+def test_rel_move_succeed_after_uuid_ack_timeout(
     expected_tok,
     expected_tok_event,
     tokens_acked,
@@ -246,21 +246,20 @@ def test_rel_move_fail(
     device.default_command_ack_timeout_duration = 0.5
 
     ack_timeout_engaged = False
+    ack_timeout_engaged_count = 0
     def dev_prop_changed(name, value, old):
         if name == device.UUID_ACK_TIMEOUT_ENGAGED:
-            nonlocal ack_timeout_engaged
+            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
             ack_timeout_engaged = value
+            if value:
+                ack_timeout_engaged_count += 1
 
     device.property_changed += dev_prop_changed
 
     device.notify_message(SystemCommandKind.SEND_RETRACT, None, context=ctx)
-    timeout = time.perf_counter() + 4
-    while time.perf_counter() < timeout:
-        if not device._commands_handler_thread.is_alive():
-            break
-        time.sleep(0.1)
-    assert ctx not in tokens_acked
-    assert ack_timeout_engaged
-    assert not device._commands_handler_thread.is_alive()  # it crashed with RuntimeError
-    assert "refusing retry given relative" in caplog.text
-    assert "command handler crashed" in caplog.text
+
+    expected_tok_event.wait(3)
+    assert ctx in tokens_acked
+    assert not ack_timeout_engaged
+    assert ack_timeout_engaged_count == 1
+    assert device._commands_handler_thread.is_alive()

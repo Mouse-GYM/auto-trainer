@@ -150,7 +150,7 @@ class _BoardPendingContext:
                 self.ctx is None
             and self.uuid is None
             and self.prev_command is None
-            and self.compound_steps is None
+            and (self.compound_steps is None or len(self.compound_steps) == 0)
         )
 
 
@@ -224,7 +224,7 @@ class CanDevice(Device):
             Motor.PELLET_Z_MOTOR: None,
         }
         self._last_pellet_pos = Offset3DTuple(math.nan, math.nan, math.nan)
-        # looks like actually only used for logging
+        self._last_send_pos = Offset3DTuple(math.nan, math.nan, math.nan)
 
         if not HAVE_CAN_DEVICE:
             logger.warning(
@@ -978,11 +978,11 @@ class CanDevice(Device):
         return self._perform_next_compound_step(board, move_steps)
 
     def _find_step_board(self, step) -> Optional[Target]:
-        if 'x' in step or 'x_rel' in step:
+        if 'x' in step or 'x_rel' in step or 'send_x_rel' in step:
             motor = Motor.PELLET_X_MOTOR
-        elif 'y' in step or 'y_rel' in step:
+        elif 'y' in step or 'y_rel' in step or 'send_y_rel' in step:
             motor = Motor.PELLET_Y_MOTOR
-        elif 'z' in step or 'z_rel' in step:
+        elif 'z' in step or 'z_rel' in step or 'send_z_rel' in step:
             motor = Motor.PELLET_Z_MOTOR
         elif 'load_arm' in step:
             motor = Motor.PELLET_LOAD_SERVO
@@ -1207,25 +1207,29 @@ class CanDevice(Device):
         Args:
             message: StepperStatus
         """
-        if message.motor in self._motor_to_coordinate_idx:
+        motor_idx = self._motor_to_coordinate_idx.get(message.motor, None)
+        if motor_idx is not None:
             prev_limit_switch = self._last_limit_switch[message.motor]
-            last_pos = self._last_pellet_pos[self._motor_to_coordinate_idx[message.motor]]
+            last_pos = list(self._last_pellet_pos)
+            last_send_pos = list(self._last_send_pos)
             if message.is_at_limit != prev_limit_switch:
                 logger.notice("%s: limit_switch: %s -> %s ; pos=%.02f (last=%.02f) send_pos=%.02f",
                               message.motor, prev_limit_switch, message.is_at_limit,
-                              message.position, last_pos, message.send_position)
+                              message.position, last_pos[motor_idx], message.send_position)
                 self._last_limit_switch[message.motor] = message.is_at_limit
-        coord_char = self._motor_to_coordinate_char.get(message.motor, None)
-        if coord_char is not None:
-            self._last_pellet_pos = self._last_pellet_pos.replace(**{coord_char: message.position})
+            last_pos[motor_idx] = message.position
+            last_send_pos[motor_idx] = message.send_position
+            self._last_pellet_pos = Offset3DTuple(last_pos)
+            self._last_send_pos = Offset3DTuple(last_send_pos)
         kind = CanDevice._motor_to_status_kind.get(message.motor, None)
-        if self._api is not None and kind is not None:
+        api = self._api
+        if api is not None and kind is not None:
             prev_data, prev_perf_c = self._previous_stepper_status_pos_perf_c.get(kind, (None, -math.inf))
             perf_now = get_perf_now()
             data = (message.position, message.send_position, message.is_at_limit, message.position_error)
             if data != prev_data or perf_now - prev_perf_c > self.same_data_refresh_delay:
                 self._previous_stepper_status_pos_perf_c[kind] = (data, perf_now)
-                self.api.send_message(kind, message)
+                api.send_message(kind, message)
 
     def _report_servo_status(self, message: ServoStatus):
         """
@@ -1303,6 +1307,34 @@ class CanDevice(Device):
         }  # noqa
         compound_movements[1:1] = steps
         return True
+
+    def _perform_send_rel_move(self, step: Dict[str, Any]):
+        if 'send_x_rel' in step:
+            rel_val = step['send_x_rel']
+            motor = Motor.PELLET_X_MOTOR
+            meth = self._interface.move_motor_x
+            m_idx = 0
+        elif 'send_y_rel' in step:
+            rel_val = step['send_y_rel']
+            motor = Motor.PELLET_Y_MOTOR
+            meth = self._interface.move_motor_y
+            m_idx = 1
+        else:
+            assert 'send_z_rel' in step
+            rel_val = step['send_z_rel']
+            motor = Motor.PELLET_Z_MOTOR
+            meth = self._interface.move_motor_z
+            m_idx = 2
+        # calculate position:
+        new_pos = self._last_send_pos[m_idx] + rel_val
+        if not math.isfinite(new_pos):
+            logger.warning(
+                "skipping %s given last known send_position not finite (%s)",
+                step, self._last_send_pos,
+            )
+            # or should we move to 0 instead ?
+            return motor, True
+        return motor, meth(new_pos)
 
     def _perform_next_compound_step(self, board: _BoardPendingContext, compound_movements: List[Dict[str, Any]]) -> bool:
         """
@@ -1441,6 +1473,9 @@ class CanDevice(Device):
             motor: Motor = step['_internal_func_motor']  # noqa
             success = func()  # noqa
 
+        elif 'send_x_rel' in step or 'send_y_rel' in step or 'send_z_rel' in step:
+            motor, success = self._perform_send_rel_move(step)
+
         elif 'x_rel' in step:
             motor = Motor.PELLET_X_MOTOR
             success = self._interface.move_motor_x(step['x_rel'], relative=True)
@@ -1459,7 +1494,7 @@ class CanDevice(Device):
         assert motor is not None, "all possible compound steps relate to a specific Motor"
 
         if success:
-            if "x_rel" in step or "y_rel" in step or "z_rel" in step:
+            if 'x_rel' in step or 'y_rel' in step or 'z_rel' in step:
                 self._prev_command_is_relative = True
 
             after_uuid = self._interface.uuid()
@@ -1574,4 +1609,11 @@ def default_move_retract() -> MotorSteps:
     Returns:
         A MotorSteps object containing the move retract sequence
     """
-    return MotorSteps("move_retract", [{'y_rel': -15}])
+    return MotorSteps("move_retract", [
+        # NB: need to have each one, even if 0 relative,
+        # to make the corresponding axis move to the desired send axis position.
+            {"send_z_rel": 0},  # move up/down first
+            {"send_x_rel": 0},  # then left/right
+            {"send_y_rel": -15},  # then forward/backward
+        ],
+    )

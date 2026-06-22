@@ -99,7 +99,7 @@ v0_expected_result_config = {
     "behavior": {
         "pellet_delivery": {
             "is_enabled": True,
-            "deliver_when_in_cage": False,
+            "retract_enabled": True,
             "is_pellet_cover_enabled": True,
             "is_intersession_analysis_enabled": True,
             "is_intersession_pellet_shift_enabled": True,

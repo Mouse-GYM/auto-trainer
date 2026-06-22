@@ -576,27 +576,6 @@ class AppModel(ObservableObject):
             inference.pose_algorithm = pose_algo
         self._pose_algorithm = pose_algo
 
-    @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_release_pellet(self):
-        algo = self._behavior.algorithm
-        # we never know the session could be just stopped,
-        # so check:
-        if algo.is_in_session:
-            pellet_m = self._behavior.system_machine.pellet
-            logger.verbose("consider_release_pellet: calling try_next_state ; "
-                           "pellet_recently_seen=%s age=%.2f",
-                           algo.pellet_recently_seen, algo.pellet_presence_age)
-            # this is called via a timer, which are not necessarily very precise,
-            # and to be safe on all side, do not check again, the actual age could even be slightly less than the
-            # desired threshold (but very very near). So to not miss that case: do not "recheck"
-            if algo.can_release_pellet(pellet_state=pellet_m.state):
-                self._behavior.system_machine.pellet.environment_changed(
-                    pellet_seen=algo.pellet_recently_seen, must_release=True, caller="camera-recording-aged-enough")
-                # NB: this is not really necessary anymore as it's handled by pellet machine itself during monitoring now,
-                # but this makes the call faster, not waiting the next inference result passed to pellet machine environement changed
-        else:
-            logger.verbose("consider_release_pellet but not in session")
-
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
@@ -620,7 +599,7 @@ class AppModel(ObservableObject):
             else:
                 cmd = raw
             extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
-            logger.info("Handling %s ; data=%s", cmd, extra_info)
+            logger.verbose("Handling %s ; data=%s", cmd, extra_info)
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status, *r_args = args
@@ -632,19 +611,15 @@ class AppModel(ObservableObject):
                         project = self._project_info
                         if project is not None:
                             project.start_record_timestamp = first_frame_time
+                        logger.info("received RECORDING: frame-0: time=%.3f perf_c=%.3f now=%.3f")
                     else:
                         p_now = get_perf_now()
                     algo.set_capture_status(new_status, perf_now=p_now)
-                    if new_status == CaptureProcessStatus.RECORDING and algo.is_in_session:
-                        new_timer = self._timer_recording_age_enough = _recording_age_enough_timer(
-                            algo.recording_age_release_pellet_threshold, self._consider_release_pellet
-                        )
-                        new_timer.start()
-                        logger.debug("started timer for consider_release_pellet, delay=%s",
-                                     algo.recording_age_release_pellet_threshold)
                 else:
                     logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
                                    cam_idx, new_status)
+            else:
+                logger.warning("unhandled command: %s raw=%s", cmd, raw)
         # end while True
         logger.info("handle_proc_msg_queue exiting")
 
