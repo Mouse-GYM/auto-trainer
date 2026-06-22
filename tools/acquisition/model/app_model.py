@@ -305,11 +305,17 @@ class AppModel(ObservableObject):
         self._cams_record_enabled = mp_ctx.Value("b", False)
         self._cams_synced_frame_index = mp_ctx.Value("i", -1)
 
+        self._record_stop_sema = mp_ctx.Semaphore(0)
+        # and this is used to notify the end of recording from the 2 camera video_record threads to the offline one,
+        # so that the later doesn't try to open the video files, before they are finished written to and closed.
+        # Preventing the opencv lib to emit warning on stderr.
+
         self._left_camera = VideoCaptureModel(
             "left", self._preferences, 0,
             msg_queue=proc_msg_queue, cam_id=CameraId.Left,
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
+            record_stop_sema=self._record_stop_sema,
         )
 
         self._right_camera = VideoCaptureModel(
@@ -320,6 +326,7 @@ class AppModel(ObservableObject):
             cam_id=CameraId.Right,
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
+            record_stop_sema=self._record_stop_sema,
         )
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
@@ -360,7 +367,11 @@ class AppModel(ObservableObject):
         #
         if inference_model is None:
             inference_model = InferenceModel(
-                self._pose_algorithm, calib_dir=calib_dir, mp_manager=self._mp_manager)
+                self._pose_algorithm,
+                calib_dir=calib_dir,
+                mp_manager=self._mp_manager,
+                record_stop_sema=self._record_stop_sema,
+            )
         inference = self._inference =  inference_model
         #
 
@@ -399,10 +410,14 @@ class AppModel(ObservableObject):
         inference.property_changed += self._on_inference_property_changed
         inference.pose_response_ready += self._on_pose_response_ready
         inference.detection_result_ready += self._on_detection_result_ready
+
         preferences.property_changed += self._on_preferences_property_changed
+
         algo = behavior_model.algorithm
         algo.property_changed += self._on_behavior_algo_property_changed
+        algo.session_starting_before_record_start += self._on_session_starting_before_record_start
         algo.session_capture_ending += self._on_session_capture_ended
+
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
@@ -1709,6 +1724,13 @@ class AppModel(ObservableObject):
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
+
+    def _on_session_starting_before_record_start(self):
+        drained = 0
+        while self._record_stop_sema.acquire(block=False):
+            drained += 1
+        if drained:
+            logger.verbose("drained record_stop_sema by %s", drained)
 
     def _on_session_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info

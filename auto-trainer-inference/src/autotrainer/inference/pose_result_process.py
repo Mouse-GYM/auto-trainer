@@ -633,7 +633,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                                                         columns=pose_algo.pose_result_columns)
                         writes_h5_live_durations.append(write_duration)
                     #
-                    logger.debug("setting stop recorded")
+                    logger.debug("setting stop_recorded event")
                     self._stop_recorded.set()  # this is for the feeder thread to know when it can open the data files
 
             cnt_data_received += 1
