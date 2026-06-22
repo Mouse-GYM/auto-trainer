@@ -274,8 +274,8 @@ class SystemMachine(StateMachine):
         logger.verbose("enter_intersession: reason=%s, n_batch=%s, in-session=%s",
                        reason, len(batch_list), algo.is_in_session)
 
-        # ensure goes to retract for intersession, if is/was still monitoring (or sending):
-        if self._pellet_machine.state in {PelletState.monitoring, PelletState.sending}:
+        # ensure goes to retract for intersession, if is/was still monitoring, or sending, or eventually covering too:
+        if self._pellet_machine.state in {PelletState.monitoring, PelletState.covering, PelletState.sending}:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
 

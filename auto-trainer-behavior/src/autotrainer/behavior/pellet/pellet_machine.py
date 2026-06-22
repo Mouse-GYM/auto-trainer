@@ -487,7 +487,7 @@ class PelletMachine(StateMachine):
                 action()
                 if self._state in {PelletState.covering, PelletState.releasing}:
                     self.state = cur_state
-                    # put back cur-state after cover/release
+                    # put back immediatelly cur_state after cover/release,
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.
