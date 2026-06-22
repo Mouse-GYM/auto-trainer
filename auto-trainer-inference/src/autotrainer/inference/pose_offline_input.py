@@ -343,7 +343,7 @@ class OfflineInputProcess:
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
                     logger.warning("timeout waiting for intersession stop_recorded event ; but continuing")
-                    # raise RuntimeError("timeout waiting for intersession stop_recorded event")
+                    break
                 check_correct_status()
             self._stop_recorded.clear()
             logger.debug("got stop_recorded")
@@ -359,12 +359,23 @@ class OfflineInputProcess:
                 # especially at high FPS.
                 logger.debug("waiting record_stop_sema %s ; t_end=%.1f", record_stop_sema, t_end)
                 while count_acquired < n_cams:
-                    to = t_end - time.perf_counter()
-                    if record_stop_sema.acquire(timeout=to):
-                        count_acquired += 1
-                    else:
-                        raise RuntimeError("timeout waiting for record_stop_sema=%s timeout=%.2f now=%.2f",
-                                           record_stop_sema, to, time.perf_counter())
+                    while True:
+                        try:
+                            if record_stop_sema.acquire(timeout=0.1):
+                                count_acquired += 1
+                                break
+                            else:
+                                to = t_end - time.perf_counter()
+                                if to < 0:
+                                    msg = (f"timeout waiting for record_stop_sema={record_stop_sema} "
+                                           f"timeout={to:.2f} now={time.perf_counter():.2f}")
+                                    raise RuntimeError(msg)
+                                check_correct_status()
+                        except:  # (InferenceIncorrectStatus, RuntimeError):
+                            while count_acquired > 0:
+                                record_stop_sema.release()
+                                count_acquired -= 1
+                            raise
                 logger.verbose("acquired record_stop_sema=%s. waited=%.2f",
                                record_stop_sema, time.perf_counter() - t_before)
 
