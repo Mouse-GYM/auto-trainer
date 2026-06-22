@@ -9,9 +9,8 @@ from multiprocessing.sharedctypes import (
     SynchronizedString,
     Synchronized,
 )
-from multiprocessing.synchronize import Semaphore as Semaphoretype
+from multiprocessing.synchronize import Semaphore as SemaphoreType
 from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
-from multiprocessing import synchronize
 from threading import Event
 import urllib
 from urllib.parse import urlparse
@@ -79,7 +78,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         presence_detection: Optional[PresenceDetectionAttrs] = None,
         synced_cam_recording: Optional[Synchronized] = None,
         synced_cam_frame_index: Optional[Synchronized] = None,
-        record_stop_sema: Optional[Semaphoretype] = None,
+        record_stop_sema: Optional[SemaphoreType] = None,
     ):
         super().__init__()
 
