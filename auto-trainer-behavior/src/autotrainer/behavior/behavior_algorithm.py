@@ -233,7 +233,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._baseline_intensity = self._active_config.head_clamp.baseline_intensity
 
         # NB: not saved in config:
-        self._recording_age_release_pellet_threshold = 0.25
         self._sess_min_duration = 1.5  # could add to config
 
         self._recording_prebuffer_duration: float = 0
@@ -590,11 +589,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def capture_status_age(self) -> float:
         """Capture status age as number of seconds"""
         return get_perf_now() - self._last_capture_status_change_perf_c
-
-    @property
-    def recording_age_release_pellet_threshold(self) -> float:
-        """Desired delay to wait once camera recording-started is detected, to then after release the pellet"""
-        return self._recording_age_release_pellet_threshold
 
     @property
     def is_in_session(self) -> bool:

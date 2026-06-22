@@ -540,7 +540,6 @@ class MockSystemMachine:
         algo.capture_status = CaptureProcessStatus.RECORDING
         p_now = get_current_simulate_perf_now()
         algo.project.start_record_timestamp = p_now
-        self.increment_perf_now(algo.recording_age_release_pellet_threshold)
 
 
 @pytest.fixture
