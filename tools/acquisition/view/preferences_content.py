@@ -283,7 +283,9 @@ class PreferencesContent(QWidget):
             s.setEnabled(
                 self._deliver_pellet_toggle.isEnabled()
                 and self._deliver_pellet_toggle.isChecked()
-                and algo.active_config.pellet_delivery.retract_enabled))
+                and algo.active_config.pellet_delivery.retract_enabled
+                and not algo.active_config.head_clamp.wait_engaged_before_send_pellet
+            ))
         def on_pellet_send_delay_changed(value: float):
             algo.active_config.pellet_delivery.pellet_send_wait_delay = value
         spinbox.valueChanged.connect(on_pellet_send_delay_changed)
@@ -557,6 +559,7 @@ class PreferencesContent(QWidget):
         def update_wait_engaged_before_send_pellet(value):
             toggled = value != 0
             algo.active_config.head_clamp.wait_engaged_before_send_pellet = toggled
+            refresh_enabled_states()
         toggle.stateChanged.connect(update_wait_engaged_before_send_pellet)
         right_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
