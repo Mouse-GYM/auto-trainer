@@ -32,6 +32,13 @@ from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
 logger = get_verbose_logger(__name__)
 
 
+# these 2 constants are used to ensure the primary and secondary cams
+# can always sync for start and end recording on the same frame.
+_PREBUFFER_SYNC_KEEP = 4
+_PREBUFFER_SYNC_OFFSET = 2
+assert 0 < _PREBUFFER_SYNC_OFFSET < _PREBUFFER_SYNC_KEEP
+
+
 class CaptureCommandKind(IntEnum):
     """Commands accepted by VideoCaptureProcess through the command Queue"""
 
@@ -380,10 +387,10 @@ class VideoCapture(Process):
             idx = len(frames_prebuffer_list) - 1
             while True:
                 # keep always more, for sync purpose, see primary_acquire below.
-                if idx <= 10:
+                if idx <= _PREBUFFER_SYNC_KEEP:
                     break
                 if frame_perf_c - frames_prebuffer_list[idx][3] >= attrs.record_prebuffer_duration:
-                    del frames_prebuffer_list[:idx - 10]  # keep more !
+                    del frames_prebuffer_list[:idx - _PREBUFFER_SYNC_KEEP]  # keep more !
                     break
                 idx -= 1
             frames_prebuffer_list.append((f, fw, t, p, fidx))
@@ -399,7 +406,8 @@ class VideoCapture(Process):
                 return
             if not is_primary:  # non-primary cams get synced via secondary_acquire()
                 return
-            target_idx = frame_idx - len(frames_prebuffer_list) + 5  # see update_frames_prebuffer
+            target_idx = frame_idx - len(frames_prebuffer_list) + _PREBUFFER_SYNC_OFFSET  # see update_frames_prebuffer
+            target_idx = min(target_idx, frame_idx)
             with prim_cam_record_enabled:  # acquire lock
                 synced_frame_idx = target_idx
                 prim_cam_synced_frame_idx.value = target_idx
@@ -696,8 +704,8 @@ class VideoCapture(Process):
                 if vid_detection is not None:
                     vid_detection.update_frame(when, frame, frame_perf_c)
 
-                if not (is_record_active and record_start_stop_frame_idx is not None) and attrs.record_prebuffer_duration > 0:
-                    update_frames_prebuffer(frame, when, frame_time, frame_perf_c, cam_frame_id)
+                # if not (is_record_active and record_start_stop_frame_idx is not None) and attrs.record_prebuffer_duration > 0:
+                update_frames_prebuffer(frame, when, frame_time, frame_perf_c, cam_frame_id)
 
             except Exception as err:
                 logger.exception("Error during capture loop: %s", err)
