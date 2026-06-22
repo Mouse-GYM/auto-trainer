@@ -1336,6 +1336,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return False
         if self._algo_paused:
             return False
+        if not self._active_config.pellet_delivery.is_enabled:
+            return False
         uncov_cfg = self._active_config.pellet_uncover
         if self.can_cover_pellet():
             ctx = self._uncover_ctx
@@ -1347,7 +1349,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     and ctx.can_uncover(p_now, uncov_cfg)
                 )
             return False
-        return self._active_config.pellet_delivery.is_enabled
+        return True
 
         # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
         # determining consumed happens during intersession) and b) need to determine whether said limit should
