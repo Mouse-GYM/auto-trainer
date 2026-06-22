@@ -284,7 +284,8 @@ class PreferencesContent(QWidget):
                 self._deliver_pellet_toggle.isEnabled()
                 and self._deliver_pellet_toggle.isChecked()
                 and algo.active_config.pellet_delivery.retract_enabled
-                and not algo.active_config.head_clamp.wait_engaged_before_send_pellet
+                and (not algo.active_config.head_clamp.enabled
+                     or not algo.active_config.head_clamp.wait_engaged_before_send_pellet)
             ))
         def on_pellet_send_delay_changed(value: float):
             algo.active_config.pellet_delivery.pellet_send_wait_delay = value
