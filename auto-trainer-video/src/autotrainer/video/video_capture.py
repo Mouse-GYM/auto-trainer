@@ -32,11 +32,9 @@ from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
 logger = get_verbose_logger(__name__)
 
 
-# these 2 constants are used to ensure the primary and secondary cams
-# can always sync for start and end recording on the same frame.
-_PREBUFFER_SYNC_KEEP = 4
-_PREBUFFER_SYNC_OFFSET = 2
-assert 0 < _PREBUFFER_SYNC_OFFSET < _PREBUFFER_SYNC_KEEP
+# Always keep that extra more nbr of frames for cameras recording sync purpose:
+_PREBUFFER_SYNC_KEEP = 3
+assert _PREBUFFER_SYNC_KEEP > 0
 
 
 class CaptureCommandKind(IntEnum):
@@ -386,7 +384,9 @@ class VideoCapture(Process):
         def update_frames_prebuffer(f, fw, t, p, fidx):
             idx = len(frames_prebuffer_list) - 1
             while True:
-                # keep always more, for sync purpose, see primary_acquire below.
+                # keep always more, for sync purpose,
+                # Allowing to ensure that the primary and secondary cams have always the same start frame
+                # in common available for use for a start/stop recording.
                 if idx <= _PREBUFFER_SYNC_KEEP:
                     break
                 if frame_perf_c - frames_prebuffer_list[idx][3] >= attrs.record_prebuffer_duration:
@@ -441,7 +441,6 @@ class VideoCapture(Process):
             if cam_frame_id >= synced_frame_idx:
                 record_start_stop_frame_idx = None
             #
-            # record_q_list = self._record_queue_list
             idx = len(record_q_list) - 1
             logger.debug("checking record_q_list for synced_frame: %s",
                          tuple(t[0] for t in record_q_list))
@@ -480,12 +479,15 @@ class VideoCapture(Process):
 
             self._set_status(CaptureProcessStatus.RUNNING)
 
-            if is_primary and msg_q is not None:
+            if msg_q is not None:
                 msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
                            (self._camera_idx, CaptureProcessStatus.RUNNING)))
 
         logger.notice("starting capture loop ..")
         self._set_status(CaptureProcessStatus.RUNNING)
+        if msg_q is not None:
+            logger.verbose("cam%s: sending running", self._camera_idx)
+            msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE, (self._camera_idx, CaptureProcessStatus.RUNNING)))
 
         frame_perf_c = math.nan
         save_err = None
@@ -669,18 +671,11 @@ class VideoCapture(Process):
 
                         #
                         self._set_status(CaptureProcessStatus.RECORDING)
-
-                        if is_primary and msg_q is not None:
-                            if __debug__:
-                                logger.debug("is_primary: Putting CaptureProcessStatus.RECORDING")
-                            #
+                        #
+                        if msg_q is not None:
                             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE,
                                        (self._camera_idx, CaptureProcessStatus.RECORDING,
                                         first_frame_p_now, first_frame_when, first_frame_time)))
-                        else:
-                            if __debug__:
-                                logger.debug("not is_primary or msg_q None"
-                                             " ; skipped put CaptureProcessStatus.RECORDING")
 
                 elif not is_record_active and record_start_stop_frame_idx is not None:
                     secondary_acquire()
