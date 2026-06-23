@@ -351,7 +351,6 @@ class ProjectInfo(_ProjectInfo):
     ) -> Tuple[str, str, str]:
         """Get the 3-tuple of video paths for given arguments"""
         vid_path = self.get_source_path(name, interval=interval, session=session)
-
         file_name = f"{vid_path.full_path}.{self.video_write_ext}"
         index = 0
 
@@ -481,6 +480,10 @@ class ProjectInfo(_ProjectInfo):
         if auto_new:
             idx += 1
         return Path(loc).joinpath(fmt.format(idx=f"{idx:03d}"))
+
+    def get_frame_timing_path(self) -> Path:
+        source = self.get_session_path("frame_timing.csv", session=self.session)
+        return Path(source.location).joinpath(source.prefix)
 
     def to_local_value(self) -> Self:
         """Detach, if it was, from the possible shared memory values used for `when` & `session`.

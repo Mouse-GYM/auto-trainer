@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import math
+import multiprocessing
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from multiprocessing import synchronize
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from queue import Queue, Empty
@@ -78,10 +80,14 @@ class VideoRecord(Thread):
         properties: VideoRecordProperties,
         input_queue: Queue,
         *,
+        cam_idx: int = -1,
         record_stop_sema: Optional[SemaphoreType] = None,
+        msg_queue: Optional[multiprocessing.Queue] = None,
     ):
         super().__init__(name=properties.name, daemon=True)
+        self._cam_idx = cam_idx
         self._project_info = properties.project_info
+        self._prepared_project: Optional[ProjectInfo] = None
         self._name = properties.name
         self._width = properties.frame_size[0]
         self._height = properties.frame_size[1]
@@ -92,6 +98,7 @@ class VideoRecord(Thread):
 
         self._input_queue: Queue = input_queue
         self._record_stop_sema = record_stop_sema
+        self._msg_queue = msg_queue
 
         self._is_running = True
 
@@ -108,6 +115,7 @@ class VideoRecord(Thread):
         self._interval_reference = -1
         self._first_frame_when = math.inf
         self._first_frame_time = math.inf
+        self._first_frame_perf_c = math.inf
 
     @property
     def first_frame_time(self):
@@ -116,6 +124,14 @@ class VideoRecord(Thread):
     @first_frame_time.setter
     def first_frame_time(self, value):
         self._first_frame_time = value
+
+    @property
+    def first_frame_perf_c(self) -> float:
+        return self._first_frame_perf_c
+
+    @first_frame_perf_c.setter
+    def first_frame_perf_c(self, value: float):
+        self._first_frame_perf_c = value
 
     @property
     def first_frame_when(self):
@@ -151,11 +167,12 @@ class VideoRecord(Thread):
         tot_written = 0
         consecutive_failures = 0
         record_stop_sema = self._record_stop_sema
+        msg_queue = self._msg_queue
 
         while self._is_running:
 
             try:
-                queue_list = input_q.get(timeout=0.01)
+                queue_list = input_q.get(timeout=0.1)
             except Empty:
                 continue
             input_q.task_done()  # always !
@@ -171,14 +188,20 @@ class VideoRecord(Thread):
                     if record_stop_sema is not None:
                         record_stop_sema.release()
                         logger.verbose("released record_stop_sema: %s", record_stop_sema)
+                    if msg_queue is not None:
+                        # allows main process to know when it can merge the cameras timestamp files.
+                        msg_queue.put((
+                            SystemStatusMessageKind.CAMERA_RECORDING_CLOSED_FINISHED, (
+                                self._cam_idx, tot_written, self._prepared_project,
+                        )))
                     continue
 
                 for frame_id, frame, frame_when, frame_perf_now in queue_list:
                     # NB: reminder: frame_when is really camera clock, which vary from camera to camera,
                     # reconstructing frame_time (based on first frame start ~time):
                     # we assume camera clock is in nanoseconds precision, so using it:
-                    zero_based_frame_when = (frame_when - self._first_frame_when) / 1e9
-                    frame_time = self._first_frame_time + zero_based_frame_when
+                    zero_based_frame_perf_c = frame_perf_now - self._first_frame_perf_c
+                    frame_time = self._first_frame_time + zero_based_frame_perf_c
 
                     if self._is_video_enabled:
                         vid_writer = self._video_writer
@@ -197,19 +220,9 @@ class VideoRecord(Thread):
 
                         vid_ts_file = self._video_timestamp_file
                         if vid_ts_file is not None:
-                            # NB: Using camera frame_when, which is the most precise, to measure FPS:
-                            if prev_frame_when is None:
-                                d2 = 0
-                            else:
-                                # NB: we know that Spinnaker cameras give their timestamp in nanosecond unit,
-                                d2 = (frame_when - prev_frame_when) / 1e9  # so / 1e9 here.
-                                if d2:
-                                    d2 = 1 / d2
-                                else:
-                                    d2 = math.nan
+                            d2 = self._fps  # currently keeping in timestamps.txt file for eventual back-compat
                             vid_ts_file.write(f"{frame_time}, {d2}, {frame_when}, {frame_perf_now}, {frame_id}\n")
                             prev_perf_now = frame_perf_now
-                            prev_frame_when = frame_when
 
                     if 0 < self._image_interval <= frame_perf_now - self._last_image_perf_now:
                         img_loc, img_name = self._image_location, self._image_name
@@ -260,8 +273,10 @@ class VideoRecord(Thread):
             logger.warning("Cannot prepare writers with None project_info or not valid: %s", project)
             return
         self._interval_reference = project.get_interval(self._interval_mode, when=now)
+        project = project.to_local_value()  # ensure it doesn't change for below
         self._prepare_video_writer(project)
         self._prepare_image_capture(project)
+        self._prepared_project = project
 
     def _close_writers(self):
         logger.spam("closing writers...")
@@ -293,7 +308,7 @@ class VideoRecord(Thread):
 
         Path(video_file).parent.mkdir(parents=True, exist_ok=True)
         vid_writer = cv2.VideoWriter(
-            video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps, (self._width, self._height))
+            video_file, cv2.VideoWriter_fourcc(*'mp4v'), self._fps, (self._width, self._height))  # noqa
         if not vid_writer.isOpened():
             raise RuntimeError(f"Failed open {video_file} for writing")
         try:
