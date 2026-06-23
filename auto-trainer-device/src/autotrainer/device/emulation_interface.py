@@ -1,3 +1,4 @@
+import math
 import threading
 import time
 import typing
@@ -5,16 +6,16 @@ from pathlib import Path
 from random import uniform, random
 from typing import Union, Tuple
 
+from autotrainer.core import Offset3DTuple
 from autotrainer.core.logging import get_verbose_logger
 
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
                                StepperStatus, ServoStatus, Target, DigitalOutputs,
                                Motor, AnalogOutputs, SensorStatus, MagnetDigitalInputs,
                                AudioData, PressureReading, LoadCellReading, Version,
-                               PelletDigitalInputs, DoorData, Acknowledge
+                               PelletDigitalInputs, DoorData, Acknowledge, ColorLed
                                )
 from .can_interface import motor_to_str
-from ..core import Offset3DTuple
 
 logger = get_verbose_logger(__name__)
 
@@ -67,6 +68,8 @@ class EmulationInterface(DeviceInterface):
         self._last_status_message = 0.0
         self._last_audio_message = 0.0
         self._last_data_message = 0.0
+
+        self._color_led = ColorLed()
 
         self._positions = {
             Motor.PELLET_LOAD_SERVO: 0.0,
@@ -206,6 +209,7 @@ class EmulationInterface(DeviceInterface):
             messages.append(DoorData())
             messages.append(SensorStatus(temperature_c=28.0 + uniform(-2, 2),
                                          humidity_percent=50.0 + uniform(-2, 2)))
+            messages.append(self._color_led)
 
         fh_audio_replay = self._audio_replay_fh
         if fh_audio_replay is not None:
@@ -457,7 +461,9 @@ class EmulationInterface(DeviceInterface):
 
     def set_color_led(self, red_percent: int, green_percent: int, blue_percent: int) -> bool:
         if self._is_open:
+            color_led = self._color_led = ColorLed(red=red_percent, green=green_percent, blue=blue_percent)
             logger.info(f"Set color LED ({red_percent}, {green_percent}, {blue_percent})")
+            self._messages.append(color_led)
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 

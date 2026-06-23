@@ -18,6 +18,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
 from autotrainer.video import VideoRecordMode
 from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
@@ -62,25 +63,23 @@ def settings_ini_path(tmp_path):
 
 
 @pytest.fixture
-def user_pref(tmp_path, trainer_config_dir, animals_dir, settings_ini_path):
-    pref = UserPreferences(settings_file_path=settings_ini_path)
-    pref.configuration_location = trainer_config_dir
-    pref.animal_location = animals_dir
-    p = tmp_path.joinpath("logs")
-    p.mkdir()
-    pref.log_location = p
-    pref.log_level = int(verboselogs.VERBOSE)
-    return pref
-
-
-@pytest.fixture
-def app_model(user_pref, calib_dir, diamond_config_path, system_config, monkeypatch):
+def app_model(
+    user_pref,
+    calib_dir,
+    diamond_config_path,
+    system_config,
+    monkeypatch,
+) -> AppModel:  # noqa
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
     app = AppModel(user_pref, calib_dir=calib_dir)
-    return app
+    try:
+        yield app  # noqa
+    finally:
+        app.capture_stop(force=True)
+        app.on_close()
 
 
 def test_user_preferences(settings_ini_path, user_pref, trainer_config_dir):
@@ -104,8 +103,6 @@ def test_load_config(app_model, trainer_config_dir, animals_dir, calib_dir, syst
     pref = app_model.preferences
     assert Path(pref.animal_location) == animals_dir
     assert Path(pref.configuration_location) == trainer_config_dir
-
-    # ...
 
 
 def test_start_stop(app_model, settings_ini_path):

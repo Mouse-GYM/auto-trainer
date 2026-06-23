@@ -12,7 +12,7 @@ from multiprocessing.sharedctypes import (
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
 from threading import Event
-import urllib
+import urllib.parse
 
 import numpy
 from numpy import ndarray
@@ -108,7 +108,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._msg_queue = msg_queue  # for sending "status" message(s) to main process
         self._video_command_queue = mp_ctx.Queue(maxsize=64)
         self._video_status = mp_ctx.Value(ctypes.c_int, CaptureProcessStatus.UNKNOWN)
-        self._video_frame_index = mp_ctx.Value(ctypes.c_int64, -1)
+        self._video_frame_index = mp_ctx.Value(ctypes.c_int64, -1)  # actually unused
         self._video_image_queue: Optional[FixedArrayQueue] = None
         self._errors: SynchronizedString = mp_ctx.Array(ctypes.c_char, bytes(512))
         self._watchdog_capture_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
@@ -500,7 +500,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         expected: Union[CaptureProcessStatus, Iterable[CaptureProcessStatus]],
         *,
         timeout: float,
-    ):
+    ) -> bool:
         if isinstance(expected, CaptureProcessStatus):
             expected = (expected,)
         wait_status = set(expected)
