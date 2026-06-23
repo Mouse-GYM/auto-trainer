@@ -94,7 +94,6 @@ from tools.acquisition.model.video_capture_model import VideoCaptureModel
 logger = get_verbose_logger(__name__)
 
 # allow be patched from tests
-_recording_age_enough_timer = make_daemon_timer
 _daily_timer = make_daemon_timer
 
 
@@ -299,7 +298,6 @@ class AppModel(ObservableObject):
         self._handle_proc_msg_thread = threading.Thread(
             target=self._handle_proc_msg_queue, name="handle_proc_msg_queue", daemon=True)
         self._handle_proc_msg_thread.start()
-        self._timer_recording_age_enough = no_op_timer
         # end not sure
 
         # this is used to sync the start record frame of both cameras:
@@ -592,6 +590,17 @@ class AppModel(ObservableObject):
             inference.pose_algorithm = pose_algo
         self._pose_algorithm = pose_algo
 
+    def _identify_primary_main_cam_idx(self):
+        for idx, cam in enumerate(self._cameras):
+            if cam.is_primary:
+                logger.debug("using primary cam_idx=%s", idx)
+                return idx
+        logger.verbose(
+            "No primary camera defined, using camera-0 as main one: %s",
+            self._cameras[0],
+        )
+        return 0
+
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
@@ -619,8 +628,7 @@ class AppModel(ObservableObject):
             algo = self._behavior.algorithm
             if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
                 cam_idx, new_status, *r_args = args
-                if self._cameras[cam_idx].is_primary:
-                    self._timer_recording_age_enough.cancel()
+                if cam_idx == self._identify_primary_main_cam_idx():
                     if new_status == CaptureProcessStatus.RECORDING:
                         first_frame_perf, first_frame_when, first_frame_time, *r_args = r_args
                         p_now = first_frame_perf
@@ -1525,7 +1533,6 @@ class AppModel(ObservableObject):
 
         for timer in (
                 self._timer_one_minute_repeat,
-                self._timer_recording_age_enough,
                 self._timer_daily,
         ):
             logger.debug("stopping timer %s", timer)
