@@ -1115,14 +1115,15 @@ class SystemMachine(StateMachine):
     def _on_pellet_sent(self, *, perf_c: float):
         if self._algorithm.is_in_session:
             project = self._project_info
-            if self._pellet_machine.covered_state is False:
-                self._event_manager.post_event_content(
-                    ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
             if self._session_pellet_sent_perf_c is None:
                 self._session_pellet_sent_perf_c = perf_c
                 t_delivered = perf_c - self._algorithm.recording_start_perf_c
                 logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
                 project.t_pellet_delivered = t_delivered
+                if self._pellet_machine.covered_state is False:
+                    project.t_pellet_presented = t_delivered
+                    self._event_manager.post_event_content(
+                        ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
         else:
             self._consider_start_session(reason="pellet-sent")
 
@@ -1140,9 +1141,7 @@ class SystemMachine(StateMachine):
                 project.t_pellet_presented = perf_c - algo.recording_start_perf_c
                 logger.debug("set pellet_presented_perf_c=%.3f to project=%s", perf_c, project)
                 self._event_manager.post_event_content(
-                    ApiEventKind.trialPelletPresented,
-                    data=dict(trial_id=project.session),
-                )
+                    ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
