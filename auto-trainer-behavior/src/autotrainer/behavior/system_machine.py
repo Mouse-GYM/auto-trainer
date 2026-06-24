@@ -81,7 +81,10 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
-        self._project_info: Optional[ProjectInfo] = project_info
+        if project_info is None:
+            project_info = ProjectInfo()
+        project_info: ProjectInfo
+        self._project_info = project_info
         #
         self._next_shift_xyz_to_apply: Optional[Offset3DTuple] = None
         self._batch_project_sessions_start_list: List[ProjectInfo] = []
@@ -215,11 +218,12 @@ class SystemMachine(StateMachine):
         return self._intersession
 
     @property
-    def project(self) -> Optional[ProjectInfo]:
+    def project(self) -> ProjectInfo:
         return self._project_info
 
     @project.setter
     def project(self, value: ProjectInfo):
+        logger.verbose("Received new project-info, relaying to event manager, algo and inference ..")
         self._project_info = value
         self._event_manager.project = value
         self._algorithm.project = value
@@ -235,9 +239,9 @@ class SystemMachine(StateMachine):
         logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
                      reason, self._state, pellet_state, self._enter_tunnel_pellet_seen)
         if self._state == SystemState.cage:
+            self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
-        self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
 
     def after_enter_tunnel(self, *, reason: str = "NA"):
         self._consider_start_session(reason=reason)
@@ -409,28 +413,27 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_session_capture_started(self):
+        project = self._project_info
         dcs_send_pos = self._pellet_device.last_dcs_set_position
-        prj = self._project_info
         pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
-        if prj is None or dcs_send_pos is None:
-            logger.warning("project None or current dcs_send_pos None (DCS)")
+        if dcs_send_pos is None:
+            logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
         p_now = self._session_started_perf_c = get_perf_now()
         pellet_m = self._pellet_machine
         self._session_pellet_sent_perf_c = p_now if (
             pellet_m.state == PelletState.monitoring and pellet_recent_seen
         ) else None
         logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
-                       dcs_send_pos, None if prj is None else prj.when)
+                       dcs_send_pos, project.when)
         # ensure inference has the correct project info,
         # this is required for session batch processing.
         #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
-        if prj is not None:
-            prj.send_position = self._pellet_device.last_set_position
-            prj.dcs_send_position = dcs_send_pos
-            if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
-                prj.t_pellet_delivered = 0
-            logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
-            self._inference.project = prj
+        project.send_position = self._pellet_device.last_set_position
+        project.dcs_send_position = dcs_send_pos
+        if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
+            project.t_pellet_delivered = 0
+        logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
+        self._inference.project = project
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -441,10 +444,8 @@ class SystemMachine(StateMachine):
             self._tunnel_device.tare_load_cell()
         p_now = get_perf_now()
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
-        cur_project = self._project_info
-        if cur_project is not None:
-            cur_project = cur_project.to_local_value()
-            logger.verbose("capture_ended: project=%s", vars(cur_project))
+        cur_project = self._project_info.to_local_value()
+        logger.verbose("capture_ended: project=%s", vars(cur_project))
 
         algo = self._algorithm
         if not algo.active_config.pellet_delivery.retract_enabled:
@@ -538,6 +539,7 @@ class SystemMachine(StateMachine):
                 with algo.set_allow_reentrant(True):
                     self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
+            finished_batch = True
             shift_xyz = self._next_shift_xyz_to_apply
             if shift_xyz is not None:
                 self._next_shift_xyz_to_apply = None
@@ -548,8 +550,10 @@ class SystemMachine(StateMachine):
             # force inference project-info back to current/live one:
             self._inference.project = self._project_info
             algo.batch_analysis_ending(failed_count=self._batch_failed_count)
+        else:
+            finished_batch = False
 
-        if algo.active_config.batch_session_recording.enabled:
+        if finished_batch:
             self._event_manager.post_event_content(
                 ApiEventKind.batchAnalysisEnded,
                 data=dict(failed_count=self._batch_failed_count))
@@ -763,8 +767,6 @@ class SystemMachine(StateMachine):
 
     def _handle_pellet_uncover(self, response: PoseResponse):
         project = self._project_info
-        if project is None:
-            return
         algo = self._algorithm
         active_cfg = self._algorithm.active_config
         if not (algo.is_in_session and active_cfg.pellet_delivery.is_pellet_cover_enabled):
@@ -1097,9 +1099,8 @@ class SystemMachine(StateMachine):
         if new_value == PelletState.monitoring:
             if algo.is_in_session:
                 project = self._project_info
-                if project is not None:
-                    if not math.isfinite(project.t_pellet_delivered):
-                        project.t_pellet_delivered = algo.capture_status_age
+                if not math.isfinite(project.t_pellet_delivered):
+                    project.t_pellet_delivered = algo.capture_status_age
             else:
                 self._consider_start_session(reason="pellet-monitoring")
         elif new_value == PelletState.releasing:
@@ -1110,32 +1111,36 @@ class SystemMachine(StateMachine):
         self._consider_start_session(reason="pellet-sending")
 
     def _on_pellet_sent(self, *, perf_c: float):
-        self._event_manager.post_event_content(ApiEventKind.trialPelletPresented)
         if self._algorithm.is_in_session:
+            project = self._project_info
+            if self._pellet_machine.covered_state is False:
+                self._event_manager.post_event_content(
+                    ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
             if self._session_pellet_sent_perf_c is None:
                 self._session_pellet_sent_perf_c = perf_c
-                project = self._project_info
-                if project is not None:
-                    t_delivered = perf_c - self._algorithm.recording_start_perf_c
-                    logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
-                    project.t_pellet_delivered = t_delivered
+                t_delivered = perf_c - self._algorithm.recording_start_perf_c
+                logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
+                project.t_pellet_delivered = t_delivered
         else:
             self._consider_start_session(reason="pellet-sent")
 
     def _on_pellet_released(self, *, perf_c: float):
         project = self._project_info
-        if project is None:
-            return
         # for some reason the cover arm looks to sometimes still be finishing its move up to ~2-3 frames after
         # the perf_c we receive, it might be it's related to its inertia.
         perf_c += 0.012  # small correction for best result
+        algo = self._algorithm
         logger.debug(
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
-            perf_c, self._algorithm.is_in_session, self._session_started_perf_c, project)
-        if self._algorithm.is_in_session:
-            if project is not None and not math.isfinite(project.t_pellet_presented):
-                project.t_pellet_presented = perf_c - self._algorithm.recording_start_perf_c
+            perf_c, algo.is_in_session, self._session_started_perf_c, project)
+        if algo.is_in_session:
+            if not math.isfinite(project.t_pellet_presented):
+                project.t_pellet_presented = perf_c - algo.recording_start_perf_c
                 logger.debug("set pellet_presented_perf_c=%.3f to project=%s", perf_c, project)
+                self._event_manager.post_event_content(
+                    ApiEventKind.trialPelletPresented,
+                    data=dict(trial_id=project.session),
+                )
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)

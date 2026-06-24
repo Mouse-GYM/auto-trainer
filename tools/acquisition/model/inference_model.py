@@ -454,10 +454,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         logger.debug("_cb_on_intersession_segmentation_finished: success=%s error=%s prj=%s", success, error, project)
         if success:
             self._event_manager.post_event_content(
-                ApiEventKind.intertrialSegmentationSave, data=dict(location=project.get_session_path().location))
+                ApiEventKind.intertrialSegmentationSave,
+                data=dict(location=project.get_session_path().location, trial_id=project.session))
         else:
             self._event_manager.post_event_content(
-                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error))
+                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error, trial_id=project.session))
         self._handle_segmentation_finished(project, success, error=error)
 
     def _cb_on_set_feed_intersession_result(self, project: ProjectInfo, error: Optional[str],
@@ -554,12 +555,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def _intersession_process(self, intersession_detection: IntersessionDetection):
         det_cfg = intersession_detection.configuration
+        project = det_cfg.project
         pool = self._process_pool
         try:
             assert pool is not None
             async_res = pool.apply_async(
                 self._intersession_process_execute,
-                args=(det_cfg.project,),
+                args=(project,),
                 kwds=dict(
                     calib_dir=self._calib_dir,
                     frame_rate=det_cfg.frame_rate,
@@ -579,13 +581,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             result: IntersessionResponse
             self._event_manager.post_event_content(
                 ApiEventKind.intertrialDetectionSave,
-                data=dict(location=det_cfg.project.get_session_path().location),
+                data=dict(location=project.get_session_path().location, trial=project.session),
             )
             # assert isinstance(result, IntersessionResponse)
-            self.detection_result_ready(det_cfg.project, result)
+            self.detection_result_ready(project, result)
         else:
-            self._event_manager.post_event_content(ApiEventKind.intertrialDetectionError,
-                                                   data=dict(error=error))
+            self._event_manager.post_event_content(ApiEventKind.intertrialDetectionSaveError,
+                                                   data=dict(error=error, trial_id=project.session))
 
         intersession_detection.configuration.complete(processed_ok, error=error)
         self._intersession_detection = None

@@ -214,7 +214,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
-        self._project_info = project_info
+        self._project_info: ProjectInfo = ProjectInfo() if project_info is None else project_info
         self._status = BehaviorAlgoStatus.IDLE
 
         self._active_config = BehaviorConfiguration()
@@ -260,8 +260,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._capture_status = CaptureProcessStatus.UNKNOWN
         self._last_capture_status_change_perf_c = -math.inf
         self._recording_start_perf_c = math.nan
-
-        # self.max_pellets_per_headfix_session: int = 10  # unused
 
         self._pellet_shift_y_limit: Optional[float] = None
 
@@ -501,7 +499,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return self
 
     @property
-    def project(self) -> Optional[ProjectInfo]:
+    def project(self) -> ProjectInfo:
         return self._project_info
 
     @project.setter
@@ -1137,12 +1135,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.reset_session_pellet_count()
 
         project = self._project_info
-        if project is not None:  # can there be session capture without project_info actually ?
-            project.calculate_next_session_index()
-            self._event_manager.post_event_content(
-                ApiEventKind.projectSessionChanged,
-                data=dict(root=project.root, session=project.session),
-            )
+        project.calculate_next_session_index()
+        self._event_manager.post_event_content(
+            ApiEventKind.projectSessionChanged,
+            data=dict(root=project.root, session=project.session),
+        )
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
@@ -1159,7 +1156,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         self.session_starting()
 
-        self._event_manager.post_event_content(ApiEventKind.trialStarted)
+        self._event_manager.post_event_content(
+            ApiEventKind.trialStarted, data=dict(trial_id=project.session, reason=reason))
 
         return True
 
@@ -1190,7 +1188,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
+            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.session, reason=reason))
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1589,10 +1587,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         rsp = prev[1]
         return rsp.reach_events
 
-    def set_previous_intersession_analysis_rsp(self, prj: ProjectInfo, res: IntersessionResponse):
-        self._previous_intersession_analysis_rsp = (prj, res)
+    def set_previous_intersession_analysis_rsp(self, project: ProjectInfo, res: IntersessionResponse):
+        self._previous_intersession_analysis_rsp = (project, res)
         self._event_manager.post_event_content(
-            ApiEventKind.trialReachEvents, data=dict(trial_reach_events=res.reach_events))
+            ApiEventKind.trialReachEvents,
+            data=dict(trial_reach_events=res.reach_events, trial_id=project.session))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
@@ -1619,21 +1618,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.pellet_consumed_total = total_counts.consumed
         self.pellet_reaches_total = total_counts.reaches
         self.successful_reaches_total = total_counts.success_reaches
-
-    def _start_day(self):
-        self.pellet_consumed_day = 0  # consumed
-        self.pellets_presented_day = 0
-        self.successful_reaches_day = 0
-        self.pellet_reaches_day = 0
-
-    # unused atm...
-    def _check_date(self):
-        today = date.today()
-        if today != self._today:
-            dt = datetime.combine(today, datetime.min.time())
-            self._event_manager.post_event_content(ApiEventKind.dayStarted, dict(date=dt.timestamp()))
-            self._today = today
-            self._start_day()
 
     @staticmethod
     def close_algorithm_handler(*, timeout: float=3):
