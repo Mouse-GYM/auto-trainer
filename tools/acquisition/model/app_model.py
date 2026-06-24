@@ -619,8 +619,10 @@ class AppModel(ObservableObject):
         frame_duration = 1 / main_fps
         utc_when = None
         ts_file_fields = ("frame_time", "fps", "frame_when", "frame_perf", "frame_id")
+        ts_files = []
         for cam in cams:
             _, ts_filename, *_ = project.get_video_path(cam.name, allow_overwrite=True)
+            ts_files.append(Path(ts_filename))
             df = pandas.read_csv(ts_filename, names=ts_file_fields, sep=",", skipinitialspace=True)
             data.append(df)
             logger.debug("cam%s: df=%s", cam.camera_index, df)
@@ -655,6 +657,9 @@ class AppModel(ObservableObject):
                 )
                 dw.writerow(d)
         logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
+        for ts_file in ts_files:
+            ts_file: Path
+            ts_file.unlink(missing_ok=True)
 
     def _get_monitored_cams(self):
         cams = []  # put primary first
