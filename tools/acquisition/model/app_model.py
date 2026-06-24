@@ -643,7 +643,8 @@ class AppModel(ObservableObject):
         with timing_path.open("w") as fh:
             dw = csv.DictWriter(fh, out_fields)
             dw.writeheader()
-            for idx, frame_id in enumerate(range(start_frame_id, start_frame_id + len(df))):
+            # nb: only using main_cam as reference:
+            for idx, frame_id in enumerate(range(start_frame_id, start_frame_id + len(df_main_cam))):
                 # expected_frame_id = start_frame_id + idx
                 utc_when = first_frame_utc_when + idx * frame_duration
                 frame_when = df_main_cam['frame_when'][idx]
