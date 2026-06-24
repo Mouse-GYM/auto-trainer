@@ -1009,22 +1009,24 @@ class SystemMachine(StateMachine):
             tunnel_dev = self._tunnel_device
             self.cancel_timers()
             # don't leave in-progress:
-            self._autoclamp_set_in_progress(False)
-            self._auto_clamp_disengage_in_progress = False
+            if self._auto_clamp_in_progress:
+                with algo.set_allow_reentrant(True):
+                    self._execute_disengage_auto_clamp_if_in_progress()
             if new_value:
                 if algo.is_in_session:
                     if algo.intersession_state == IntersessionState.idle:
                         algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
                 if algo.status != BehaviorAlgoStatus.IDLE:
-                    for action_func in (
-                        tunnel_dev.open_tunnel_gate,
-                        lambda: self._update_magnet_position(0),
-                        lambda: self._pellet_machine.move_home(force=True),
-                    ):
-                        try:
-                            action_func()
-                        except Exception as err:
-                            logger.warning("%s failed: %s, but continuing", action_func, err)
+                    with algo.set_allow_reentrant(True):
+                        for action_func in (
+                            tunnel_dev.open_tunnel_gate,
+                            lambda: self._update_magnet_position(0),
+                            lambda: self._pellet_machine.move_home(force=True),
+                        ):
+                            try:
+                                action_func()
+                            except Exception as err:
+                                logger.warning("%s failed: %s, but continuing", action_func, err)
             else:
                 if algo.status != BehaviorAlgoStatus.IDLE:
                     tunnel_dev.open_tunnel_gate()
