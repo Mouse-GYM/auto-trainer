@@ -693,10 +693,10 @@ class CanDevice(Device):
                     else:
                         cur_commands.append(raw)
             #
-            has_compound_left = False
-            for board_ctx in boards_pending_ctx.values():
-                if board_ctx.compound_steps is not None and len(board_ctx.compound_steps) > 0:
-                    has_compound_left = True
+            has_compound_left = any(
+                board_ctx.compound_steps is not None and len(board_ctx.compound_steps) > 0
+                for board_ctx in boards_pending_ctx.values()
+            )
             #
             p_now = get_perf_now()
             retrying_board = None
