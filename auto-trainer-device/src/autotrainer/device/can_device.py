@@ -610,12 +610,10 @@ class CanDevice(Device):
                 raise RuntimeError("too many failure trying _perform_next_compound_step")
 
         def sort_available_commands(r):
-            k, d, c, p = r  # kind data ctx perf
+            k, d, c, perf_c = r  # kind data ctx perf
             t = self._find_command_next_board_target(k, d)
             b: _BoardPendingContext = self._boards_pending_ctx[t]
-            if b.is_available():
-                return p
-            return math.inf
+            return (0 if b.is_available() else 1, perf_c)
 
         p_before_loop = get_perf_now()
         while True:
