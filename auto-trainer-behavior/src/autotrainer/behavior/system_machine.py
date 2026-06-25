@@ -119,7 +119,6 @@ class SystemMachine(StateMachine):
         self._enter_tunnel_pellet_seen = False
 
         self._session_started_perf_c = -math.inf
-        self._session_pellet_sent_perf_c: Optional[float] = None
 
         self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
@@ -420,9 +419,6 @@ class SystemMachine(StateMachine):
         p_now = self._session_started_perf_c = get_perf_now()
         pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
-        self._session_pellet_sent_perf_c = p_now if (
-            pellet_m.state == PelletState.monitoring and pellet_recent_seen
-        ) else None
         logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, project.when)
         # ensure inference has the correct project info,
@@ -1117,8 +1113,7 @@ class SystemMachine(StateMachine):
     def _on_pellet_sent(self, *, perf_c: float):
         if self._algorithm.is_in_session:
             project = self._project_info
-            if self._session_pellet_sent_perf_c is None:
-                self._session_pellet_sent_perf_c = perf_c
+            if not math.isfinite(project.t_pellet_delivered):
                 t_delivered = perf_c - self._algorithm.recording_start_perf_c
                 logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
                 project.t_pellet_delivered = t_delivered
