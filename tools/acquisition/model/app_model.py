@@ -639,7 +639,7 @@ class AppModel(ObservableObject):
                 # align on same first frame_id than primary cam:
                 cur_first_frame_id = df["frame_id"][0]
                 if cur_first_frame_id < main_cam_first_frame_id:
-                    df = df.tail(-(main_cam_first_frame_id - cur_first_frame_id))
+                    df = df.tail(-(main_cam_first_frame_id - cur_first_frame_id)).reset_index(drop=True)
             data[idx_df] = df
         #
         df_second_cam = data[1]
