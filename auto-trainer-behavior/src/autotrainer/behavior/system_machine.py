@@ -415,10 +415,10 @@ class SystemMachine(StateMachine):
     def _on_session_capture_started(self):
         project = self._project_info
         dcs_send_pos = self._pellet_device.last_dcs_set_position
-        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         if dcs_send_pos is None:
             logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
         p_now = self._session_started_perf_c = get_perf_now()
+        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
         self._session_pellet_sent_perf_c = p_now if (
             pellet_m.state == PelletState.monitoring and pellet_recent_seen
@@ -430,9 +430,11 @@ class SystemMachine(StateMachine):
         #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
         project.send_position = self._pellet_device.last_set_position
         project.dcs_send_position = dcs_send_pos
+        logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
         if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
             project.t_pellet_delivered = 0
-        logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
+            if pellet_m.covered_state is False:
+                project.t_pellet_presented = 0
         self._inference.project = project
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
