@@ -630,6 +630,7 @@ class AppModel(ObservableObject):
             return
         main_cam_first_frame_id = df_main_cam["frame_id"][0]
         for idx_df, df in enumerate(data[1:], start=1):
+            df: pandas.DataFrame
             if len(df) == 0:
                 logger.warning("_merge_camera_timestamp_files: empty df for cam-%s", cams[idx_df].name)
                 df = df_main_cam.copy()
@@ -638,7 +639,7 @@ class AppModel(ObservableObject):
                 # align on same first frame_id than primary cam:
                 cur_first_frame_id = df["frame_id"][0]
                 if cur_first_frame_id < main_cam_first_frame_id:
-                    df = df.iloc[main_cam_first_frame_id - cur_first_frame_id:]
+                    df = df.tail(-(main_cam_first_frame_id - cur_first_frame_id))
             data[idx_df] = df
         #
         df_second_cam = data[1]
