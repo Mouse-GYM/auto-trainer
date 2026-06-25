@@ -1203,7 +1203,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         logger.notice("session processing end: %s ; project=%s", result, project)
         self._event_manager.post_event_content(
             ApiEventKind.trialEnded, data=dict(result=result))
-        self.session_ending(result)  # NB: only used via tests
+        self.session_ending(project, result)
 
     def reset_session_pellet_count(self):
         self.session_pellet_loaded_count = 0

@@ -2,7 +2,7 @@ import enum
 from typing import Callable, List, Protocol, Optional, TypeVar
 from uuid import UUID
 
-from autotrainer.core import Offset3DTuple, ObservableObjectProtocol
+from autotrainer.core import Offset3DTuple, ObservableObjectProtocol, ProjectInfo
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.reach_event import ReachEvent
 
@@ -258,7 +258,7 @@ class BehaviorAlgoEvents:
     batch_analysis_starting = EventHandler[BatchAnalysisStartingEvent]
     batch_analysis_ending = EventHandler[BatchAnalysisEndingEvent]
 
-    session_ending = EventHandler[Callable[[CaptureAnalysisResult], None]]
+    session_ending = EventHandler[Callable[[ProjectInfo, CaptureAnalysisResult], None]]
 
     cover_servo_status_changed = EventHandler[Callable[[CoverServoStatus], None]]
 

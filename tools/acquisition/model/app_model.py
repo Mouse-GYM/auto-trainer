@@ -418,13 +418,13 @@ class AppModel(ObservableObject):
         algo.property_changed += self._on_behavior_algo_property_changed
         algo.session_starting_before_record_start += self._on_session_starting_before_record_start
         algo.session_capture_ending += self._on_session_capture_ended
+        algo.session_ending += self._on_session_ending
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
         intersession = system_machine.intersession
         intersession.events.property_changed += self._on_intersession_property_changed
-        intersession.events.on_analysis_ended += self._on_intersession_analysis_ended
 
         pellet_m = system_machine.pellet
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
@@ -1821,17 +1821,6 @@ class AppModel(ObservableObject):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
 
-    def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
-        if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
-            cnt_removed = 0
-            for cam in self._cameras:
-                _, ts_file, _ = project.get_video_path(cam.name)
-                ts_file = Path(ts_file)
-                if ts_file.exists():
-                    ts_file.unlink()
-                    cnt_removed += 1
-            logger.debug("removed %s timestamps txt files", cnt_removed)
-
     def _on_session_starting_before_record_start(self):
         drained = 0
         while self._record_stop_sema.acquire(block=False):
@@ -1846,6 +1835,20 @@ class AppModel(ObservableObject):
         # self._behavior.system_machine.on_session_capture_ended(reason)
         # NB: had to keep in system_machine for many tests.
         # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
+
+    def _clean_timestamps_txt_files(self, project: ProjectInfo):
+        removed = []
+        for cam in self._cameras:
+            _, ts_file, _ = project.get_video_path(cam.name, allow_overwrite=True)
+            ts_file = Path(ts_file)
+            if ts_file.exists():
+                ts_file.unlink()
+                removed.append(ts_file)
+        logger.debug("%s: removed timestamps txt files: %s", project.short_id, removed)
+
+    def _on_session_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
+            self._clean_timestamps_txt_files(project)
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps

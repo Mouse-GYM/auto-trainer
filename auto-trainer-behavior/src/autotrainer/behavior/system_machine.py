@@ -131,7 +131,6 @@ class SystemMachine(StateMachine):
         algo.session_starting += self._on_session_capture_started
         algo.session_capture_ending += self.on_session_capture_ended
         algo.property_changed += self._on_algorithm_property_changed
-        algo.session_ending
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
         shift_xyz_handler = self._shift_xyz_handler = ShiftXYZHandler(algo=algo)
@@ -520,10 +519,11 @@ class SystemMachine(StateMachine):
             # at the end of live recording pose-process automatically goes to offline mode,
             # so we ask it to switch back to live:
             self._inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
-            algo.end_session(
-                cur_project,
-                CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
-                else CaptureAnalysisResult.CAPTURE_ONLY)
+            if cur_project is not None:
+                algo.end_session(
+                    cur_project,
+                    CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
+                    else CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
