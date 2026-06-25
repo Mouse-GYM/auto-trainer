@@ -47,7 +47,7 @@ from autotrainer.core import (
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
-from autotrainer.core.interfaces import RecordingEndingReason
+from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -424,6 +424,7 @@ class AppModel(ObservableObject):
 
         intersession = system_machine.intersession
         intersession.events.property_changed += self._on_intersession_property_changed
+        intersession.events.on_analysis_ended += self._on_intersession_analysis_ended
 
         pellet_m = system_machine.pellet
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
@@ -610,19 +611,15 @@ class AppModel(ObservableObject):
                     project.session, timing_path)
         data = []
         prim_cam = cams[0]  # primary
-        main_fps = prim_cam.save_configuration().params.get("fps", math.nan)  # extract configured fps
+        main_fps = prim_cam.active_config.params.get('fps', math.nan)
         if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
-            logger.error(
-                "skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name
-            )
+            logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
             return
         frame_duration = 1 / main_fps
         utc_when = None
         ts_file_fields = ("frame_time", "fps", "frame_when", "frame_perf", "frame_id")
-        ts_files = []
         for cam in cams:
             _, ts_filename, *_ = project.get_video_path(cam.name, allow_overwrite=True)
-            ts_files.append(Path(ts_filename))
             df = pandas.read_csv(ts_filename, names=ts_file_fields, sep=",", skipinitialspace=True)
             data.append(df)
             logger.debug("cam%s: df=%s", cam.camera_index, df)
@@ -658,9 +655,7 @@ class AppModel(ObservableObject):
                 )
                 dw.writerow(d)
         logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
-        for ts_file in ts_files:
-            ts_file: Path
-            ts_file.unlink(missing_ok=True)
+
 
     def _get_monitored_cams(self):
         cams = []  # put primary first
@@ -1825,6 +1820,17 @@ class AppModel(ObservableObject):
     def _on_intersession_property_changed(self, name, value, _):
         if name == IntersessionMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
+
+    def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
+            cnt_removed = 0
+            for cam in self._cameras:
+                _, ts_file, _ = project.get_video_path(cam.name)
+                ts_file = Path(ts_file)
+                if ts_file.exists():
+                    ts_file.unlink()
+                    cnt_removed += 1
+            logger.debug("removed %s timestamps txt files", cnt_removed)
 
     def _on_session_starting_before_record_start(self):
         drained = 0

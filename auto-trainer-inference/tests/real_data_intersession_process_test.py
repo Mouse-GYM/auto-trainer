@@ -113,7 +113,6 @@ def test_fp_and_xp_not_same(project_info, caplog):
         project_info,
         calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     )
-    assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
     assert res.pellets_presented == 1
     assert res.food_consumed == 0

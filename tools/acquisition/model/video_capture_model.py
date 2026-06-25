@@ -424,6 +424,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         logger.debug("closing %s", self.name)
         self.on_capture_stop()
 
+    @property
+    def active_config(self) -> CameraConfiguration:
+        return self._cur_conf
+
     def load_configuration(self, conf: CameraConfiguration):
         self._id = conf.id
         self._name = str(conf.id)

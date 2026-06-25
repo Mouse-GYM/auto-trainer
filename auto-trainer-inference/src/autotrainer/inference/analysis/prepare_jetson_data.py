@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, filtfilt
 
+from autotrainer.core import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference import calibration_FLIR as cal_flir
@@ -69,49 +70,8 @@ def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray:
     # Load timestamps from the file
     timestamps_df = pd.read_csv(timestamp_file, header=None,
                                 names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id'])
-    if len(timestamps_df) == 0:
-        return np.asarray([], dtype=int)
-    # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
-    # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
-    timestamps_ns = timestamps_df['frame_when_ns'].values  # Extract desired column
-    timestamps_s = timestamps_ns / 1e9  # Convert seconds <-> nanoseconds
-
-    # Calculate inter-frame intervals
-    intervals = np.diff(timestamps_s)
-
-    # Calculate the expected inter-frame interval
-    expected_interval = 1.0 / frame_rate
-
-    # Create a binary vector for the entire video length
-    expected_frame_count = 1 + round((timestamps_ns[-1] - timestamps_ns[0]) * frame_rate / 1e9)
-    if expected_frame_count != len(timestamps_df):
-        logger.warning(
-            "Correcting expected_frame_count from %s to %s ; file=%s ; timestamps: min=%s max=%s frame_rate=%s",
-            expected_frame_count, len(timestamps_df), timestamp_file, timestamps_s.min(), timestamps_s.max(), frame_rate)
-        expected_frame_count = len(timestamps_df)
-
-    dropped_frame_vector = np.zeros(expected_frame_count, dtype=int)
-
-    # Mark dropped frames
-    current_frame = 0
-    for i, interval in enumerate(intervals):
-        # not sure:
-        if current_frame > len(dropped_frame_vector) - 1:
-            logger.verbose("breaking dropped_frame_vector loop")
-            break
-        dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
-        current_frame += 1
-        if interval > 1.5 * expected_interval:  # Dropped frame threshold
-            # Calculate how many frames were missed
-            missed_count = int(round(interval / expected_interval)) - 1
-            dropped_frame_vector[current_frame:current_frame + missed_count] = 1  # Mark missed frames
-            current_frame += missed_count
-            logger.warning("identified drop frame: i=%s iv=%s", i, interval)
-
-    # Mark the last frame as successful
-    if current_frame < len(dropped_frame_vector):
-        dropped_frame_vector[current_frame] = 0
-
+    dropped_frame_vector = np.ndarray((len(timestamps_df),), dtype=np.uint8)
+    dropped_frame_vector[:] = timestamps_df['frame_when_ns'].isna().astype(np.uint8).array
     return dropped_frame_vector
 
 
@@ -236,7 +196,12 @@ def process_hand_data(
 
 
 # extract tracking data from H5 file
-def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
+def extract_tracking_data(
+    video_paths,
+    dlc_seg,
+    p_thresh,
+    frame_rate,
+):
     dataframe_RL = []
     bodyparts = ['R_Hand', 'L_Hand', 'Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle',
                  'Diamond']
@@ -834,7 +799,12 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
-    session, vid_tag, dlc_seg, calib_src_dir, center_method,
+    project: ProjectInfo,
+    session,
+    vid_tag,
+    dlc_seg,
+    calib_src_dir,
+    center_method,
     *,
     frame_rate: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:  # df_LR, df_3D

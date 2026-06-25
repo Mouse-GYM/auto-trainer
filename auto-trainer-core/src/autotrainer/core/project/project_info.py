@@ -183,6 +183,10 @@ class ProjectInfo(_ProjectInfo):
         self.t_pellet_delivered = t_pellet_delivered
         self.t_pellet_presented = t_pellet_presented
 
+    @property
+    def short_id(self) -> str:
+        return f"{self.when.strftime(DATE_FORMAT)}_{self.device_id}_{self.session:03d}"
+
     # def __repr__(self):
     #     return (
     #         f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
