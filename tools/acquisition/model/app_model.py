@@ -1854,7 +1854,7 @@ class AppModel(ObservableObject):
                 timer = make_daemon_timer(30, lambda: self._clean_timestamps_txt_files(project))
                 # 30s should be enough, the full stop of recording at camera process side, takes ~1-2-3s usually max.
                 timer.start()
-            else:
+            elif result != CaptureAnalysisResult.ANALYSIS_FAILED:  # keep result in case of analysis error
                 # when not capture_only it's ok to delete here immediatelly:
                 self._clean_timestamps_txt_files(project)
 
