@@ -656,7 +656,6 @@ class AppModel(ObservableObject):
                 dw.writerow(d)
         logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
 
-
     def _get_monitored_cams(self):
         cams = []  # put primary first
         monitored_cams = (self._left_camera, self._right_camera)
@@ -1848,7 +1847,16 @@ class AppModel(ObservableObject):
 
     def _on_session_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
         if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
-            self._clean_timestamps_txt_files(project)
+            # NB: don't clean immediatelly:
+            # for capture-only result: the merge of these files into the unique common timing csv file most often
+            # is not yet done, given it's async/after relatively to this session_ending().
+            if result == CaptureAnalysisResult.CAPTURE_ONLY:
+                timer = make_daemon_timer(30, lambda: self._clean_timestamps_txt_files(project))
+                # 30s should be enough, the full stop of recording at camera process side, takes ~1-2-3s usually max.
+                timer.start()
+            else:
+                # when not capture_only it's ok to delete here immediatelly:
+                self._clean_timestamps_txt_files(project)
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
