@@ -442,9 +442,10 @@ class SystemMachine(StateMachine):
         p_now = get_perf_now()
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
         cur_project = self._project_info
-        if cur_project is not None:
-            cur_project = cur_project.to_local_value()
-            logger.verbose("capture_ended: project=%s", vars(cur_project))
+        if cur_project is None:
+            return
+        cur_project = cur_project.to_local_value()
+        logger.verbose("capture_ended: project=%s", cur_project)
 
         algo = self._algorithm
         if not algo.active_config.pellet_delivery.retract_enabled:
@@ -488,9 +489,10 @@ class SystemMachine(StateMachine):
             )
         #
         logger.notice(
-            "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
+            "session ended: prj=%s intersession.state=%s system_machine.state=%s algo.system_state=%s "
             "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s "
             "can_batch=%s can_perform_analysis=%s real=%s",
+            cur_project.short_id,
             self._intersession.state, self.state, algo.system_state,
             self._pellet_machine.state,
             algo.intersession_enabled, algo.session_mouse_seen,
