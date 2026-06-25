@@ -625,6 +625,22 @@ class AppModel(ObservableObject):
             logger.debug("cam%s: df=%s", cam.camera_index, df)
         #
         df_main_cam = data[0]
+        if len(df_main_cam) == 0:
+            logger.warning("_merge_camera_timestamp_files: empty df for main cam")
+            return
+        main_cam_first_frame_id = df_main_cam["frame_id"][0]
+        for idx_df, df in enumerate(data[1:], start=1):
+            if len(df) == 0:
+                logger.warning("_merge_camera_timestamp_files: empty df for cam-%s", cams[idx_df].name)
+                df = df_main_cam.copy()
+                df["frame_when"] = df["frame_perf"] = df["frame_time"] = math.nan
+            else:
+                # align on same first frame_id than primary cam:
+                cur_first_frame_id = df["frame_id"][0]
+                if cur_first_frame_id < main_cam_first_frame_id:
+                    df = df.iloc[main_cam_first_frame_id - cur_first_frame_id:]
+            data[idx_df] = df
+        #
         df_second_cam = data[1]
         r0 = df_main_cam[:1]
         start_frame_id = r0['frame_id'][0]
@@ -645,7 +661,11 @@ class AppModel(ObservableObject):
                 # expected_frame_id = start_frame_id + idx
                 utc_when = first_frame_utc_when + idx * frame_duration
                 frame_when = df_main_cam['frame_when'][idx]
-                second_frame_when = df_second_cam['frame_when'][idx]
+                # protect in case of secondary camera recorded less frames:
+                if idx >= len(df_second_cam):
+                    second_frame_when = math.nan
+                else:
+                    second_frame_when = df_second_cam['frame_when'][idx]
                 d = dict(
                     frame_id=frame_id,
                     frame_when=frame_when if math.isfinite(frame_when) else "",  # could keep the math.nan otherwise
