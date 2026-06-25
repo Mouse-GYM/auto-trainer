@@ -792,10 +792,12 @@ class SystemMachine(StateMachine):
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
-            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f", min_y, max_y)
+            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f loc3d=%s",
+                           min_y, max_y, response.locations_3d)
             ctx.start_min_y = min_y
         elif not valid and prev_valid:
-            logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
+            logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f loc3d=%s",
+                           max_y, response.locations_3d)
         if valid:
             if not math.isfinite(ctx.start_y_dcs_valid_perf_c):
                 ctx.start_y_dcs_valid_perf_c = perf_now
