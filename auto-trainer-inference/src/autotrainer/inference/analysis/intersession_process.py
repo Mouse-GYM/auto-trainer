@@ -54,7 +54,6 @@ def intersession_process(
     center_method = (1, SceneElement.Diamond)
     #
     df_lr, centered_df_3d = process_raw_data(
-        project,
         location, vid_tag, dlc_seg, calib_src_dir, center_method,
         frame_rate=frame_rate,
     )

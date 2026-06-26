@@ -799,7 +799,6 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
-    project: ProjectInfo,
     session,
     vid_tag,
     dlc_seg,
