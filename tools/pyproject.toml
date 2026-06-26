@@ -14,7 +14,7 @@ dynamic = ["version"]
 dependencies = [
     # requesting exact version for auto-trainer standalone projects,
     # given API can be still unstable.
-    'auto-trainer-training == 0.9.26',
+    'auto-trainer-training == 0.9.27',
     # NB: auto-trainer-api is coming via auto-trainer-core
 
     # but not already for these, still parts of this repo:
