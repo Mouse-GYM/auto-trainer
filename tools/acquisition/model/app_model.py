@@ -750,6 +750,7 @@ class AppModel(ObservableObject):
             if cam_idx in monitored_cam_indices:
                 cams_closed_finished[cam_idx] = (project, frames_written)
                 if all(cam.camera_index in cams_closed_finished for cam in monitored_cams):
+                    project = cams_closed_finished[0][0]  # always take the primary cam passed project as ref.
                     self._merge_camera_timestamp_files(project, monitored_cams)
                     cams_closed_finished.clear()  # now clear
         else:
