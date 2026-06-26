@@ -612,6 +612,7 @@ class AppModel(ObservableObject):
         data = []
         prim_cam = cams[0]  # primary
         main_fps = prim_cam.active_config.params.get('fps', math.nan)
+        txt_files = []
         if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
             logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
             return
@@ -620,8 +621,10 @@ class AppModel(ObservableObject):
         ts_file_fields = ("frame_time", "fps", "frame_when", "frame_perf", "frame_id")
         for cam in cams:
             _, ts_filename, *_ = project.get_video_path(cam.name, allow_overwrite=True)
+            ts_filename = Path(ts_filename)
             df = pandas.read_csv(ts_filename, names=ts_file_fields, sep=",", skipinitialspace=True)
             data.append(df)
+            txt_files.append(ts_filename)
             logger.debug("cam%s: df=%s", cam.camera_index, df)
         #
         df_main_cam = data[0]
@@ -647,7 +650,7 @@ class AppModel(ObservableObject):
         start_frame_id = r0['frame_id'][0]
         first_frame_utc_when = r0['frame_time'][0]
         logger.debug("start_frame_id=%s (utc_when=%s)", start_frame_id, first_frame_utc_when)
-        out_fields = [
+        timing_csv_fields = [
             'frame_id',
             'frame_when',
             'frame_present_primary',
@@ -655,7 +658,7 @@ class AppModel(ObservableObject):
             'utc_when',
         ]
         with timing_path.open("w") as fh:
-            dw = csv.DictWriter(fh, out_fields)
+            dw = csv.DictWriter(fh, timing_csv_fields)
             dw.writeheader()
             # nb: only using main_cam as reference:
             for idx, frame_id in enumerate(range(start_frame_id, start_frame_id + len(df_main_cam))):
@@ -676,6 +679,9 @@ class AppModel(ObservableObject):
                 )
                 dw.writerow(d)
         logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
+        for p in txt_files:
+            p: Path
+            p.unlink(missing_ok=True)
 
     def _get_monitored_cams(self):
         cams = []  # put primary first

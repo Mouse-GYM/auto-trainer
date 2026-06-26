@@ -13,7 +13,7 @@ import math
 import pandas
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Literal
 
 import cv2
 import numpy as np
@@ -56,22 +56,34 @@ def dict_almost_equal(d1, d2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 
-def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray:
+def identify_dropped_frames(
+    timestamp_file,
+    frame_rate,
+    *,
+    cam_col_present_name: Literal["frame_present_primary", "frame_present_secondary"],
+) -> np.ndarray:
     """
     Identify dropped frames in a video based on inter-frame intervals.
 
     Parameters:
-        timestamp_file (str): Path to the CSV file containing timestamps in nanoseconds.
+        timestamp_file (str): Path to the timing CSV file containing the frames id/timestamps infos for all cameras
         frame_rate (float): Expected frame rate in frames per second.
 
     Returns:
         np.ndarray: A binary vector with 0 for successful frames and 1 for dropped frames.
     """
     # Load timestamps from the file
-    timestamps_df = pd.read_csv(timestamp_file, header=None,
-                                names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id'])
+    # timing_header = ['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id']
+    timing_csv_fields = [
+        "frame_id",
+        "frame_when",
+        "frame_present_primary",
+        "frame_present_secondary",
+        "utc_when",
+    ]
+    timestamps_df = pd.read_csv(timestamp_file, header=0, names=timing_csv_fields, skipinitialspace=True, delimiter=",")
     dropped_frame_vector = np.ndarray((len(timestamps_df),), dtype=np.uint8)
-    dropped_frame_vector[:] = timestamps_df['frame_when_ns'].isna().astype(np.uint8).array
+    dropped_frame_vector[:] = timestamps_df[cam_col_present_name].apply(lambda val: val != 1).array
     return dropped_frame_vector
 
 
@@ -197,6 +209,7 @@ def process_hand_data(
 
 # extract tracking data from H5 file
 def extract_tracking_data(
+    project: ProjectInfo,
     video_paths,
     dlc_seg,
     p_thresh,
@@ -212,7 +225,7 @@ def extract_tracking_data(
     hand_base_names = ['H_flat', 'H_spread', 'H_grab']
     hand_options = ['R', 'L']
     additional_names = ['Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle', 'Diamond']
-    for v_path in video_paths:
+    for cam_idx, v_path in enumerate(video_paths):
         logger.info("extract_tracking_data: %s", v_path)
         vid_dir, vid_name_raw = os.path.split(v_path)
         vid_name_raw = os.path.splitext(vid_name_raw)[0]
@@ -233,9 +246,18 @@ def extract_tracking_data(
 
         # Generate the dropped frame vector
         v_path = Path(v_path)
-        timestamp_file = v_path.parent.joinpath(f"{v_path.stem}_timestamps.txt").as_posix()
-        dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
-
+        timestamp_file_path = project.get_frame_timing_path()
+        if cam_idx == 0:
+            cam_col_present_name = "frame_present_primary"
+        elif cam_idx == 1:
+            cam_col_present_name = "frame_present_secondary"
+        else:
+            raise RuntimeError(f"Invalid cam index: {cam_idx}")
+        #
+        dropped_frame_vector = identify_dropped_frames(
+            str(timestamp_file_path), frame_rate,
+            cam_col_present_name=cam_col_present_name,
+        )
         # # In cases where there are more timestamps than frames
         if len(df) != len(dropped_frame_vector):
             logger.verbose("len(df)=%s vs len(dropped_frame_vector)=%s ; cutting to shortest",
@@ -799,6 +821,7 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
+    project: ProjectInfo,
     session,
     vid_tag,
     dlc_seg,
@@ -816,13 +839,15 @@ def process_raw_data(
 
     # Extract relevant video paths in order
     videoOrder = ['left', 'right']
-    video_paths = [video for key in videoOrder for video in videoList if key in video]
+    # NB: this so set "left" as the primary camera, given that's the assumption used here.
 
-    if not video_paths:
-        raise RuntimeError("No Videos found!")
+    video_paths = [video for key in videoOrder for video in videoList if key in video]
+    if len(video_paths) != 2:
+        raise RuntimeError(f"Missed at least 1 video: found: {video_paths}")
+    # could use: project.get_video_path()
 
     # Extract reach data, filter, prep for undistortion and triangulation
-    df_LR, bodyparts = extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate)
+    df_LR, bodyparts = extract_tracking_data(project, video_paths, dlc_seg, p_thresh, frame_rate)
     vid_name_base, vid_dir = get_vid_name_base(video_paths[0])
     # Extract reach data, filter, prep for undistortion and triangulation
     for ndx, df in enumerate(df_LR):

@@ -8,17 +8,26 @@ from unittest.mock import patch
 
 import h5py.h5f
 import numpy
+import numpy as np
+import pandas as pd
 import verboselogs
 
-from autotrainer.core import Offset3DTuple, ProjectInfo
+from autotrainer.core import Offset3DTuple, ProjectInfo, get_verbose_logger
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
-from autotrainer.inference.analysis import intersession_process, IntersessionResponse
+from autotrainer.inference.analysis import (
+    intersession_process,
+    IntersessionResponse,
+    prepare_jetson_data,
+)
 from autotrainer.core.reach_event import ReachEvent
 
 import pytest
 
 from top_fixtures import AlmostEqualFloat
+
+
+logger = get_verbose_logger(__name__)
 
 this_dir = Path(__file__).parent.resolve()
 data_dir = this_dir.joinpath("data")
@@ -36,6 +45,68 @@ class _ProjectInfo(ProjectInfo):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _init_t_presented_released(self)
+
+
+def patched_identify_dropped_frames(timestamp_file, frame_rate, *, cam_col_present_name: str) -> np.ndarray:
+    """patched for test purpose, to allow reuse previous data"""
+    name = "left" if "primary" in cam_col_present_name else "right"
+    timestamp_file = timestamp_file.replace("frame_timing.csv", f"{name}_timestamps.txt")
+    # Load timestamps from the file
+    timestamps_df = pd.read_csv(timestamp_file, header=None,
+                                names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id'])
+    if len(timestamps_df) == 0:
+        return np.asarray([], dtype=int)
+    # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
+    # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
+    timestamps_ns = timestamps_df['frame_when_ns'].values  # Extract desired column
+    timestamps_s = timestamps_ns / 1e9  # Convert seconds <-> nanoseconds
+
+    # Calculate inter-frame intervals
+    intervals = np.diff(timestamps_s)
+
+    # Calculate the expected inter-frame interval
+    expected_interval = 1.0 / frame_rate
+
+    # Create a binary vector for the entire video length
+    expected_frame_count = 1 + round((timestamps_ns[-1] - timestamps_ns[0]) * frame_rate / 1e9)
+    if expected_frame_count != len(timestamps_df):
+        logger.warning(
+            "Correcting expected_frame_count from %s to %s ; file=%s ; timestamps: min=%s max=%s frame_rate=%s",
+            expected_frame_count, len(timestamps_df), timestamp_file, timestamps_s.min(), timestamps_s.max(), frame_rate)
+        expected_frame_count = len(timestamps_df)
+
+    dropped_frame_vector = np.zeros(expected_frame_count, dtype=int)
+
+    # Mark dropped frames
+    current_frame = 0
+    for i, interval in enumerate(intervals):
+        # not sure:
+        if current_frame > len(dropped_frame_vector) - 1:
+            logger.verbose("breaking dropped_frame_vector loop")
+            break
+        dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
+        current_frame += 1
+        if interval > 1.5 * expected_interval:  # Dropped frame threshold
+            # Calculate how many frames were missed
+            missed_count = int(round(interval / expected_interval)) - 1
+            dropped_frame_vector[current_frame:current_frame + missed_count] = 1  # Mark missed frames
+            current_frame += missed_count
+            logger.warning("identified drop frame: i=%s iv=%s", i, interval)
+
+    # Mark the last frame as successful
+    if current_frame < len(dropped_frame_vector):
+        dropped_frame_vector[current_frame] = 0
+
+    return dropped_frame_vector
+
+
+@pytest.fixture(autouse=True)
+def _patch_identify_dropped_frames_for_previous(monkeypatch):
+    monkeypatch.setattr(
+        prepare_jetson_data,
+        prepare_jetson_data.identify_dropped_frames.__qualname__,
+        patched_identify_dropped_frames,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -113,6 +184,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
         project_info,
         calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     )
+    assert "Correcting expected_frame_count from " in caplog.text
     assert isinstance(res, IntersessionResponse)
     assert res.pellets_presented == 1
     assert res.food_consumed == 0
