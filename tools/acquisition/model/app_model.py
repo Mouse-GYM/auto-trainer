@@ -262,7 +262,7 @@ class AppModel(ObservableObject):
         self._loaded_config_dir_path = Path()
 
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
-        self._is_recording_trigger = False
+        self._is_recording_trigger = False  # actually unused
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
@@ -1365,7 +1365,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, when=datetime.now(), session=None)
+        self._save_project_metadata(project_info, when=datetime.now(), session=None, caller="capture_start")
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1726,10 +1726,10 @@ class AppModel(ObservableObject):
 
     def _trigger_received(self, notification: Notification):
         self._is_recording_trigger = notification.context
-        project = self._project_info
-        if notification.context and project is not None:
-            self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
-                                project.session)
+        # project = self._project_info
+        # if notification.context and project is not None:
+        #     self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
+        #                         project.session)
 
     def _update_status_text_overlay(self):
         parts = []
@@ -1851,7 +1851,7 @@ class AppModel(ObservableObject):
     def _on_session_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info
         if project is not None:
-            self._save_project_metadata(project)
+            self._save_project_metadata(project, caller="session_capture_ended")
         # self._behavior.system_machine.on_session_capture_ended(reason)
         # NB: had to keep in system_machine for many tests.
         # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
@@ -2100,13 +2100,20 @@ class AppModel(ObservableObject):
         return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo, *,
-                               when: Optional[datetime] = None, session: Optional[int] = -1):
+                               when: Optional[datetime] = None, session: Optional[int] = -1,
+                               caller: str="NA"):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
-        when = when if when is not None else (project_info.when if project_info.when is not None else datetime.now())
+        when = when if when is not None else project_info.when
         file_name = project_info.get_metadata_file(session, when)
+        logger.verbose(
+            "Saving metadata to %s ; caller=%s when=%s sess=%s prj=%s",
+            file_name, caller, when, session, project_info,
+        )
+        if session is not None and session < 0:
+            session = project_info.session  # ensure use this one
         self._save_metadata(project_info, when, file_name, session)
 
-    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: int = None):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: Optional[int] = -1):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
             "date": when.strftime("%Y%m%d_%H%M%S"),
