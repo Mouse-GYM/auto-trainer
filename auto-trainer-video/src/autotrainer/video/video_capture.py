@@ -405,19 +405,19 @@ class VideoCapture(Process):
             nonlocal synced_frame_idx
             if synced_frame_idx is not None:
                 return
-            if prim_cam_record_enabled is None:  # or attrs.camera_index < 0
-                synced_frame_idx = frame_idx - len(frames_prebuffer_list)
-                return
-            if not is_primary:  # non-primary cams get synced via secondary_acquire()
+            if not is_primary and prim_cam_record_enabled is not None:
+                # non-primary cams get synced via secondary_acquire()
                 return
             target_idx = frame_idx
             if enabled:
                 idx = len(frames_prebuffer_list) - 1
                 while idx >= 0:
                     frame_p = frames_prebuffer_list[idx][3]
-                    if math.isfinite(frame_p) and perf_now - frame_p >= attrs.record_prebuffer_duration:
-                        logger.debug("will use frames_prebuffer_list at %s for synced_frame_idx", idx)
-                        break
+                    if math.isfinite(frame_p):
+                        if perf_now - frame_p >= attrs.record_prebuffer_duration:
+                            logger.debug("will use frames_prebuffer_list at %s for synced_frame_idx", idx)
+                            break
+                        target_idx = frame_idx  # keep the most valid one
                     idx -= 1
                 if len(frames_prebuffer_list) > 0:
                     idx = idx if idx >= 0 else 0
@@ -425,11 +425,13 @@ class VideoCapture(Process):
                     if math.isfinite(frames_prebuffer_list[idx][2]):  # frame_when, could check frame_perf as well
                         target_idx = frames_prebuffer_list[idx][-1]
 
-            with prim_cam_record_enabled:  # acquire lock
-                synced_frame_idx = target_idx
-                prim_cam_synced_frame_idx.value = target_idx
-                prim_cam_record_enabled.value = enabled
-            logger.verbose("Set target rec_enabled=%s frame_id=%s ; frame_idx=%s", enabled, target_idx, frame_idx)
+            synced_frame_idx = target_idx
+            if prim_cam_record_enabled is not None:
+                with prim_cam_record_enabled:  # acquire lock
+                    prim_cam_synced_frame_idx.value = target_idx
+                    prim_cam_record_enabled.value = enabled
+            logger.verbose("Set target rec_enabled=%s frame_id=%s ; frame_idx=%s",
+                           enabled, target_idx, frame_idx)
 
         def secondary_acquire():
             nonlocal synced_frame_idx
