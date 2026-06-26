@@ -113,9 +113,18 @@ class VideoRecord(Thread):
 
         self._interval_mode = ProjectInterval.NONE
         self._interval_reference = -1
+        self._first_frame_id = -1
         self._first_frame_when = math.inf
         self._first_frame_time = math.inf
         self._first_frame_perf_c = math.inf
+
+    @property
+    def first_frame_id(self) -> int:
+        return self._first_frame_id
+
+    @first_frame_id.setter
+    def first_frame_id(self, value: int):
+        self._first_frame_id = value
 
     @property
     def first_frame_time(self):
@@ -124,22 +133,6 @@ class VideoRecord(Thread):
     @first_frame_time.setter
     def first_frame_time(self, value):
         self._first_frame_time = value
-
-    @property
-    def first_frame_perf_c(self) -> float:
-        return self._first_frame_perf_c
-
-    @first_frame_perf_c.setter
-    def first_frame_perf_c(self, value: float):
-        self._first_frame_perf_c = value
-
-    @property
-    def first_frame_when(self):
-        return self._first_frame_when
-
-    @first_frame_when.setter
-    def first_frame_when(self, value):
-        self._first_frame_when = value
 
     def run(self):
         logger.notice("%s: running", self)
@@ -169,6 +162,8 @@ class VideoRecord(Thread):
         record_stop_sema = self._record_stop_sema
         msg_queue = self._msg_queue
 
+        fps = self._fps
+
         while self._is_running:
 
             try:
@@ -197,11 +192,9 @@ class VideoRecord(Thread):
                     continue
 
                 for frame_id, frame, frame_when, frame_perf_now in queue_list:
-                    # NB: reminder: frame_when is really camera clock, which vary from camera to camera,
                     # reconstructing frame_time (based on first frame start ~time):
-                    # we assume camera clock is in nanoseconds precision, so using it:
-                    zero_based_frame_perf_c = frame_perf_now - self._first_frame_perf_c
-                    frame_time = self._first_frame_time + zero_based_frame_perf_c
+                    estimated_frame_rel_t = (frame_id - self._first_frame_id) / fps
+                    frame_time = self._first_frame_time + estimated_frame_rel_t
 
                     if self._is_video_enabled:
                         vid_writer = self._video_writer

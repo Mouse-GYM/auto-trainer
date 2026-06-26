@@ -606,8 +606,6 @@ class VideoCapture(Process):
 
                 if count_frames_received == 1:
                     self._record.first_frame_time = frame_time
-                    self._record.first_frame_when = when
-                    self._record.first_frame_perf_c = frame_perf_c
                     logger.success("captured first frame id=%s ; cam_when=%.4f cam_perf_c=%.4f",
                                    cam_frame_id, when_secs, frame_perf_c)
                 elif inference is not None and (cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300):
@@ -683,9 +681,8 @@ class VideoCapture(Process):
                             len(frames_prebuffer_list),
                         )
                         #
-                        self._record.first_frame_when = first_frame_when
+                        self._record.first_frame_id = first_frame_id
                         self._record.first_frame_time = first_frame_time
-                        self._record.first_frame_perf_c = first_frame_p_now
                         #
                         if len(frames_prebuffer_list) > 0:
                             rec_q_put(
