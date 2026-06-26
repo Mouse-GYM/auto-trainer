@@ -1171,10 +1171,10 @@ class SystemMachine(StateMachine):
         logger.verbose(
             "consider_start_session: load_cell.engaged=%s "
             "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
-            "send_begin_age=%.1f send_end_age=%.1f capture_status_age=%.1f",
+            "send_begin_age=%.1f send_end_age=%.1f",
             self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
-            algo.is_in_session, send_begin_age, send_end_age, algo.capture_status_age)
+            algo.is_in_session, send_begin_age, send_end_age)
         if not (
             self._state == SystemState.tunnel
             and not algo.is_in_session

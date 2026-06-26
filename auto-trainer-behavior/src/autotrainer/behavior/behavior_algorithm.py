@@ -258,7 +258,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
-        self._last_capture_status_change_perf_c = -math.inf
         self._recording_start_perf_c = math.nan
 
         self._pellet_shift_y_limit: Optional[float] = None
@@ -571,7 +570,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             prev, self._capture_status = self._capture_status, status
             if prev == status:
                 return
-            self._last_capture_status_change_perf_c = perf_now
             if status == CaptureProcessStatus.RECORDING:
                 self._recording_start_perf_c = perf_now
             else:
@@ -583,11 +581,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     @property
     def recording_start_perf_c(self) -> float:
         return self._recording_start_perf_c
-
-    @property
-    def capture_status_age(self) -> float:
-        """Capture status age as number of seconds"""
-        return get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
     def is_in_session(self) -> bool:
