@@ -262,7 +262,6 @@ class AppModel(ObservableObject):
         self._loaded_config_dir_path = Path()
 
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
-        self._is_recording_trigger = False  # actually unused
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
@@ -404,8 +403,6 @@ class AppModel(ObservableObject):
         self._attached_animal: Optional[AnimalSubject] = None
 
         self._rpc_service: Optional[RpcService] = None
-
-        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
 
         self._hardware.property_changed += self._on_hardware_property_changed
         inference.property_changed += self._on_inference_property_changed
@@ -607,11 +604,11 @@ class AppModel(ObservableObject):
     def _merge_camera_timestamp_files(self, project: ProjectInfo, cams: Tuple[VideoCaptureModel]):
         # assert len(cams) == 2
         timing_path = project.get_frame_timing_path()
-        logger.info("Merging camera timestamps files for trial%03d into %s",
-                    project.session, timing_path)
         data = []
         prim_cam = cams[0]  # primary
         main_fps = prim_cam.active_config.params.get('fps', math.nan)
+        logger.info("Merging camera timestamps files for trial%03d into %s (fps=%s)",
+                    project.session, timing_path, main_fps)
         txt_files = []
         if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
             logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
@@ -751,6 +748,8 @@ class AppModel(ObservableObject):
                                cam_idx, new_status)
         elif cmd == SystemStatusMessageKind.CAMERA_RECORDING_CLOSED_FINISHED:
             cam_idx, frames_written, project, *r_args = args
+            if project is None:
+                return
             monitored_cams = self._get_monitored_cams()
             monitored_cam_indices = tuple(cam.camera_index for cam in monitored_cams)
             if cam_idx in monitored_cam_indices:
@@ -1429,7 +1428,6 @@ class AppModel(ObservableObject):
             self._capture_stop()
         finally:
             # always:
-            self._is_recording_trigger = False
             # must be set before try reload training plans, given checked in it
             self._acquisition_started = False
             self._acquisition_stopping = False
@@ -1730,13 +1728,6 @@ class AppModel(ObservableObject):
                 break
 
         self.animals = animals
-
-    def _trigger_received(self, notification: Notification):
-        self._is_recording_trigger = notification.context
-        # project = self._project_info
-        # if notification.context and project is not None:
-        #     self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
-        #                         project.session)
 
     def _update_status_text_overlay(self):
         parts = []
