@@ -428,9 +428,7 @@ class SystemMachine(StateMachine):
         project.dcs_send_position = dcs_send_pos
         logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
         if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
-            project.t_pellet_delivered = 0
-            if pellet_m.covered_state is False:
-                project.t_pellet_presented = 0
+            self._set_pellet_delivered_presented(project, 0)
         self._inference.project = project
         self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
 
@@ -987,6 +985,21 @@ class SystemMachine(StateMachine):
                 delay, self._consider_close_gate_during_intersession)
             timer.start()
 
+    def _set_pellet_delivered_presented(self, project: ProjectInfo, t_rel_start: float):
+        if not math.isfinite(project.t_pellet_delivered):
+            logger.debug("set project.t_pellet_delivered=%.3f", t_rel_start)
+            project.t_pellet_delivered = t_rel_start
+        #
+        if (
+            math.isfinite(project.t_pellet_delivered)
+            and not math.isfinite(project.t_pellet_presented)
+            and self._pellet_machine.covered_state is False
+        ):
+            logger.debug("set project.t_pellet_presented=%.3f", t_rel_start)
+            project.t_pellet_presented = t_rel_start
+            self._event_manager.post_event_content(
+                ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_algorithm_property_changed(self, name: str, new_value, old_value):
         # Always back off to the baseline intensity when auto-clamp is disabled.
@@ -1097,11 +1110,7 @@ class SystemMachine(StateMachine):
         logger.verbose("pellet_state_changed: %s -> %s", old_value, new_value)
         algo = self._algorithm
         if new_value == PelletState.monitoring:
-            if algo.is_in_session:
-                project = self._project_info
-                if not math.isfinite(project.t_pellet_delivered):
-                    project.t_pellet_delivered = algo.capture_status_age
-            else:
+            if not algo.is_in_session:
                 self._consider_start_session(reason="pellet-monitoring")
         elif new_value == PelletState.releasing:
             if algo.is_in_session:
@@ -1115,12 +1124,7 @@ class SystemMachine(StateMachine):
             project = self._project_info
             if not math.isfinite(project.t_pellet_delivered):
                 t_delivered = perf_c - self._algorithm.recording_start_perf_c
-                logger.debug("set project.t_delivered=%.3f perf=%.3f", t_delivered, perf_c)
-                project.t_pellet_delivered = t_delivered
-                if self._pellet_machine.covered_state is False:
-                    project.t_pellet_presented = t_delivered
-                    self._event_manager.post_event_content(
-                        ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
+                self._set_pellet_delivered_presented(project, t_delivered)
         else:
             self._consider_start_session(reason="pellet-sent")
 
@@ -1134,11 +1138,7 @@ class SystemMachine(StateMachine):
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
             perf_c, algo.is_in_session, self._session_started_perf_c, project)
         if algo.is_in_session:
-            if not math.isfinite(project.t_pellet_presented):
-                project.t_pellet_presented = perf_c - algo.recording_start_perf_c
-                logger.debug("set pellet_presented_perf_c=%.3f to project=%s", perf_c, project)
-                self._event_manager.post_event_content(
-                    ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
+            self._set_pellet_delivered_presented(project, perf_c - algo.recording_start_perf_c)
 
     def _update_magnet_position(self, position: float):
         self._tunnel_device.update_head_magnet_intensity(position)
