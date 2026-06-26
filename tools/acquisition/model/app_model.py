@@ -415,7 +415,7 @@ class AppModel(ObservableObject):
         algo.property_changed += self._on_behavior_algo_property_changed
         algo.session_starting_before_record_start += self._on_session_starting_before_record_start
         algo.session_capture_ending += self._on_session_capture_ended
-        algo.session_ending += self._on_session_ending
+        # algo.session_ending += self._on_session_ending
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
@@ -676,9 +676,7 @@ class AppModel(ObservableObject):
                 )
                 dw.writerow(d)
         logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
-        for p in txt_files:
-            p: Path
-            p.unlink(missing_ok=True)
+        self._remove_timestamps_txt_files(project)
 
     def _get_monitored_cams(self):
         cams = []  # put primary first
@@ -1854,28 +1852,15 @@ class AppModel(ObservableObject):
         # NB: had to keep in system_machine for many tests.
         # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
 
-    def _clean_timestamps_txt_files(self, project: ProjectInfo):
+    def _remove_timestamps_txt_files(self, project: ProjectInfo):
         removed = []
         for cam in self._cameras:
             _, ts_file, _ = project.get_video_path(cam.name, allow_overwrite=True)
             ts_file = Path(ts_file)
             if ts_file.exists():
-                ts_file.unlink()
+                ts_file.unlink(missing_ok=True)
                 removed.append(ts_file)
         logger.debug("%s: removed timestamps txt files: %s", project.short_id, removed)
-
-    def _on_session_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
-        if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
-            # NB: don't clean immediatelly:
-            # for capture-only result: the merge of these files into the unique common timing csv file most often
-            # is not yet done, given it's async/after relatively to this session_ending().
-            if result == CaptureAnalysisResult.CAPTURE_ONLY:
-                timer = make_daemon_timer(30, lambda: self._clean_timestamps_txt_files(project))
-                # 30s should be enough, the full stop of recording at camera process side, takes ~1-2-3s usually max.
-                timer.start()
-            elif result != CaptureAnalysisResult.ANALYSIS_FAILED:  # keep result in case of analysis error
-                # when not capture_only it's ok to delete here immediatelly:
-                self._clean_timestamps_txt_files(project)
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
