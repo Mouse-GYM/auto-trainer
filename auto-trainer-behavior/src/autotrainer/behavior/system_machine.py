@@ -281,11 +281,9 @@ class SystemMachine(StateMachine):
             # set intersession and inference current project to the one from the batch:
             logger.verbose("setting project_info to intersession and inference")
             inference.project = project_info
-            wait_stop_recorded = False
-            # don't wait stop recorded if it's a batch list processing,
-            # this is always ok since if current project info is/was single one in batch-list,
-            # then it's removed from batch and analyzed from current project instead, as regularly.
-            # See self._on_session_capture_ended().
+            wait_stop_recorded = len(batch_list) == 1 and project_info == self._project_info
+            # only wait stop_recorded if batch_list len is 1, and it's currently set/activated self._projet_info
+            # otherwise it's not needed.
 
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
@@ -300,10 +298,6 @@ class SystemMachine(StateMachine):
                 )
         else:
             self._batch_project_sessions_start_list = []
-            if algo.active_config.batch_session_recording.enabled:
-                self._event_manager.post_event_content(
-                    ApiEventKind.batchAnalysisStarted, data=dict(count=1)
-                )
             self._batch_project_sessions_finished = 0
             wait_stop_recorded = True
 
@@ -463,7 +457,6 @@ class SystemMachine(StateMachine):
         batch_sess_cfg = algo.batch_session_recording_config
         load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
         if can_perform_analysis:
-            assert cur_project is not None
             if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
                 # > 0:  in case it's disabled while there is some session(s) currently batched
                 cur_sessions_batch.append(cur_project)
@@ -504,11 +497,6 @@ class SystemMachine(StateMachine):
         #
         self._batch_project_sessions_finished = 0
         if cur_project is not None and (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
-            if len(cur_sessions_batch) == 1 and cur_project == cur_sessions_batch[0]:
-                logger.debug("only 1 session in batch, skipping batch")
-                # no need if it's the latest/current project-session-info already.
-                cur_sessions_batch.clear()
-                # it will be handled normally anyway
             prj = cur_project if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
             with algo.set_allow_reentrant(True):
                 self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
@@ -1182,6 +1170,9 @@ class SystemMachine(StateMachine):
             and algo.is_pellet_recently_seen()
         ):
             logger.debug("Not good state")
+            return
+        if not self._project_info.is_valid():
+            logger.error("refusing start_session without valid project")
             return
         algo.start_session(reason=reason)
 

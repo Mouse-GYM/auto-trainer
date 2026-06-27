@@ -246,6 +246,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._start_session_reason = "NA"
         self._stop_session_reason = RecordingEndingReason.NA
         self._timer_end_capture_session = no_op_timer
+        self._prev_can_load_pellet_log_refuse_perf_c = -math.inf
 
         self._session_mouse_seen = False
         self._pellet_hands_min_distance: float = math.inf
@@ -1121,13 +1122,16 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             logger.error("%s: refusing start session when algo paused", reason)
             return False
 
+        project = self._project_info
+        if not project.is_valid():
+            raise RuntimeError("Project not valid")
+
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
         self._session_started_perf_c = get_perf_now()
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
-        project = self._project_info
         project.calculate_next_session_index()
         self._event_manager.post_event_content(
             ApiEventKind.projectSessionChanged,
@@ -1301,7 +1305,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                                            perf_now=perf_now)
         if need_load:
             if self._system_state == SystemState.intersession:
-                logger.verbose("refusing can_load_pellet given intersession")
+                p_now = get_perf_now()
+                if p_now - self._prev_can_load_pellet_log_refuse_perf_c > 1:
+                    logger.verbose("refusing can_load_pellet given intersession")
+                    self._prev_can_load_pellet_log_refuse_perf_c = p_now
                 return False
             return True
         return False

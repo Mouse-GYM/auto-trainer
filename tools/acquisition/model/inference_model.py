@@ -581,7 +581,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             result: IntersessionResponse
             self._event_manager.post_event_content(
                 ApiEventKind.intertrialDetectionSave,
-                data=dict(location=project.get_session_path().location, trial=project.session),
+                data=dict(location=project.get_session_path().location, trial_id=project.session),
             )
             # assert isinstance(result, IntersessionResponse)
             self.detection_result_ready(project, result)
