@@ -73,7 +73,7 @@ class TestBatchAnalysis(MockSystemMachine):
         assert self.batch_len_processed == max_batch_size
         assert self.batch_failed_count == 0
 
-    def test_with_batch_size_1_do_not_use_batch(self, machine, caplog):
+    def test_with_batch_size_1_also_use_batch(self, machine, caplog):
         algo = self.algo
         pellet = self.pellet
         algo.batch_session_recording_config.maximum_batch_size = 1
@@ -87,12 +87,11 @@ class TestBatchAnalysis(MockSystemMachine):
             assert machine.state == SystemState.intersession
             assert machine.intersession.state == IntersessionState.segmentation
             algo.update_pellet_seen(True)
-            while pellet._api_status_token is not None:
-                self.mock_pellet_ack()
+            self.mock_pellet_ack(until_none=True)
 
         assert machine.state == SystemState.tunnel
-        assert self.batch_start_count == 0
-        assert "only 1 session in batch, skipping batch" in caplog.text
+        assert self.batch_start_count == 1
+        assert self.batch_len_processed == 1
         assert machine.intersession.state == IntersessionState.idle
 
     @pytest.mark.parametrize("last_trial_with_mouse", [False, True])
