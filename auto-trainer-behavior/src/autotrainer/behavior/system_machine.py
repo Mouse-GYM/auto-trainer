@@ -447,8 +447,7 @@ class SystemMachine(StateMachine):
                 self._pellet_machine.move_retract()
 
         can_perform_analysis = (
-            cur_project is not None
-            and algo.can_perform_intersession_analysis()
+            algo.can_perform_intersession_analysis()
             and self._intersession.can_perform_segmentation(cur_project)
         )
         real_can_perform_analysis = can_perform_analysis
@@ -474,7 +473,6 @@ class SystemMachine(StateMachine):
             can_batch_session = (
                 load_cell_engaged
                 and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
-                and cur_project is not None
             )
         #
         logger.notice(
@@ -490,13 +488,12 @@ class SystemMachine(StateMachine):
         if (    not can_perform_analysis
             and not can_batch_session
             and not algo.session_mouse_seen
-            and cur_project is not None
         ):
             if algo.clean_raw_data_on_inactive_session:
                 self._clean_raw_data(cur_project)
         #
         self._batch_project_sessions_finished = 0
-        if cur_project is not None and (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
+        if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
             prj = cur_project if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
             with algo.set_allow_reentrant(True):
                 self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
