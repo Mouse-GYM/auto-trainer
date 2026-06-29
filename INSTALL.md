@@ -8,7 +8,9 @@ place requirements on platform or Python version.
 
 ### System Installs/Requirements
 #### Anaconda
-Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
+Anaconda is required for full feature support.
+
+Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`, `Anaconda3-2025.12-2-Linux-aarch64.sh`, and others.
 
 ### Teledyne/Blackfly Camera Support
 
