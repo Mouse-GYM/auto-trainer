@@ -8,15 +8,16 @@ place requirements on platform or Python version.
 
 ### System Installs/Requirements
 #### Anaconda
-Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`.
+Anaconda is required for full feature support.
+
+Tested with `Anaconda3-2023.09-0-Linux-aarch64.sh`, `Anaconda3-2025.12-2-Linux-aarch64.sh`, and others.
 
 ### Teledyne/Blackfly Camera Support
 
 * These cameras require installation of version 3 of the Spinnaker SDK/runtime for your platform.
 * Platforms are limited to Windows and Ubuntu 20.04
 * Python version is limited to 3.8
-
-#### arm64 example
+* See `install_spinnaker.sh` at https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
 ```bash
 gunzip spinnaker-3.2.0.62-arm64-pkg-20.04.tar.gz
@@ -28,6 +29,8 @@ sudo ./remove_spinnaker_arm.sh  # remove previous version if any
 sudo ./install_spinnaker_arm.sh
 ```
 
+**Nb:** this must be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
+
 ## Platform Specific Requirements 
 
 Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
@@ -38,6 +41,7 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 `conda create -n auto-trainer-1 python=3.8`
 
 2) activate it: `conda activate auto-trainer-1` ; **every time**.
+   Nb: This is now included with device-deployment too.
 
 3) Once first time: clone this repository.
     - create or update the ~/.netrc file so that it contains :
@@ -56,13 +60,19 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
    - `pip install ./library/spinnaker_python-3.2.0.62-cp38-cp38-linux_x86_64.whl`
    - `pip install .\library\spinnaker_python-3.2.0.62-cp38-cp38-win_amd64.whl`
 
+   **Nb:** this must also be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
+
 5) **Jetson Only** and only once first time:
-   1) `conda install --channel=conda-forge ffmpeg=6.0.0`
-   2) Unfortunately nvidia torch wheel version is not fully valid, and prevent to be installed with regular index-url,
-      so we have to :
+   1) `conda install --channel=conda-forge ffmpeg=6.1.2 libgomp ncurses`
+      --channel=conda-forge: Use that conda channel. Which is required here.
+      libgomp and ncurses are also required to get more recent, and built with appropriate flags,
+      versions than the native system corresponding libraries,
+      which are not recent enough/have some incompatibilities with others libraries used by the application.
+   2) Unfortunately the nvidia torch wheel version/tag is not fully valid (from a version spec/syntax pov),
+      and prevent to be installed with regular index-url, so we have to :
       - `wget https://developer.download.nvidia.cn/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl`
       - `pip install ./torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl`
-   3) On the other hand, nvidia tensorflow wheel version is valid, so we can do:
+   3) On the other hand, the nvidia tensorflow wheel version is valid, so we can do:
       - `pip install tensorflow==2.12.0+nv23.06 --extra-index-url https://developer.download.nvidia.com/compute/redist/jp/v512`
    4) `pip install ./path/to/pyjerrycan-1.2.5-cp38-cp38-linux_aarch64.whl`
      - Usually pyjerrycan wheel file is copied in home dir.
@@ -74,14 +84,22 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 `pip install -e .`
 
 
-### LD_PRELOAD
+### Environment requirements
+Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment/ for full information,
+more particularly its `home-install/.load_autotrainer_env.sh` file.
 
-A command similar to following must be used or added to `.bashrc`/`.bash_profile`
+Using a conda env, we have to/should export LD_LIBRARY_PATH with the correct library directories from the conda env.
+Also, there are some libraries that need to be preloaded (given some incompatibilities between them and other(s)),
+using export LD_PRELOAD.
 
-```shell
-# NB: long line: copy to the end:
-export LD_PRELOAD="${LD_PRELOAD}:/usr/lib/aarch64-linux-gnu/libffi.so.7:/usr/lib/aarch64-linux-gnu/libgomp.so.1:/lib/aarch64-linux-gnu/libGLdispatch.so.0:/home/$USER/anaconda3/envs/auto-trainer-1/lib/python3.8/site-packages/scikit_learn.libs/libgomp-d22c30c5.so.1.0.0"
+A block similar to the following must be used or added to `.bashrc`/`.bash_profile` :
+
+```bash
+# need be activated before below exports (before ${CONDA_PREFIX} usage):
+conda activate auto-trainer-1
+
+# ensure system libraries from conda env are used :
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib64:${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}
+
+export LD_PRELOAD="${LD_PRELOAD}:${CONDA_PREFIX}/lib/libgomp.so"
 ```
-
-The exact filenames of the last two in particular may be slightly different based on versioning. There will be an
-error message in the console with the exact filename if it is different from the above.
