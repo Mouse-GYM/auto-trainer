@@ -281,7 +281,11 @@ class VideoCapture(Process):
             self._record_properties.fps = camera.fps
 
             vid_rec = self._record = VideoRecord(
-                self._record_properties, rec_queue, record_stop_sema=self._attrs.record_stop_sema)
+                self._record_properties, rec_queue,
+                record_stop_sema=self._attrs.record_stop_sema,
+                msg_queue=self._attrs.msg_queue,
+                cam_idx=self._camera_idx,
+            )
             vid_rec.start()
 
             det_attrs = self._attrs.presence_detection_attrs
@@ -332,15 +336,15 @@ class VideoCapture(Process):
 
     def _run_capture_loop(self, camera: CameraBase) -> None:
         log_cam_frame_info_delay_frame_count = camera.fps * 5
-        frame_normal_delay = 1 / camera.fps
         fault_count = 0
         cnt_net_q_put = 0
         is_record_active = False
-        cam_frame_id = -1
+        cam_frame_id = -1  # expected first frame id of any new acquisition is 0.
         count_frames_received = 0
         when_secs = math.nan
         attrs = self._attrs
         is_primary = attrs.is_primary
+        frame_period = 1 / camera.fps
         prim_cam_record_enabled = attrs.synced_cam_record_enabled
         prim_cam_synced_frame_idx = attrs.synced_cam_frame_index
         synced_frame_idx: Optional[int] = None
@@ -401,26 +405,33 @@ class VideoCapture(Process):
             nonlocal synced_frame_idx
             if synced_frame_idx is not None:
                 return
-            if prim_cam_record_enabled is None:  # or attrs.camera_index < 0
-                synced_frame_idx = frame_idx - len(frames_prebuffer_list)
-                return
-            if not is_primary:  # non-primary cams get synced via secondary_acquire()
+            if not is_primary and prim_cam_record_enabled is not None:
+                # non-primary cams get synced via secondary_acquire()
                 return
             target_idx = frame_idx
             if enabled:
                 idx = len(frames_prebuffer_list) - 1
                 while idx >= 0:
-                    if perf_now - frames_prebuffer_list[idx][3] > attrs.record_prebuffer_duration:
-                        logger.debug("will use frames_prebuffer_list at %s for synced_frame_idx", idx)
-                        break
+                    frame_p = frames_prebuffer_list[idx][3]
+                    if math.isfinite(frame_p):
+                        if perf_now - frame_p >= attrs.record_prebuffer_duration:
+                            logger.debug("will use frames_prebuffer_list at %s for synced_frame_idx", idx)
+                            break
+                        target_idx = frame_idx  # keep the most valid one
                     idx -= 1
                 if len(frames_prebuffer_list) > 0:
-                    target_idx = frames_prebuffer_list[idx if idx >= 0 else 0][-1]
-            with prim_cam_record_enabled:  # acquire lock
-                synced_frame_idx = target_idx
-                prim_cam_synced_frame_idx.value = target_idx
-                prim_cam_record_enabled.value = enabled
-            logger.verbose("Set target rec_enabled=%s frame_id=%s ; frame_idx=%s", enabled, target_idx, frame_idx)
+                    idx = idx if idx >= 0 else 0
+                    # keep frame_idx if it was drop in prebuffer:
+                    if math.isfinite(frames_prebuffer_list[idx][2]):  # frame_when, could check frame_perf as well
+                        target_idx = frames_prebuffer_list[idx][-1]
+
+            synced_frame_idx = target_idx
+            if prim_cam_record_enabled is not None:
+                with prim_cam_record_enabled:  # acquire lock
+                    prim_cam_synced_frame_idx.value = target_idx
+                    prim_cam_record_enabled.value = enabled
+            logger.verbose("Set target rec_enabled=%s frame_id=%s ; frame_idx=%s",
+                           enabled, target_idx, frame_idx)
 
         def secondary_acquire():
             nonlocal synced_frame_idx
@@ -490,6 +501,7 @@ class VideoCapture(Process):
             msg_q.put((SystemStatusMessageKind.CAMERA_STATUS_CHANGE, (self._camera_idx, CaptureProcessStatus.RUNNING)))
 
         frame_perf_c = math.nan
+        frame_time = time.time()
         save_err = None
 
         while True:
@@ -503,6 +515,7 @@ class VideoCapture(Process):
             prev_frame_when_secs = when_secs
             prev_frame_id = cam_frame_id
             prev_frame_perf_now = frame_perf_c
+            prev_frame_time = frame_time
 
             if fault_count > 5:
                 logger.critical("Too many capture loop processing errors ; giving up")
@@ -526,13 +539,16 @@ class VideoCapture(Process):
                     synced_frame_idx = cam_frame_id  # ensure immediate stop
                     perform_stop_recording(force=True)
                 time.sleep(0.001)
+                frame_time = time.time()
                 continue
 
             try:
                 # this eventually set/unset recording enabled on the primary cam, or on non-synced cam(s):
                 # + 1 because next frame will have that frame_id
                 if is_record_active and record_start_stop_frame_idx is None and synced_frame_idx is None:
-                    primary_acquire(prev_frame_id + 1, enabled=True)
+                    # prev_frame_id is normally a valid acquired frame,
+                    # which should always allow to have one valid for start-recording, even in case of heavy drops.
+                    primary_acquire(prev_frame_id, enabled=True)
                 elif not is_record_active and record_start_stop_frame_idx is not None and synced_frame_idx is None:
                     primary_acquire(prev_frame_id + 1, enabled=False)
 
@@ -555,7 +571,18 @@ class VideoCapture(Process):
                 count_frames_received += 1
                 frame_late_delay = perf_now - frame_perf_c
                 #
+                count_missed_frames = cam_frame_id - (1 + prev_frame_id)
                 when_secs = when / 1e9
+                if count_missed_frames > 0:
+                    # insert blank/black missed frames:
+                    frames_prebuffer_list.extend(
+                        # frame, frame_when, frame_time, frame_perf_c, frame_id
+                        (empty_frame, math.nan, prev_frame_time + idx1 * frame_period, math.nan, missed_frame_id)
+                        for idx1, missed_frame_id in enumerate(
+                            range(prev_frame_id + 1, prev_frame_id + 1 + count_missed_frames),
+                            start=1,
+                        )
+                    )
                 # perf_frame_dropped = (
                 #     0
                 #     if not math.isfinite(prev_frame_perf_now)
@@ -564,7 +591,7 @@ class VideoCapture(Process):
                 if (
                     inference is not None
                     and (
-                        cam_frame_id != prev_frame_id + 1
+                        count_missed_frames > 0
                         # or frame_late_delay > 0.15  ~arbitrary
                     )
                 ):
@@ -579,7 +606,6 @@ class VideoCapture(Process):
 
                 if count_frames_received == 1:
                     self._record.first_frame_time = frame_time
-                    self._record.first_frame_when = when
                     logger.success("captured first frame id=%s ; cam_when=%.4f cam_perf_c=%.4f",
                                    cam_frame_id, when_secs, frame_perf_c)
                 elif inference is not None and (cam_frame_id % log_cam_frame_info_delay_frame_count == 0 or cam_frame_id < 300):
@@ -655,12 +681,11 @@ class VideoCapture(Process):
                             len(frames_prebuffer_list),
                         )
                         #
-                        self._record.first_frame_when = first_frame_when
+                        self._record.first_frame_id = first_frame_id
                         self._record.first_frame_time = first_frame_time
                         #
                         if len(frames_prebuffer_list) > 0:
                             rec_q_put(
-                                # ( frame, frame_when, frame_perf_now )
                                 [(fix, f, fw, p) for f, fw, _, p, fix in frames_prebuffer_list]
                             )
                             frames_prebuffer_list = []  # thread safety, don't use .clear()
@@ -690,6 +715,12 @@ class VideoCapture(Process):
 
                 elif record_start_stop_frame_idx is not None:
                     # normal recording case in progress
+                    if count_missed_frames > 0:
+                        record_q_list.extend(
+                            # frame-id, frame, frame_when, frame_perf_c
+                            (prev_frame_id + idx1, empty_frame, math.nan, prev_frame_perf_now + idx1 * frame_period)
+                            for idx1 in range(1, count_missed_frames + 1)
+                        )
                     record_q_list.append((cam_frame_id, frame, when, frame_perf_c))
                     if len(record_q_list) >= self._record_batch_size:
                         rec_q_put(record_q_list)

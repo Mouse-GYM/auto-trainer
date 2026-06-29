@@ -13,13 +13,14 @@ import math
 import pandas
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Literal
 
 import cv2
 import numpy as np
 import pandas as pd
 from scipy.signal import butter, filtfilt
 
+from autotrainer.core import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference import calibration_FLIR as cal_flir
@@ -55,63 +56,34 @@ def dict_almost_equal(d1, d2, rel_tol=1e-9, abs_tol=0.0):
     return True
 
 
-def identify_dropped_frames(timestamp_file, frame_rate) -> np.ndarray:
+def identify_dropped_frames(
+    timestamp_file,
+    frame_rate,
+    *,
+    cam_col_present_name: Literal["frame_present_primary", "frame_present_secondary"],
+) -> np.ndarray:
     """
     Identify dropped frames in a video based on inter-frame intervals.
 
     Parameters:
-        timestamp_file (str): Path to the CSV file containing timestamps in nanoseconds.
+        timestamp_file (str): Path to the timing CSV file containing the frames id/timestamps infos for all cameras
         frame_rate (float): Expected frame rate in frames per second.
 
     Returns:
         np.ndarray: A binary vector with 0 for successful frames and 1 for dropped frames.
     """
     # Load timestamps from the file
-    timestamps_df = pd.read_csv(timestamp_file, header=None,
-                                names=['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id'])
-    if len(timestamps_df) == 0:
-        return np.asarray([], dtype=int)
-    # NB: the timestamp is realtime, fps is fps, frame_when_ns is the camera frame "when/timestamp",
-    # and the frame_perf_c is system perf_counter, which is common and the most precise we can use here.
-    timestamps_ns = timestamps_df['frame_when_ns'].values  # Extract desired column
-    timestamps_s = timestamps_ns / 1e9  # Convert seconds <-> nanoseconds
-
-    # Calculate inter-frame intervals
-    intervals = np.diff(timestamps_s)
-
-    # Calculate the expected inter-frame interval
-    expected_interval = 1.0 / frame_rate
-
-    # Create a binary vector for the entire video length
-    expected_frame_count = 1 + round((timestamps_ns[-1] - timestamps_ns[0]) * frame_rate / 1e9)
-    if expected_frame_count != len(timestamps_df):
-        logger.warning(
-            "Correcting expected_frame_count from %s to %s ; file=%s ; timestamps: min=%s max=%s frame_rate=%s",
-            expected_frame_count, len(timestamps_df), timestamp_file, timestamps_s.min(), timestamps_s.max(), frame_rate)
-        expected_frame_count = len(timestamps_df)
-
-    dropped_frame_vector = np.zeros(expected_frame_count, dtype=int)
-
-    # Mark dropped frames
-    current_frame = 0
-    for i, interval in enumerate(intervals):
-        # not sure:
-        if current_frame > len(dropped_frame_vector) - 1:
-            logger.verbose("breaking dropped_frame_vector loop")
-            break
-        dropped_frame_vector[current_frame] = 0  # Mark current frame as successful
-        current_frame += 1
-        if interval > 1.5 * expected_interval:  # Dropped frame threshold
-            # Calculate how many frames were missed
-            missed_count = int(round(interval / expected_interval)) - 1
-            dropped_frame_vector[current_frame:current_frame + missed_count] = 1  # Mark missed frames
-            current_frame += missed_count
-            logger.warning("identified drop frame: i=%s iv=%s", i, interval)
-
-    # Mark the last frame as successful
-    if current_frame < len(dropped_frame_vector):
-        dropped_frame_vector[current_frame] = 0
-
+    # timing_header = ['timestamp', 'fps', 'frame_when_ns', 'frame_perf_c', 'frame_id']
+    timing_csv_fields = [
+        "frame_id",
+        "frame_when",
+        "frame_present_primary",
+        "frame_present_secondary",
+        "utc_when",
+    ]
+    timestamps_df = pd.read_csv(timestamp_file, header=0, names=timing_csv_fields, skipinitialspace=True, delimiter=",")
+    dropped_frame_vector = np.ndarray((len(timestamps_df),), dtype=np.uint8)
+    dropped_frame_vector[:] = timestamps_df[cam_col_present_name].apply(lambda val: val != 1).array
     return dropped_frame_vector
 
 
@@ -236,7 +208,13 @@ def process_hand_data(
 
 
 # extract tracking data from H5 file
-def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
+def extract_tracking_data(
+    project: ProjectInfo,
+    video_paths,
+    dlc_seg,
+    p_thresh,
+    frame_rate,
+):
     dataframe_RL = []
     bodyparts = ['R_Hand', 'L_Hand', 'Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle',
                  'Diamond']
@@ -247,7 +225,7 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
     hand_base_names = ['H_flat', 'H_spread', 'H_grab']
     hand_options = ['R', 'L']
     additional_names = ['Pellet', 'Nose', 'Mouth', 'Tongue_mid', 'Tongue_tip', 'Star', 'Triangle', 'Diamond']
-    for v_path in video_paths:
+    for cam_idx, v_path in enumerate(video_paths):
         logger.info("extract_tracking_data: %s", v_path)
         vid_dir, vid_name_raw = os.path.split(v_path)
         vid_name_raw = os.path.splitext(vid_name_raw)[0]
@@ -268,9 +246,18 @@ def extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate):
 
         # Generate the dropped frame vector
         v_path = Path(v_path)
-        timestamp_file = v_path.parent.joinpath(f"{v_path.stem}_timestamps.txt").as_posix()
-        dropped_frame_vector = identify_dropped_frames(timestamp_file, frame_rate)
-
+        timestamp_file_path = project.get_frame_timing_path()
+        if cam_idx == 0:
+            cam_col_present_name = "frame_present_primary"
+        elif cam_idx == 1:
+            cam_col_present_name = "frame_present_secondary"
+        else:
+            raise RuntimeError(f"Invalid cam index: {cam_idx}")
+        #
+        dropped_frame_vector = identify_dropped_frames(
+            str(timestamp_file_path), frame_rate,
+            cam_col_present_name=cam_col_present_name,
+        )
         # # In cases where there are more timestamps than frames
         if len(df) != len(dropped_frame_vector):
             logger.verbose("len(df)=%s vs len(dropped_frame_vector)=%s ; cutting to shortest",
@@ -834,7 +821,12 @@ def triangulate_3d_step1(
 
 
 def process_raw_data(
-    session, vid_tag, dlc_seg, calib_src_dir, center_method,
+    project: ProjectInfo,
+    session,
+    vid_tag,
+    dlc_seg,
+    calib_src_dir,
+    center_method,
     *,
     frame_rate: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:  # df_LR, df_3D
@@ -847,13 +839,15 @@ def process_raw_data(
 
     # Extract relevant video paths in order
     videoOrder = ['left', 'right']
-    video_paths = [video for key in videoOrder for video in videoList if key in video]
+    # NB: this so set "left" as the primary camera, given that's the assumption used here.
 
-    if not video_paths:
-        raise RuntimeError("No Videos found!")
+    video_paths = [video for key in videoOrder for video in videoList if key in video]
+    if len(video_paths) != 2:
+        raise RuntimeError(f"Missed at least 1 video: found: {video_paths}")
+    # could use: project.get_video_path()
 
     # Extract reach data, filter, prep for undistortion and triangulation
-    df_LR, bodyparts = extract_tracking_data(video_paths, dlc_seg, p_thresh, frame_rate)
+    df_LR, bodyparts = extract_tracking_data(project, video_paths, dlc_seg, p_thresh, frame_rate)
     vid_name_base, vid_dir = get_vid_name_base(video_paths[0])
     # Extract reach data, filter, prep for undistortion and triangulation
     for ndx, df in enumerate(df_LR):

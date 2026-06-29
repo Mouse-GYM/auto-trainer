@@ -183,6 +183,10 @@ class ProjectInfo(_ProjectInfo):
         self.t_pellet_delivered = t_pellet_delivered
         self.t_pellet_presented = t_pellet_presented
 
+    @property
+    def short_id(self) -> str:
+        return f"{self.when.strftime(DATE_FORMAT)}_{self.device_id}_{self.session:03d}"
+
     # def __repr__(self):
     #     return (
     #         f"{self.__class__.__name__}(device={self.device_id!r}, session={self.session!r}, when={self.when!r}, "
@@ -211,11 +215,7 @@ class ProjectInfo(_ProjectInfo):
             self._session.release()
 
     def _get_when_or_now(self, when: Optional[datetime] = None) -> datetime:
-        if when is None:
-            when = self.when
-            if when is None:
-                when = _get_datetime_now()
-        assert when is not None
+        when: datetime = self.when if when is None else when
         return when
 
     def is_valid(self):
@@ -230,9 +230,7 @@ class ProjectInfo(_ProjectInfo):
         return t if math.isfinite(t) else self.get_t_pellet_delivered_or_default(default=default)
 
     def get_day_path(self, skip_ensure: bool = False, when: Optional[datetime]=None) -> Tuple[str, str]:
-        """Get the location and related datetime for given arguments.
-        If when is None then self.when is used, which can eventually be None, in which case now() is used.
-        """
+        """Get the location and related datetime for given arguments. If when is None then self.when is used."""
         when: datetime = self._get_when_or_now(when)
         today = when.strftime(DATE_FORMAT)
         location = os.path.join(self.root, today)
@@ -351,7 +349,6 @@ class ProjectInfo(_ProjectInfo):
     ) -> Tuple[str, str, str]:
         """Get the 3-tuple of video paths for given arguments"""
         vid_path = self.get_source_path(name, interval=interval, session=session)
-
         file_name = f"{vid_path.full_path}.{self.video_write_ext}"
         index = 0
 
@@ -481,6 +478,10 @@ class ProjectInfo(_ProjectInfo):
         if auto_new:
             idx += 1
         return Path(loc).joinpath(fmt.format(idx=f"{idx:03d}"))
+
+    def get_frame_timing_path(self) -> Path:
+        source = self.get_session_path("frame_timing.csv", session=self.session)
+        return Path(source.location).joinpath(source.prefix)
 
     def to_local_value(self) -> Self:
         """Detach, if it was, from the possible shared memory values used for `when` & `session`.
