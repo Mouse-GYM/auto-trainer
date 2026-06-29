@@ -214,7 +214,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
-        self._project_info = project_info
+        self._project_info: ProjectInfo = ProjectInfo() if project_info is None else project_info
         self._status = BehaviorAlgoStatus.IDLE
 
         self._active_config = BehaviorConfiguration()
@@ -246,6 +246,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._start_session_reason = "NA"
         self._stop_session_reason = RecordingEndingReason.NA
         self._timer_end_capture_session = no_op_timer
+        self._prev_can_load_pellet_log_refuse_perf_c = -math.inf
 
         self._session_mouse_seen = False
         self._pellet_hands_min_distance: float = math.inf
@@ -258,10 +259,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._system_state = SystemState.cage
         self._intersession_state = IntersessionState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
-        self._last_capture_status_change_perf_c = -math.inf
         self._recording_start_perf_c = math.nan
-
-        # self.max_pellets_per_headfix_session: int = 10  # unused
 
         self._pellet_shift_y_limit: Optional[float] = None
 
@@ -501,7 +499,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return self
 
     @property
-    def project(self) -> Optional[ProjectInfo]:
+    def project(self) -> ProjectInfo:
         return self._project_info
 
     @project.setter
@@ -573,7 +571,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             prev, self._capture_status = self._capture_status, status
             if prev == status:
                 return
-            self._last_capture_status_change_perf_c = perf_now
             if status == CaptureProcessStatus.RECORDING:
                 self._recording_start_perf_c = perf_now
             else:
@@ -585,11 +582,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     @property
     def recording_start_perf_c(self) -> float:
         return self._recording_start_perf_c
-
-    @property
-    def capture_status_age(self) -> float:
-        """Capture status age as number of seconds"""
-        return get_perf_now() - self._last_capture_status_change_perf_c
 
     @property
     def is_in_session(self) -> bool:
@@ -1130,19 +1122,21 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             logger.error("%s: refusing start session when algo paused", reason)
             return False
 
+        project = self._project_info
+        if not project.is_valid():
+            raise RuntimeError("Project not valid")
+
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
         self._session_started_perf_c = get_perf_now()
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
-        project = self._project_info
-        if project is not None:  # can there be session capture without project_info actually ?
-            project.calculate_next_session_index()
-            self._event_manager.post_event_content(
-                ApiEventKind.projectSessionChanged,
-                data=dict(root=project.root, session=project.session),
-            )
+        project.calculate_next_session_index()
+        self._event_manager.post_event_content(
+            ApiEventKind.projectSessionChanged,
+            data=dict(root=project.root, session=project.session),
+        )
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
@@ -1159,7 +1153,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         self.session_starting()
 
-        self._event_manager.post_event_content(ApiEventKind.trialStarted)
+        self._event_manager.post_event_content(
+            ApiEventKind.trialStarted, data=dict(trial_id=project.session, reason=reason))
 
         return True
 
@@ -1190,7 +1185,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(reason=reason))
+            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.session, reason=reason))
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1310,7 +1305,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                                            perf_now=perf_now)
         if need_load:
             if self._system_state == SystemState.intersession:
-                logger.verbose("refusing can_load_pellet given intersession")
+                p_now = get_perf_now()
+                if p_now - self._prev_can_load_pellet_log_refuse_perf_c > 1:
+                    logger.verbose("refusing can_load_pellet given intersession")
+                    self._prev_can_load_pellet_log_refuse_perf_c = p_now
                 return False
             return True
         return False
@@ -1589,10 +1587,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         rsp = prev[1]
         return rsp.reach_events
 
-    def set_previous_intersession_analysis_rsp(self, prj: ProjectInfo, res: IntersessionResponse):
-        self._previous_intersession_analysis_rsp = (prj, res)
+    def set_previous_intersession_analysis_rsp(self, project: ProjectInfo, res: IntersessionResponse):
+        self._previous_intersession_analysis_rsp = (project, res)
         self._event_manager.post_event_content(
-            ApiEventKind.trialReachEvents, data=dict(trial_reach_events=res.reach_events))
+            ApiEventKind.trialReachEvents,
+            data=dict(trial_reach_events=res.reach_events, trial_id=project.session))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
@@ -1619,21 +1618,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.pellet_consumed_total = total_counts.consumed
         self.pellet_reaches_total = total_counts.reaches
         self.successful_reaches_total = total_counts.success_reaches
-
-    def _start_day(self):
-        self.pellet_consumed_day = 0  # consumed
-        self.pellets_presented_day = 0
-        self.successful_reaches_day = 0
-        self.pellet_reaches_day = 0
-
-    # unused atm...
-    def _check_date(self):
-        today = date.today()
-        if today != self._today:
-            dt = datetime.combine(today, datetime.min.time())
-            self._event_manager.post_event_content(ApiEventKind.dayStarted, dict(date=dt.timestamp()))
-            self._today = today
-            self._start_day()
 
     @staticmethod
     def close_algorithm_handler(*, timeout: float=3):
