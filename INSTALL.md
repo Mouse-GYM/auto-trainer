@@ -15,8 +15,19 @@ Anaconda is required for full feature support.  Tested with `Anaconda3-2023.09-0
 * These cameras require installation of version 3 of the Spinnaker SDK/runtime for your platform.
 * Platforms are limited to Windows and Ubuntu 20.04
 * Python version is limited to 3.8
+* See `install_spinnaker.sh` at https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
-See `install_spinnaker.sh` at https://github.com/Mouse-GYM/auto-trainer-device-deployment
+```bash
+gunzip spinnaker-3.2.0.62-arm64-pkg-20.04.tar.gz
+tar -xvf spinnaker-3.2.0.62-arm64-pkg-20.04.tar
+cd spinnaker-3.2.0.62-arm64/
+sudo apt-get install libusb-1.0-0  # (no-op was already the most recent)
+sudo apt-get --fix-broken install
+sudo ./remove_spinnaker_arm.sh  # remove previous version if any
+sudo ./install_spinnaker_arm.sh
+```
+
+**Nb:** this must be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
 
 ## Platform Specific Requirements 
 
@@ -28,6 +39,7 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 `conda create -n auto-trainer-1 python=3.8`
 
 2) activate it: `conda activate auto-trainer-1` ; **every time**.
+   Nb: This is now included with device-deployment too.
 
 3) Once first time: clone this repository.
     - create or update the ~/.netrc file so that it contains :
@@ -46,7 +58,7 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
    - `pip install ./library/spinnaker_python-3.2.0.62-cp38-cp38-linux_x86_64.whl`
    - `pip install .\library\spinnaker_python-3.2.0.62-cp38-cp38-win_amd64.whl`
 
-   **Nb:** this must be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
+   **Nb:** this must also be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
 
 5) **Jetson Only** and only once first time:
    1) `conda install --channel=conda-forge ffmpeg=6.0.0`
@@ -67,5 +79,21 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 
 
 ### Environment requirements
-Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment/,
+Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment/ for full information,
 more particularly its `home-install/.load_autotrainer_env.sh` file.
+
+Using a conda env, we have to/should export LD_LIBRARY_PATH with the correct library directories from the conda env.
+Also, there are some libraries that need to be preloaded (given some incompatibilities between them and other(s)),
+using export LD_PRELOAD.
+
+A block similar to the following must be used or added to `.bashrc`/`.bash_profile` :
+
+```bash
+# need be activated before below exports (before ${CONDA_PREFIX} usage):
+conda activate auto-trainer-1
+
+# ensure system libraries from conda env are used :
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib64:${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}
+
+export LD_PRELOAD="${LD_PRELOAD}:${CONDA_PREFIX}/lib/libgomp.so:/lib/aarch64-linux-gnu/libGLdispatch.so.0"
+```
