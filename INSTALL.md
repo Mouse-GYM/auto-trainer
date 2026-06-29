@@ -61,7 +61,7 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
    **Nb:** this must also be kept in sync with `https://github.com/Mouse-GYM/auto-trainer-device-deployment/tree/main/spinnaker`
 
 5) **Jetson Only** and only once first time:
-   1) `conda install --channel=conda-forge ffmpeg=6.1.1 libgomp ncurses`
+   1) `conda install --channel=conda-forge ffmpeg=6.1.2 libgomp ncurses`
       --channel=conda-forge: Use that conda channel. Which is required here.
       libgomp and ncurses are also required to get more recent, and built with appropriate flags,
       versions than the native system corresponding libraries,
@@ -99,5 +99,5 @@ conda activate auto-trainer-1
 # ensure system libraries from conda env are used :
 export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib64:${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}
 
-export LD_PRELOAD="${LD_PRELOAD}:${CONDA_PREFIX}/lib/libgomp.so:/lib/aarch64-linux-gnu/libGLdispatch.so.0"
+export LD_PRELOAD="${LD_PRELOAD}:${CONDA_PREFIX}/lib/libgomp.so"
 ```
