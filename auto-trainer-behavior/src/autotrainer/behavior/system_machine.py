@@ -442,9 +442,10 @@ class SystemMachine(StateMachine):
         p_now = get_perf_now()
         self._batch_sessions_total_duration += p_now - self._session_started_perf_c
         cur_project = self._project_info
-        if cur_project is not None:
-            cur_project = cur_project.to_local_value()
-            logger.verbose("capture_ended: project=%s", vars(cur_project))
+        if cur_project is None:
+            return
+        cur_project = cur_project.to_local_value()
+        logger.verbose("capture_ended: project=%s", cur_project)
 
         algo = self._algorithm
         if not algo.active_config.pellet_delivery.retract_enabled:
@@ -488,9 +489,10 @@ class SystemMachine(StateMachine):
             )
         #
         logger.notice(
-            "session ended: intersession.state=%s system_machine.state=%s algo.system_state=%s "
+            "session ended: prj=%s intersession.state=%s system_machine.state=%s algo.system_state=%s "
             "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s "
             "can_batch=%s can_perform_analysis=%s real=%s",
+            cur_project.short_id,
             self._intersession.state, self.state, algo.system_state,
             self._pellet_machine.state,
             algo.intersession_enabled, algo.session_mouse_seen,
@@ -519,12 +521,15 @@ class SystemMachine(StateMachine):
             # at the end of live recording pose-process automatically goes to offline mode,
             # so we ask it to switch back to live:
             self._inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
-            algo.end_session(CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
-                             else CaptureAnalysisResult.CAPTURE_ONLY)
+            if cur_project is not None:
+                algo.end_session(
+                    cur_project,
+                    CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
+                    else CaptureAnalysisResult.CAPTURE_ONLY)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_intersession_analysis_ended(self, result: CaptureAnalysisResult):
-        logger.verbose("intersession ended: result=%s", result)
+    def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        logger.verbose("intersession ended: trial=%s result=%s", project.short_id, result)
         cur_batch = self._batch_project_sessions_list
         if result == CaptureAnalysisResult.ANALYSIS_FAILED:
             self._batch_failed_count += 1
@@ -789,10 +794,12 @@ class SystemMachine(StateMachine):
         ctx = self._algorithm.uncover_context
         prev_valid = ctx.y_dcs_valid
         if not prev_valid and valid:
-            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f", min_y, max_y)
+            logger.verbose("setting pellet-uncover valid ; dist: min=%.1f max=%.1f loc3d=%s",
+                           min_y, max_y, response.locations_3d)
             ctx.start_min_y = min_y
         elif not valid and prev_valid:
-            logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f", max_y)
+            logger.verbose("unsetting pellet-uncover valid ; max_dist=%.1f loc3d=%s",
+                           max_y, response.locations_3d)
         if valid:
             if not math.isfinite(ctx.start_y_dcs_valid_perf_c):
                 ctx.start_y_dcs_valid_perf_c = perf_now

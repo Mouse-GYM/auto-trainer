@@ -89,6 +89,9 @@ class SystemStatusMessageKind(IntEnum):
 
     CAMERA_STATUS_CHANGE = 1001
 
+    CAMERA_RECORDING_CLOSED_FINISHED = 1002  # current associated args is (cam_idx, tot_frames_written, project_info)
+    """Sent when camera recording files are closed by record thread"""
+
     MEASUREMENT = -101
     """This value is deprecated.  Use MEASUREMENTS if the object you are passing with this identifier conforms to the
     MeasurementMessage protocol."""

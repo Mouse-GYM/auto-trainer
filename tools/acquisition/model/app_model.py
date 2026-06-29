@@ -1,3 +1,4 @@
+import csv
 import ctypes
 import dataclasses
 import enum
@@ -16,8 +17,9 @@ import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol
+from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
 
+import pandas
 import yaml
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
@@ -45,7 +47,7 @@ from autotrainer.core import (
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
-from autotrainer.core.interfaces import RecordingEndingReason
+from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -260,7 +262,6 @@ class AppModel(ObservableObject):
         self._loaded_config_dir_path = Path()
 
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
-        self._is_recording_trigger = False
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
@@ -403,8 +404,6 @@ class AppModel(ObservableObject):
 
         self._rpc_service: Optional[RpcService] = None
 
-        NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._trigger_received)
-
         self._hardware.property_changed += self._on_hardware_property_changed
         inference.property_changed += self._on_inference_property_changed
         inference.pose_response_ready += self._on_pose_response_ready
@@ -416,6 +415,7 @@ class AppModel(ObservableObject):
         algo.property_changed += self._on_behavior_algo_property_changed
         algo.session_starting_before_record_start += self._on_session_starting_before_record_start
         algo.session_capture_ending += self._on_session_capture_ended
+        # algo.session_ending += self._on_session_ending
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
@@ -601,51 +601,163 @@ class AppModel(ObservableObject):
         )
         return 0
 
+    def _merge_camera_timestamp_files(self, project: ProjectInfo, cams: Tuple[VideoCaptureModel]):
+        # assert len(cams) == 2
+        timing_path = project.get_frame_timing_path()
+        data = []
+        prim_cam = cams[0]  # primary
+        main_fps = prim_cam.active_config.params.get('fps', math.nan)
+        logger.info("Merging camera timestamps files for trial%03d into %s (fps=%s)",
+                    project.session, timing_path, main_fps)
+        txt_files = []
+        if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
+            logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
+            return
+        frame_duration = 1 / main_fps
+        utc_when = None
+        ts_file_fields = ("frame_time", "fps", "frame_when", "frame_perf", "frame_id")
+        for cam in cams:
+            _, ts_filename, *_ = project.get_video_path(cam.name, allow_overwrite=True)
+            ts_filename = Path(ts_filename)
+            df = pandas.read_csv(ts_filename, names=ts_file_fields, sep=",", skipinitialspace=True)
+            data.append(df)
+            txt_files.append(ts_filename)
+            logger.debug("cam%s: df=%s", cam.camera_index, df)
+        #
+        df_main_cam = data[0]
+        if len(df_main_cam) == 0:
+            logger.warning("_merge_camera_timestamp_files: empty df for main cam")
+            return
+        main_cam_first_frame_id = df_main_cam["frame_id"][0]
+        for idx_df, df in enumerate(data[1:], start=1):
+            df: pandas.DataFrame
+            if len(df) == 0:
+                logger.warning("_merge_camera_timestamp_files: empty df for cam-%s", cams[idx_df].name)
+                df = df_main_cam.copy()
+                df["frame_when"] = df["frame_perf"] = df["frame_time"] = math.nan
+            else:
+                # align on same first frame_id than primary cam:
+                cur_first_frame_id = df["frame_id"][0]
+                if cur_first_frame_id < main_cam_first_frame_id:
+                    df = df.tail(-(main_cam_first_frame_id - cur_first_frame_id)).reset_index(drop=True)
+            data[idx_df] = df
+        #
+        df_second_cam = data[1]
+        r0 = df_main_cam[:1]
+        start_frame_id = r0['frame_id'][0]
+        first_frame_utc_when = r0['frame_time'][0]
+        logger.debug("start_frame_id=%s (utc_when=%s)", start_frame_id, first_frame_utc_when)
+        timing_csv_fields = [
+            'frame_id',
+            'frame_when',
+            'frame_present_primary',
+            'frame_present_secondary',
+            'utc_when',
+        ]
+        with timing_path.open("w") as fh:
+            dw = csv.DictWriter(fh, timing_csv_fields)
+            dw.writeheader()
+            # nb: only using main_cam as reference:
+            for idx, frame_id in enumerate(range(start_frame_id, start_frame_id + len(df_main_cam))):
+                # expected_frame_id = start_frame_id + idx
+                utc_when = first_frame_utc_when + idx * frame_duration
+                frame_when = df_main_cam['frame_when'][idx]
+                # protect in case of secondary camera recorded less frames:
+                if idx >= len(df_second_cam):
+                    second_frame_when = math.nan
+                else:
+                    second_frame_when = df_second_cam['frame_when'][idx]
+                d = dict(
+                    frame_id=frame_id,
+                    frame_when=frame_when if math.isfinite(frame_when) else "",  # could keep the math.nan otherwise
+                    frame_present_primary=1 if math.isfinite(frame_when) else 0,
+                    frame_present_secondary=1 if math.isfinite(second_frame_when) else 0,
+                    utc_when=utc_when,
+                )
+                dw.writerow(d)
+        logger.info("Written %s entries into %s", len(df_main_cam), timing_path)
+        self._remove_timestamps_txt_files(project)
+
+    def _get_monitored_cams(self):
+        cams = []  # put primary first
+        monitored_cams = (self._left_camera, self._right_camera)
+        for cam in monitored_cams:
+            if cam.is_primary:
+                cams.append(cam)
+                break
+        for cam in monitored_cams:
+            if not cam.is_primary:
+                cams.append(cam)
+        monitored_cams = tuple(cams)
+        return monitored_cams
+
     def _handle_proc_msg_queue(self):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
+        cams_closed_finished = {}
         while True:
             raw = proc_msg_q.get()
             if raw is None:
                 break
-            args = ()
-            kwargs = None
-            if isinstance(raw, tuple):
-                if len(raw) < 1:
-                    logger.warning("Invalid status msg: %r", raw)
-                    continue
-                cmd = raw[0]
-                if len(raw) > 1:
-                    args = raw[1]
-                    if len(raw) > 2:
-                        kwargs = raw[2]
-                        if len(raw) > 3:
-                            logger.warning("Unhandled extra args to status msg: %r", raw[3:])
-            else:
-                cmd = raw
-            extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
-            logger.verbose("Handling %s ; data=%s", cmd, extra_info)
-            algo = self._behavior.algorithm
-            if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
-                cam_idx, new_status, *r_args = args
-                if cam_idx == self._identify_primary_main_cam_idx():
-                    if new_status == CaptureProcessStatus.RECORDING:
-                        first_frame_perf, first_frame_when, first_frame_time, *r_args = r_args
-                        p_now = first_frame_perf
-                        project = self._project_info
-                        if project is not None:
-                            project.start_record_timestamp = first_frame_time
-                        logger.info("received RECORDING: frame-0: time=%.3f perf_c=%.3f now=%.3f")
-                    else:
-                        p_now = get_perf_now()
-                    algo.set_capture_status(new_status, perf_now=p_now)
-                else:
-                    logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
-                                   cam_idx, new_status)
-            else:
-                logger.warning("unhandled command: %s raw=%s", cmd, raw)
+            try:
+                self._handle_proc_msg(raw, cams_closed_finished=cams_closed_finished)
+            except Exception as err:
+                logger.exception("Error handling message %s: %s ; continuing", raw, err)
         # end while True
         logger.info("handle_proc_msg_queue exiting")
+
+    def _handle_proc_msg(self, raw, *, cams_closed_finished):
+        args = ()
+        kwargs = None
+        # unpack args/kwargs from raw:
+        if isinstance(raw, tuple):
+            if len(raw) < 1:
+                logger.warning("Invalid status msg: %r", raw)
+                return
+            cmd = raw[0]
+            if len(raw) > 1:
+                args = raw[1]
+                if len(raw) > 2:
+                    kwargs = raw[2]
+                    if len(raw) > 3:
+                        logger.warning("Unhandled extra args to status msg: %r", raw[3:])
+        else:
+            cmd = raw
+            args = raw
+            kwargs = None
+        extra_info = (args, kwargs) if logger.isEnabledFor(logging.DEBUG) else "NA"
+        logger.verbose("Handling %s ; data=%s", cmd, extra_info)
+        algo = self._behavior.algorithm
+        if cmd == SystemStatusMessageKind.CAMERA_STATUS_CHANGE:
+            cam_idx, new_status, *r_args = args
+            if cam_idx == self._identify_primary_main_cam_idx():
+                if new_status == CaptureProcessStatus.RECORDING:
+                    first_frame_perf, first_frame_when, first_frame_time, *r_args = r_args
+                    p_now = first_frame_perf
+                    project = self._project_info
+                    if project is not None:
+                        project.start_record_timestamp = first_frame_time
+                    logger.info("received RECORDING: frame-0: time=%.3f perf_c=%.3f now=%.3f")
+                else:
+                    p_now = get_perf_now()
+                algo.set_capture_status(new_status, perf_now=p_now)
+            else:
+                logger.verbose("not handling non-primary camera status, cam_idx=%s status=%s",
+                               cam_idx, new_status)
+        elif cmd == SystemStatusMessageKind.CAMERA_RECORDING_CLOSED_FINISHED:
+            cam_idx, frames_written, project, *r_args = args
+            if project is None:
+                return
+            monitored_cams = self._get_monitored_cams()
+            monitored_cam_indices = tuple(cam.camera_index for cam in monitored_cams)
+            if cam_idx in monitored_cam_indices:
+                cams_closed_finished[cam_idx] = (project, frames_written)
+                if all(cam.camera_index in cams_closed_finished for cam in monitored_cams):
+                    project = cams_closed_finished[0][0]  # always take the primary cam passed project as ref.
+                    self._merge_camera_timestamp_files(project, monitored_cams)
+                    cams_closed_finished.clear()  # now clear
+        else:
+            logger.warning("unhandled command: %s raw=%s", cmd, raw)
 
     @property
     def preferences(self) -> UserPreferences:
@@ -1257,7 +1369,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, when=datetime.now(), session=None)
+        self._save_project_metadata(project_info, when=datetime.now(), session=None, caller="capture_start")
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -1314,7 +1426,6 @@ class AppModel(ObservableObject):
             self._capture_stop()
         finally:
             # always:
-            self._is_recording_trigger = False
             # must be set before try reload training plans, given checked in it
             self._acquisition_started = False
             self._acquisition_stopping = False
@@ -1616,13 +1727,6 @@ class AppModel(ObservableObject):
 
         self.animals = animals
 
-    def _trigger_received(self, notification: Notification):
-        self._is_recording_trigger = notification.context
-        project = self._project_info
-        if notification.context and project is not None:
-            self._save_metadata(project, project.when, project.get_metadata_file(project.session, when=project.when),
-                                project.session)
-
     def _update_status_text_overlay(self):
         parts = []
         cur_inf_status = self._inference.status
@@ -1743,10 +1847,20 @@ class AppModel(ObservableObject):
     def _on_session_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info
         if project is not None:
-            self._save_project_metadata(project)
+            self._save_project_metadata(project, caller="session_capture_ended")
         # self._behavior.system_machine.on_session_capture_ended(reason)
         # NB: had to keep in system_machine for many tests.
         # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
+
+    def _remove_timestamps_txt_files(self, project: ProjectInfo):
+        removed = []
+        for cam in self._cameras:
+            _, ts_file, _ = project.get_video_path(cam.name, allow_overwrite=True)
+            ts_file = Path(ts_file)
+            if ts_file.exists():
+                ts_file.unlink(missing_ok=True)
+                removed.append(ts_file)
+        logger.debug("%s: removed timestamps txt files: %s", project.short_id, removed)
 
     def _on_behavior_algo_property_changed(self, name: str, value, old_value):
         props = BehaviorAlgoProps
@@ -1969,13 +2083,20 @@ class AppModel(ObservableObject):
         return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo, *,
-                               when: Optional[datetime] = None, session: Optional[int] = -1):
+                               when: Optional[datetime] = None, session: Optional[int] = -1,
+                               caller: str="NA"):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
-        when = when if when is not None else (project_info.when if project_info.when is not None else datetime.now())
+        when = when if when is not None else project_info.when
         file_name = project_info.get_metadata_file(session, when)
+        logger.verbose(
+            "Saving metadata to %s ; caller=%s when=%s sess=%s prj=%s",
+            file_name, caller, when, session, project_info,
+        )
+        if session is not None and session < 0:
+            session = project_info.session  # ensure use this one
         self._save_metadata(project_info, when, file_name, session)
 
-    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: int = None):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: Optional[int] = -1):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
             "date": when.strftime("%Y%m%d_%H%M%S"),

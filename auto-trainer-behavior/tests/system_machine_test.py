@@ -302,7 +302,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_no_intersession(self, machine):
         processing_ended_count = 0
-        def processing_ended(status):
+        def processing_ended(prj, status):
             nonlocal processing_ended_count
             processing_ended_count += 1
             assert status == CaptureAnalysisResult.CAPTURE_ONLY
@@ -317,7 +317,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_intersession_mouse_not_seen(self, machine):
         processing_ended_count = 0
-        def processing_ended(status):
+        def processing_ended(prj, status):
             nonlocal processing_ended_count
             processing_ended_count += 1
             assert status == CaptureAnalysisResult.CAPTURE_ONLY
@@ -337,7 +337,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
     @pytest.mark.parametrize("system_state", [SystemState.cage, SystemState.tunnel])
     def test_when_intersession_mouse_seen(self, machine, detection_success, system_state):
         processing_ended_count = 0
-        def processing_ended(status):
+        def processing_ended(prj, status):
             nonlocal processing_ended_count
             processing_ended_count += 1
             assert status == (
@@ -369,7 +369,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
     def test_when_intersession_mouse_seen_segmentation_fails(self, machine):
         processing_ended_count = 0
-        def processing_ended(status):
+        def processing_ended(prj, status):
             nonlocal processing_ended_count
             processing_ended_count += 1
             assert status == CaptureAnalysisResult.ANALYSIS_FAILED

@@ -20,7 +20,7 @@ logger = get_verbose_logger(__name__)
 
 class IntersessionMachineEvents(StateMachineEvents):
     on_analysis_started: Callable[[], None]  # unused
-    on_analysis_ended: Callable[[CaptureAnalysisResult], None]
+    on_analysis_ended: Callable[[ProjectInfo, CaptureAnalysisResult], None]
 
 
 class IntersessionMachine(StateMachine):
@@ -112,8 +112,8 @@ class IntersessionMachine(StateMachine):
         if det_cfg is not None and det_cfg.project != project:
             logger.warning("Unexpected detection config project: %s vs %s", det_cfg.project, project)
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
-        self._algorithm.end_session(result)
-        self.events.on_analysis_ended(result)
+        self._algorithm.end_session(project, result)
+        self.events.on_analysis_ended(project, result)
 
     def can_perform_segmentation(self, project_info: ProjectInfo):
         p = project_info is not None

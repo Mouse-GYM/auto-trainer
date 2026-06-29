@@ -129,7 +129,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
         self._frame_count = 0
         self._start = 0
-        self._fps = 0
+        self._fps = 0  # NB: this is NOT the camera acquire FPS
 
         self._last_error = None
 
@@ -142,6 +142,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
+
+    @property
+    def camera_index(self):
+        """Unique camera index"""
+        return self._camera_index
 
     @property
     def video_status(self) -> CaptureProcessStatus:
@@ -418,6 +423,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
     def on_close(self):
         logger.debug("closing %s", self.name)
         self.on_capture_stop()
+
+    @property
+    def active_config(self) -> CameraConfiguration:
+        return self._cur_conf
 
     def load_configuration(self, conf: CameraConfiguration):
         self._id = conf.id

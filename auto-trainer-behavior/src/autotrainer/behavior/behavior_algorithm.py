@@ -1196,14 +1196,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
-    def end_session(self, result: CaptureAnalysisResult):
+    def end_session(self, project: ProjectInfo, result: CaptureAnalysisResult):
         """called on end of a full "session" handling, analysis on it possibly included, if not delayed.
         But this is still called from system machine when analysis is delayed.
         """
-        logger.notice("session processing end: %s", result)
+        logger.notice("session processing end: %s ; project=%s", result, project)
         self._event_manager.post_event_content(
             ApiEventKind.trialEnded, data=dict(result=result))
-        self.session_ending(result)  # NB: only used via tests
+        self.session_ending(project, result)
 
     def reset_session_pellet_count(self):
         self.session_pellet_loaded_count = 0
