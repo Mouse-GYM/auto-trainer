@@ -1,17 +1,19 @@
 import math
+from functools import partial
+from unittest import mock
 
 import numpy
-import pytest
 
-from autotrainer.behavior import BehaviorAlgorithm
+from autotrainer.behavior import BehaviorAlgorithm, SystemState, behavior_algorithm
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core.interfaces import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.core.capture import CaptureProcessStatus
-from top_fixtures import increase_simulate_perf_now
+from top_fixtures import increase_simulate_perf_now, AlmostEqualFloat
 
+import pytest
 
 @pytest.fixture
 def algo(monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
@@ -211,18 +213,25 @@ def test_end_session_if_not_running_fails(algo):
     assert algo.is_in_session is False
 
 
-def test_delivery_disabled_defaults(algo):
+def test_delivery_basic(algo):
     algo.pellet_delivery_enabled = False
     assert algo.can_load_pellet() is False
     assert algo.can_send_pellet() is False
     #
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is False
+    for pellet_state in list(PelletState):
+        assert algo.can_retract_pellet(pellet_state=pellet_state) is False
     #
     algo.pellet_delivery_enabled = True
     #
     assert algo.can_send_pellet() is False
     assert algo.can_load_pellet() is False
+
+    # still same for retract:
+    assert algo.can_retract_pellet(pellet_state=PelletState.retract) is False, "don't repeat move_retract !"
+    for pellet_state in set(PelletState) - {PelletState.retract}:
+        assert algo.can_retract_pellet(pellet_state=pellet_state) is True
 
     algo.update_triangle_seen(True)
     assert algo.can_load_pellet() is True
@@ -230,24 +239,111 @@ def test_delivery_disabled_defaults(algo):
     #
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is True
+    #
     algo.pellet_cover_enabled = False
     assert algo.can_release_pellet() is True
     assert algo.can_cover_pellet() is False
     #
     algo.active_config.pellet_delivery.pellet_send_wait_delay = 1
+    algo.capture_status = CaptureProcessStatus.RUNNING
     algo.start_session(reason="manual")
-    algo.set_capture_status(CaptureProcessStatus.RECORDING)
+    assert algo.can_send_pellet() is False
+    algo.capture_status = CaptureProcessStatus.RECORDING
     assert algo.can_send_pellet() is False
     increase_simulate_perf_now(algo.active_config.pellet_delivery.pellet_send_wait_delay)
     assert algo.can_send_pellet() is True
 
 
+def test_can_send_load_pellet_retract_disabled(algo):
+    cfg = algo.active_config.pellet_delivery
+    cfg.is_enabled = True
+    cfg.retract_enabled = False
+    assert algo.pellet_recently_seen is False
+    assert algo.can_load_pellet() is False
+    algo.update_triangle_seen(True)
+    assert algo.can_load_pellet() is True
+    algo.system_state = SystemState.intersession
+    assert algo.can_load_pellet() is False
+    assert algo.can_retract_pellet(pellet_state=PelletState.retract) is False
+    for pellet_state in set(PelletState) - {PelletState.retract}:
+        assert algo.can_retract_pellet(pellet_state=pellet_state) is True
+    #
+    for system_state in list(SystemState):
+        algo.system_state = system_state
+        assert algo.can_send_pellet() is False
+    algo.update_pellet_seen(True)
+    assert algo.pellet_recently_seen is True
+    algo.system_state = SystemState.intersession
+    assert algo.can_send_pellet() is False
+    for system_state in {SystemState.cage, SystemState.tunnel}:
+        algo.system_state = system_state
+        assert algo.can_send_pellet() is True
+    algo.start_session()
+    assert algo.is_in_session
+    # algo.active_config.head_clamp.enabled = True
+    # need be set on algo itself :
+    algo.head_fixation_enabled = True
+    algo.active_config.head_clamp.wait_engaged_before_send_pellet = True
+    cfg.retract_enabled = False
+    assert algo.can_send_pellet() is True
+    cfg.retract_enabled = True
+    assert algo.can_send_pellet() is False
+    assert algo.can_retract_pellet(pellet_state=PelletState.monitoring) is True
+    algo.autoclamp_in_progress = True
+    assert algo.can_send_pellet() is True
+    assert algo.can_retract_pellet(pellet_state=PelletState.monitoring) is False
+    #
+    algo.head_fixation_enabled = False
+    algo.record_prebuffer_duration = 5
+    assert algo.can_send_pellet() is False
+    algo.set_capture_status(CaptureProcessStatus.RECORDING)
+    assert algo.can_send_pellet() is False
+    increase_simulate_perf_now(algo.record_prebuffer_duration)
+    assert algo.can_send_pellet() is True
+    cfg.pellet_send_wait_delay = 3
+    assert algo.can_send_pellet() is False
+    increase_simulate_perf_now(cfg.pellet_send_wait_delay)
+    assert algo.can_send_pellet() is True
+
+
+@pytest.mark.parametrize("enabled", (False, True))
+def test_can_perform_intersession_analysis(algo, enabled):
+    algo.can_perform_intersession_analysis() is False
+    algo.update_mouse_seen(True)
+    algo.can_perform_intersession_analysis() is False
+    algo.start_session()
+    algo.can_perform_intersession_analysis() is False
+    algo.update_mouse_seen(True)
+    algo.active_config.pellet_delivery.is_intersession_analysis_enabled = enabled
+    algo.can_perform_intersession_analysis() is enabled
+
+
+@pytest.mark.parametrize("minimum_duration", (1, 5))
+def test_too_short_session_end_capture_is_delayed(algo, minimum_duration):
+    algo.start_session()
+    minimum_duration = AlmostEqualFloat(minimum_duration)
+    algo.session_minimum_duration = minimum_duration
+    assert algo.is_in_session
+    with mock.patch.object(behavior_algorithm, "make_daemon_timer") as m_make_timer:
+        algo.end_capture_session(reason="manual")
+    assert algo.is_in_session
+    assert m_make_timer.return_value.start.call_args_list == [mock.call()]
+    assert m_make_timer.call_args.args[0] == minimum_duration
+    func = m_make_timer.call_args.args[1]
+    increase_simulate_perf_now(minimum_duration)
+    func()
+    assert not algo.is_in_session
+
+
 def test_algo_paused(algo):
     algo.algo_paused = True
+    assert algo.start_session() is False
     assert algo.can_send_pellet() is False
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is False
     assert algo.can_load_pellet() is False
+    for pellet_state in list(PelletState):
+        assert algo.can_retract_pellet(pellet_state=pellet_state) is False
     algo.algo_paused = False
     assert algo.can_send_pellet() is False
     assert algo.can_cover_pellet() is True
@@ -257,6 +353,12 @@ def test_algo_paused(algo):
     assert algo.triangle_recently_seen is True
     assert algo.can_load_pellet() is True  # given triangle recently seen
     assert algo.pellet_recently_seen is False  # but not pellet
+
+
+def test_start_session_with_invalid_project(algo, caplog):
+    algo.project = ProjectInfo()
+    assert algo.start_session() is False
+    assert "refusing start session when project not valid" in caplog.text
 
 
 def test_diamond_triangle_drift(algo):

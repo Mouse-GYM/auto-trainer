@@ -1124,7 +1124,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         project = self._project_info
         if not project.is_valid():
-            raise RuntimeError("Project not valid")
+            logger.error("%s: refusing start session when project not valid: %s", reason, project)
+            return False
 
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
@@ -1241,18 +1242,24 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 if self.is_pellet_recently_seen(use_any_cam=True):
                     return True
                 return False
-        if not (self._is_in_session and self._capture_status == CaptureProcessStatus.RECORDING):
+        if not self._is_in_session:
             return False
         if self._head_fixation_enabled and cfg.head_clamp.wait_engaged_before_send_pellet:
             return self._autoclamp_in_progress
         t_since_rec_started = get_perf_now() - self._recording_start_perf_c
+        # although _recording_start_perf_c is set when capture_status is set to RECORDING,
+        # it's not done atomically, and also given we don't use a lock for this can_send_pellet(),
+        # so this double check:
+        if not math.isfinite(t_since_rec_started):
+            return False
+        if self._capture_status != CaptureProcessStatus.RECORDING:
+            return False
         prebuffer_duration = self._recording_prebuffer_duration
-        if math.isfinite(prebuffer_duration):
+        # the recording_start_perf_c is the *real* one, with prebuffer included,
+        # if it's not null then account for it:
+        if math.isfinite(prebuffer_duration) and prebuffer_duration > 0:
             t_since_rec_started -= prebuffer_duration
-        return (
-            self._is_in_session
-            and t_since_rec_started >= cfg.pellet_delivery.pellet_send_wait_delay
-        )
+        return t_since_rec_started >= cfg.pellet_delivery.pellet_send_wait_delay
 
     def would_load_pellet(
         self,
@@ -1358,13 +1365,16 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        if self._algo_paused or self._status not in {
-            BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
-            BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
-        } or pellet_state in {
-            # PelletState.home,  # not sure
-            PelletState.retract,  # prevent executing the command again and again and..
-        }:
+        if (
+            self._algo_paused
+            or self._status
+            not in {
+                BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+                BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+            }
+            or not self._active_config.pellet_delivery.is_enabled
+            or pellet_state == PelletState.retract  # prevent executing the command again and again and..
+        ):
             return False
         if not self._active_config.pellet_delivery.retract_enabled:
             return self._system_state == SystemState.intersession
