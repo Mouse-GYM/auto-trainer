@@ -317,14 +317,14 @@ def test_can_send_load_pellet_retract_disabled(algo):
 
 @pytest.mark.parametrize("enabled", (False, True))
 def test_can_perform_intersession_analysis(algo, enabled):
-    algo.can_perform_intersession_analysis() is False
+    assert algo.can_perform_intersession_analysis() is False
     algo.update_mouse_seen(True)
-    algo.can_perform_intersession_analysis() is False
+    assert algo.can_perform_intersession_analysis() is False
     algo.start_session()
-    algo.can_perform_intersession_analysis() is False
+    assert algo.can_perform_intersession_analysis() is False
     algo.update_mouse_seen(True)
     algo.active_config.pellet_delivery.is_intersession_analysis_enabled = enabled
-    algo.can_perform_intersession_analysis() is enabled
+    assert algo.can_perform_intersession_analysis() is enabled
 
 
 @pytest.mark.parametrize("minimum_duration", (1, 5))
