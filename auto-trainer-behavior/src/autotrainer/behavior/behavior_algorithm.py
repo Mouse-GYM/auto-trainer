@@ -466,7 +466,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                if t_reentrant_count == 0 or is_handler_thread_allow_reentrant:
+                if t_reentrant_count == 0 or t_allow_reentrant:
                     func(*args) if kwargs is None else func(*args, **kwargs)
                 else:
                     reentrant_list.append((func, args, kwargs, event))
