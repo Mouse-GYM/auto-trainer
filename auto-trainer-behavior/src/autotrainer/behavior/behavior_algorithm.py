@@ -1367,8 +1367,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
         if (
             self._algo_paused
-            or self._status
-            not in {
+            or self._status not in {
                 BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
                 BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
             }
