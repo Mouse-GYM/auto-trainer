@@ -683,9 +683,11 @@ class SystemMachine(StateMachine):
                       drift_dist)
         self._event_manager.post_event_content(
             ApiEventKind.pelletDriftReset, data=dict(drift=dict(x=cur_drift.x, y=cur_drift.y, z=cur_drift.z)))
-        self._pellet_machine.move_home()
+        with algo.set_allow_reentrant(True):
+            self._pellet_machine.move_home()
         if algo.is_in_session:
-            algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
+            with algo.set_allow_reentrant(True):
+                algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
 
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
