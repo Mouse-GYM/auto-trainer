@@ -8,6 +8,7 @@ import multiprocessing.managers
 import os
 import os.path
 import sys
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
@@ -61,10 +62,10 @@ class IntervalSource(NamedTuple):
     interval: int
 
 
-class SessionSource(NamedTuple):
+class TrialSource(NamedTuple):
     location: str
     prefix: str
-    session_index: int  # trial index
+    trial: int  # trial index
 
 
 class IntervalFileInfo(NamedTuple):
@@ -82,11 +83,13 @@ def _ensure_location(location: str):
         raise
 
 
-
-
 # NB: so that we can easily patch from test
 def _get_datetime_now() -> datetime:
     return datetime.now()
+
+
+def _make_session_id() -> str:
+    return str(uuid.uuid4())
 
 
 @dataclass
@@ -115,13 +118,14 @@ class _ProjectInfo:
     ensure_exists: bool = False
     camera_1: str = ""
     camera_2: str = ""
-    _session: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
-    session: ClassVar[int] = ValueHolderDescriptor()  # noqa
+    _trial: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
+    trial: ClassVar[int] = ValueHolderDescriptor()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
     start_record_timestamp: float = math.nan  # regular unix timestamp, in seconds
     t_pellet_delivered: float = math.nan  # in seconds (zero-based on start_recording)
     t_pellet_presented: float = math.nan
+    session_id: str = dataclasses.field(default_factory=_make_session_id)
 
 
 @dataclass
@@ -137,31 +141,34 @@ class ProjectInfo(_ProjectInfo):
         ensure_exists: bool = _ProjectInfo.ensure_exists,
         camera_1: str = _ProjectInfo.camera_1,
         camera_2: str = _ProjectInfo.camera_2,
-        session: Optional[int] = None,
+        trial: Optional[int] = None,
         send_position: Optional[Offset3DTuple] = _ProjectInfo.send_position,
         dcs_send_position: Optional[Offset3DTuple] = _ProjectInfo.dcs_send_position,
         start_record_timestamp: float = _ProjectInfo.start_record_timestamp,
         t_pellet_delivered: float = _ProjectInfo.t_pellet_delivered,
         t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
+        session_id: Optional[str] = None,
         #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
         super().__init__()
+        if session_id is None:
+            session_id = _make_session_id()
         if when is None:
             _when = None
         else:
             _when = RawValueHolder(when.timestamp())
-            if session is None:
-                session = 1
-        if session is None:
-            _session = None
+            if trial is None:
+                trial = 1
+        if trial is None:
+            _trial = None
         else:
-            _session = RawValueHolder(session)
+            _trial = RawValueHolder(trial)
             if when is None:
-                raise ValueError("Cannot create ProjectInfo with session but without when")
-        if _session is None and _when is None:
+                raise ValueError("Cannot create ProjectInfo with trial but without when")
+        if _trial is None and _when is None:
             ctx = get_mp_ctx() if mp_manager is None else mp_manager
-            _session = ctx.Value(ctypes.c_uint32, 1)
+            _trial = ctx.Value(ctypes.c_uint32, 1)
             # use the same lock for both session and when mp shared values:
             _when = ctx.Value(ctypes.c_double,  # double required, not float !!
                                    _get_datetime_now().timestamp(),
@@ -173,7 +180,7 @@ class ProjectInfo(_ProjectInfo):
         self.root = root
         self.device_id = device_id
         self._when = _when
-        self._session = _session
+        self._trial = _trial
         self.ensure_exists = ensure_exists
         self.camera_1 = camera_1
         self.camera_2 = camera_2
@@ -182,10 +189,11 @@ class ProjectInfo(_ProjectInfo):
         self.start_record_timestamp = start_record_timestamp
         self.t_pellet_delivered = t_pellet_delivered
         self.t_pellet_presented = t_pellet_presented
+        self.session_id = session_id
 
     @property
     def short_id(self) -> str:
-        return f"{self.when.strftime(DATE_FORMAT)}_{self.device_id}_{self.session:03d}"
+        return f"{self.when.strftime(DATE_FORMAT)}_{self.device_id}_{self.trial:03d}"
 
     # def __repr__(self):
     #     return (
@@ -201,18 +209,18 @@ class ProjectInfo(_ProjectInfo):
                 and self.when == other.when
                 and self.camera_1 == other.camera_1
                 and self.camera_2 == other.camera_2
-                and self.session == other.session
+                and self.trial == other.trial
             )
         return super().__eq__(other)
 
     # for multiprocess capability:
     def __enter__(self):
-        if hasattr(self._session, "acquire"):
-            self._session.acquire()
+        if hasattr(self._trial, "acquire"):
+            self._trial.acquire()
 
     def __exit__(self, ex, ex_type, ex_stack):
-        if hasattr(self._session, "acquire"):
-            self._session.release()
+        if hasattr(self._trial, "acquire"):
+            self._trial.release()
 
     def _get_when_or_now(self, when: Optional[datetime] = None) -> datetime:
         when: datetime = self.when if when is None else when
@@ -264,12 +272,12 @@ class ProjectInfo(_ProjectInfo):
         prefix = f"{today}{d}{when_str}{s}"
         return IntervalSource(location, prefix, when.hour if interval == ProjectInterval.HOUR else when.minute)
 
-    def get_session_path(self, name: str = "", session: int = -1, skip_ensure: bool = False,
-                         when: Optional[datetime] = None) -> SessionSource:
+    def get_trial_path(self, name: str = "", trial: int = -1, skip_ensure: bool = False,
+                       when: Optional[datetime] = None) -> TrialSource:
         (location, today) = self.get_day_path(True, when=when)
-        if session < 0:
-            session = self.session
-        session_str = f"trial{session:03}"
+        if trial < 0:
+            trial = self.trial
+        session_str = f"trial{trial:03}"
         location = os.path.join(location, session_str)
         if not skip_ensure and self.ensure_exists:
             _ensure_location(location)
@@ -277,35 +285,35 @@ class ProjectInfo(_ProjectInfo):
         prefix = f"{today}{d}_{session_str}"
         s = f"_{name}" if name else ""
         prefix = f"{prefix}{s}"
-        return SessionSource(location, prefix, session)
+        return TrialSource(location, prefix, trial)
 
     def get_source_path(
         self,
         name: str = "",
         interval: ProjectInterval = ProjectInterval.NONE,
-        session: int = -1,
+        trial: int = -1,
         skip_ensure: bool = False,
         when: Optional[datetime] = None,
     ) -> ProjectPath:
         if interval is None or interval == ProjectInterval.NONE:
-            path = self.get_session_path(name, session=session, skip_ensure=skip_ensure, when=when)
+            path = self.get_trial_path(name, trial=trial, skip_ensure=skip_ensure, when=when)
         else:
             path = self.get_interval_path(name, interval=interval, skip_ensure=skip_ensure, when=when)
         return ProjectPath(path.location, path.prefix, os.path.join(path.location, path.prefix))
 
-    def get_metadata_file(self, session: Optional[int] = -1, when: Optional[datetime] = None) -> str:
+    def get_metadata_file(self, trial: Optional[int] = -1, when: Optional[datetime] = None) -> str:
         """Returns the metadata file path,
             if session is None it's non-trial based.
             if < -1 then self.session is used
         """
         when: datetime = self._get_when_or_now(when)
         timestamp = when.strftime(TIME_FORMAT)
-        if session is None:
+        if trial is None:
             location, prefix = self.get_day_path(when=when)
             d = f"_{self.device_id}" if self.device_id else ""
             return os.path.join(location, f"{prefix}{d}_{timestamp}_metadata")
         else:
-            source = self.get_session_path("metadata", session=session)
+            source = self.get_trial_path("metadata", trial=trial)
             return os.path.join(source.location, f"{source.prefix}")
 
     def get_monitor_file(self, name: str = "monitor", ext: str = "csv",
@@ -344,11 +352,11 @@ class ProjectInfo(_ProjectInfo):
         self,
         name: str = "",
         interval: ProjectInterval = ProjectInterval.NONE,
-        session: int = -1,
+        trial: int = -1,
         allow_overwrite: bool = False,
     ) -> Tuple[str, str, str]:
         """Get the 3-tuple of video paths for given arguments"""
-        vid_path = self.get_source_path(name, interval=interval, session=session)
+        vid_path = self.get_source_path(name, interval=interval, trial=trial)
         file_name = f"{vid_path.full_path}.{self.video_write_ext}"
         index = 0
 
@@ -364,14 +372,15 @@ class ProjectInfo(_ProjectInfo):
 
         return file_name, ts_file, frames_processed_indices_file
 
-    def get_image_capture_path(self,
+    def get_image_capture_path(
+        self,
         name: str = "",
         interval: ProjectInterval = ProjectInterval.NONE,
-        session: int = -1,
+        trial: int = -1,
         when: Optional[datetime] = None,
     ) -> Tuple[Path, str]:
         """Get the 2-tuple of image paths for given arguments"""
-        base = self.get_source_path(name, interval=interval, session=session, skip_ensure=True, when=when)
+        base = self.get_source_path(name, interval=interval, trial=trial, skip_ensure=True, when=when)
         image_location = os.path.join(base.location, f"{base.prefix}{IMAGE_CAPTURE_SUFFIX}")
         if self.ensure_exists:
             _ensure_location(image_location)
@@ -385,41 +394,45 @@ class ProjectInfo(_ProjectInfo):
     def get_intersession_pose_path(
         self,
         name: str = "",
-        session: int = -1,
+        trial: int = -1,
         *,
         suffix: str = "",
         when: Optional[datetime] = None,
     ) -> str:
-        source = self.get_source_path(name, session=session, when=when)
+        source = self.get_source_path(name, trial=trial, when=when)
         return os.path.join(source.location, f"{source.prefix}_raw2D{suffix}.h5")
 
     def calculate_next_session_index(self, when: Optional[datetime] = None):
         """Calculate the next session index & date and store it locally"""
         self._calculate_next_session_index(when)
-        logger.success("Calculated next session index=%s when=%s",
-                       self.session, self.when)
+        logger.success("Calculated next trial index=%s when=%s",
+                       self.trial, self.when)
 
-    def _reset_vals(self, when, session):
+    def reset_session_id(self):
+        self.session_id = _make_session_id()
+        logger.info("Set new session_id=%r", self.session_id)
+
+    def _reset_vals(self, when, trial):
         with self:
             self.when = when  # noqa
-            self.session = session  # noqa
+            self.trial = trial  # noqa
             self.start_record_timestamp = self.t_pellet_delivered = self.t_pellet_presented = math.nan
 
     def _calculate_next_session_index(self, when: Optional[datetime] = None):
-        """Calculate the next session index & date and store it locally"""
+        """Calculate the next trial index & date and store it locally"""
         if when is None:
             when = _get_datetime_now()
         assert when is not None
         prev_when = self.when
         assert prev_when is not None
         location, _ = self.get_day_path(when=when)
-        logger.debug("calculating next session index in %s", location)
+        logger.debug("calculating next trial index in %s", location)
         path = Path(location)
         existed = path.exists()
         was_dir = path.is_dir()
         path.mkdir(parents=True, exist_ok=True)  # this ensures 2 consecutive won't get same
         if not existed or not was_dir:
-            tentative_p, _, _ = self.get_session_path(session=1, when=when, skip_ensure=True)
+            tentative_p, _, _ = self.get_trial_path(trial=1, when=when, skip_ensure=True)
             try:
                 Path(tentative_p).mkdir(parents=True)
             except FileExistsError:
@@ -430,10 +443,10 @@ class ProjectInfo(_ProjectInfo):
         if prev_when.date() < when.date():
             # actually the day directory could be already created from possible other writers to it,
             # this ensures that we should get the correct new session nbr
-            new_session_nbr = 1
+            new_trial_nbr = 1
         else:
-            new_session_nbr = self.session + 1
-        tentative_p, _, _ = self.get_session_path(session=new_session_nbr, when=when, skip_ensure=True)
+            new_trial_nbr = self.trial + 1
+        tentative_p, _, _ = self.get_trial_path(trial=new_trial_nbr, when=when, skip_ensure=True)
         tentative_p = Path(tentative_p)
         if not tentative_p.exists():
             try:
@@ -441,12 +454,12 @@ class ProjectInfo(_ProjectInfo):
             except FileExistsError:
                 pass
             else:
-                logger.info("found fast next session: %s", tentative_p)
-                self._reset_vals(when, new_session_nbr)
+                logger.info("found fast next trial: %s", tentative_p)
+                self._reset_vals(when, new_trial_nbr)
                 return
 
         # slower code way
-        session_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "trial" in x.name]
+        trial_dirs = [x.name[-3:] for x in path.iterdir() if x.is_dir() and "trial" in x.name]
 
         def int_map_fcn(value: str):
             try:
@@ -454,15 +467,15 @@ class ProjectInfo(_ProjectInfo):
             except (ValueError, TypeError):
                 return None
 
-        session_vals = [int(x) for x in session_dirs if int_map_fcn(x) is not None]
-        if len(session_vals) == 0:
-            logger.debug("no existing sessions found")
+        trial_vals = [int(x) for x in trial_dirs if int_map_fcn(x) is not None]
+        if len(trial_vals) == 0:
+            logger.debug("no existing trial found")
             self._reset_vals(when, 1)
         else:
-            logger.debug("found %s existing session directories", len(session_vals))
-            session_vals.sort(reverse=True)
-            greater_val = session_vals[0]
-            logger.info("last session index for day: %s", greater_val)
+            logger.debug("found %s existing trial directories", len(trial_vals))
+            trial_vals.sort(reverse=True)
+            greater_val = trial_vals[0]
+            logger.info("last trial index for day: %s", greater_val)
             self._reset_vals(when, greater_val + 1)
 
     def get_log_file_path(self, when: Optional[datetime] = None, *, auto_new: bool=True) -> Path:
@@ -480,7 +493,7 @@ class ProjectInfo(_ProjectInfo):
         return Path(loc).joinpath(fmt.format(idx=f"{idx:03d}"))
 
     def get_frame_timing_path(self) -> Path:
-        source = self.get_session_path("frame_timing.csv", session=self.session)
+        source = self.get_trial_path("frame_timing.csv", trial=self.trial)
         return Path(source.location).joinpath(source.prefix)
 
     def to_local_value(self) -> Self:

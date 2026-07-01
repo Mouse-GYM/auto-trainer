@@ -160,7 +160,7 @@ def make_3d_calib(
     project = app_model.make_project_info()
     project.calculate_next_session_index()
     #
-    sess_path = project.get_session_path()
+    sess_path = project.get_trial_path()
     #
     square_size = 4  # in millimeters
     row_ct = 6

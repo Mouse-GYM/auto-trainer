@@ -608,7 +608,7 @@ class AppModel(ObservableObject):
         prim_cam = cams[0]  # primary
         main_fps = prim_cam.active_config.params.get('fps', math.nan)
         logger.info("Merging camera timestamps files for trial%03d into %s (fps=%s)",
-                    project.session, timing_path, main_fps)
+                    project.trial, timing_path, main_fps)
         txt_files = []
         if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
             logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
@@ -783,7 +783,7 @@ class AppModel(ObservableObject):
                 root=project.root,
                 device_id=project.device_id,
                 day=project.get_day_path()[1],
-                session=project.session,
+                session=project.trial,
             ))
 
     @property
@@ -2093,12 +2093,13 @@ class AppModel(ObservableObject):
             file_name, caller, when, session, project_info,
         )
         if session is not None and session < 0:
-            session = project_info.session  # ensure use this one
+            session = project_info.trial  # ensure use this one
         self._save_metadata(project_info, when, file_name, session)
 
-    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: Optional[int] = -1):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, trial: Optional[int] = -1):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
+            "session_id": project.session_id,
             "date": when.strftime("%Y%m%d_%H%M%S"),
             "created": when.timestamp(),
             "createdUtc": when_as_utc.timestamp(),  # same than created
@@ -2107,7 +2108,7 @@ class AppModel(ObservableObject):
             "appVersion": self._app_version,
             "animalName": self.animal_name,
             "notes": self.notes or "",
-            "session": session,
+            "trial": trial,
             "t_pellet_delivered": project.t_pellet_delivered,
             "t_pellet_presented": project.t_pellet_presented,
             "configuration": None,
@@ -2358,7 +2359,7 @@ class AppModel(ObservableObject):
             animal=None if animal is None else animal.to_api_status(),
             project=ApiProjectStatus(
                 day_path=project.get_day_path()[0],
-                session_index=project.session,
+                session_index=project.trial,
             ),
             detectors=detectors,
             alarms=alarms,
