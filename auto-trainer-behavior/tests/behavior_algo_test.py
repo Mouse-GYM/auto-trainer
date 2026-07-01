@@ -1,4 +1,5 @@
 import math
+from datetime import timedelta
 from functools import partial
 from unittest import mock
 
@@ -435,3 +436,24 @@ def test_handle_diamond_triangle_offset_without_config(algo):
     assert algo.diamond_triangle_drift_data_points_size == 0
     algo.handle_diamond_triangle_offset(Offset3DTuple(0, 0, 0), Offset3DTuple(0, 0, 0))
     assert algo.diamond_triangle_drift_data_points_size == 0
+
+
+@pytest.mark.parametrize("count_name", (
+    'pellets_presented_day',
+    'pellet_reaches_day',
+    'pellet_consumed_day',
+    'successful_reaches_day',
+))
+def test_new_day_reset_daily_counts_when_accessed(algo, count_name):
+    cur_day = algo._pellet_counts_day_date
+    with mock.patch.object(behavior_algorithm, "date") as m_date:
+        # ensure same to start with:
+        m_date.today.return_value = cur_day
+        cur_count = getattr(algo, count_name)
+        new_count = cur_count + 5
+        setattr(algo, count_name, new_count)
+        assert getattr(algo, count_name) == new_count
+        another_day = cur_day + timedelta(days=2)
+        m_date.today.return_value = another_day
+        after_count = getattr(algo, count_name)
+        assert after_count == 0
