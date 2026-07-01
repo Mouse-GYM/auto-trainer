@@ -314,9 +314,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @classmethod
     def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
+        handler_thread, handler_queue, reentrant_list = cls._handler_thread_queue
         if cls._no_handler_thread:
+            if handler_queue is not None:
+                raise RuntimeError(f"requested no_handler_thread but handler_queue not None: {handler_queue} "
+                                   f"thread={handler_thread}")
             return
-        _, handler_queue, reentrant_list = cls._handler_thread_queue
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
             handler_queue = queue.Queue(maxsize=64)
@@ -453,20 +456,21 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
         event = getattr(cls._thread_locals, "event", None)
+        is_handler_thread_allow_reentrant = (cur_thread is handler_thread and t_allow_reentrant)
         if (handler_queue is None
             or cls._no_handler_thread
-            or (cur_thread is handler_thread and t_allow_reentrant)
+            or is_handler_thread_allow_reentrant
         ):
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             cls._thread_locals.allow_reentrant = False
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                if t_reentrant_count == 0 or t_allow_reentrant:
+                if t_reentrant_count == 0 or is_handler_thread_allow_reentrant:
                     func(*args) if kwargs is None else func(*args, **kwargs)
                 else:
                     reentrant_list.append((func, args, kwargs, event))
-                if t_reentrant_count == 0 and handler_queue is None:
+                if t_reentrant_count == 0:
                     while reentrant_list:
                         func, args, kwargs, _ = reentrant_list.pop(0)
                         func(*args) if kwargs is None else func(*args, **kwargs)
