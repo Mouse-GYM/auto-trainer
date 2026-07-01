@@ -452,6 +452,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cur_thread = threading.current_thread()
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
+        event = getattr(cls._thread_locals, "event", None)
         if (handler_queue is None
             or cls._no_handler_thread
             or (cur_thread is handler_thread and t_allow_reentrant)
@@ -461,8 +462,11 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                func(*args) if kwargs is None else func(*args, **kwargs)
-                if t_reentrant_count == 0 and handler_thread is None:
+                if t_reentrant_count == 0 or t_allow_reentrant:
+                    func(*args) if kwargs is None else func(*args, **kwargs)
+                else:
+                    reentrant_list.append((func, args, kwargs, event))
+                if t_reentrant_count == 0 and handler_queue is None:
                     while reentrant_list:
                         func, args, kwargs, _ = reentrant_list.pop(0)
                         func(*args) if kwargs is None else func(*args, **kwargs)
@@ -478,7 +482,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 reentrant_list.append((func, args, kwargs, None))
                 return
             if wait:
-                event = getattr(cls._thread_locals, "event", None)
                 if event is None:
                     logger.debug("%s: creating event for sync handling of put_func_call %s",
                                  threading.current_thread(), func)

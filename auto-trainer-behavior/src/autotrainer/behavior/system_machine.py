@@ -919,7 +919,7 @@ class SystemMachine(StateMachine):
             )
             timer.start()
         else:
-            with BehaviorAlgorithm.set_allow_reentrant(True):
+            with algo.set_allow_reentrant(True):
                 self._pre_disengage_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)

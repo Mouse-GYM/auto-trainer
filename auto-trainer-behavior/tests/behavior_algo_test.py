@@ -1,4 +1,7 @@
+
 import math
+import threading
+import time
 from datetime import timedelta
 from functools import partial
 from unittest import mock
@@ -457,3 +460,140 @@ def test_new_day_reset_daily_counts_when_accessed(algo, count_name):
         m_date.today.return_value = another_day
         after_count = getattr(algo, count_name)
         assert after_count == 0
+
+
+class TestBehaviorAlgoWithHandlerThread:
+
+    @pytest.fixture
+    def algo(self, monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
+        assert (
+            behavior_algorithm._DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE is True
+        ), "we rely on this one"
+        del mock_get_perf_now  # used for its side effect
+        monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", False)  # double ensure
+        algo = BehaviorAlgorithm(project_info=project_info)
+        try:
+            yield algo
+        finally:
+            algo.close_algorithm_handler()
+
+    def test_default_put_wait(self, algo):
+        func1_done = threading.Event()
+        def func1():
+            time.sleep(0.15)
+            func1_done.set()
+        algo.put_func_call(func1)
+        assert func1_done.is_set()
+
+    def test_error_in_func_does_not_kill_handler(self, algo):
+        def func1():
+            raise RuntimeError("FOOBAR")
+        algo.put_func_call(func1)
+        func2_done = threading.Event()
+        def func2():
+            func2_done.set()
+        algo.put_func_call(func2)
+        assert func2_done.is_set()
+
+    def test_reentrant_default_after(self, algo):
+        outer_event = threading.Event()
+        inner_event = threading.Event()
+        def func1():
+            def inner_func1():
+                outer_event.wait(2)
+                inner_event.set()
+            algo.put_func_call(inner_func1)
+        algo.put_func_call(func1)
+        assert not inner_event.is_set()
+        outer_event.set()
+        assert inner_event.wait(1) is True
+
+    def test_set_allow_reentrant(self, algo):
+        inner_event = threading.Event()
+        def func1():
+            def inner_func1():
+                inner_event.set()
+            with algo.set_allow_reentrant(True):
+                algo.put_func_call(inner_func1)
+        algo.put_func_call(func1)
+        assert inner_event.is_set()
+
+    def test_set_sync_call_mode(self, algo):
+        inner_event = threading.Event()
+        def func1():
+            inner_event.wait(0.15)
+            inner_event.set()
+
+        with algo.set_put_func_call_mode(wait=False):
+            algo.put_func_call(func1)
+        assert not inner_event.is_set()
+        assert inner_event.wait(1) is True
+
+
+class TestBehaviorAlgoWithoutHandlerThread:
+
+    # this is essencientialy checking that without handler thread has same "characteristcs" than with,
+    # for the allow_reentrant
+
+    def test_set_allow_reentrant(self, algo):
+        TestBehaviorAlgoWithHandlerThread.test_set_allow_reentrant(self, algo)
+
+    def test_without_allow_reentrant_execute_after(self, algo):
+        # cannot use:
+        # TestBehaviorAlgoWithHandlerThread.test_reentrant_default_after(self, algo)
+
+        # need custom one:
+        inner1_t = None
+        inner2_t = None
+        inner3_t = None
+        after_inner2 = None
+        def func1():
+            nonlocal inner1_t
+            inner1_t = time.perf_counter()
+            def inner_func1():
+                nonlocal inner2_t, after_inner2
+                inner2_t = time.perf_counter()
+                def inner_func2():
+                    nonlocal inner3_t
+                    time.sleep(0.1)
+                    inner3_t = time.perf_counter()
+                algo.put_func_call(inner_func2)
+                after_inner2 = time.perf_counter()
+            algo.put_func_call(inner_func1)
+        algo.put_func_call(func1)
+        assert all(map(math.isfinite, (inner1_t, inner2_t, inner3_t, after_inner2)))
+        assert inner1_t < inner2_t < after_inner2 < inner3_t
+
+    def test_with_allow_reentrant_not_execute_after(self, algo):
+        inner1_t = None
+        inner2_t = None
+        inner3_t = None
+        after_inner2_t = None
+        inner1_evt = threading.Event()
+        inner2_evt = threading.Event()
+        inner3_evt = threading.Event()
+        def func1():
+            nonlocal inner1_t
+            inner1_t = time.perf_counter()
+            def inner_func1():
+                nonlocal inner2_t, after_inner2_t
+                inner2_t = time.perf_counter()
+                def inner_func2():
+                    nonlocal inner3_t
+                    time.sleep(0.1)
+                    inner3_t = time.perf_counter()
+                    inner3_evt.set()
+                with algo.set_allow_reentrant(True):
+                    algo.put_func_call(inner_func2)
+                after_inner2_t = time.perf_counter()
+                inner2_evt.set()
+            algo.put_func_call(inner_func1)
+            inner1_evt.set()
+        algo.put_func_call(func1)
+        # order does not matter:
+        inner1_evt.wait()
+        inner2_evt.wait()
+        inner3_evt.wait()
+        # then:
+        assert all(map(math.isfinite, (inner1_t, inner2_t, inner3_t, after_inner2_t)))
+        assert inner1_t < inner2_t < inner3_t < after_inner2_t
