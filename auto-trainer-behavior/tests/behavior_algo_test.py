@@ -19,6 +19,11 @@ from top_fixtures import increase_simulate_perf_now, AlmostEqualFloat
 
 import pytest
 
+
+class SomeError(RuntimeError):
+    """Only a specific exception"""
+
+
 @pytest.fixture
 def algo(monkeypatch, mock_get_perf_now, project_info) -> BehaviorAlgorithm:
     del mock_get_perf_now  # used for its side effect
@@ -597,3 +602,17 @@ class TestBehaviorAlgoWithoutHandlerThread:
         # then:
         assert all(map(math.isfinite, (inner1_t, inner2_t, inner3_t, after_inner2_t)))
         assert inner1_t < inner2_t < inner3_t < after_inner2_t
+
+    def test_error_in_func_raise_to_caller(self, algo):
+        def func():
+            raise SomeError
+        with pytest.raises(SomeError):
+            algo.put_func_call(func)
+
+    def test_error_in_reentrant_func_raise_to_caller(self, algo):
+        def func():
+            def inner():
+                raise SomeError
+            algo.put_func_call(inner)
+        with pytest.raises(SomeError):
+            algo.put_func_call(func)
