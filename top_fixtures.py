@@ -643,5 +643,10 @@ def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:
 
 
 @pytest.fixture
-def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inference) -> BehaviorModel:
-    return BehaviorModel(fake_system_msg_handler, sensor_analysis, hardware_model, inference)
+def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inference) -> BehaviorModel:  # noqa
+    # unused
+    model = BehaviorModel(fake_system_msg_handler, sensor_analysis, hardware_model, inference)
+    try:
+        yield model  # noqa
+    finally:
+        BehaviorAlgorithm.close_algorithm_handler()
