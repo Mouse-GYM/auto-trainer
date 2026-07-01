@@ -158,7 +158,7 @@ def make_3d_calib(
     }
     #
     project = app_model.make_project_info()
-    project.calculate_next_session_index()
+    project.calculate_next_trial_index()
     #
     sess_path = project.get_trial_path()
     #

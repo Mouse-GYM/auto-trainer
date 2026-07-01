@@ -1369,7 +1369,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, when=datetime.now(), session=None, caller="capture_start")
+        self._save_project_metadata(project_info, when=datetime.now(), trial=None, caller="capture_start")
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -2083,18 +2083,18 @@ class AppModel(ObservableObject):
         return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo, *,
-                               when: Optional[datetime] = None, session: Optional[int] = -1,
+                               when: Optional[datetime] = None, trial: Optional[int] = -1,
                                caller: str="NA"):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
         when = when if when is not None else project_info.when
-        file_name = project_info.get_metadata_file(session, when)
+        file_name = project_info.get_metadata_file(trial, when)
         logger.verbose(
             "Saving metadata to %s ; caller=%s when=%s sess=%s prj=%s",
-            file_name, caller, when, session, project_info,
+            file_name, caller, when, trial, project_info,
         )
-        if session is not None and session < 0:
-            session = project_info.trial  # ensure use this one
-        self._save_metadata(project_info, when, file_name, session)
+        if trial is not None and trial < 0:
+            trial = project_info.trial  # ensure use this one
+        self._save_metadata(project_info, when, file_name, trial)
 
     def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, trial: Optional[int] = -1):
         when_as_utc = when.astimezone(timezone.utc)

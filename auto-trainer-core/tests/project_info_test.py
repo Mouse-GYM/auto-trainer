@@ -66,7 +66,7 @@ def test_without_session_and_when_are_shared(root):
         info = ProjectInfo(root=root, device_id=device_id)
     assert info.trial == 1
     assert info.when == unix_start_as_local
-    info.calculate_next_session_index()
+    info.calculate_next_trial_index()
     assert info.when != unix_start_as_local
     assert info.trial == 1
     assert hasattr(info._when, "acquire")  # noqa
@@ -80,7 +80,7 @@ def test_get_path_at_different_day_does_not_change_result(root):
     module = importlib.import_module(ProjectInfo.__module__)
     with mock.patch.object(module, "_get_datetime_now") as m_datetime_now:
         m_datetime_now.return_value = some_day
-        info.calculate_next_session_index()
+        info.calculate_next_trial_index()
         loc1, d1 = info.get_day_path()
         assert d1 == "20250101"
         # now change the day:
@@ -89,7 +89,7 @@ def test_get_path_at_different_day_does_not_change_result(root):
         loc2, d2 = info.get_day_path()
         assert loc1 == loc2 and d1 == d2, "must be same still"
         # but with a new calculate_next_session_index:
-        info.calculate_next_session_index()
+        info.calculate_next_trial_index()
         loc3, d3 = info.get_day_path()
         assert loc3 != loc2 and d3 != d2, "must be different *AFTER* calculate_next_session_index"
         assert d3 == "20250102"
@@ -119,15 +119,15 @@ def test_can_use_with_with_statement(root):
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_fast_path(root):
     prj = ProjectInfo(root=root)
-    prj.calculate_next_session_index()
+    prj.calculate_next_trial_index()
     assert prj.trial == 1
-    prj.calculate_next_session_index()
+    prj.calculate_next_trial_index()
     assert prj.trial == 2
     local_prj = prj.to_local_value()
-    local_prj.calculate_next_session_index()
+    local_prj.calculate_next_trial_index()
     assert local_prj.trial == 3
     assert prj.trial == 2  # still
-    prj.calculate_next_session_index()
+    prj.calculate_next_trial_index()
     assert prj.trial == 4, "slow path taken"
 
 
@@ -140,12 +140,12 @@ def test_new_day_if_output_dir_exists(root, monkeypatch):
                         f"{_get_datetime_now.__qualname__}", m)
     tomorrow = now + timedelta(days=1)
     m.return_value = tomorrow
-    prj.calculate_next_session_index()
+    prj.calculate_next_trial_index()
     assert prj.when == tomorrow
     assert prj.trial == 1
     # now retry again, should get 2:
     prj = ProjectInfo(root=root, when=now, trial=100)
-    prj.calculate_next_session_index()
+    prj.calculate_next_trial_index()
     assert prj.when == tomorrow
     assert prj.trial == 2
 

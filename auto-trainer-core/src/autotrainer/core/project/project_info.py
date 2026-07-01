@@ -210,6 +210,7 @@ class ProjectInfo(_ProjectInfo):
                 and self.camera_1 == other.camera_1
                 and self.camera_2 == other.camera_2
                 and self.trial == other.trial
+                and self.session_id == other.session_id
             )
         return super().__eq__(other)
 
@@ -303,8 +304,8 @@ class ProjectInfo(_ProjectInfo):
 
     def get_metadata_file(self, trial: Optional[int] = -1, when: Optional[datetime] = None) -> str:
         """Returns the metadata file path,
-            if session is None it's non-trial based.
-            if < -1 then self.session is used
+            if trial is None it's non-trial based.
+            if < -1 then self.trial is used
         """
         when: datetime = self._get_when_or_now(when)
         timestamp = when.strftime(TIME_FORMAT)
@@ -402,9 +403,9 @@ class ProjectInfo(_ProjectInfo):
         source = self.get_source_path(name, trial=trial, when=when)
         return os.path.join(source.location, f"{source.prefix}_raw2D{suffix}.h5")
 
-    def calculate_next_session_index(self, when: Optional[datetime] = None):
-        """Calculate the next session index & date and store it locally"""
-        self._calculate_next_session_index(when)
+    def calculate_next_trial_index(self, when: Optional[datetime] = None):
+        """Calculate the next trial index & date and store it locally"""
+        self._calculate_next_trial_index(when)
         logger.success("Calculated next trial index=%s when=%s",
                        self.trial, self.when)
 
@@ -418,7 +419,7 @@ class ProjectInfo(_ProjectInfo):
             self.trial = trial  # noqa
             self.start_record_timestamp = self.t_pellet_delivered = self.t_pellet_presented = math.nan
 
-    def _calculate_next_session_index(self, when: Optional[datetime] = None):
+    def _calculate_next_trial_index(self, when: Optional[datetime] = None):
         """Calculate the next trial index & date and store it locally"""
         if when is None:
             when = _get_datetime_now()

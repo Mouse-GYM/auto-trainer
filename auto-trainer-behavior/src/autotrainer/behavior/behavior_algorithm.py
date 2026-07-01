@@ -1132,7 +1132,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
-        project.calculate_next_session_index()
+        project.calculate_next_trial_index()
         self._event_manager.post_event_content(
             ApiEventKind.projectSessionChanged,
             data=dict(root=project.root, session=project.trial),
