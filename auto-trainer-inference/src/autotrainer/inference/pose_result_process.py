@@ -82,6 +82,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
         watchdog_perf_c: Synchronized,
+        tot_live_workers: int = 4,
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
@@ -112,7 +113,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._is_running = True
         self._feed_intersession_project: Optional[ProjectInfo] = None
         self._feed_intersession_error: Optional[str] = None
-        self._tot_live_workers = 4  # nbr live workers to use
+        self._tot_live_workers = tot_live_workers  # nbr live workers to use
         self._live_input_q = mp_ctx.Queue(maxsize=32)  # for live 3d processing
         self._live_new_workers: List[LivePoseResultProcessWorker] = []
         self._live_pose_workers: List[LivePoseResultProcessWorker] = []

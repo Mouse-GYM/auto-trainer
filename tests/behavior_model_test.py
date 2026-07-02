@@ -10,7 +10,8 @@ from tools.acquisition.model.app_model_status import AppModelStatus
 from top_fixtures import MockSystemMachine
 
 
-def test_save_config_include_sensor_analysis_monitors_and_detectors(behavior_model):
+def test_save_config_include_sensor_analysis_monitors_and_detectors(app_model):
+    behavior_model = app_model.behavior
     save = behavior_model.save_configuration
     analysis = behavior_model.analysis
     #
