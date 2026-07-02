@@ -402,13 +402,13 @@ class MainWindow(QMainWindow):
         diamond_locs3d: List[Offset3DTuple],  # diamond loc3d (inference coordinate system)
         raw_diamond_3d: List[Offset3DTuple],
     ):
+        app_model = self._app_model
         self._timer_calibrate_diamond_triangle.cancel()
         if len(offsets) < 3 or len(diamond_locs3d) < 10:
             self._post_api_event(
                 ApiEventKind.calibrationDcsFailed,
                 dict(reason="MissingData")
             )
-            self.calib_diamond_triangle_action.setEnabled(False)
             box = QMessageBox()
             box.setWindowTitle("Please")
             box.setText(
@@ -420,7 +420,6 @@ class MainWindow(QMainWindow):
             self._open_dialogs.append(box)
 
             def remove():
-                self.calib_diamond_triangle_action.setEnabled(True)
                 # logger.debug("removing dialog from self.open_dialogs")
                 try:
                     self._open_dialogs.remove(box)
@@ -431,7 +430,8 @@ class MainWindow(QMainWindow):
             retry_button.clicked.connect(lambda: self.on_calibrate_diamond_triangle(True))
             retry_button.clicked.connect(remove)
             #
-            box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole).clicked.connect(remove)
+            button = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            button.clicked.connect(remove)
             box.setWindowModality(Qt.WindowModality.NonModal)
             box.setModal(False)
 
@@ -472,12 +472,10 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if rsp == QMessageBox.StandardButton.Yes:
-                self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
-                self.on_calibrate_diamond_triangle(True)
+                self.on_calibrate_diamond_triangle(True, calib_duration=2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
             return
         # success
         self._post_api_event(ApiEventKind.calibrationDcsCompleted)
-        app_model = self._app_model
         algo = app_model.behavior.algorithm
         save_path = algo.diamond_triangle_offset_config_path.expanduser()
         if save_path.exists():
@@ -564,7 +562,7 @@ class MainWindow(QMainWindow):
             nonlocal start_perf_c, offsets, positions, recording
             if not recording:
                 return
-            if len(offsets) > 2:
+            if len(offsets) > 15:
                 self._timer_calibrate_diamond_triangle.cancel()
             new_offset = pose_response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle)
             if new_offset is not None:
@@ -585,15 +583,18 @@ class MainWindow(QMainWindow):
         recording = True
         offsets = []
         positions = []
+        action.blockSignals(True)
         action.setChecked(True)
+        action.blockSignals(False)
         action.setIcon(qta.icon("fa5s.crosshairs", color='red'))
         before_pellet_delivery_enabled = algo.pellet_delivery_enabled
         algo.pellet_delivery_enabled = False
         start_perf_c = time.perf_counter()
         app_model.inference.pose_response_ready += record_offsets
         self._status_label.setText("Capturing data ..")
+        self._timer_calibrate_diamond_triangle.cancel()
         timer = self._timer_calibrate_diamond_triangle = _calibrate_timer(
-            DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT,
+            1.5 * calib_duration,
             lambda: InvokeMethod(self.on_calibrate_diamond_triangle, False)
         )
         timer.start()
@@ -609,19 +610,20 @@ class MainWindow(QMainWindow):
         app_model.inference.pose_response_ready -= record_offsets
         algo.pellet_delivery_enabled = before_pellet_delivery_enabled
         action.setIcon(qta.icon("fa5s.crosshairs"))
+        action.blockSignals(True)
         action.setChecked(False)
+        action.blockSignals(False)
         #
         self._diamond_triangle_calib_run = None  # MUST be before
-        #
-        try:
-            self._handle_diamond_triangle_calib_run(
-                positions=positions,
-                offsets=offsets,
-                diamond_locs3d=diamond_locs3d,
-                raw_diamond_3d=raw_diamond_3d,
-            )
-        finally:
-            app_model.status = prev_status
+        app_model.status = prev_status
+        # immediatelly go back to prev status, not after _handle_diamond_triangle_calib_run
+        # which can go back to calib-dcs..
+        self._handle_diamond_triangle_calib_run(
+            positions=positions,
+            offsets=offsets,
+            diamond_locs3d=diamond_locs3d,
+            raw_diamond_3d=raw_diamond_3d,
+        )
 
     def on_activated(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
         logger.success("main window activated")
@@ -637,17 +639,19 @@ class MainWindow(QMainWindow):
             else:
                 logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
 
-    def on_calibrate_diamond_triangle(self, is_toggled):
-        if is_toggled and self._diamond_triangle_calib_run is None:
-            self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run()
+    def on_calibrate_diamond_triangle(self, is_toggled, *, calib_duration: float=DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
+        self._timer_calibrate_diamond_triangle.cancel()
         calib_run = self._diamond_triangle_calib_run
-        if is_toggled:
+        logger.verbose("on_calibrate_diamond_triangle: is_toggled=%s calib_duration=%.1f calib_run=%s",
+                       is_toggled, calib_duration, calib_run)
+        if calib_run is None:
+            calib_run = self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(calib_duration)
             # this triggers the execution of the first part of the calib run,
             # which is to record enough data
             next(calib_run)
-
-        if not is_toggled:
-            # this then triggers the stop of the data recording, and try to use it and if correct save it to file.
+        else:
+            # this then triggers the stop of the data recording,
+            # and try to use it and if correct save it to file.
             try:
                 next(calib_run)
             except StopIteration:
@@ -887,7 +891,7 @@ class MainWindow(QMainWindow):
         action = self.calib_diamond_triangle_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Calibrate Coordinate System", self)
         action.setToolTip("Calibrate the relative offset between the pellet delivery spoon and the tunnel")
         action.setCheckable(True)
-        action.triggered.connect(self.on_calibrate_diamond_triangle)
+        action.toggled.connect(self.on_calibrate_diamond_triangle)
         action.setEnabled(False)
 
         action = self.make_3d_calib_action = QAction(QIcon(qta.icon("fa5s.crosshairs")), "Make 3D calibration", self)
@@ -1509,7 +1513,6 @@ class MainWindow(QMainWindow):
                     self.animal_in_training_action,
                 ):
                     action.setEnabled(False)
-                    action.setChecked(False)
                 for item in (
                     self.make_3d_calib_action,
                     self.run_action,
@@ -1523,13 +1526,13 @@ class MainWindow(QMainWindow):
                 self.animal_in_training_action.setEnabled(valid_dcs)
 
             elif value is AppModelStatus.ACQUIRING:
+                self._app_model_status_combo.setEnabled(True)
                 for action in (
                     self.calib_diamond_triangle_action,
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
                     action.setEnabled(True)
-                    action.setChecked(False)
                 for item in (self._animal_dropdown_combo, self._training_mode_combo, self._training_plan_combo):
                     item.setEnabled(True)
                 self.animal_in_training_action.setEnabled(valid_dcs)
@@ -1539,11 +1542,15 @@ class MainWindow(QMainWindow):
                     self._training_mode_combo,
                     self._training_plan_combo,
                     self._animal_dropdown_combo,
+                    self._app_model_status_combo,
                     self.calib_diamond_triangle_action,
                     self.animal_in_device_action,
                     self.animal_in_training_action,
                 ):
-                    item.setEnabled(False)
+                    if item == self.calib_diamond_triangle_action and value == AppModelStatus.CALIBRATION_DCS:
+                        pass
+                    else:
+                        item.setEnabled(False)
 
             elif value is AppModelStatus.ANIMAL_IN_DEVICE:
                 self.animal_in_device_action.setChecked(True)
@@ -1557,7 +1564,6 @@ class MainWindow(QMainWindow):
                     self._animal_dropdown_combo,
                     self.calib_diamond_triangle_action,
                     self.make_3d_calib_action,
-                    self.calib_diamond_triangle_action,
                 ):
                     item.setEnabled(False)
                 self.animal_in_training_action.setEnabled(valid_dcs)
@@ -1571,7 +1577,6 @@ class MainWindow(QMainWindow):
                     self._animal_dropdown_combo,
                     self.calib_diamond_triangle_action,
                     self.make_3d_calib_action,
-                    self.calib_diamond_triangle_action,
                 ):
                     item.setEnabled(False)
 
