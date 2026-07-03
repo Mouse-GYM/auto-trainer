@@ -300,7 +300,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         intersession_inference(final_pose_data, pose_algo.part_names, project_info)
         logger.success("fully processed session-%s inference with %s total pose responses",
-                       project_info.session, final_pose_data.shape[0])
+                       project_info.trial, final_pose_data.shape[0])
         return final_pose_data.shape
 
     def _terminate_workers(self):
@@ -595,7 +595,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 recording_in_progress = True
                 cur_local_prj = self._project.to_local_value()
                 logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
-                              cur_local_prj.session, mode, frames_indices.tolist())
+                              cur_local_prj.trial, mode, frames_indices.tolist())
                 self._stop_recorded.clear()
                 logger.debug("cleared stop_recorded")
                 cams_frame_idx_fhs = []

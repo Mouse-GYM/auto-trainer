@@ -1140,10 +1140,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
-        project.calculate_next_session_index()
+        project.calculate_next_trial_index()
         self._event_manager.post_event_content(
             ApiEventKind.projectSessionChanged,
-            data=dict(root=project.root, session=project.session),
+            data=dict(root=project.root, session=project.trial),
         )
 
         # ensure we look at their state on start:
@@ -1162,7 +1162,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.session_starting()
 
         self._event_manager.post_event_content(
-            ApiEventKind.trialStarted, data=dict(trial_id=project.session, reason=reason))
+            ApiEventKind.trialStarted, data=dict(trial_id=project.trial, reason=reason))
 
         return True
 
@@ -1193,7 +1193,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.session, reason=reason))
+            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.trial, reason=reason))
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1607,7 +1607,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._previous_intersession_analysis_rsp = (project, res)
         self._event_manager.post_event_content(
             ApiEventKind.trialReachEvents,
-            data=dict(trial_reach_events=res.reach_events, trial_id=project.session))
+            data=dict(trial_reach_events=res.reach_events, trial_id=project.trial))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)

@@ -175,7 +175,7 @@ def assert_pose_response_almost_equal(
 
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_fp_and_xp_not_same(project_info, caplog):
-    project_info.session = 2
+    project_info.trial = 2
     project_info.root = this_dir.joinpath("fp-and-xp-not-same").as_posix()
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 6, 23)
@@ -199,7 +199,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
 
 @pytest.mark.skipif(os.name != "posix", reason="disabled on non-posix")
 def test_agx001_20250806_59(project_info, caplog):
-    project_info.session = 59
+    project_info.trial = 59
     project_info.root = this_dir.joinpath("index_error").as_posix()
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 8, 6)
@@ -250,7 +250,7 @@ agx001_20251015_15_expected_result = IntersessionResponse(
 @pytest.fixture
 def agx001_20251015_15(project_info):
     project_info.root = data_dir.as_posix()
-    project_info.session = 15
+    project_info.trial = 15
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 10, 15)
     return project_info
@@ -289,7 +289,7 @@ agx001_20260205_11_expected_result = IntersessionResponse(
 agx001_20260205_11_project_info = ProjectInfo(
     root=data_dir.as_posix(),
     device_id="agx001",
-    session=11,
+    trial=11,
     when=datetime(2026, 2, 5),
     camera_1="left",
     camera_2="right",
@@ -337,7 +337,7 @@ def test_pose_algo_process_frames_agx001_20251015_15(initialized_pose_algo, agx0
         ('Triangle', 'Diamond'),
     ]
     # pose_algo.process_frames_select_frames_method = select_frames_method
-    sp = agx001_20251015_15.get_session_path()
+    sp = agx001_20251015_15.get_trial_path()
     fhs = []
     tables = []
     for cam in ("left", "right"):
@@ -405,7 +405,7 @@ def test_pose_algo_process_frames_bench_agx001_20251015_15(pose_algo, agx001_202
         pairs_3d = [
             ('Diamond', 'Triangle'),
         ]
-        sp = agx001_20251015_15.get_session_path()
+        sp = agx001_20251015_15.get_trial_path()
         fhs = []
         tables = []
         for cam in ("left", "right"):
