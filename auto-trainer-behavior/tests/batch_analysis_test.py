@@ -166,8 +166,10 @@ class TestBatchAnalysis(MockSystemMachine):
                 assert pellet.state == PelletState.monitoring
                 self.increment_perf_now(algo.active_config.pellet_delivery.max_pellet_missing_seconds)
                 self.mock_pose_response(pellet_seen=False, mouse_seen=True)
-                assert pellet.state == PelletState.loading
-            assert pellet.state == PelletState.loading
+                if algo.system_state == SystemState.intersession:
+                    assert pellet.state == PelletState.retract
+                else:
+                    assert pellet.state == PelletState.loading
             assert machine.state == SystemState.intersession
             #
             with caplog.at_level(logging.DEBUG):

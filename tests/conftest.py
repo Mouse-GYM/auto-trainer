@@ -58,4 +58,19 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         system_message_handler=fake_system_msg_handler,
         calib_dir=calib_dir,
     )
-    return app
+    # ensure all of that is not async:
+    analysis = app.analysis
+    analysis.emergency_alarm_monitor.default_timer_delay = None
+    analysis.emergency_alarm_monitor.use_daemon = False
+    for alrm in analysis.alarms:
+        alrm.use_daemon = False
+        alrm.default_timer_delay = None
+        alrm.restart()
+    for det in analysis._detectors:
+        det.use_daemon = False
+        det.default_timer_delay = None
+        det.restart()
+    try:
+        yield app
+    finally:
+        app.on_close()

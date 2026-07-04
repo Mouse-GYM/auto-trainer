@@ -116,8 +116,6 @@ class SystemMachine(StateMachine):
 
         self._is_handling_diamond_triangle = False
 
-        self._enter_tunnel_pellet_seen = False
-
         self._session_started_perf_c = -math.inf
 
         self._pellet_device = pellet_device
@@ -234,9 +232,8 @@ class SystemMachine(StateMachine):
 
     def before_enter_tunnel(self, *, reason: str = "NA"):
         pellet_state = self._pellet_machine.state
-        self._enter_tunnel_pellet_seen = self._algorithm.pellet_recently_seen
         logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
-                     reason, self._state, pellet_state, self._enter_tunnel_pellet_seen)
+                     reason, self._state, pellet_state, self._algorithm.is_pellet_recently_seen())
         if self._state == SystemState.cage:
             self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
             # always when enter tunnel, but only if was in cage before.
@@ -683,9 +680,11 @@ class SystemMachine(StateMachine):
                       drift_dist)
         self._event_manager.post_event_content(
             ApiEventKind.pelletDriftReset, data=dict(drift=dict(x=cur_drift.x, y=cur_drift.y, z=cur_drift.z)))
-        self._pellet_machine.move_home()
+        with algo.set_allow_reentrant(True):
+            self._pellet_machine.move_home()
         if algo.is_in_session:
-            algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
+            with algo.set_allow_reentrant(True):
+                algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
 
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
@@ -919,7 +918,7 @@ class SystemMachine(StateMachine):
             )
             timer.start()
         else:
-            with BehaviorAlgorithm.set_allow_reentrant(True):
+            with algo.set_allow_reentrant(True):
                 self._pre_disengage_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -987,7 +986,7 @@ class SystemMachine(StateMachine):
             logger.debug("set project.t_pellet_presented=%.3f", t_rel_start)
             project.t_pellet_presented = t_rel_start
             self._event_manager.post_event_content(
-                ApiEventKind.trialPelletPresented, data=dict(trial_id=project.session))
+                ApiEventKind.trialPelletPresented, data=dict(trial_id=project.trial))
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_algorithm_property_changed(self, name: str, new_value, old_value):
@@ -1140,6 +1139,7 @@ class SystemMachine(StateMachine):
             and self._analysis.load_cell_monitor.is_engaged
         ):
             return
+        self._project_info.reset_session_id()
         with self._algorithm.set_allow_reentrant(True):
             self.enter_tunnel(reason=reason)
 

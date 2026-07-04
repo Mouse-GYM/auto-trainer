@@ -41,7 +41,7 @@ def intersession_process(
     :param debug_level: integer debug level.
     :return: information required to update behavior for future sessions
     """
-    location, _, _ = project.get_session_path()
+    location, _, _ = project.get_trial_path()
     logger.info("process intersession pose data using %s", location)
     calib_src_dir = (
         Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None else calib_dir

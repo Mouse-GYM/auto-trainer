@@ -82,6 +82,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         frames_per_cam: int,
         monitored_parts_offsets: List[Tuple[str, str]],
         watchdog_perf_c: Synchronized,
+        tot_live_workers: int = 4,
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
@@ -112,7 +113,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._is_running = True
         self._feed_intersession_project: Optional[ProjectInfo] = None
         self._feed_intersession_error: Optional[str] = None
-        self._tot_live_workers = 4  # nbr live workers to use
+        self._tot_live_workers = tot_live_workers  # nbr live workers to use
         self._live_input_q = mp_ctx.Queue(maxsize=32)  # for live 3d processing
         self._live_new_workers: List[LivePoseResultProcessWorker] = []
         self._live_pose_workers: List[LivePoseResultProcessWorker] = []
@@ -299,7 +300,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
         intersession_inference(final_pose_data, pose_algo.part_names, project_info)
         logger.success("fully processed session-%s inference with %s total pose responses",
-                       project_info.session, final_pose_data.shape[0])
+                       project_info.trial, final_pose_data.shape[0])
         return final_pose_data.shape
 
     def _terminate_workers(self):
@@ -594,7 +595,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 recording_in_progress = True
                 cur_local_prj = self._project.to_local_value()
                 logger.notice("Detected new record in progress ; session=%s ; mode=%s frames indices: %s",
-                              cur_local_prj.session, mode, frames_indices.tolist())
+                              cur_local_prj.trial, mode, frames_indices.tolist())
                 self._stop_recorded.clear()
                 logger.debug("cleared stop_recorded")
                 cams_frame_idx_fhs = []

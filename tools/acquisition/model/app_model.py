@@ -608,7 +608,7 @@ class AppModel(ObservableObject):
         prim_cam = cams[0]  # primary
         main_fps = prim_cam.active_config.params.get('fps', math.nan)
         logger.info("Merging camera timestamps files for trial%03d into %s (fps=%s)",
-                    project.session, timing_path, main_fps)
+                    project.trial, timing_path, main_fps)
         txt_files = []
         if not isinstance(main_fps, (int, float)) or main_fps == 0 or not math.isfinite(main_fps):
             logger.error("skipping invalid camera config fps=%s. cam=%s", main_fps, prim_cam.name)
@@ -783,7 +783,7 @@ class AppModel(ObservableObject):
                 root=project.root,
                 device_id=project.device_id,
                 day=project.get_day_path()[1],
-                session=project.session,
+                session=project.trial,
             ))
 
     @property
@@ -1369,7 +1369,7 @@ class AppModel(ObservableObject):
         self._behavior.system_machine.pellet.move_home(force=True)
 
         # once cameras successfully started:
-        self._save_project_metadata(project_info, when=datetime.now(), session=None, caller="capture_start")
+        self._save_project_metadata(project_info, when=datetime.now(), trial=None, caller="capture_start")
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
@@ -2083,22 +2083,23 @@ class AppModel(ObservableObject):
         return configuration
 
     def _save_project_metadata(self, project_info: ProjectInfo, *,
-                               when: Optional[datetime] = None, session: Optional[int] = -1,
+                               when: Optional[datetime] = None, trial: Optional[int] = -1,
                                caller: str="NA"):
         """Save the given project_info metadata, if session is None : it's main/global metadata"""
         when = when if when is not None else project_info.when
-        file_name = project_info.get_metadata_file(session, when)
+        file_name = project_info.get_metadata_file(trial, when)
         logger.verbose(
             "Saving metadata to %s ; caller=%s when=%s sess=%s prj=%s",
-            file_name, caller, when, session, project_info,
+            file_name, caller, when, trial, project_info,
         )
-        if session is not None and session < 0:
-            session = project_info.session  # ensure use this one
-        self._save_metadata(project_info, when, file_name, session)
+        if trial is not None and trial < 0:
+            trial = project_info.trial  # ensure use this one
+        self._save_metadata(project_info, when, file_name, trial)
 
-    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, session: Optional[int] = -1):
+    def _save_metadata(self, project: ProjectInfo, when: datetime, file_name: str, trial: Optional[int] = -1):
         when_as_utc = when.astimezone(timezone.utc)
         info: Dict[str, Any] = {
+            "session_id": project.session_id,
             "date": when.strftime("%Y%m%d_%H%M%S"),
             "created": when.timestamp(),
             "createdUtc": when_as_utc.timestamp(),  # same than created
@@ -2107,7 +2108,7 @@ class AppModel(ObservableObject):
             "appVersion": self._app_version,
             "animalName": self.animal_name,
             "notes": self.notes or "",
-            "session": session,
+            "trial": trial,
             "t_pellet_delivered": project.t_pellet_delivered,
             "t_pellet_presented": project.t_pellet_presented,
             "configuration": None,
@@ -2358,7 +2359,7 @@ class AppModel(ObservableObject):
             animal=None if animal is None else animal.to_api_status(),
             project=ApiProjectStatus(
                 day_path=project.get_day_path()[0],
-                session_index=project.session,
+                session_index=project.trial,
             ),
             detectors=detectors,
             alarms=alarms,

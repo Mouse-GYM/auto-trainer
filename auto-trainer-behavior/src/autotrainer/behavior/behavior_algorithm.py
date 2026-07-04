@@ -314,9 +314,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @classmethod
     def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
+        handler_thread, handler_queue, reentrant_list = cls._handler_thread_queue
         if cls._no_handler_thread:
+            if handler_queue is not None:
+                raise RuntimeError(f"requested no_handler_thread but handler_queue not None: {handler_queue} "
+                                   f"thread={handler_thread}")
             return
-        _, handler_queue, reentrant_list = cls._handler_thread_queue
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
             handler_queue = queue.Queue(maxsize=64)
@@ -452,17 +455,22 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         cur_thread = threading.current_thread()
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
+        event = getattr(cls._thread_locals, "event", None)
+        is_handler_thread_allow_reentrant = (cur_thread is handler_thread and t_allow_reentrant)
         if (handler_queue is None
             or cls._no_handler_thread
-            or (cur_thread is handler_thread and t_allow_reentrant)
+            or is_handler_thread_allow_reentrant
         ):
             # logger.debug("%s: in-place execution ; already in system msg handler thread", func)
             cls._thread_locals.allow_reentrant = False
             t_reentrant_count = getattr(cls._thread_locals, "reentrant_count", 0)
             cls._thread_locals.reentrant_count = t_reentrant_count + 1
             try:
-                func(*args) if kwargs is None else func(*args, **kwargs)
-                if t_reentrant_count == 0 and handler_thread is None:
+                if t_reentrant_count == 0 or t_allow_reentrant:
+                    func(*args) if kwargs is None else func(*args, **kwargs)
+                else:
+                    reentrant_list.append((func, args, kwargs, event))
+                if t_reentrant_count == 0:
                     while reentrant_list:
                         func, args, kwargs, _ = reentrant_list.pop(0)
                         func(*args) if kwargs is None else func(*args, **kwargs)
@@ -478,7 +486,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 reentrant_list.append((func, args, kwargs, None))
                 return
             if wait:
-                event = getattr(cls._thread_locals, "event", None)
                 if event is None:
                     logger.debug("%s: creating event for sync handling of put_func_call %s",
                                  threading.current_thread(), func)
@@ -1124,7 +1131,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         project = self._project_info
         if not project.is_valid():
-            raise RuntimeError("Project not valid")
+            logger.error("%s: refusing start session when project not valid: %s", reason, project)
+            return False
 
         logger.success("%s: starting new session recording ...", reason)
         self._is_in_session = True
@@ -1132,10 +1140,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._start_session_reason = reason
         self.reset_session_pellet_count()
 
-        project.calculate_next_session_index()
+        project.calculate_next_trial_index()
         self._event_manager.post_event_content(
             ApiEventKind.projectSessionChanged,
-            data=dict(root=project.root, session=project.session),
+            data=dict(root=project.root, session=project.trial),
         )
 
         # ensure we look at their state on start:
@@ -1154,7 +1162,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.session_starting()
 
         self._event_manager.post_event_content(
-            ApiEventKind.trialStarted, data=dict(trial_id=project.session, reason=reason))
+            ApiEventKind.trialStarted, data=dict(trial_id=project.trial, reason=reason))
 
         return True
 
@@ -1185,7 +1193,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.session, reason=reason))
+            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.trial, reason=reason))
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1241,18 +1249,24 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 if self.is_pellet_recently_seen(use_any_cam=True):
                     return True
                 return False
-        if not (self._is_in_session and self._capture_status == CaptureProcessStatus.RECORDING):
+        if not self._is_in_session:
             return False
         if self._head_fixation_enabled and cfg.head_clamp.wait_engaged_before_send_pellet:
             return self._autoclamp_in_progress
         t_since_rec_started = get_perf_now() - self._recording_start_perf_c
+        # although _recording_start_perf_c is set when capture_status is set to RECORDING,
+        # it's not done atomically, and also given we don't use a lock for this can_send_pellet(),
+        # so this double check:
+        if not math.isfinite(t_since_rec_started):
+            return False
+        if self._capture_status != CaptureProcessStatus.RECORDING:
+            return False
         prebuffer_duration = self._recording_prebuffer_duration
-        if math.isfinite(prebuffer_duration):
+        # the recording_start_perf_c is the *real* one, with prebuffer included,
+        # if it's not null then account for it:
+        if math.isfinite(prebuffer_duration) and prebuffer_duration > 0:
             t_since_rec_started -= prebuffer_duration
-        return (
-            self._is_in_session
-            and t_since_rec_started >= cfg.pellet_delivery.pellet_send_wait_delay
-        )
+        return t_since_rec_started >= cfg.pellet_delivery.pellet_send_wait_delay
 
     def would_load_pellet(
         self,
@@ -1358,13 +1372,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
-        if self._algo_paused or self._status not in {
-            BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
-            BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
-        } or pellet_state in {
-            # PelletState.home,  # not sure
-            PelletState.retract,  # prevent executing the command again and again and..
-        }:
+        if (
+            self._algo_paused
+            or self._status not in {
+                BehaviorAlgoStatus.ANIMAL_IN_DEVICE,
+                BehaviorAlgoStatus.ANIMAL_IN_TRAINING,
+            }
+            or not self._active_config.pellet_delivery.is_enabled
+            or pellet_state == PelletState.retract  # prevent executing the command again and again and..
+        ):
             return False
         if not self._active_config.pellet_delivery.retract_enabled:
             return self._system_state == SystemState.intersession
@@ -1591,7 +1607,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._previous_intersession_analysis_rsp = (project, res)
         self._event_manager.post_event_content(
             ApiEventKind.trialReachEvents,
-            data=dict(trial_reach_events=res.reach_events, trial_id=project.session))
+            data=dict(trial_reach_events=res.reach_events, trial_id=project.trial))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)

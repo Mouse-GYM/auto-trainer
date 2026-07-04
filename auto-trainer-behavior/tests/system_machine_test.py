@@ -142,19 +142,19 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     mock_system.mock_pose_response(pellet_seen=True)  # make pellet-seen
     assert algo.pellet_recently_seen
 
-    mock_system.mock_pellet_ack()  # ack the covering after pellet seen
+    mock_system.mock_pellet_ack()  # ack the load after pellet seen
 
     assert algo.is_in_session is True
     assert algo.pellet_recently_seen
 
-    assert pellet_m.state == PelletState.sending
+    assert pellet_m.state == PelletState.retract
     assert mock_system.pellet_state_trans == [
         PelletState.loading,
         PelletState.covering,
-        PelletState.sending,
+        PelletState.retract,
     ]
     assert algo.pellet_recently_seen
-    mock_system.mock_pellet_ack()  # ack the sending
+    mock_system.mock_pellet_ack()  # ack the retract
     mock_system.make_load_cell_inactive()
     assert not algo.is_in_session
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]

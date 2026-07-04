@@ -22,7 +22,7 @@ from autotrainer.inference import (
     pose_result_process,
 )
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-from top_fixtures import collect_log_queue_to_caplog
+from top_fixtures import collect_log_queue_to_caplog, increase_simulate_perf_now
 
 frames_idc_online_no_recording = np.asarray([(-1, -1, -1), (-1, -1, -1)])
 
@@ -72,6 +72,7 @@ def inference_data_proc(pose_algo, capture_multiprocess_logs, monkeypatch, caplo
         frames_per_cam=3,
         watchdog_perf_c=multiprocessing.Value(ctypes.c_double),
         monitored_parts_offsets=pairs_offset,
+        tot_live_workers=1,  # ensure always sequential
     )
     proc._cmd_queue.put(
         (proc.Msg.SET_POSE_ALGO, (pose_algo,), None)
@@ -91,11 +92,12 @@ def test_live_no_recording(inference_data_proc):
             InferenceMode.Live,
             frames_idc_online_no_recording,
         ))
-        time.sleep(0.1)
+        time.sleep(0.2)
     msg, (args, kwargs) = proc._msg_queue.get(timeout=3)
     print(msg, args, kwargs)
     assert msg is InferenceMonitorDataMsg.POSE_RESULT_READY
     pose_rsp = args[0]
+    pose_rsp: PoseResponse
     assert isinstance(pose_rsp, PoseResponse)
     assert pose_rsp.sequence == 0
     #
@@ -105,13 +107,14 @@ def test_live_no_recording(inference_data_proc):
     assert pose_rsp.sequence == 1
 
 
-def test_renew_workers(request, monkeypatch, caplog, capture_multiprocess_logs):
+def test_renew_workers(
+        request, monkeypatch, caplog, capture_multiprocess_logs):
     # os.environ["AUTOTRAINER_LIVE_WORKERS_RENEW_TIMER_DELAY"] = "3"
-    proc = request.getfixturevalue("inference_data_proc")
+    proc: InferenceMonitorDataProc = request.getfixturevalue("inference_data_proc")
     proc._live_generation_renew_age = 3
     proc.start()
-    # proc = inference_data_proc
-    # monkeypatch.setattr(pose_result_process, "LIVE_WORKERS_RENEW_TIMER_DELAY", 3)
+    # tried used mock_get_perf_now and increase_simulate_perf_now()
+    # but proc is in a subprocess.. and there the get_perf_now() is not patched.. that would be todo...
     for _ in range(3):
         # NB: the 3 first are discarded by the pose result process
         proc._data_queue.put(
@@ -122,7 +125,7 @@ def test_renew_workers(request, monkeypatch, caplog, capture_multiprocess_logs):
             )
         )
     tot_put = 8
-    for _ in range(tot_put):
+    for idx in range(tot_put):
         proc._data_queue.put(
             (
                 zero_pose_data,
@@ -131,7 +134,6 @@ def test_renew_workers(request, monkeypatch, caplog, capture_multiprocess_logs):
             )
         )
         time.sleep(1)
-        # increase_simulate_perf_now(1)
 
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     assert "making new workers generation-1.." in caplog.text

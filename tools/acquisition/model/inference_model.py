@@ -455,10 +455,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if success:
             self._event_manager.post_event_content(
                 ApiEventKind.intertrialSegmentationSave,
-                data=dict(location=project.get_session_path().location, trial_id=project.session))
+                data=dict(location=project.get_trial_path().location, trial_id=project.trial))
         else:
             self._event_manager.post_event_content(
-                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error, trial_id=project.session))
+                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error, trial_id=project.trial))
         self._handle_segmentation_finished(project, success, error=error)
 
     def _cb_on_set_feed_intersession_result(self, project: ProjectInfo, error: Optional[str],
@@ -581,13 +581,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             result: IntersessionResponse
             self._event_manager.post_event_content(
                 ApiEventKind.intertrialDetectionSave,
-                data=dict(location=project.get_session_path().location, trial_id=project.session),
+                data=dict(location=project.get_trial_path().location, trial_id=project.trial),
             )
             # assert isinstance(result, IntersessionResponse)
             self.detection_result_ready(project, result)
         else:
             self._event_manager.post_event_content(ApiEventKind.intertrialDetectionSaveError,
-                                                   data=dict(error=error, trial_id=project.session))
+                                                   data=dict(error=error, trial_id=project.trial))
 
         intersession_detection.configuration.complete(processed_ok, error=error)
         self._intersession_detection = None

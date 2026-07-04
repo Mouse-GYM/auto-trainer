@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("unit")
     parser.add_argument("date", type=lambda v: datetime.strptime(v, "%Y%m%d"))
-    parser.add_argument("session", type=int)
+    parser.add_argument("trial", type=int)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--calib-dir", type=Path,
                         default=Path.home().joinpath("Autotrainer", DEFAULT_3D_CALIB_DIR_NAME))
@@ -37,14 +37,14 @@ def main():
         root=args.data_dir,
         device_id=args.unit,
         when=args.date,
-        session=args.session,
+        trial=args.trial,
     )
     result = intersession_process(
         project_info,
         calib_dir=args.calib_dir,
         debug_level=args.analysis_debug_level,
     )
-    sess_path = project_info.get_session_path()
+    sess_path = project_info.get_trial_path()
     print(f"{sess_path.prefix}: {result.humanize()}")
     handler = ShiftXYZBufferHandler(config=ShiftXYZBufferHandlerConfig())
     shift = handler.make_shift_from_rh_list(result.rh_max_vp_list)
