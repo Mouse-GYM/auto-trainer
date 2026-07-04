@@ -22,7 +22,6 @@ class InferenceEvents:
     segmentation_finished = SegmentationFinishedEvent
     detection_result_ready = Callable[[ProjectInfo, IntersessionResponse], None]
     pose_response_ready = Callable[[PoseResponse], None]
-    algo_initialised = Callable[[PoseAlgorithm], None]  # not used by any listener
     diamond_triangle_offset_changed = Callable[[Optional[Offset3DTuple]], None]
     star_triangle_offset_changed = Callable[[Optional[Offset3DTuple]], None]
     triangle_pellet_offset_changed = Callable[[Optional[Offset3DTuple]], None]
@@ -82,7 +81,6 @@ class InferenceProtocol(ObservableObject, _InferenceProtocol, ProjectDependentPr
     segmentation_finished: InferenceEvents.segmentation_finished
     detection_result_ready: InferenceEvents.detection_result_ready
     pose_response_ready: InferenceEvents.pose_response_ready
-    algo_initialised: InferenceEvents.algo_initialised
     diamond_triangle_offset_changed: InferenceEvents.diamond_triangle_offset_changed
     star_triangle_offset_changed: InferenceEvents.star_triangle_offset_changed
     triangle_pellet_offset_changed: InferenceEvents.triangle_pellet_offset_changed
