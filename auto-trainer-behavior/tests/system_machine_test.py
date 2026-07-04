@@ -298,9 +298,9 @@ def test_clean_raw_data_on_session_end(machine, project_info, feature_enabled):
 
 #
 
-class TestSessionProcessingEnding(MockSystemMachine):
+class TestSessionProcessingEndingIntersessionDisabled(MockSystemMachine):
 
-    def test_when_no_intersession(self, machine):
+    def test_when_intersession_disabled(self, machine):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -315,6 +315,14 @@ class TestSessionProcessingEnding(MockSystemMachine):
         algo.end_capture_session()
         assert processing_ended_count == 1
 
+
+class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        algo = machine.algorithm
+        algo.intersession_enabled = True
+
     def test_when_intersession_mouse_not_seen(self, machine):
         processing_ended_count = 0
         def processing_ended(prj, status):
@@ -323,7 +331,6 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert status == CaptureAnalysisResult.CAPTURE_ONLY
         #
         algo = machine.algorithm
-        algo.intersession_enabled = True
         algo.session_ending += processing_ended
         #
         algo.start_session()
@@ -347,7 +354,6 @@ class TestSessionProcessingEnding(MockSystemMachine):
 
         #
         algo = machine.algorithm
-        algo.intersession_enabled = True
         algo.session_ending += processing_ended
         algo.start_session()
         algo.update_mouse_seen(True)
@@ -367,7 +373,7 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert processing_ended_count == 1
         assert processing_ended_count == 1
 
-    def test_when_intersession_mouse_seen_segmentation_fails(self, machine):
+    def test_when_intersession_mouse_seen_segmentation_fails(self, machine, caplog):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -375,7 +381,6 @@ class TestSessionProcessingEnding(MockSystemMachine):
             assert status == CaptureAnalysisResult.ANALYSIS_FAILED
         #
         algo = machine.algorithm
-        algo.intersession_enabled = True
         algo.session_ending += processing_ended
         algo.start_session()
         algo.update_mouse_seen(True)
@@ -386,8 +391,55 @@ class TestSessionProcessingEnding(MockSystemMachine):
             algo.end_capture_session()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(False)
+            assert "Unexpected end_analysis while no segmentation or detection configuration" not in caplog.text
+            assert "Unexpected segment" not in caplog.text
+            assert "Unexpected detection" not in caplog.text
             assert processing_ended_count == 1
         assert processing_ended_count == 1
+
+    def test_invalid_end_segmentation(self, machine, caplog):
+        algo = machine.algorithm
+        algo.start_session()
+        algo.update_mouse_seen(True)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            # intersession state must be segmentation for end_analysis() .. (or detection).
+            machine.intersession.state = IntersessionState.segmentation  # so set it manually.
+            # algo.end_capture_session()    # don't end_capture_session so.
+            # otherwise it would set the segmentation config.
+            assert "Unexpected end_analysis" not in caplog.text
+            machine.intersession.end_analysis(algo.project, True)
+            assert "Unexpected end_analysis" in caplog.text
+            assert "Unexpected segment" not in caplog.text
+            assert "Unexpected detection" not in caplog.text
+
+    def test_unexpected_segmentation(self, machine, caplog):
+        algo = machine.algorithm
+        algo.start_session()
+        algo.update_mouse_seen(True)
+        bad_project = algo.project.to_local_value()
+        bad_project.trial += 1
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            algo.end_capture_session()
+            assert "Unexpected segment" not in caplog.text
+            machine.intersession.end_analysis(bad_project, False)
+            assert "Unexpected segment" in caplog.text
+
+    def test_unexpected_detection(self, machine, caplog):
+        algo = machine.algorithm
+        algo.start_session()
+        algo.update_mouse_seen(True)
+        bad_project = algo.project.to_local_value()
+        bad_project.trial += 1
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(self.mock_perform_segmentation())
+            algo.end_capture_session()
+            stack.enter_context(self.mock_perform_detection())
+            self.mock_complete_segmentation(True)
+            assert "Unexpected detection" not in caplog.text
+            machine.intersession.end_analysis(bad_project, True)
+            assert "Unexpected detection" in caplog.text
 
 
 def test_handle_diamond_triangle_offset_full(mock_system, machine):
