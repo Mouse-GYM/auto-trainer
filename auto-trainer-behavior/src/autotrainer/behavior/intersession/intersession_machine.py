@@ -80,7 +80,6 @@ class IntersessionMachine(StateMachine):
         res = self._inference.perform_segmentation(segment_config)
         if res is None:
             logger.error("perform segmentation didn't started")
-            self._segmentation_configuration = None
             with self._algorithm.set_allow_reentrant(True):
                 self.end_analysis(project_info, False)
         else:

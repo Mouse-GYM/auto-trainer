@@ -142,7 +142,7 @@ class PoseProcess(Process):
 
         model_path = self._model_location
         if model_path is None or len(model_path) == 0:
-            logger.warning("pellet model not specified; using in-memory random data")
+            logger.warning("pellet model not specified (%s); using in-memory random data", model_path)
             model = MemoryPoseModel(self._live_input_queue.batch_size)
         else:
             logger.notice("Loading DLC model %r", model_path)
@@ -215,21 +215,22 @@ class PoseProcess(Process):
         """
         while True:
             try:
-                cmd, context = self._cmd_queue.get_nowait()
-                self._cmd_queue_ack.set()
-                if cmd == InferenceCommandMessageKind.Terminate:
-                    return False
-                elif cmd == InferenceCommandMessageKind.Start:
-                    break
-                elif cmd == InferenceCommandMessageKind.ProcessLive:
-                    self._set_process_live(reason=str(cmd))
-                elif cmd == InferenceCommandMessageKind.ProcessOffline:
-                    logger.warning("unexpected cmd %s while wait for start", cmd)
-                    # self._set_process_offline()
-                else:
-                    logger.warning("Unhandled command: %s", cmd)
+                cmd, context = self._cmd_queue.get(timeout=1)
             except Empty:
-                time.sleep(0.01)
+                continue
+            self._cmd_queue_ack.set()
+            logger.debug("handling %s", cmd)
+            if cmd == InferenceCommandMessageKind.Terminate:
+                return False
+            elif cmd == InferenceCommandMessageKind.Start:
+                break
+            elif cmd == InferenceCommandMessageKind.ProcessLive:
+                self._set_process_live(reason=str(cmd))
+            elif cmd == InferenceCommandMessageKind.ProcessOffline:
+                logger.warning("unexpected cmd %s while wait for start", cmd)
+                # self._set_process_offline()
+            else:
+                logger.warning("Unhandled command: %s", cmd)
 
         return True
 
@@ -282,7 +283,7 @@ class PoseProcess(Process):
 
         # use a pre-allocated copy for outputting the frames indices:
         prev_mode = None
-        logger.info("%s: starting processing ..", self)
+        logger.info("starting processing ..")
         d_q_put = self._data_queue.put
         predict = self._pose_model.predict
         perf_add_c = self._perf_monitor.add_cycle
