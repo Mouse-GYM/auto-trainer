@@ -74,7 +74,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self.property_changed(self.CONFIG, value, prev)
         self.check_state()  # force check_state even if same config
 
-    def post_detector_event(self, detector_id: int, active: bool, enabled: Optional[bool] = None):
+    def post_detector_event(self, detector_id: ApiDetectorKind, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
             enabled = self._running
         post_api_detector_event_content(self._event_manager, detector_id, active, enabled)

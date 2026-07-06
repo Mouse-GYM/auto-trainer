@@ -2,7 +2,7 @@ import dataclasses
 from functools import partial
 from typing import Type, TypeVar, Generic, ClassVar, Optional, Callable, Dict, Set, List
 
-from autotrainer.api import ApiAlarmKind, ApiEventKind
+from autotrainer.api import ApiAlarmKind, ApiAlarmStatus, ApiEventKind, build_event
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 
@@ -43,16 +43,15 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
         if kind is None:
             return
         cfg = self._config
-        self._event_manager.post_event_content(
+        self._event_manager.post_api_event(build_event(
             ApiEventKind.alarmChanged,
-            data={
-                "alarm_id": kind,
-                "is_active": self._is_engaged,
-                "is_enabled": cfg.use,
-                "is_stop_condition": cfg.is_emergency_condition,
-                "is_auto_resume_enabled": cfg.allow_autoresume_on_cleared,
-            },
-        )
+            ApiAlarmStatus(
+                alarm_id=kind,
+                is_active=self._is_engaged,
+                is_enabled=cfg.use,
+                is_stop_condition=cfg.is_emergency_condition,
+                is_auto_resume_enabled=cfg.allow_autoresume_on_cleared,
+            )))
 
     def _custom_set_is_engaged(self):
         super()._custom_set_is_engaged()

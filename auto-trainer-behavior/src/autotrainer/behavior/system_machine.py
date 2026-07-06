@@ -7,7 +7,7 @@ from typing import Optional, List
 
 from transitions import Machine
 
-from autotrainer.api import ApiEventKind
+from autotrainer.api import ApiEventKind, build_event
 
 from autotrainer.core import (ProjectInfo, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
                               HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
@@ -290,9 +290,9 @@ class SystemMachine(StateMachine):
                 self._batch_project_sessions_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
-                self._event_manager.post_event_content(
-                    ApiEventKind.batchAnalysisStarted, data=dict(count=len(batch_list))
-                )
+                self._event_manager.post_api_event(build_event(
+                    ApiEventKind.batchAnalysisStarted,
+                    {"session_id": self._project_info.session_id, "trial_count": len(batch_list)}))
         else:
             self._batch_project_sessions_start_list = []
             self._batch_project_sessions_finished = 0
@@ -534,9 +534,10 @@ class SystemMachine(StateMachine):
             finished_batch = False
 
         if finished_batch:
-            self._event_manager.post_event_content(
+            self._event_manager.post_api_event(build_event(
                 ApiEventKind.batchAnalysisEnded,
-                data=dict(failed_count=self._batch_failed_count))
+                {"session_id": self._project_info.session_id,
+                 "failed_trial_count": self._batch_failed_count}))
 
         with algo.set_allow_reentrant(True):
             self.exit_intersession()
@@ -985,8 +986,9 @@ class SystemMachine(StateMachine):
         ):
             logger.debug("set project.t_pellet_presented=%.3f", t_rel_start)
             project.t_pellet_presented = t_rel_start
-            self._event_manager.post_event_content(
-                ApiEventKind.trialPelletPresented, data=dict(trial_id=project.trial))
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.trialPelletPresented,
+                {"session_id": project.session_id, "trial_id": project.trial}))
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_algorithm_property_changed(self, name: str, new_value, old_value):

@@ -19,7 +19,7 @@ from typing import Callable
 
 from typing_extensions import Self
 
-from autotrainer.api import ApiEventKind
+from autotrainer.api import ApiEventKind, build_event
 
 from autotrainer.core import ObservableObject, EventManager, post_trigger_enable, Offset3DTuple, \
     AnimalSubject, get_perf_now, calculate_std_dev_manual, ProjectInfo
@@ -1141,10 +1141,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.reset_session_pellet_count()
 
         project.calculate_next_trial_index()
-        self._event_manager.post_event_content(
-            ApiEventKind.projectSessionChanged,
-            data=dict(root=project.root, session=project.trial),
-        )
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.projectTrialChanged,
+            {"root": project.root, "session_id": project.session_id, "trial_id": project.trial}))
 
         # ensure we look at their state on start:
         self._session_mouse_seen = False
@@ -1161,8 +1160,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         self.session_starting()
 
-        self._event_manager.post_event_content(
-            ApiEventKind.trialStarted, data=dict(trial_id=project.trial, reason=reason))
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.trialStarted,
+            {"session_id": project.session_id, "trial_id": project.trial, "reason": reason}))
 
         return True
 
@@ -1192,8 +1192,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
         self._stop_session_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
-        self._event_manager.post_event_content(
-            ApiEventKind.trialCaptureEnded, data=dict(trial_id=self._project_info.trial, reason=reason))
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.trialCaptureEnded,
+            {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
         with self.set_allow_reentrant(True):
             self.session_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1204,8 +1205,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         But this is still called from system machine when analysis is delayed.
         """
         logger.notice("session processing end: %s ; project=%s", result, project)
-        self._event_manager.post_event_content(
-            ApiEventKind.trialEnded, data=dict(result=result))
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.trialEnded,
+            {"session_id": project.session_id, "trial_id": project.trial, "result": result}))
         self.session_ending(project, result)
 
     def reset_session_pellet_count(self):
@@ -1399,19 +1401,21 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         any_ctx = self._parts_pres_ctx_any_cam
         all_ctx = self._parts_pres_ctx_all_cams
         get_seen = all_ctx.get_part_seen
-        need_api_post = (
-            [SceneElement.R_Hand, ApiEventKind.trialRightHandSeen, get_seen(SceneElement.R_Hand)],
-            [SceneElement.Pellet, ApiEventKind.trialPelletSeen, get_seen(SceneElement.Pellet)],
-        )
+        prev_right_hand_seen = get_seen(SceneElement.R_Hand)
+        prev_pellet_seen = get_seen(SceneElement.Pellet)
         #
         update_scene_elements_context_from_pose(any_ctx, all_ctx, pose_rsp)
         # little special case for mouse:
         self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
         #
-        post = self._event_manager.post_event_content
-        for part, evt, prev_seen in need_api_post:
-            if prev_seen != get_seen(part):
-                post(evt)
+        if prev_right_hand_seen != get_seen(SceneElement.R_Hand):
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.trialRightHandSeen,
+                {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
+        if prev_pellet_seen != get_seen(SceneElement.Pellet):
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.trialPelletSeen,
+                {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
 
     def update_pellet_seen(self, seen: bool = True):
         self.update_part_seen(SceneElement.Pellet, seen, perf_now=get_perf_now())
@@ -1442,7 +1446,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 logger.verbose("Session mouse seen")
                 # property currently unused:
                 self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, False)
-                self._event_manager.post_event_content(ApiEventKind.trialAnimalSeen)
+                self._event_manager.post_api_event(build_event(
+                    ApiEventKind.trialAnimalSeen,
+                    {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
 
     @property
     def mouse_last_seen_age(self) -> float:
@@ -1605,9 +1611,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     def set_previous_intersession_analysis_rsp(self, project: ProjectInfo, res: IntersessionResponse):
         self._previous_intersession_analysis_rsp = (project, res)
-        self._event_manager.post_event_content(
+        self._event_manager.post_api_event(build_event(
             ApiEventKind.trialReachEvents,
-            data=dict(trial_reach_events=res.reach_events, trial_id=project.trial))
+            {"session_id": project.session_id, "trial_id": project.trial,
+             "trial_reach_events": res.reach_events}))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)
