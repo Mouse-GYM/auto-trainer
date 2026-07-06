@@ -62,12 +62,17 @@ logger = get_verbose_logger(__name__)
 _this_dir = Path(__file__).parent.resolve()
 
 
-_calibrate_timer = make_daemon_timer
+#
+_diamond_triangle_calibrate_timer = make_daemon_timer
 
-DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # duration of calibration data acquisition
-DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # maximum time before automated stop of calibration
+DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION = 3  # seconds, duration of calibration data acquisition
+DEFAULT_DIAMOND_TRIANGLE_CALIB_TIMEOUT = 30  # seconds, maximum time before automated stop of calibration
 # if not enough data is captured after that time the calib is automatically finished/stopped (and ask for retry)
-DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # distance over which data is considered noisy, and a retry proposed
+DEFAULT_DIAMOND_TRIANGLE_NOISY_DISTANCE = 0.2  # mm, distance over which data is considered noisy, and a retry proposed
+
+DIAMOND_TRIANGLE_MIN_OFFSETS_FOR_SUCCESS = 3
+DIAMOND_TRIANGLE_MIN_DIAMONDS_FOR_SUCCESS = 5
+# if any is lower: consider missing data -> need new recalib.
 
 
 def _make_separator():
@@ -404,7 +409,11 @@ class MainWindow(QMainWindow):
     ):
         app_model = self._app_model
         self._timer_calibrate_diamond_triangle.cancel()
-        if len(offsets) < 3 or len(diamond_locs3d) < 10:
+        if (
+            len(offsets) < DIAMOND_TRIANGLE_MIN_OFFSETS_FOR_SUCCESS
+            or len(diamond_locs3d) < DIAMOND_TRIANGLE_MIN_DIAMONDS_FOR_SUCCESS
+        ):
+            self.calib_diamond_triangle_action.setEnabled(False)
             self._post_api_event(
                 ApiEventKind.calibrationDcsFailed,
                 dict(reason="MissingData")
@@ -420,7 +429,7 @@ class MainWindow(QMainWindow):
             self._open_dialogs.append(box)
 
             def remove():
-                # logger.debug("removing dialog from self.open_dialogs")
+                self.calib_diamond_triangle_action.setEnabled(True)
                 try:
                     self._open_dialogs.remove(box)
                 except ValueError:  # safer
@@ -472,7 +481,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if rsp == QMessageBox.StandardButton.Yes:
-                self.on_calibrate_diamond_triangle(True, calib_duration=2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
+                self.on_calibrate_diamond_triangle(True,
+                                                   calib_duration=2 * DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION)
             return
         # success
         self._post_api_event(ApiEventKind.calibrationDcsCompleted)
@@ -562,8 +572,6 @@ class MainWindow(QMainWindow):
             nonlocal start_perf_c, offsets, positions, recording
             if not recording:
                 return
-            if len(offsets) > 15:
-                self._timer_calibrate_diamond_triangle.cancel()
             new_offset = pose_response.get_parts_3d_offset(SceneElement.Diamond, SceneElement.Triangle)
             if new_offset is not None:
                 offsets.append(new_offset)
@@ -578,7 +586,7 @@ class MainWindow(QMainWindow):
                 # required, to execute the function in the UI/main thread:
                 # reminder this record_offsets is executed by some thread handler/worker in some callback
                 InvokeMethod(self.on_calibrate_diamond_triangle, False)
-                recording = False
+                recording = False  # ensure list aren't modified after we pass them for processing
 
         recording = True
         offsets = []
@@ -593,8 +601,9 @@ class MainWindow(QMainWindow):
         app_model.inference.pose_response_ready += record_offsets
         self._status_label.setText("Capturing data ..")
         self._timer_calibrate_diamond_triangle.cancel()
-        timer = self._timer_calibrate_diamond_triangle = _calibrate_timer(
-            1.5 * calib_duration,
+        # add new timer for eventual stop of current calib, in case no data is coming at all:
+        timer = self._timer_calibrate_diamond_triangle = _diamond_triangle_calibrate_timer(
+            1.2 * calib_duration,  # use slightly higher timeout for this stop than the requested calib_duration.
             lambda: InvokeMethod(self.on_calibrate_diamond_triangle, False)
         )
         timer.start()
@@ -645,6 +654,9 @@ class MainWindow(QMainWindow):
         logger.verbose("on_calibrate_diamond_triangle: is_toggled=%s calib_duration=%.1f calib_run=%s",
                        is_toggled, calib_duration, calib_run)
         if calib_run is None:
+            if not is_toggled:
+                logger.verbose("on_calibrate_diamond_triangle calib_run already stopped")
+                return
             calib_run = self._diamond_triangle_calib_run = self._make_diamond_triangle_calib_run(calib_duration)
             # this triggers the execution of the first part of the calib run,
             # which is to record enough data
