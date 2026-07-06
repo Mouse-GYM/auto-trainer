@@ -82,6 +82,7 @@ from autotrainer.api import (
     ApiCommandRequestResponse,
     ApiCommandRequestResult,
     ApiEventKind,
+    build_event,
 )
 
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -777,14 +778,18 @@ class AppModel(ObservableObject):
         for model in self._models:
             model.project = project
         self._analysis.project_info = project
-        self._event_manager.post_event_content(
-            ApiEventKind.projectChanged,
-            data=None if project is None else dict(
-                root=project.root,
-                device_id=project.device_id,
-                day=project.get_day_path()[1],
-                session=project.trial,
-            ))
+        if project is None:
+            self._event_manager.post_event_content(ApiEventKind.projectChanged, data=None)
+        else:
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.projectChanged,
+                {
+                    "root": project.root,
+                    "device_id": project.device_id,
+                    "day": project.get_day_path()[1],
+                    "session_id": project.session_id,
+                    "trial_id": project.trial,
+                }))
 
     @property
     def left_camera(self):
@@ -889,8 +894,8 @@ class AppModel(ObservableObject):
             else animal.autoclamp_evasion_pellets_consumed
         )
         self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
-        self._event_manager.post_event_content(
-            ApiEventKind.animalSelected, None if animal is None else animal.to_api_status())
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.animalSelected, None if animal is None else animal.to_api_status()))
         logger.success("Switched to animal %s", animal)
 
     @property
@@ -1121,9 +1126,8 @@ class AppModel(ObservableObject):
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
             self._save_animal_metadata(animal, sender="add_animal")
-            self._event_manager.post_event_content(
-                ApiEventKind.animalCreated, animal.to_api_status(),
-            )
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.animalCreated, animal.to_api_status()))
 
             # Ensure property change events for listeners
             animals = self._animals
@@ -1875,8 +1879,8 @@ class AppModel(ObservableObject):
             prev, animal.target_y_limit = animal.target_y_limit, value
             if prev != value:
                 self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
-                self._event_manager.post_event_content(
-                    ApiEventKind.animalUpdated, animal.to_api_status())
+                self._event_manager.post_api_event(build_event(
+                    ApiEventKind.animalUpdated, animal.to_api_status()))
 
         elif name == props.CAGE_CLEAN_CONFIG:
             self._refresh_cage_clean_data()
@@ -2024,8 +2028,8 @@ class AppModel(ObservableObject):
         total_counts.reaches += result.total_reaches
         if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
             self._save_animal_metadata(animal, sender="detection_result_ready")
-            self._event_manager.post_event_content(
-                ApiEventKind.animalUpdated, animal.to_api_status())
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.animalUpdated, animal.to_api_status()))
 
     def _on_training_plan_property_changed(self, name, value, _):
         logger.debug("plan prop: %s -> %s", name, value)
@@ -2265,10 +2269,7 @@ class AppModel(ObservableObject):
 
     def _send_api_system_status(self):
         system_status = self._make_api_system_status_payload()
-        self._event_manager.post_event_content(
-            kind=ApiEventKind.systemStatus,
-            data=dataclasses.asdict(system_status),
-        )
+        self._event_manager.post_api_event(build_event(ApiEventKind.systemStatus, system_status))
 
     def _make_api_system_status_payload(self) -> ApiSystemStatus:
         hard = self._hardware
@@ -2359,7 +2360,8 @@ class AppModel(ObservableObject):
             animal=None if animal is None else animal.to_api_status(),
             project=ApiProjectStatus(
                 day_path=project.get_day_path()[0],
-                session_index=project.trial,
+                trial_id=project.trial,
+                session_id=project.session_id,
             ),
             detectors=detectors,
             alarms=alarms,

@@ -3,7 +3,7 @@ import enum
 from functools import partial
 from typing import Optional, List, Set, Callable, Dict, Union
 
-from autotrainer.api import ApiEventKind, ApiAlarmKind
+from autotrainer.api import ApiEventKind, ApiAlarmKind, ApiAlarmStatus, build_event
 
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.logging import get_verbose_logger
@@ -99,17 +99,17 @@ class EmergencyAlarmMonitor(BaseDetector[EmergencyAlarmConfiguration]):
         super()._start()
         self._engaged_reasons.clear()
 
-    def post_alarm_event(self, detector_id: int, active: bool, enabled: bool, auto_resume: bool, is_stop_cond: bool):
-        self._event_manager.post_event_content(
+    def post_alarm_event(self, alarm_id: ApiAlarmKind, active: bool, enabled: bool, auto_resume: bool,
+                         is_stop_cond: bool):
+        self._event_manager.post_api_event(build_event(
             ApiEventKind.alarmChanged,
-            data={
-                "alarm_id": detector_id,
-                "is_active": active,
-                "is_enabled": enabled,
-                "is_auto_resume_enabled": auto_resume,
-                "is_stop_condition": is_stop_cond,
-            },
-        )
+            ApiAlarmStatus(
+                alarm_id=alarm_id,
+                is_active=active,
+                is_enabled=enabled,
+                is_auto_resume_enabled=auto_resume,
+                is_stop_condition=is_stop_cond,
+            )))
 
     @property
     def engaged_reasons(self) -> List[EmergencyReason]:
