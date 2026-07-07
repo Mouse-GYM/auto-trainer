@@ -13,7 +13,7 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Callable, Union, Literal
 
-from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
+from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
@@ -186,6 +186,16 @@ class MainWindow(QMainWindow):
         self._set_reset_vat_text()
         self._set_reset_cage_clean_text()
         self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
+
+        self._watchdog_perf_c = get_perf_now()
+        watchdog_timer = self._watchdog_timer = QTimer(self)
+        watchdog_timer.timeout.connect(self._update_watchdog_perf_c)
+        watchdog_timer.start(1000)
+        app_model.analysis.watchdog_monitor.register_watchdog("main-ui-thread", lambda: self._watchdog_perf_c)
+
+    def _update_watchdog_perf_c(self):
+        logger.spam("updating watchog")
+        self._watchdog_perf_c = get_perf_now()
 
     @property
     def app_model(self) -> AppModel:
