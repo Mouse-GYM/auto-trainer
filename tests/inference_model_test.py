@@ -15,9 +15,8 @@ from tools.acquisition.model.inference_model import InferenceModel
 
 
 @pytest.fixture()
-def inference(pose_algo, calib_dir, project_info):
+def inference(pose_algo, calib_dir, project_info, mp_manager):
     record_stop_sema = multiprocessing.Semaphore()
-    mp_manager = multiprocessing.Manager()
     model = InferenceModel(
         pose_algo,
         calib_dir=calib_dir, record_stop_sema=record_stop_sema, mp_manager=mp_manager)
@@ -27,7 +26,6 @@ def inference(pose_algo, calib_dir, project_info):
     finally:
         model.terminate()
         model = None  # noqa
-        mp_manager.shutdown()
 
 
 @pytest.fixture()
