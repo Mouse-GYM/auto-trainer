@@ -35,6 +35,7 @@ class StateMachine:
         self._events = self._events_class(event_names)
         self._event_manager = EventManager.default()
         self.post_event_content = self._event_manager.post_event_content
+        self.post_api_event = self._event_manager.post_api_event
 
     @property
     def events(self):

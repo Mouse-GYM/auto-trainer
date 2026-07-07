@@ -6,6 +6,8 @@ from datetime import datetime
 from queue import Queue, Empty
 from typing import Optional, List, Any
 
+from autotrainer.api import ApiEventDict
+
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.project import ProjectInfo
 
@@ -196,6 +198,14 @@ class EventManager:
                          context=data)
 
         self.post_event(info)
+
+    def post_api_event(self, event: ApiEventDict) -> None:
+        """Post a ``build_event()``-constructed :class:`ApiEventDict`.
+
+        The event's own ``when``/``index`` are intentionally ignored; ``post_event_content`` re-stamps
+        them at post time so timing reflects when the event was posted, not when it was built.
+        """
+        self.post_event_content(event["kind"], data=event["context"])
 
     def post_event(self, info: EventInfo):
         """

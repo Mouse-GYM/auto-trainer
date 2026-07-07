@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from autotrainer.core import EventManagerPlugin, EventInfo, ProjectInfo
 
@@ -8,6 +8,7 @@ class MockEventPlugin(EventManagerPlugin):
         self.project = None
         self.enabled = True
         self.last_event: Optional[EventInfo] = None
+        self.events: List[EventInfo] = []
         self.event_count: int = 0
         self.flushed = False
         self.closed = False
@@ -20,6 +21,7 @@ class MockEventPlugin(EventManagerPlugin):
 
     def process_event(self, info: EventInfo, repeat_count: int) -> None:
         self.last_event = info
+        self.events.append(info)
         self.event_count += 1
 
     def flush(self) -> None:

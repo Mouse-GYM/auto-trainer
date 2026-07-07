@@ -2,9 +2,7 @@ import abc
 from typing import Callable, Optional, List, Union, Protocol, Any
 
 
-from autotrainer.api import ApiEventKind
-
-from autotrainer.api.api_event_kind import ApiPelletShiftSource
+from autotrainer.api import ApiEventKind, ApiPelletShiftSource, build_event
 
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo, \
     mean_method
@@ -12,7 +10,7 @@ from autotrainer.core.configuration.behavior_configuration import (
     ShiftXYZBufferHandlerConfig,
     ShiftXYZHandlerConfig,
 )
-from autotrainer.core.event import post_api_event_content
+from autotrainer.core.event import post_api_event
 from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
 
 from autotrainer.behavior import BehaviorAlgorithm
@@ -274,15 +272,16 @@ class ShiftXYZHandler(ObservableObject):
         if processed_shift is not None:
             self.last_processed_shift_xyz = processed_shift
             func = self._processed_shift_handler
-            post_api_event_content(
+            post_api_event(build_event(
                 ApiEventKind.intertrialPelletShift,
-                data=dict(
-                    source=ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
-                           else ApiPelletShiftSource.REACH_FAILURES,
-                    shift=dict(x=processed_shift.x, y=processed_shift.y, z=processed_shift.z),
-                    deferred=not is_last,
-                )
-            )
+                {
+                    "session_id": project.session_id,
+                    "trial_id": project.trial,
+                    "source": ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
+                              else ApiPelletShiftSource.REACH_FAILURES,
+                    "shift": {"x": processed_shift.x, "y": processed_shift.y, "z": processed_shift.z},
+                    "deferred": not is_last,
+                }))
             if func is None:
                 logger.debug("handle_processed_shift_func undefined")
             else:

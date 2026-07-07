@@ -3,7 +3,7 @@ from typing import Callable, Optional
 
 from transitions import Machine
 
-from autotrainer.api.api_event_kind import ApiEventKind
+from autotrainer.api import ApiEventKind, build_event
 
 from autotrainer.core import ProjectInfo, transitions_allow_functions
 from autotrainer.core.logging import get_verbose_logger
@@ -84,7 +84,9 @@ class IntersessionMachine(StateMachine):
                 self.end_analysis(project_info, False)
         else:
             self.events.on_analysis_started()
-            self.post_event_content(ApiEventKind.intertrialSegmentationBegin, data=dict(trial_id=project_info.trial))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialSegmentationBegin,
+                {"session_id": project_info.session_id, "trial_id": project_info.trial}))
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
         detection_config = DetectionConfiguration(
@@ -99,8 +101,10 @@ class IntersessionMachine(StateMachine):
         else:
             self._segmentation_configuration = None  # can now unset this one
             self._detection_configuration = detection_config
-            self.post_event_content(ApiEventKind.intertrialDetectionBegin,
-                                    data=dict(trial_id=segment_config.project.trial))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialDetectionBegin,
+                {"session_id": segment_config.project.session_id,
+                 "trial_id": segment_config.project.trial}))
 
     def after_end_analysis(self, project: ProjectInfo, success: bool):
         logger.info("end_analysis(success=%s) of %s", success, project)
@@ -158,7 +162,9 @@ class IntersessionMachine(StateMachine):
                            segment_config.project)
         project = segment_config.project
         if success:
-            self.post_event_content(ApiEventKind.intertrialSegmentationEnd, data=dict(trial_id=project.trial))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialSegmentationEnd,
+                {"session_id": project.session_id, "trial_id": project.trial}))
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                 def algo_action():
                     self.perform_detection(segment_config)
@@ -168,8 +174,9 @@ class IntersessionMachine(StateMachine):
                     self.end_analysis(project, False)
         else:
             logger.error("perform segmentation failed. config=%s", segment_config)
-            self.post_event_content(
-                ApiEventKind.intertrialSegmentationError, data=dict(error=error, trial_id=project.trial))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialSegmentationError,
+                {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
             def algo_action():
                 self.end_analysis(project, False)
         if algo_action is not None:
@@ -179,12 +186,16 @@ class IntersessionMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _detection_complete(self, success: bool, *,
                             detection_config: DetectionConfiguration, error: str="NA"):
-        trial_id = detection_config.project.trial
+        project = detection_config.project
         if not success:
             logger.error("perform detection failed. det_config=%s", detection_config)
-            self.post_event_content(ApiEventKind.intertrialDetectionError, data=dict(error=error, trial_id=trial_id))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialDetectionError,
+                {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
         else:
-            self.post_event_content(ApiEventKind.intertrialDetectionEnd, data=dict(trial_id=trial_id))
+            self.post_api_event(build_event(
+                ApiEventKind.intertrialDetectionEnd,
+                {"session_id": project.session_id, "trial_id": project.trial}))
         with self._algorithm.set_allow_reentrant(True):
             self.end_analysis(detection_config.project, success)
 

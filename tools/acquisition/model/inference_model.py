@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
 from threading import Thread
 
+from autotrainer.api import build_event
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
     InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
 from autotrainer.core.project import ProjectDependentProtocol
@@ -460,12 +461,14 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def _cb_on_intersession_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         logger.debug("_cb_on_intersession_segmentation_finished: success=%s error=%s prj=%s", success, error, project)
         if success:
-            self._event_manager.post_event_content(
+            self._event_manager.post_api_event(build_event(
                 ApiEventKind.intertrialSegmentationSave,
-                data=dict(location=project.get_trial_path().location, trial_id=project.trial))
+                {"session_id": project.session_id, "trial_id": project.trial,
+                 "location": project.get_trial_path().location}))
         else:
-            self._event_manager.post_event_content(
-                ApiEventKind.intertrialSegmentationSaveError, data=dict(error=error, trial_id=project.trial))
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.intertrialSegmentationSaveError,
+                {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
         self._handle_segmentation_finished(project, success, error=error)
 
     def _cb_on_set_feed_intersession_result(self, project: ProjectInfo, error: Optional[str],
@@ -586,15 +589,16 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         if processed_ok:
             result: IntersessionResponse
-            self._event_manager.post_event_content(
+            self._event_manager.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionSave,
-                data=dict(location=project.get_trial_path().location, trial_id=project.trial),
-            )
+                {"session_id": project.session_id, "trial_id": project.trial,
+                 "location": project.get_trial_path().location}))
             # assert isinstance(result, IntersessionResponse)
             self.detection_result_ready(project, result)
         else:
-            self._event_manager.post_event_content(ApiEventKind.intertrialDetectionSaveError,
-                                                   data=dict(error=error, trial_id=project.trial))
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.intertrialDetectionSaveError,
+                {"session_id": project.session_id, "trial_id": project.trial, "error": error or ""}))
 
         intersession_detection.configuration.complete(processed_ok, error=error)
         self._intersession_detection = None

@@ -3,6 +3,7 @@ import datetime as dt
 
 import pytest
 
+from autotrainer.api import ApiEventKind, ApiDetectorKind, ApiDetectorStatus, build_event
 from autotrainer.core import EventManager, ProjectInfo, EventInfo
 from autotrainer.core.event.file_event_plugin import FileEventPlugin
 from autotrainer.core.event.logger_event_plugin import LoggerEventPlugin
@@ -88,3 +89,43 @@ def test_plugin_interface(event_manager, mock_plugin):
 def test_post_none_event_refused(event_manager):
     with pytest.raises(RuntimeError, match=r"post_event\(None\) refused"):
         event_manager.post_event(None)  # noqa
+
+
+def _wait_processed(event_manager):
+    while event_manager.has_pending():
+        time.sleep(0.001)
+
+
+def test_post_api_event_restamps_and_posts_context(event_manager, mock_plugin):
+    event_manager.register_plugin(mock_plugin)
+
+    built = build_event(
+        ApiEventKind.trialStarted, {"session_id": "sess-1", "trial_id": 3, "reason": "NA"})
+
+    event_manager.post_api_event(built)
+    _wait_processed(event_manager)
+
+    posted = mock_plugin.last_event
+    assert posted.kind == ApiEventKind.trialStarted
+    assert posted.context == {"session_id": "sess-1", "trial_id": 3, "reason": "NA"}
+    # when/index are re-stamped by post_event_content, not reused from the built dict.
+    assert posted.when is not built["when"]
+    assert posted.index != built["index"]
+
+
+def test_post_api_event_normalizes_dataclass_context(event_manager, mock_plugin):
+    event_manager.register_plugin(mock_plugin)
+
+    status = ApiDetectorStatus(
+        detector_id=ApiDetectorKind.lowFreeDiskSpace, is_active=True, is_enabled=True)
+    event_manager.post_api_event(build_event(ApiEventKind.detectorChanged, status))
+    _wait_processed(event_manager)
+
+    posted = mock_plugin.last_event
+    assert posted.kind == ApiEventKind.detectorChanged
+    # build_event asdict()s a dataclass context, so plugins see a plain dict.
+    assert posted.context == {
+        "detector_id": ApiDetectorKind.lowFreeDiskSpace,
+        "is_active": True,
+        "is_enabled": True,
+    }
