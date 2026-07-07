@@ -3,12 +3,14 @@ import multiprocessing
 import sys
 import threading
 import time
+from functools import partial
 from pathlib import Path
 
 import cv2
 import numpy
 import pytest
 
+from autotrainer.behavior import SegmentationConfiguration
 from autotrainer.core import FixedArrayMultiQueue, FrameIndexCategory
 from autotrainer.inference import InferenceCommandMessageKind, InferenceStatus
 from tools.acquisition.model.inference_model import InferenceModel
@@ -81,6 +83,10 @@ def test_inference_recording_and_offline_processing(
         th.join()
     inference_q.put_frame_index_category(frame, FrameIndexCategory.EOF_RECORDING)
     wait_stop_recorded = False
+    def on_complete(success, *, error="NA"):
+        pass
+    cfg = SegmentationConfiguration(project=project_info, frame_rate=fps, complete=on_complete)
+    assert inference.perform_segmentation(cfg) is not None
     time.sleep(2.5)
     inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
     time.sleep(5)
