@@ -5,6 +5,7 @@ import threading
 import time
 from functools import partial
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy
@@ -83,8 +84,16 @@ def test_inference_recording_and_offline_processing(
         th.join()
     inference_q.put_frame_index_category(frame, FrameIndexCategory.EOF_RECORDING)
     wait_stop_recorded = False
-    def on_complete(success, *, error="NA"):
-        pass
+    completed = False
+    complete_ok = complete_error = None
+    def on_complete(success: bool, *, error: Optional[str]=None):
+        nonlocal completed, complete_ok, complete_error
+        if completed:
+            raise RuntimeError("expected only once")
+        completed = True
+        complete_ok = success
+        complete_error = error
+
     cfg = SegmentationConfiguration(project=project_info, frame_rate=fps, complete=on_complete)
     assert inference.perform_segmentation(cfg) is not None
     time.sleep(2.5)
@@ -92,3 +101,6 @@ def test_inference_recording_and_offline_processing(
     time.sleep(5)
     inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
     time.sleep(2)
+    assert completed
+    assert complete_ok is True
+    assert complete_error is None
