@@ -104,10 +104,24 @@ def motor_config(monkeypatch):
 
 
 @pytest.fixture
-def project_info(tmp_path) -> ProjectInfo:
+def mp_manager():
+    mgr = multiprocessing.Manager()
+    try:
+        yield mgr
+    finally:
+        mgr.shutdown()
+
+
+@pytest.fixture
+def project_info(tmp_path, mp_manager) -> ProjectInfo:
     root = tmp_path.joinpath("root")
     root.mkdir()
-    prj = ProjectInfo(root=root.as_posix())
+    prj = ProjectInfo(
+        root=root.as_posix(),
+        camera_1="left",
+        camera_2="right",
+        mp_manager=mp_manager,
+    )
     return prj
 
 

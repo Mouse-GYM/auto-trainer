@@ -119,7 +119,7 @@ def test_with_primary_secondary(
         mod.on_trigger_recording(False)
     for mod in (video_capture_model, video_capture_model2):
         assert mod.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5) is True
-    time.sleep(0.5)  # give little extra time
+    time.sleep(1.5)  # give little extra time
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     # print(caplog.text)
     #

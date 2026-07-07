@@ -168,6 +168,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         return worker
 
     def _monitor_cmd_queue(self):
+        logger.debug("running monitor_cmd_queue")
         while self._is_running:
             raw = self._cmd_queue.get()
             if raw is None:

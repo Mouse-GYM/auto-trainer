@@ -32,6 +32,7 @@ omit =
 
 # so using coverage-enable-subprocess for now.
 
+concurrency = thread,multiprocessing
 parallel = true
 # still needed
 

@@ -60,6 +60,7 @@ class DlcPoseModel(PoseModel):
         return True
 
     def load(self):
+        # NB: delayed import on purpose: this is called from within pose process.
         from deeplabcut.pose_estimation_tensorflow.config import load_config
         from deeplabcut.pose_estimation_tensorflow.core import predict
         from deeplabcut.utils import auxiliaryfunctions

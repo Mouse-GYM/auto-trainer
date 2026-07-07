@@ -14,7 +14,7 @@ from threading import Thread
 
 from autotrainer.api import build_event
 from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
-    InferenceConfiguration, Offset3DTuple, ApiEventKind
+    InferenceConfiguration, Offset3DTuple, ApiEventKind, get_perf_now
 from autotrainer.core.project import ProjectDependentProtocol
 from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
@@ -53,7 +53,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         self._event_manager = EventManager.default()
-        self._mp_manager = mp_manager
+        self._mp_manager = mp_ctx
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
         self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
         self._cmd_queue_lock = threading.Lock()  # to ensure ack are correct respectively
@@ -88,7 +88,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frame_width = 1
         self._frame_height = 1
 
-        self._project: Optional[ProjectInfo] = None
+        self._project: ProjectInfo = ProjectInfo()
         self._intersession_block: Optional[IntersessionBlock] = None
         self._intersession_detection: Optional[IntersessionDetection] = None
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
@@ -178,6 +178,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def _set_status(self, value: InferenceStatus):
         prev, self._status = self._status, value
         self._on_property_changed(self.STATUS, value, prev)
+
+    def wait_for_status(self, status: InferenceStatus, *, timeout: float):
+        p_timeout = get_perf_now() + timeout
+        while self._status != status:
+            if get_perf_now() > p_timeout:
+                raise RuntimeError(f"Timeout waiting inference status {status}")
+            time.sleep(0.001)
 
     @property
     def pose_algorithm(self) -> PoseAlgorithm:

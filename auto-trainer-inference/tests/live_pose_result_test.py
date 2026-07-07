@@ -77,14 +77,23 @@ def inference_data_proc(pose_algo, capture_multiprocess_logs, monkeypatch, caplo
     proc._cmd_queue.put(
         (proc.Msg.SET_POSE_ALGO, (pose_algo,), None)
     )
-    yield proc  # noqa
-    proc.terminate()
-    proc.join(3)
+    try:
+        yield proc  # noqa
+    finally:
+        proc._cmd_queue.put(None)  # ensure clean stop
+        proc.join(15)  # give large amount for allow coverage to write to disk
+        proc.terminate()
+        proc.join(5)
 
 
-def test_live_no_recording(inference_data_proc):
+def test_live_no_recording(inference_data_proc, caplog, pose_algo):
     proc = inference_data_proc
     proc.start()
+
+    # give sometime to start, when coverage is enabled, process is long to start because of coverage overhead.
+    time.sleep(2.5)
+    # without this small sleep the messages we await are missed
+
     for _ in range(5):
         # NB: the 3 first are discarded by the pose result process
         proc._data_queue.put((
@@ -93,15 +102,16 @@ def test_live_no_recording(inference_data_proc):
             frames_idc_online_no_recording,
         ))
         time.sleep(0.2)
-    msg, (args, kwargs) = proc._msg_queue.get(timeout=3)
-    print(msg, args, kwargs)
+
+    msg, (args, kwargs) = proc._msg_queue.get(timeout=5)
+    # print(msg, args, kwargs)
     assert msg is InferenceMonitorDataMsg.POSE_RESULT_READY
     pose_rsp = args[0]
     pose_rsp: PoseResponse
     assert isinstance(pose_rsp, PoseResponse)
     assert pose_rsp.sequence == 0
     #
-    msg, (args, kwargs) = proc._msg_queue.get(timeout=3)
+    msg, (args, kwargs) = proc._msg_queue.get(timeout=5)
     pose_rsp = args[0]
     # print(msg, args, kwargs)
     assert pose_rsp.sequence == 1

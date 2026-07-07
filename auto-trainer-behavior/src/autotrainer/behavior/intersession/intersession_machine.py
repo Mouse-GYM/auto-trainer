@@ -80,7 +80,6 @@ class IntersessionMachine(StateMachine):
         res = self._inference.perform_segmentation(segment_config)
         if res is None:
             logger.error("perform segmentation didn't started")
-            self._segmentation_configuration = None
             with self._algorithm.set_allow_reentrant(True):
                 self.end_analysis(project_info, False)
         else:
@@ -96,7 +95,11 @@ class IntersessionMachine(StateMachine):
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)
-        if res is not None:
+        if res is None:
+            logger.warning("inference perform_detection() returned None")
+            self.end_analysis(segment_config.project, False)
+        else:
+            self._segmentation_configuration = None  # can now unset this one
             self._detection_configuration = detection_config
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionBegin,
@@ -109,13 +112,20 @@ class IntersessionMachine(StateMachine):
         det_cfg = self._detection_configuration
         self._segmentation_configuration = None
         self._detection_configuration = None
+        invalid = False
         if det_cfg is None and seg_cfg is None:
+            invalid = True
             logger.warning("Unexpected end_analysis while no segmentation or detection configuration, project=%s",
                            project)
         if seg_cfg is not None and seg_cfg.project != project:
+            invalid = True
             logger.warning("Unexpected segment config project: %s vs %s", seg_cfg.project, project)
         if det_cfg is not None and det_cfg.project != project:
+            invalid = True
             logger.warning("Unexpected detection config project: %s vs %s", det_cfg.project, project)
+        if invalid:
+            # prefer not continue/move forward into invalid condition(s)
+            return
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
         self._algorithm.end_session(project, result)
         self.events.on_analysis_ended(project, result)
@@ -142,7 +152,8 @@ class IntersessionMachine(StateMachine):
     def _segmentation_complete(self, success: bool, *,
                                segment_config: SegmentationConfiguration, error: str="NA"):
         self_seg_cfg = self._segmentation_configuration
-        self._segmentation_configuration = None
+        # self._segmentation_configuration = None
+        # NB: do not set to None here, it's checked (and then set to None) after in end_analysis().
         logger.verbose("segmentation_complete: success=%s config=%s ; error=%s",
                      success, segment_config, error)
         if self_seg_cfg is None or self_seg_cfg.project != segment_config.project:
