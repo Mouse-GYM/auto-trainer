@@ -242,11 +242,11 @@ class SystemMachine(StateMachine):
         if self._state == SystemState.cage or force_from_cage:
             self._tot_trials_analysed = 0
             self._tot_trials_failed_analysed = 0
-            self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
-            self._event_manager.post_event_content(
+            self._event_manager.post_api_event(build_event(ApiEventKind.tunnelEnter))
+            self._event_manager.post_api_event(build_event(
                 ApiEventKind.sessionStarted,
-                data=dict(session_id=self._project_info.session_id,
-                          is_analysis_deferred=self._algorithm.batch_session_recording_config.enabled))
+                dict(session_id=self._project_info.session_id,
+                     is_analysis_deferred=self._algorithm.batch_session_recording_config.enabled)))
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
