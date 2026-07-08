@@ -1459,7 +1459,8 @@ class AppModel(ObservableObject):
 
         watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
         for item in WatchdogItems:
-            watchdog_mon_unregister(item)
+            if item is not WatchdogItems.MAIN_UI_THREAD:
+                watchdog_mon_unregister(item)
 
         self._inference.stop()
         self._hardware.disconnect()
