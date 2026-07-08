@@ -22,6 +22,7 @@ import autotrainer.core
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
+from autotrainer.core.analysis import detector
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
 from autotrainer.inference.analysis import IntersessionResponse
@@ -300,10 +301,14 @@ def system_msg_queue():
 
 
 @pytest.fixture
-def sensor_analysis(mock_get_perf_now) -> SensorAnalysis:
+def sensor_analysis(mock_get_perf_now, monkeypatch) -> SensorAnalysis:  # noqa
+    # ensure we don't have daemon or asynchronous detectors during tests
+    for det_cls in detector.registered_detector_classes:
+        monkeypatch.setattr(det_cls, "use_daemon", False)
+
     s = SensorAnalysis()
     try:
-        yield s
+        yield s  # noqa
     finally:
         s.stop()
 

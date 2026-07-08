@@ -267,14 +267,15 @@ class SystemMachine(StateMachine):
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             batch_projects = self._batch_project_sessions_list
-            if len(batch_projects) == 0:
+            intersession_is_idle = self._intersession.state == IntersessionState.idle
+            if intersession_is_idle and len(batch_projects) == 0:
                 self._post_api_session_ended(self._project_info.session_id)
             else:
-                if self._intersession.state != IntersessionState.idle:
-                    # this can happen if a batch-list is in processing, for instance
+                if not intersession_is_idle:
+                    # this can happen when a trial is in analysis processing (offline or analysis), for instance
                     logger.verbose("exit_tunnel but intersession state=%s, doing nothing. n_batch_trials=%s",
                                    self._intersession.state, len(batch_projects))
-                else:
+                elif len(batch_projects) > 0:
                     prj = batch_projects[0]
                     with algo.set_allow_reentrant(True):
                         self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
@@ -628,7 +629,6 @@ class SystemMachine(StateMachine):
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
                         self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
-                        # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
                     self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
                                                            data=dict(is_enabled=self._state))

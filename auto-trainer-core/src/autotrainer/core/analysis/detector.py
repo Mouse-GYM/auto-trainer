@@ -2,7 +2,7 @@ import math
 import queue
 import threading
 import time
-from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic
+from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now
@@ -20,6 +20,9 @@ _request_check_state = object()
 
 
 DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
+
+
+registered_detector_classes: List["BaseDetector"] = []
 
 
 class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
@@ -55,6 +58,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        registered_detector_classes.append(cls)
 
     @property
     def name(self) -> str:
