@@ -191,6 +191,7 @@ class AppModelEvents:
 
 class WatchdogItems(str, enum.Enum):
 
+    MAIN_UI_THREAD = "main_ui_thread"
     DEVICE_READER = "device_reader"
     DEVICE_WRITER = "device_writer"
     POSE_PROCESS = "pose_process"
