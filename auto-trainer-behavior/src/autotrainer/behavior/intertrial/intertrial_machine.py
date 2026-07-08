@@ -9,7 +9,7 @@ from autotrainer.core import ProjectInfo, transitions_allow_functions
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.interfaces import CaptureAnalysisResult
 
-from . import IntersessionState
+from .intertrial_state import IntertrialState
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine, StateMachineEvents
@@ -18,16 +18,16 @@ from ..state_machine import StateMachine, StateMachineEvents
 logger = get_verbose_logger(__name__)
 
 
-class IntersessionMachineEvents(StateMachineEvents):
+class IntertrialMachineEvents(StateMachineEvents):
     on_analysis_started: Callable[[], None]  # unused
     on_analysis_ended: Callable[[ProjectInfo, CaptureAnalysisResult], None]
 
 
-class IntersessionMachine(StateMachine):
+class IntertrialMachine(StateMachine):
 
-    _events_class = IntersessionMachineEvents
+    _events_class = IntertrialMachineEvents
 
-    states = list(IntersessionState)
+    states = list(IntertrialState)
 
     def __init__(
         self,
@@ -36,12 +36,12 @@ class IntersessionMachine(StateMachine):
         inference: InferenceProtocol,
     ):
 
-        initial_state = IntersessionState.idle
+        initial_state = IntertrialState.idle
 
         super().__init__(initial_state=initial_state)
 
-        self._machine = Machine(model=[self], states=IntersessionMachine.states,
-                                transitions=IntersessionMachine.transitions, auto_transitions=False,
+        self._machine = Machine(model=[self], states=IntertrialMachine.states,
+                                transitions=IntertrialMachine.transitions, auto_transitions=False,
                                 initial=initial_state, model_override=True)
 
         algorithm.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous machine instance
@@ -53,13 +53,13 @@ class IntersessionMachine(StateMachine):
         self._frame_rate: Optional[int] = None
 
     @property
-    def events(self) -> IntersessionMachineEvents:  # to have correct type hint as well
+    def events(self) -> IntertrialMachineEvents:  # to have correct type hint as well
         return self._events
 
     def reset_to_idle(self):
         self._detection_configuration = None
         self._segmentation_configuration = None
-        self.state = IntersessionState.idle
+        self.state = IntertrialState.idle
 
     @property
     def frame_rate(self):
@@ -127,7 +127,7 @@ class IntersessionMachine(StateMachine):
             # prefer not continue/move forward into invalid condition(s)
             return
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
-        self._algorithm.end_session(project, result)
+        self._algorithm.end_trial(project, result)
         self.events.on_analysis_ended(project, result)
 
     def can_perform_segmentation(self, project_info: ProjectInfo):
@@ -238,24 +238,24 @@ class IntersessionMachine(StateMachine):
     transitions = transitions_allow_functions([
         dict(
             trigger=perform_segmentation,
-            source=IntersessionState.idle,
-            dest=IntersessionState.segmentation,
+            source=IntertrialState.idle,
+            dest=IntertrialState.segmentation,
             conditions=can_perform_segmentation,
             after=after_enter_segmentation,
         ),
 
         dict(
             trigger=perform_detection,
-            source=IntersessionState.segmentation,
-            dest=IntersessionState.detection,
+            source=IntertrialState.segmentation,
+            dest=IntertrialState.detection,
             conditions=can_perform_detection,
             after=after_enter_detection,
         ),
 
         dict(
             trigger=end_analysis,
-            source=[IntersessionState.segmentation, IntersessionState.detection],
-            dest=IntersessionState.idle,
+            source=[IntertrialState.segmentation, IntertrialState.detection],
+            dest=IntertrialState.idle,
             after=after_end_analysis,
         ),
     ])

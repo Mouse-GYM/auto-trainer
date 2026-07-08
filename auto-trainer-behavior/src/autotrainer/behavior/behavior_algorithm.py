@@ -28,8 +28,8 @@ from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.reach_event import ReachEvent
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    BehaviorConfiguration, AutoCloseGateOnIntersessionConfiguration, AutoEndSessionConfiguration, \
-    BatchSessionRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, \
+    BehaviorConfiguration, AutoCloseGateOnIntertrialConfiguration, AutoEndTrialConfiguration, \
+    BatchTrialRecordingConfiguration, HomeOnExcessiveDriftDistanceConfiguration, \
     PelletUncoverConfiguration
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.pose_elements import ScenePartsPresenceContext, SceneElement
@@ -39,11 +39,11 @@ from autotrainer.core.interfaces import CaptureAnalysisResult, RecordingEndingRe
 
 from .pellet import PelletState
 from .system_machine_state import SystemState
-from .intersession import IntersessionState
+from .intertrial import IntertrialState
 
 from autotrainer.inference import PoseResponse
 from autotrainer.inference.pose_algorithm import update_scene_elements_context_from_pose
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 logger = get_verbose_logger(__name__)
 
@@ -104,16 +104,15 @@ class BehaviorAlgoProps(str, enum.Enum):
     DAY_SUCCESSFUL_REACHES = 'day_successful_reaches'
     TOTAL_SUCCESSFUL_REACHES = 'total_successful_reaches'
 
-    INTERSESSION_ENABLED = 'intersession_enabled'  # config
-    # INTERSESSION_PELLET_SHIFT_ENABLED = 'intersession_pellet_shift_enabled'
+    INTERTRIAL_ENABLED = 'intertrial_enabled'  # config
 
     # PELLET_DELIVERY_ENABLED = 'pellet_delivery_enabled'
     # PELLET_COVER_ENABLED = 'pellet_cover_enabled'
 
     # run ctx
-    SESSION_PELLET_COUNT = 'session_pellet_count'
-    SESSION_MOUSE_SEEN = 'session_mouse_seen'
-    # NB: only updated/set once per session, once set it's kept until end of session
+    TRIAL_PELLET_COUNT = 'trial_pellet_count'
+    TRIAL_MOUSE_SEEN = 'trial_mouse_seen'
+    # NB: only updated/set once per trial, once set it's kept until end of trial
 
     AUTO_CORRECT_MOTOR_DRIFT = 'auto_correct_motor_drift'
     # PELLET_MOTOR_DRIFT = 'pellet_motor_drift'  # unused
@@ -124,13 +123,6 @@ class BehaviorAlgoProps(str, enum.Enum):
     COVER_SERVO_STATUS = 'cover_servo_status'  # ctx
     COVER_PELLET_DISTANCE = "cover_pellet_distance"  # cfg
     RELEASE_PELLET_DISTANCE = "release_pellet_distance"  # cfg
-
-    # IS_IN_SESSION = 'is_in_session'  # property unused
-    # INTERSESSION_STATE = 'intersession_state'  # unused
-    # CAPTURE_STATUS = 'capture_status'  # unused
-
-    # TRIANGLE_PELLET_DISTANCE = "triangle_pellet_distance"  # unused
-    # PELLET_HANDS_DISTANCE = 'pellet_hands_min_distance'  # unused
 
     DIAMOND_TRIANGLE_CONFIG = 'diamond_triangle_config'
     CAGE_CLEAN_CONFIG = 'cage_clean_config'
@@ -175,16 +167,39 @@ class BehaviorAlgoStatus(str, enum.Enum):
     ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
 
 
+class _RelayEventTrialRenamed:
+    # allows to use old event names to new one, see below where used.
+    # remove me once training converted to new event names.
+
+    def __set_name__(self, owner, name):
+        self.ev_name = name.replace("session", "trial")
+
+    def __get__(self, instance, owner):
+        return getattr(instance, self.ev_name)
+
+    def __set__(self, *a):
+        pass
+
+
 class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     # dynamic events type hints,
     # helps IDE search/completion/type-verification:
-    session_starting_before_record_start: BehaviorAlgoEvents.session_starting_before_record_start
-    session_starting: BehaviorAlgoEvents.session_starting
-    session_capture_ending: BehaviorAlgoEvents.session_capture_ending
+    trial_starting_before_record_start: BehaviorAlgoEvents.trial_starting_before_record_start
+    trial_starting: BehaviorAlgoEvents.trial_starting
+    trial_capture_ending: BehaviorAlgoEvents.trial_capture_ending
+
+    # back-compat:
+    session_starting_before_record_start = _RelayEventTrialRenamed()
+    session_starting = _RelayEventTrialRenamed()
+    session_capture_ending = _RelayEventTrialRenamed()
 
     batch_analysis_starting: BehaviorAlgoEvents.batch_analysis_starting
-    session_processing_starting: BehaviorAlgoEvents.session_processing_starting
-    session_ending: BehaviorAlgoEvents.session_ending
+    trial_processing_starting: BehaviorAlgoEvents.trial_processing_starting
+    trial_ending: BehaviorAlgoEvents.trial_ending
+    # back-compat:
+    session_processing_starting = _RelayEventTrialRenamed()
+    session_ending = _RelayEventTrialRenamed()
+
     batch_analysis_ending: BehaviorAlgoEvents.batch_analysis_ending
 
     cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed  # unused
@@ -224,7 +239,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._autoclamp_in_progress = False
         self._autoclamp_engaged_perf_c = -math.inf
 
-        self._clean_raw_data_on_inactive_session = False  # NB: not saved in config
+        self._clean_raw_data_on_inactive_trial = False  # NB: not saved in config
 
         self._parts_pres_ctx_any_cam = ScenePartsPresenceContext()
         self._parts_pres_ctx_all_cams = ScenePartsPresenceContext()
@@ -234,21 +249,21 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._baseline_intensity = self._active_config.head_clamp.baseline_intensity
 
         # NB: not saved in config:
-        self._sess_min_duration = 1.5  # could add to config
+        self._trial_min_duration = 1.5  # could add to config
 
         self._recording_prebuffer_duration: float = 0
 
         # active/live context:
         self._algo_paused = False
         self._algo_paused_perf_t = -math.inf
-        self._is_in_session = False
-        self._session_started_perf_c = -math.inf
-        self._start_session_reason = "NA"
-        self._stop_session_reason = RecordingEndingReason.NA
-        self._timer_end_capture_session = no_op_timer
+        self._is_in_trial = False
+        self._trial_started_perf_c = -math.inf
+        self._start_trial_reason = "NA"
+        self._stop_trial_reason = RecordingEndingReason.NA
+        self._timer_end_capture_trial = no_op_timer
         self._prev_can_load_pellet_log_refuse_perf_c = -math.inf
 
-        self._session_mouse_seen = False
+        self._trial_mouse_seen = False
         self._pellet_hands_min_distance: float = math.inf
         self._mouse_seen_last_perf_c = -math.inf
         self._triangle_pellet_last_offset = Offset3DTuple(math.nan, math.nan, math.nan)
@@ -257,13 +272,13 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._uncover_ctx = PelletUncoverContext()
 
         self._system_state = SystemState.cage
-        self._intersession_state = IntersessionState.idle
+        self._intertrial_state = IntertrialState.idle
         self._capture_status = CaptureProcessStatus.UNKNOWN
         self._recording_start_perf_c = math.nan
 
         self._pellet_shift_y_limit: Optional[float] = None
 
-        self._session_pellet_loaded_count = 0  # loaded
+        self._trial_pellet_loaded_count = 0  # loaded
 
         self._pellet_counts_day_date = date.today()
         self._pellets_consumed_day = 0  # consumed
@@ -275,7 +290,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._successful_reaches_day: int = 0
         self._successful_reaches_total: int = 0
 
-        self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
+        self._previous_intertrial_analysis_rsp: Optional[Tuple[ProjectInfo, IntertrialResponse]] = None
 
         self._cover_servo_status = CoverServoStatus.OK
 
@@ -555,12 +570,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._system_state = value
 
     @property
-    def intersession_state(self) -> IntersessionState:
-        return self._intersession_state
+    def intertrial_state(self) -> IntertrialState:
+        return self._intertrial_state
 
-    @intersession_state.setter
-    def intersession_state(self, value: IntersessionState):
-        prev, self._intersession_state = self._intersession_state, value
+    @intertrial_state.setter
+    def intertrial_state(self, value: IntertrialState):
+        prev, self._intertrial_state = self._intertrial_state, value
         # self._on_property_changed(BehaviorAlgoProps.INTERSESSION_STATE, value, prev)
 
     @property
@@ -591,17 +606,17 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return self._recording_start_perf_c
 
     @property
-    def is_in_session(self) -> bool:
-        """Is in capture/recording session"""
-        return self._is_in_session
+    def is_in_trial_capture(self) -> bool:
+        """Is in trial capture/recording"""
+        return self._is_in_trial
 
     @property
-    def is_in_session_age(self) -> float:
-        return get_perf_now() - self._session_started_perf_c
+    def is_in_trial_age(self) -> float:
+        return get_perf_now() - self._trial_started_perf_c
 
     @property
-    def auto_close_gate_on_intersession_config(self) -> AutoCloseGateOnIntersessionConfiguration:
-        return self._active_config.auto_close_gate_on_intersession
+    def auto_close_gate_on_intertrial_config(self) -> AutoCloseGateOnIntertrialConfiguration:
+        return self._active_config.auto_close_gate_on_intertrial
 
     @property
     def pellet_delivery_enabled(self) -> bool:
@@ -671,24 +686,22 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return self.pellet_missing_time
 
     @property
-    def intersession_enabled(self) -> bool:
-        return self._active_config.pellet_delivery.is_intersession_analysis_enabled
+    def intertrial_enabled(self) -> bool:
+        return self._active_config.pellet_delivery.is_intertrial_analysis_enabled
 
-    @intersession_enabled.setter
-    def intersession_enabled(self, value: bool):
+    @intertrial_enabled.setter
+    def intertrial_enabled(self, value: bool):
         cfg = self._active_config.pellet_delivery
-        prev, cfg.is_intersession_analysis_enabled = cfg.is_intersession_analysis_enabled, value
-        self._on_property_changed(BehaviorAlgoProps.INTERSESSION_ENABLED, value, prev)
+        prev, cfg.is_intertrial_analysis_enabled = cfg.is_intertrial_analysis_enabled, value
+        self._on_property_changed(BehaviorAlgoProps.INTERTRIAL_ENABLED, value, prev)
 
     @property
-    def intersession_pellet_shift_enabled(self) -> bool:
-        return self._active_config.pellet_delivery.is_intersession_pellet_shift_enabled
+    def intertrial_pellet_shift_enabled(self) -> bool:
+        return self._active_config.pellet_delivery.is_intertrial_pellet_shift_enabled
 
-    @intersession_pellet_shift_enabled.setter
-    def intersession_pellet_shift_enabled(self, value: bool):
-        self._active_config.pellet_delivery.is_intersession_pellet_shift_enabled = value
-        # prev, self._intersession_pellet_shift_enabled = self._intersession_pellet_shift_enabled, value
-        # self._on_property_changed(BehaviorAlgoProps.INTERSESSION_PELLET_SHIFT_ENABLED, value, prev)
+    @intertrial_pellet_shift_enabled.setter
+    def intertrial_pellet_shift_enabled(self, value: bool):
+        self._active_config.pellet_delivery.is_intertrial_pellet_shift_enabled = value
 
     @property
     def head_fixation_enabled(self) -> bool:
@@ -706,12 +719,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             self._on_property_changed(BehaviorAlgoProps.HEAD_FIXATION_ENABLED, value, prev)
 
     @property
-    def clean_raw_data_on_inactive_session(self):
-        return self._clean_raw_data_on_inactive_session
+    def clean_raw_data_on_inactive_trial(self):
+        return self._clean_raw_data_on_inactive_trial
 
-    @clean_raw_data_on_inactive_session.setter
-    def clean_raw_data_on_inactive_session(self, value):
-        self._clean_raw_data_on_inactive_session = value
+    @clean_raw_data_on_inactive_trial.setter
+    def clean_raw_data_on_inactive_trial(self, value):
+        self._clean_raw_data_on_inactive_trial = value
 
     # auto/head clamp
 
@@ -819,12 +832,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._recording_prebuffer_duration = value
 
     @property
-    def session_minimum_duration(self) -> float:
-        return self._sess_min_duration
+    def trial_minimum_duration(self) -> float:
+        return self._trial_min_duration
 
-    @session_minimum_duration.setter
-    def session_minimum_duration(self, value: float):
-        self._sess_min_duration = value
+    @trial_minimum_duration.setter
+    def trial_minimum_duration(self, value: float):
+        self._trial_min_duration = value
 
     #
 
@@ -934,13 +947,13 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._on_property_changed(BehaviorAlgoProps.TOTAL_PELLET_COUNT, value, prev)
 
     @property
-    def session_pellet_loaded_count(self) -> int:
-        return self._session_pellet_loaded_count
+    def trial_pellet_loaded_count(self) -> int:
+        return self._trial_pellet_loaded_count
 
-    @session_pellet_loaded_count.setter
-    def session_pellet_loaded_count(self, value):
-        prev, self._session_pellet_loaded_count = self._session_pellet_loaded_count, value
-        self._on_property_changed(BehaviorAlgoProps.SESSION_PELLET_COUNT, value, prev)  # property unused
+    @trial_pellet_loaded_count.setter
+    def trial_pellet_loaded_count(self, value):
+        prev, self._trial_pellet_loaded_count = self._trial_pellet_loaded_count, value
+        self._on_property_changed(BehaviorAlgoProps.TRIAL_PELLET_COUNT, value, prev)  # property unused
 
     def increase_pellets_consumed(self, increment: int = 1):
         self.pellet_consumed_day += increment
@@ -1089,12 +1102,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     #
 
     @property
-    def auto_end_session_config(self) -> AutoEndSessionConfiguration:
-        return self._active_config.auto_end_session
+    def auto_end_trial_config(self) -> AutoEndTrialConfiguration:
+        return self._active_config.auto_end_trial
 
     @property
-    def batch_session_recording_config(self) -> BatchSessionRecordingConfiguration:
-        return self._active_config.batch_session_recording
+    def batch_trial_recording_config(self) -> BatchTrialRecordingConfiguration:
+        return self._active_config.batch_trial_recording
 
     @property
     def auto_correct_motors_drift(self) -> bool:
@@ -1116,29 +1129,29 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     #
 
-    def start_session(self, *, reason: str = "NA"):
+    def start_trial_capture(self, *, reason: str = "NA"):
         """Start a session/trial recording"""
         with self._thread_lock:
-            return self._start_session(reason=reason)
+            return self._start_trial(reason=reason)
 
-    def _start_session(self, *, reason: str = "NA"):
-        if self._is_in_session:
-            logger.warning("%s: start_session() called but already in session", reason)
+    def _start_trial(self, *, reason: str = "NA"):
+        if self._is_in_trial:
+            logger.warning("%s: start_trial() called but already in trial", reason)
             return False
         if self._algo_paused:
-            logger.error("%s: refusing start session when algo paused", reason)
+            logger.error("%s: refusing start trial when algo paused", reason)
             return False
 
         project = self._project_info
         if not project.is_valid():
-            logger.error("%s: refusing start session when project not valid: %s", reason, project)
+            logger.error("%s: refusing start trial when project not valid: %s", reason, project)
             return False
 
-        logger.success("%s: starting new session recording ...", reason)
-        self._is_in_session = True
-        self._session_started_perf_c = get_perf_now()
-        self._start_session_reason = reason
-        self.reset_session_pellet_count()
+        logger.success("%s: starting new trial recording ...", reason)
+        self._is_in_trial = True
+        self._trial_started_perf_c = get_perf_now()
+        self._start_trial_reason = reason
+        self.reset_trial_pellet_count()
 
         project.calculate_next_trial_index()
         self._event_manager.post_api_event(build_event(
@@ -1146,19 +1159,19 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             {"root": project.root, "session_id": project.session_id, "trial_id": project.trial}))
 
         # ensure we look at their state on start:
-        self._session_mouse_seen = False
+        self._trial_mouse_seen = False
         self._uncover_ctx.reset()  # always
 
-        self.session_starting_before_record_start()
+        self.trial_starting_before_record_start()
 
         # this is what send the trigger the enable recording at camera level,
-        # but must be done after calculate next session index !!
+        # but must be done after calculate next trial index !!
         post_trigger_enable(self, True)
 
-        # here ideally we should wait all involved elements are in the session-recording-in-progress state,
+        # here ideally we should wait all involved elements are in the trial-recording-in-progress state,
         # given it's an async task.
 
-        self.session_starting()
+        self.trial_starting()
 
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialStarted,
@@ -1166,52 +1179,52 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         return True
 
-    def end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
+    def end_capture_trial(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         with self._thread_lock:
-            return self._end_capture_session(reason=reason)
+            return self._end_capture_trial(reason=reason)
 
-    def _end_capture_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
-        if not self._is_in_session:
-            logger.warning("%s: end_session() called but not in session (out reason: %s)",
-                           reason, self._stop_session_reason)
+    def _end_capture_trial(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
+        if not self._is_in_trial:
+            logger.warning("%s: end_capture_trial() called but not in trial (out reason: %s)",
+                           reason, self._stop_trial_reason)
             return False
-        self._timer_end_capture_session.cancel()  # always
+        self._timer_end_capture_trial.cancel()  # always
         p_now = get_perf_now()
-        sess_duration = p_now - self._session_started_perf_c
-        miss_delay = self._sess_min_duration - sess_duration
+        sess_duration = p_now - self._trial_started_perf_c
+        miss_delay = self._trial_min_duration - sess_duration
         if miss_delay > 0 and reason != RecordingEndingReason.ALGO_PAUSED:
-            logger.verbose("current trial record too short, delaying end_capture_session of %.1f",
+            logger.verbose("current trial record too short, delaying end_capture_trial of %.1f",
                            miss_delay)
-            timer = self._timer_end_capture_session = make_daemon_timer(
-                miss_delay, partial(self.end_capture_session, reason=reason))
+            timer = self._timer_end_capture_trial = make_daemon_timer(
+                miss_delay, partial(self.end_capture_trial, reason=reason))
             timer.start()
             return False
-        logger.success("%s: stopping session recording ; system_state=%s capture=%s intersession_state=%s",
-                       reason, self._system_state, self._capture_status, self._intersession_state)
-        self._is_in_session = False  # must be ~first, to ensure next actions/callbacks don't see it as True
-        # but must be at least before self.session_ending() here after, given test_covered_load_cycle rely on that atm.
-        self._stop_session_reason = reason
+        logger.success("%s: stopping trial recording ; system_state=%s capture=%s intertrial_state=%s",
+                       reason, self._system_state, self._capture_status, self._intertrial_state)
+        self._is_in_trial = False  # must be ~first, to ensure next actions/callbacks don't see it as True
+        # but must be at least before self.trial_ending() here after, given test_covered_load_cycle rely on that atm.
+        self._stop_trial_reason = reason
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialCaptureEnded,
             {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
         with self.set_allow_reentrant(True):
-            self.session_capture_ending(reason)
+            self.trial_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
         return True
 
-    def end_session(self, project: ProjectInfo, result: CaptureAnalysisResult):
-        """called on end of a full "session" handling, analysis on it possibly included, if not delayed.
+    def end_trial(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        """called on end of a full trial handling, analysis on it possibly included, if not delayed.
         But this is still called from system machine when analysis is delayed.
         """
-        logger.notice("session processing end: %s ; project=%s", result, project)
+        logger.notice("trial processing end: %s ; project=%s", result, project)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialEnded,
             {"session_id": project.session_id, "trial_id": project.trial, "result": result}))
-        self.session_ending(project, result)
+        self.trial_ending(project, result)
 
-    def reset_session_pellet_count(self):
-        self.session_pellet_loaded_count = 0
+    def reset_trial_pellet_count(self):
+        self.trial_pellet_loaded_count = 0
 
     @property
     def pellet_presence_age(self) -> float:
@@ -1251,7 +1264,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 if self.is_pellet_recently_seen(use_any_cam=True):
                     return True
                 return False
-        if not self._is_in_session:
+        if not self._is_in_trial:
             return False
         if self._head_fixation_enabled and cfg.head_clamp.wait_engaged_before_send_pellet:
             return self._autoclamp_in_progress
@@ -1320,10 +1333,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         need_load = self.would_load_pellet(delivery_cfg=cfg, pellet_state=pellet_state, use_any_cam=use_any_cam,
                                            perf_now=perf_now)
         if need_load:
-            if self._system_state == SystemState.intersession:
+            if self._system_state == SystemState.intertrial:
                 p_now = get_perf_now()
                 if p_now - self._prev_can_load_pellet_log_refuse_perf_c > 1:
-                    logger.verbose("refusing can_load_pellet given intersession")
+                    logger.verbose("refusing can_load_pellet given intertrial in progress")
                     self._prev_can_load_pellet_log_refuse_perf_c = p_now
                 return False
             return True
@@ -1352,7 +1365,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         uncov_cfg = self._active_config.pellet_uncover
         if self.can_cover_pellet():
             ctx = self._uncover_ctx
-            if self._is_in_session and pellet_state == PelletState.monitoring:
+            if self._is_in_trial and pellet_state == PelletState.monitoring:
                 p_now = get_perf_now()
                 return (
                         # this 1st condition might not be necessary anymore
@@ -1361,17 +1374,6 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 )
             return False
         return True
-
-        # TODO: Covering for session counts is on hold due to a) not knowing actual consumed, only load cycles (
-        # determining consumed happens during intersession) and b) need to determine whether said limit should
-        # reset per session or per tunnel entrance (which can have multiple "sessions" when a pellet is dropped).
-        # if not self.pellet_cover_enabled:
-        #    if self.system_state == SystemState.tunnel:
-        #        return self.session_pellet_count <= self.limits.max_pellets_per_session
-        #    else:
-        #        return True
-        #
-        # return self._is_in_session and self.session_pellet_count <= self.limits.max_pellets_per_session
 
     def can_retract_pellet(self, *, pellet_state: PelletState) -> bool:
         if (
@@ -1385,15 +1387,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         ):
             return False
         if not self._active_config.pellet_delivery.retract_enabled:
-            return self._system_state == SystemState.intersession
-        if not self._is_in_session:
+            return self._system_state == SystemState.intertrial
+        if not self._is_in_trial:
             return True
         if self._head_fixation_enabled and self._active_config.head_clamp.wait_engaged_before_send_pellet:
             return not self._autoclamp_in_progress
         return False
 
-    def can_perform_intersession_analysis(self):
-        return self._active_config.pellet_delivery.is_intersession_analysis_enabled and self._session_mouse_seen
+    def can_perform_intertrial_analysis(self):
+        return self._active_config.pellet_delivery.is_intertrial_analysis_enabled and self._trial_mouse_seen
 
     #
 
@@ -1425,7 +1427,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._parts_pres_ctx_all_cams.update_part_seen(part, seen, perf_now=perf_now)
 
     def pellet_loaded(self):
-        self.session_pellet_loaded_count += 1
+        self.trial_pellet_loaded_count += 1
 
     def update_triangle_seen(self, seen: bool):
         self.update_part_seen(
@@ -1440,12 +1442,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self.update_part_seen(SceneElement.Nose, seen, perf_now=perf_now)  # ensure presence_context gets updated
         if seen:
             self._mouse_seen_last_perf_c = perf_now
-        if self._is_in_session and seen:
-            prev_seen, self._session_mouse_seen = self._session_mouse_seen, True
+        if self._is_in_trial and seen:
+            prev_seen, self._trial_mouse_seen = self._trial_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
                 # property currently unused:
-                self._on_property_changed(BehaviorAlgoProps.SESSION_MOUSE_SEEN, True, False)
+                self._on_property_changed(BehaviorAlgoProps.TRIAL_MOUSE_SEEN, True, False)
                 self._event_manager.post_api_event(build_event(
                     ApiEventKind.trialAnimalSeen,
                     {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
@@ -1455,8 +1457,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         return get_perf_now() - self._mouse_seen_last_perf_c
 
     @property
-    def session_mouse_seen(self):
-        return self._session_mouse_seen
+    def trial_mouse_seen(self):
+        return self._trial_mouse_seen
 
     @property
     def active_config(self) -> BehaviorConfiguration:
@@ -1497,7 +1499,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._loaded_config = copy.deepcopy(config)
 
     def _load_pellet_cfg(self, cfg: PelletDeliveryConfiguration):
-        self.intersession_enabled = cfg.is_intersession_analysis_enabled
+        self.intertrial_enabled = cfg.is_intertrial_analysis_enabled
 
     @property
     def diamond_triangle_drift_data_points_size(self) -> int:
@@ -1603,14 +1605,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @property
     def trial_reaches(self) -> List[ReachEvent]:
-        prev = self._previous_intersession_analysis_rsp
+        prev = self._previous_intertrial_analysis_rsp
         if prev is None:
             return []
         rsp = prev[1]
         return rsp.reach_events
 
-    def set_previous_intersession_analysis_rsp(self, project: ProjectInfo, res: IntersessionResponse):
-        self._previous_intersession_analysis_rsp = (project, res)
+    def set_previous_intertrial_analysis_rsp(self, project: ProjectInfo, res: IntertrialResponse):
+        self._previous_intertrial_analysis_rsp = (project, res)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialReachEvents,
             {"session_id": project.session_id, "trial_id": project.trial,

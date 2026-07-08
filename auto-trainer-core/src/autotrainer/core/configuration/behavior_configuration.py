@@ -73,10 +73,10 @@ class ShiftXYZHandlerConfig:
 
 
 @dataclass
-class AutoCloseGateOnIntersessionConfiguration:
+class AutoCloseGateOnIntertrialConfiguration:
 
     enabled: bool = False  # enabled/disabled
-    session_min_duration: float = 5  # do not try close gate if session duration shorter than this
+    trial_min_duration: float = 5  # do not try close gate if session duration shorter than this
     delay_after_cage_enter: float = 2.5  # only close gate once this delay since cage enter has elapsed
 
 
@@ -121,10 +121,10 @@ class PelletDeliveryConfiguration:
     """If enabled: pellet is retracted by default. And wait send condition before pellet-send"""
 
     # not really related to pellet delivery but has been here since start:
-    is_intersession_analysis_enabled: bool = False
-    is_intersession_pellet_shift_enabled: bool = True
+    is_intertrial_analysis_enabled: bool = False
+    is_intertrial_pellet_shift_enabled: bool = True
 
-    max_pellets_per_session: int = 10  # actually unused
+    max_pellets_per_trial: int = 10  # actually unused
     max_pellets_per_day: int = 50  # actually unused
     max_pellet_missing_seconds: float = 1.0  # how long to wait before load pellet when pellet missing/not seen
     # this help ensure we don't execute a load pellet if we get an incorrect pose_result with pellet seen == False,
@@ -189,7 +189,7 @@ class HeadClampConfiguration:
 
 
 @dataclasses.dataclass
-class AutoEndSessionConfiguration:
+class AutoEndTrialConfiguration:
     # enabled: bool = True
 
     no_activity_delay_minutes: int = 1
@@ -202,7 +202,7 @@ class AutoEndSessionConfiguration:
 
 
 @dataclasses.dataclass
-class BatchSessionRecordingConfiguration:
+class BatchTrialRecordingConfiguration:
 
     enabled: bool = False
 
@@ -235,10 +235,10 @@ class _BehaviorConfiguration:
     audio: AudioSpectrumThrashMonitorConfig = field(default_factory=AudioSpectrumThrashMonitorConfig)
     emergency_alarm: EmergencyAlarmConfiguration = field(default_factory=EmergencyAlarmConfiguration)
     topcam_presence_detection: PresenceDetectionConfig = field(default_factory=PresenceDetectionConfig)
-    auto_end_session: AutoEndSessionConfiguration = field(default_factory=AutoEndSessionConfiguration)
+    auto_end_trial: AutoEndTrialConfiguration = field(default_factory=AutoEndTrialConfiguration)
     auto_tunnel_sweep: AutoTunnelSweepConfiguration = field(default_factory=AutoTunnelSweepConfiguration)
-    batch_session_recording: BatchSessionRecordingConfiguration = field(default_factory=BatchSessionRecordingConfiguration)
-    auto_close_gate_on_intersession: AutoCloseGateOnIntersessionConfiguration = field(default_factory=AutoCloseGateOnIntersessionConfiguration)
+    batch_trial_recording: BatchTrialRecordingConfiguration = field(default_factory=BatchTrialRecordingConfiguration)
+    auto_close_gate_on_intertrial: AutoCloseGateOnIntertrialConfiguration = field(default_factory=AutoCloseGateOnIntertrialConfiguration)
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
     autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
@@ -273,12 +273,17 @@ class _BehaviorConfiguration:
         baseline = headclamp.pop('min_baseline_intensity')
         if baseline is not None:
             headclamp['baseline_intensity'] = baseline
+        pellet_dev = content.get("pellet_delivery", {})
+        if "is_intersession_analysis_enabled" in pellet_dev:
+            pellet_dev["is_intertrial_analysis_enabled"] = pellet_dev.pop("is_intersession_analysis_enabled")
+        if "max_pellets_per_session" in pellet_dev:
+            pellet_dev["max_pellets_per_trial"] = pellet_dev.pop("max_pellets_per_session")
         return cls(
             load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),
             headbar_pressure=HeadbarPressureConfiguration(**content.get("headbar_pressure", {})),
             auto_tare=LoadCellAutoTareConfiguration(**content.get("auto_tare", {})),
             head_clamp=HeadClampConfiguration(**headclamp),
-            pellet_delivery=PelletDeliveryConfiguration(**content.get("pellet_delivery", {})),
+            pellet_delivery=PelletDeliveryConfiguration(**pellet_dev),
         )
 
 
@@ -309,10 +314,10 @@ _tag_2_cls = dict(
     EmergencyAlarmConfiguration=EmergencyAlarmConfiguration,
     PresenceDetectionConfiguration=PresenceDetectionConfig,
     ExternalDoorsMonitorConfiguration=ExternalDoorsAlarmConfig,
-    AutoEndSessionConfiguration=AutoEndSessionConfiguration,
+    AutoEndSessionConfiguration=AutoEndTrialConfiguration,
     AutoTunnelSweepConfiguration=AutoTunnelSweepConfiguration,
-    BatchSessionRecordingConfiguration=BatchSessionRecordingConfiguration,
-    AutoCloseGateOnIntersessionConfiguration=AutoCloseGateOnIntersessionConfiguration,
+    BatchSessionRecordingConfiguration=BatchTrialRecordingConfiguration,
+    AutoCloseGateOnIntersessionConfiguration=AutoCloseGateOnIntertrialConfiguration,
     HomeOnExcessiveDriftDistance=HomeOnExcessiveDriftDistanceConfiguration,  # missed Configuration suffix
     # ShiftXYZTarget="ShiftXYZTarget",  # replaced by Offset3dTuple.
     ShiftXYZHandlerConfiguration=ShiftXYZHandlerConfig,

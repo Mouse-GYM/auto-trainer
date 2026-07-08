@@ -11,7 +11,7 @@ from autotrainer.core import transitions_allow_functions, SystemMessageHandler, 
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
 
-from ..intersession import IntersessionState
+from ..intertrial import IntertrialState
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine, StateMachineEvents
@@ -412,15 +412,15 @@ class PelletMachine(StateMachine):
 
         def logit():
             logger.verbose(
-                "try_next_state cur=%s from %s: %s -> from_inference=%s in_session=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
-                "session_mouse_seen=%s session_pellet_count=%s must_release=%s "
-                "algo_system_state=%s intersession_state=%s "
+                "try_next_state cur=%s from %s: %s -> from_inference=%s in_trial=%s pellet_seen=%s recently=%s triangle_recently_seen=%s "
+                "trial_mouse_seen=%s trial_pellet_count=%s must_release=%s "
+                "algo_system_state=%s intertrial_state=%s "
                 "pellet_seen_age=%.1fsec covered_state=%s",
                 cur_state, caller, reason, is_from_inference,
-                algo.is_in_session, pellet_seen,
+                algo.is_in_trial_capture, pellet_seen,
                 algo.pellet_recently_seen, algo.triangle_recently_seen,
-                algo.session_mouse_seen, algo.session_pellet_loaded_count, must_release,
-                algo.system_state, algo.intersession_state, algo.pellet_presence_age, self._covered_state,
+                algo.trial_mouse_seen, algo.trial_pellet_loaded_count, must_release,
+                algo.system_state, algo.intertrial_state, algo.pellet_presence_age, self._covered_state,
             )
 
         perf_now = get_perf_now()
@@ -440,7 +440,7 @@ class PelletMachine(StateMachine):
             elif triangle_seen_any and not pellet_seen_any:
                 self._check_notify_pellet_load_failed(perf_now=perf_now)
 
-        if (algo.system_state == SystemState.intersession
+        if (algo.system_state == SystemState.intertrial
             and cur_state != PelletState.retract
             and algo.can_retract_pellet(pellet_state=cur_state)
         ):

@@ -64,7 +64,7 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
     def _make_to_monitoring(self):
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
-        self.start_session_in_tunnel(set_recording_status=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
 
@@ -108,7 +108,7 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
             assert self.pellet_dev.send_home.call_args_list == [], "not enabled"
 
     @pytest.mark.parametrize("min_samples", [5, 15])
-    def test_during_session_with_drift(self, min_samples):
+    def test_during_trial_with_drift(self, min_samples):
         algo = self.algo
         cfg = algo.home_on_excessive_drift_distance_config
         cfg.min_samples = min_samples
@@ -119,17 +119,17 @@ class TestHomeOnExcessiveDrift(MockSystemMachine):
         ended_reasons = []
         def capture_ended(reason):
             ended_reasons.append(reason)
-        algo.session_capture_ending += capture_ended
+        algo.trial_capture_ending += capture_ended
         assert self.pellet_dev.send_home.call_args_list == []
         #
         self.mock_pose_response(pellet_seen=True)
         # algo.update_pellet_seen(True)
         algo.active_config.pellet_delivery.pellet_send_wait_delay = 0
         algo.record_prebuffer_duration = 0
-        self.start_session_in_tunnel(set_recording_status=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
-        assert algo.is_in_session
+        assert algo.is_in_trial_capture
         self._execute_pose_responses(rsp, min_samples)
         assert self.pellet_dev.send_home.call_args_list == [mock.call()], "pellet.send_home() should have been called"
-        assert not algo.is_in_session, "capture session should have been ended"
+        assert not algo.is_in_trial_capture, "capture session should have been ended"
         assert ended_reasons == [RecordingEndingReason.MOTOR_DRIFT_HOMING]

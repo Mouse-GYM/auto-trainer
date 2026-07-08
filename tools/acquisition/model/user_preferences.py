@@ -37,7 +37,7 @@ class UserPreferences(ObservableObject):
     ANIMAL_LOCATION = "animal_location"
     PELLET_PORT = "pellet_port"
     TUNNEL_PORT = "tunnel_port"
-    REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION = "remove_raw_data_when_inactive_session"
+    REMOVE_RAW_DATA_WHEN_INACTIVE_TRIAL = "remove_raw_data_when_inactive_trial"
     MEASUREMENT_GRAPH = "measurement_graph"
     PELLET_LOAD_COUNT_TOTAL = "pellet_load_count_total"
     PELLET_LOAD_COUNT_DAY = "pellet_load_count_day"
@@ -117,7 +117,7 @@ class UserPreferences(ObservableObject):
         self._tunnel_port = None
         self._pellet_port = None
 
-        self._remove_raw_data_when_inactive_session: bool = False
+        self._remove_raw_data_when_inactive_trial: bool = False
 
     def save(self):
         logger.verbose("Saving ini config to %s", self._settings.fileName())
@@ -223,13 +223,13 @@ class UserPreferences(ObservableObject):
         self._on_property_changed(self.TUNNEL_PORT, value, prev)
 
     @property
-    def remove_raw_data_when_inactive_session(self) -> bool:
-        return self._remove_raw_data_when_inactive_session
+    def remove_raw_data_when_inactive_trial(self) -> bool:
+        return self._remove_raw_data_when_inactive_trial
 
-    @remove_raw_data_when_inactive_session.setter
-    def remove_raw_data_when_inactive_session(self, value):
-        prev, self._remove_raw_data_when_inactive_session = self._remove_raw_data_when_inactive_session, value
-        self._on_property_changed(self.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION, value, prev)
+    @remove_raw_data_when_inactive_trial.setter
+    def remove_raw_data_when_inactive_trial(self, value):
+        prev, self._remove_raw_data_when_inactive_trial = self._remove_raw_data_when_inactive_trial, value
+        self._on_property_changed(self.REMOVE_RAW_DATA_WHEN_INACTIVE_TRIAL, value, prev)
 
     @property
     def measurement_graph(self) -> str:

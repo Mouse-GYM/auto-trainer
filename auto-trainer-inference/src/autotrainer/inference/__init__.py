@@ -14,7 +14,7 @@ class InferenceStatus(str, Enum):
     loading = "Loading"
     waiting = "Waiting"
     live = "Live"
-    intersession = "Intersession"
+    intertrial = "Intertrial"
     stopping = "Stopping"
 
 
@@ -23,8 +23,8 @@ class InferenceMonitorDataMsg(str, Enum):
     SET_PROJECT_INFO = "set_project_info"
     SET_POSE_ALGO = "set_pose_algo"
     POSE_RESULT_READY = "pose_result_ready"
-    INTERSESSION_SEGMENTATION_FINISHED = "intersession_segmentation_finished"
-    SET_FEED_INTERSESSION_RESULT = "set_feed_intersession_result"
+    INTERTRIAL_SEGMENTATION_FINISHED = "intertrial_segmentation_finished"
+    SET_FEED_INTERTRIAL_RESULT = "set_feed_intertrial_result"
 
 #
 

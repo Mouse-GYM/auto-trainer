@@ -175,7 +175,7 @@ class OfflineInputProcess:
         self._cur_batch_nr = 0
         self._cur_project_info = project_info
         cur_th = self._cur_thread = threading.Thread(
-            target=self._feed_intersession_analysis,
+            target=self._feed_intertrial_analysis,
             args=(project_info, wait_stop_recorded),
             name="OfflineRead",
             daemon=True,
@@ -223,7 +223,7 @@ class OfflineInputProcess:
     def release_output(self):
         self._sema_free.release()
 
-    def _put_intersession_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 5) -> bool:
+    def _put_intertrial_frame(self, capture, cam_index: int, frame_idx: int, *, timeout: float = 5) -> bool:
         ret, frame = capture.read()
         if not ret:
             logger.warning("cam-%s: unexpected end of video at index %s", cam_index, frame_idx)
@@ -270,27 +270,27 @@ class OfflineInputProcess:
                                 for idx in range(self._nr_cams * self._frames_per_cam)])
         return True
 
-    def _feed_intersession_analysis(self, project, wait_stop_recorded):
+    def _feed_intertrial_analysis(self, project, wait_stop_recorded):
         try:
-            self._feed_intersession_analysis_execute(project, wait_stop_recorded)
+            self._feed_intertrial_analysis_execute(project, wait_stop_recorded)
         except InferenceIncorrectStatus as err:
             got_error = err
         except Exception as err:
-            logger.exception("_feed_intersession_analysis: error: %s", err)
+            logger.exception("_feed_intertrial_analysis: error: %s", err)
             got_error = err
         else:
             got_error = None
         #
         success = got_error is None
         if not success:
-            logger.error("feed_intersession_analysis stopped given error=%s prj=%s", got_error, project)
+            logger.error("feed_intertrial_analysis stopped given error=%s prj=%s", got_error, project)
         else:
-            logger.info("feed intersession finished. trial_project=%s", project)
+            logger.info("feed intertrial finished. trial_project=%s", project)
         #
-        # set/send the feed intersession result via synced messaged to the main process:
+        # set/send the feed intertrial result via synced messaged to the main process:
         self._event_cb_ack.clear()
         self._send_msg(
-            InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT,
+            InferenceMonitorDataMsg.SET_FEED_INTERTRIAL_RESULT,
             (
                 (project, None if success else str(got_error)),  # args
                 dict(event=self._event_cb_ack),  # kwargs
@@ -312,7 +312,7 @@ class OfflineInputProcess:
             for cdx in range(self._nr_cams):
                 self._put_block(self._empty_frame, cdx, FrameIndexCategory.EOF_OFFLINE_PROCESSING)
 
-    def _feed_intersession_analysis_execute(self, project, wait_stop_recorded):
+    def _feed_intertrial_analysis_execute(self, project, wait_stop_recorded):
         captures_d: Dict[int, cv2.VideoCapture] = {}
         cams = (project.camera_1, project.camera_2)
         n_cams = len(cams)
@@ -342,7 +342,7 @@ class OfflineInputProcess:
             logger.debug("waiting stop_recorded on %s", self._stop_recorded)
             while not self._stop_recorded.wait(0.1):
                 if get_perf_now() > perf_timeout:
-                    logger.warning("timeout waiting for intersession stop_recorded event ; but continuing")
+                    logger.warning("timeout waiting for intertrial stop_recorded event ; but continuing")
                     break
                 check_correct_status()
             self._stop_recorded.clear()
@@ -398,7 +398,7 @@ class OfflineInputProcess:
             count_loops += 1
             if get_perf_now() > perf_timeout:
                 close_captures()
-                raise RuntimeError(f"timeout waiting for intersession video files {video_paths}")
+                raise RuntimeError(f"timeout waiting for intertrial video files {video_paths}")
             time.sleep(0.1)  # overkill to immediately retry
 
         logger.debug("Waited %.1fs (count_loops=%s) for video files ready",
@@ -423,7 +423,7 @@ class OfflineInputProcess:
             h5files = []
             try:
                 for cdx, cam in enumerate(cams):
-                    h5fh, h5dss = open_h5_file(project.get_intersession_pose_path(cam, suffix="_live"))
+                    h5fh, h5dss = open_h5_file(project.get_intertrial_pose_path(cam, suffix="_live"))
                     h5files.append(h5fh)
                     cams_already_processed_idx2.append([get_h5_frame_index(h5row) for h5row in h5dss])
             finally:
@@ -501,7 +501,7 @@ class OfflineInputProcess:
                 if all_read[cdx]:
                     self._put_block(self._empty_frame, cdx, FrameIndexCategory.PADDING)
                 else:
-                    if not self._put_intersession_frame(cam_capture, cdx, cams_frame_idx[cdx]):
+                    if not self._put_intertrial_frame(cam_capture, cdx, cams_frame_idx[cdx]):
                         all_read[cdx] = True
                         self._put_block(self._empty_frame, cdx, FrameIndexCategory.PADDING)
                         # if we prematurely reach the end of the video stream then give a padding instead
@@ -525,7 +525,7 @@ class OfflineInputProcess:
                     fh.write("\n".join(map(str, chain(frames_idx_sent[cdx], [""]))))
 
         # total frame count: taking the min of all saved videos frame count:
-        # intersession_block.frame_count = min(videos_frame_count.values())
+        # intertrial_block.frame_count = min(videos_frame_count.values())
 
         logger.success("passed %s frames per camera frame_count=%s ; "
                        "tot_skipped_frames=%s cams_frame_idx=%s cams_sent_frame_count=%s",

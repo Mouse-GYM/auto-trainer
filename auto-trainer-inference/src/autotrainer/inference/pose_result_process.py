@@ -23,7 +23,7 @@ from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, s
     get_multiprocess_log_queue
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
-from .analysis.intersession_inference import intersession_inference
+from .analysis.intertrial_inference import intertrial_inference
 from .h5_tools import (
     get_h5_pose_data,
     get_h5_frame_index,
@@ -111,8 +111,8 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._watchdog_perf_c = watchdog_perf_c
         self._pose_algo: Optional[PoseAlgorithm] = None
         self._is_running = True
-        self._feed_intersession_project: Optional[ProjectInfo] = None
-        self._feed_intersession_error: Optional[str] = None
+        self._feed_intertrial_project: Optional[ProjectInfo] = None
+        self._feed_intertrial_error: Optional[str] = None
         self._tot_live_workers = tot_live_workers  # nbr live workers to use
         self._live_input_q = mp_ctx.Queue(maxsize=32)  # for live 3d processing
         self._live_new_workers: List[LivePoseResultProcessWorker] = []
@@ -181,16 +181,16 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                 self._pose_algo = pose_algo
             elif cmd is self.Msg.SET_PROJECT_INFO:
                 self._project = args[0]
-            elif cmd is self.Msg.SET_FEED_INTERSESSION_RESULT:
+            elif cmd is self.Msg.SET_FEED_INTERTRIAL_RESULT:
                 project, error = args
-                self._feed_intersession_project = project
-                self._feed_intersession_error = error
+                self._feed_intertrial_project = project
+                self._feed_intertrial_error = error
             self._cmd_ack_event.set()
 
     def _send_msg(self, msg, *args, block_msg_queue_put: bool=True, **kwargs):
         self._msg_queue.put((msg, (args, kwargs)), block=block_msg_queue_put)
 
-    def _intersession_offline_process(
+    def _intertrial_offline_process(
         self,
         project_info: ProjectInfo,
         perf_c_start_offline: float,
@@ -198,31 +198,31 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         range_cams, ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx,
         cams_read_h5_dss, cams_read_h5_fhs,
     ):
-        feed_prj = self._feed_intersession_project
+        feed_prj = self._feed_intertrial_project
         try:
             if feed_prj != project_info:
                 raise RuntimeError(f"Projects mismatch: feed={feed_prj} pose_data_process={project_info}")
-            feed_error = self._feed_intersession_error
+            feed_error = self._feed_intertrial_error
             if feed_error is not None:
                 raise RuntimeError(f"feed analysis failed with {feed_error}")
             logger.notice(
-                "Processing intersession offline post-process on %s", project_info
+                "Processing intertrial offline post-process on %s", project_info
             )
-            shape = self._intersession_offline_process2(
+            shape = self._intertrial_offline_process2(
                 project_info, perf_c_start_offline, pose_algo, range_cams,
                 ib_pose_data_list, ib_pose_data_dict, cams_read_h5_idx, cams_read_h5_dss
             )
         except Exception as err:
-            logger.exception("Error during intersession_inference: %s", err)
+            logger.exception("Error during intertrial_inference: %s", err)
             success = False
             error = str(err)
         else:
             success = True
             error = None
         close_h5_fhs(cams_read_h5_fhs)
-        self._send_msg(self.Msg.INTERSESSION_SEGMENTATION_FINISHED, project_info, success, error=error)
+        self._send_msg(self.Msg.INTERTRIAL_SEGMENTATION_FINISHED, project_info, success, error=error)
 
-    def _intersession_offline_process2(
+    def _intertrial_offline_process2(
         self,
         project_info: ProjectInfo,
         perf_c_start_offline: float,
@@ -294,12 +294,12 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                            is_same, final_pose_data.shape, final_pose_data_prev.shape)
 
         logger.info("assembled %s pose responses, speed=%.3f/s (vstack=%s)"
-                  " now calling intersession_inference() ; shape=%s",
+                  " now calling intertrial_inference() ; shape=%s",
                   min_nbr_pd,
                    2 * min_nbr_pd / (time.perf_counter() - perf_c_start_offline),
                    final_pose_data.shape[0], final_pose_data.shape)
 
-        intersession_inference(final_pose_data, pose_algo.part_names, project_info)
+        intertrial_inference(final_pose_data, pose_algo.part_names, project_info)
         logger.success("fully processed session-%s inference with %s total pose responses",
                        project_info.trial, final_pose_data.shape[0])
         return final_pose_data.shape
@@ -611,7 +611,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                     _, _, p_indices = cur_local_prj.get_video_path(cam, allow_overwrite=True)
                     cams_frame_idx_fhs.append(Path(p_indices).open("w"))
                     pose_path = Path(
-                        cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
+                        cur_local_prj.get_intertrial_pose_path(cam, suffix="_live"))
                     # ensure live data files are not reused from eventual previous trial,
                     # although that would be an issue of project/session reuse then.
                     write_h5_batch(pose_path, [], [],
@@ -711,7 +711,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         cur_local_prj = self._project.to_local_value()
                         # re-obtain the paths, project info might be from a batch session
                         pose_paths = [
-                            Path(cur_local_prj.get_intersession_pose_path(cam, suffix="_live"))
+                            Path(cur_local_prj.get_intertrial_pose_path(cam, suffix="_live"))
                             for cam in cams
                         ]
                         cams_read_h5_dss = []
@@ -728,7 +728,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                         tot_skipped = 0
 
                     if pose_data is None:
-                        # end of intersession/offline replay
+                        # end of intertrial/offline replay
                         # cur_local_prj = self._project.to_local_value()
                         logger.info("detected end of inference offline processing ; project=%s",
                                        cur_local_prj)
@@ -748,7 +748,7 @@ class InferenceMonitorDataProc(multiprocessing.Process):
                             thread_post_process = None
                         thread_post_process = threading.Thread(
                             name="OfflineProcess",
-                            target=self._intersession_offline_process,
+                            target=self._intertrial_offline_process,
                             args=(
                                 cur_local_prj,
                                 perf_c_start_offline,

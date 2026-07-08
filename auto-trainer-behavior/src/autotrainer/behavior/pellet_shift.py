@@ -15,7 +15,7 @@ from autotrainer.core.reach_event import ReachEventOutcome, ReachEventMethod
 
 from autotrainer.behavior import BehaviorAlgorithm
 
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 logger = get_verbose_logger(__name__)
 
@@ -37,9 +37,9 @@ class ShiftXYZBaseHandler(abc.ABC):
 
     @abc.abstractmethod
     def __call__(
-        self, rsp: IntersessionResponse, *, reduce_method=mean_method,
+        self, rsp: IntertrialResponse, *, reduce_method=mean_method,
     ) -> Optional[Offset3DTuple]:
-        """Process/accumulate one intersession response,
+        """Process/accumulate one intertrial response,
         return None if the response does not generate yet a full shift XYZ result"""
 
     @abc.abstractmethod
@@ -65,7 +65,7 @@ class ShiftXYZBufferHandler(ShiftXYZBaseHandler):
     def reset(self):
         self._failed_reaches_buffer.clear()
 
-    def __call__(self, rsp: IntersessionResponse, *, reduce_method=mean_method):
+    def __call__(self, rsp: IntertrialResponse, *, reduce_method=mean_method):
         current_buffer = self._failed_reaches_buffer
         current_buffer.extend(rsp.rh_max_vp_list)
         cfg = self._config
@@ -180,10 +180,10 @@ class ShiftXYZHandler(ObservableObject):
     def set_processed_handler(self, func: ProcessedShiftXYZCallbackHandlerT):
         self._processed_shift_handler = func
 
-    def put_intersession_response(
+    def put_intertrial_response(
         self,
         project: ProjectInfo,
-        trial_result: IntersessionResponse,
+        trial_result: IntertrialResponse,
         *,
         is_batch: bool = False,
         is_first: bool = True,

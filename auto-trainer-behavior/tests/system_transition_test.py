@@ -16,11 +16,11 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     # assumptions.
     algo = machine.algorithm
     # some defaults:
-    assert algo.intersession_enabled is False
+    assert algo.intertrial_enabled is False
     assert machine.state == SystemState.cage
 
     with pytest.raises(MachineError):
-        machine.exit_intersession_to_cage(algo.project)
+        machine.exit_intertrial_to_cage(algo.project)
 
     with pytest.raises(MachineError):
         machine.exit_tunnel()
@@ -35,25 +35,25 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
 
     assert machine.state == SystemState.cage
 
-    algo.intersession_enabled = True
+    algo.intertrial_enabled = True
 
     machine._analysis.load_cell_monitor.is_engaged = True
 
-    assert algo.is_in_session
+    assert algo.is_in_trial_capture
     assert machine.state == SystemState.tunnel
 
-    algo.update_mouse_seen(True)  # required for intersession analysis !!
+    algo.update_mouse_seen(True)  # required for intertrial analysis !!
 
     with mock_system.mock_perform_segmentation() as m_perf_segm:
         assert m_perf_segm.call_args_list == []
         machine.exit_tunnel()
 
     assert m_perf_segm.call_args_list == [
-        mock.call(machine.intersession._segmentation_configuration)
+        mock.call(machine.intertrial._segmentation_configuration)
     ]
 
-    # Test with intersession enabled.
-    assert machine.state == SystemState.intersession
+    # Test with intertrial enabled.
+    assert machine.state == SystemState.intertrial
 
     with pytest.raises(MachineError):
         machine.enter_tunnel()
@@ -61,6 +61,6 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
     with pytest.raises(MachineError):
         machine.exit_tunnel()
 
-    machine.exit_intersession_to_cage(algo.project)
+    machine.exit_intertrial_to_cage(algo.project)
 
     assert machine.state == SystemState.cage

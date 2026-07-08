@@ -46,14 +46,14 @@ def _drain(manager: EventManager):
 
 class TestApiEventPayloads(MockSystemMachine):
 
-    def test_session_start_events_carry_session_and_trial(self, machine):
+    def test_trial_start_events_carry_session_and_trial(self, machine):
         manager = EventManager.default()
         recorder = RecordingEventPlugin()
         manager.register_plugin(recorder)
 
         project = self.algo._project_info  # noqa: SLF001
         assert project.is_valid()
-        assert self.algo.start_session(reason="manual") is True
+        assert self.algo.start_trial_capture(reason="manual") is True
         _drain(manager)
 
         project_trial_changed = recorder.context_for(ApiEventKind.projectTrialChanged)
@@ -74,8 +74,8 @@ class TestApiEventPayloads(MockSystemMachine):
         manager.register_plugin(recorder)
 
         project = self.algo._project_info  # noqa: SLF001
-        assert self.algo.start_session(reason="manual") is True
-        assert self.algo.end_capture_session() is True
+        assert self.algo.start_trial_capture(reason="manual") is True
+        assert self.algo.end_capture_trial() is True
         _drain(manager)
 
         capture_ended = recorder.context_for(ApiEventKind.trialCaptureEnded)

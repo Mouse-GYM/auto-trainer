@@ -19,13 +19,13 @@ from top_fixtures import MockSystemMachine
 from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
-from autotrainer.behavior import IntersessionState
+from autotrainer.behavior import IntertrialState
 from autotrainer.core.interfaces import CaptureAnalysisResult
 from autotrainer.behavior import SystemState, SystemMachine
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletMachine
 
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 
 def test_enter_exit_tunnel(mock_system, machine):
@@ -40,12 +40,12 @@ def test_enter_exit_tunnel(mock_system, machine):
 
     NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, set_capture_triggered)
 
-    # Current code assumes intersession analysis is off by default.
-    assert algo.intersession_enabled is False
+    # Current code assumes intertrial analysis is off by default.
+    assert algo.intertrial_enabled is False
 
     # Defaults
     assert machine.state == SystemState.cage
-    assert algo.is_in_session is False
+    assert algo.is_in_trial_capture is False
     assert not algo.pellet_recently_seen
     algo.update_pellet_seen(True)
     assert algo.pellet_recently_seen
@@ -54,14 +54,14 @@ def test_enter_exit_tunnel(mock_system, machine):
     # Should trigger enter tunnel, new session, and associated changes.
     mock_system.make_load_cell_active()
 
-    assert algo.is_in_session is True
+    assert algo.is_in_trial_capture is True
     assert is_capture_triggered is True
     assert machine.state == SystemState.tunnel
 
     mock_system.make_load_cell_inactive()
 
     assert machine.state == SystemState.cage
-    assert algo.is_in_session is False
+    assert algo.is_in_trial_capture is False
     assert is_capture_triggered is False
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
@@ -69,7 +69,7 @@ def test_enter_exit_tunnel(mock_system, machine):
     ]
 
 
-def test_no_session_without_pellet(mock_system, machine: SystemMachine):
+def test_no_trial_without_pellet(mock_system, machine: SystemMachine):
     pellet_m = machine._pellet_machine
     algo = machine.algorithm
     assert isinstance(pellet_m, PelletMachine)
@@ -87,7 +87,7 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     pellet_m.events.pellet_loaded += pellet_loaded
 
     # before:
-    assert algo.is_in_session is False
+    assert algo.is_in_trial_capture is False
     assert load_attempt_count == 0
     assert not algo.triangle_recently_seen
     assert not algo.pellet_recently_seen
@@ -129,8 +129,8 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert not pellet_m.can_use_pellet_command() # but now cannot use
     assert pellet_m._api_status_token is pellet_m._token_pellet_load
 
-    mock_system.start_session_in_tunnel(set_recording_status=True)
-    assert algo.is_in_session is False, "without a pellet-seen session must not start"
+    mock_system.start_trial_in_tunnel(set_recording_status=True)
+    assert algo.is_in_trial_capture is False, "without a pellet-seen session must not start"
     assert pellet_m.state == PelletState.loading  # still monitoring
     assert machine.state == SystemState.tunnel  # but tunnel
 
@@ -144,7 +144,7 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
 
     mock_system.mock_pellet_ack()  # ack the load after pellet seen
 
-    assert algo.is_in_session is True
+    assert algo.is_in_trial_capture is True
     assert algo.pellet_recently_seen
 
     assert pellet_m.state == PelletState.retract
@@ -156,35 +156,35 @@ def test_no_session_without_pellet(mock_system, machine: SystemMachine):
     assert algo.pellet_recently_seen
     mock_system.mock_pellet_ack()  # ack the retract
     mock_system.make_load_cell_inactive()
-    assert not algo.is_in_session
+    assert not algo.is_in_trial_capture
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
     mock_system.machine_state_trans.clear()
 
-    mock_system.start_session_in_tunnel(set_recording_status=True)
+    mock_system.start_trial_in_tunnel(set_recording_status=True)
     mock_system.mock_pose_response(pellet_seen=True)
 
     assert algo.pellet_recently_seen
 
     assert mock_system.machine_state_trans == [SystemState.tunnel]
 
-    assert algo.is_in_session is True, "now that pellet-seen: is_in_session"
+    assert algo.is_in_trial_capture is True, "now that pellet-seen: is_in_session"
 
     mock_system.make_load_cell_inactive()
 
-    assert algo.is_in_session is False
+    assert algo.is_in_trial_capture is False
     assert mock_system.machine_state_trans == [SystemState.tunnel, SystemState.cage]
 
 
-def test_intersession_enabled(mock_system, machine):
+def test_intertrial_enabled(mock_system, machine):
     """
-    Placeholder for intersession analysis when ready.  Will not test details of intersession state machine, but that the
+    Placeholder for intertrial analysis when ready.  Will not test details of intertrial state machine, but that the
     system changes are as expected.
     :return: None
     """
     algo = machine.algorithm
     pellet_m = machine._pellet_machine
 
-    algo.intersession_enabled = True
+    algo.intertrial_enabled = True
     algo.pellet_cover_enabled = True
 
     assert machine.state == SystemState.cage
@@ -202,9 +202,9 @@ def test_intersession_enabled(mock_system, machine):
     assert pellet_m._api_status_token is not None  # but we wait the cover ack
     mock_system.mock_pellet_ack()
     
-    mock_system.start_session_in_tunnel(set_recording_status=True)  # this trigger a start session recording
+    mock_system.start_trial_in_tunnel(set_recording_status=True)  # this trigger a start session recording
 
-    assert algo.is_in_session
+    assert algo.is_in_trial_capture
     assert pellet_m.state == PelletState.retract
     assert machine.state == SystemState.tunnel
     assert algo.system_state == machine.state
@@ -220,13 +220,13 @@ def test_intersession_enabled(mock_system, machine):
         mock_system.make_load_cell_inactive()
         assert not machine._analysis.load_cell_monitor.is_engaged
 
-    assert algo.intersession_state == IntersessionState.segmentation
-    assert machine.state == SystemState.intersession
+    assert algo.intertrial_state == IntertrialState.segmentation
+    assert machine.state == SystemState.intertrial
     assert algo.system_state == machine.state
     assert mock_system.machine_state_trans == [
         SystemState.tunnel,
         SystemState.cage,
-        SystemState.intersession,
+        SystemState.intertrial,
     ]
     assert mock_system.pellet_state_trans == [
         PelletState.sending,
@@ -244,7 +244,7 @@ def test_intersession_enabled(mock_system, machine):
 
 def test_inference_detection_ready(machine):
     algo = machine.algorithm
-    result = IntersessionResponse(
+    result = IntertrialResponse(
         rh_max_vp_list=[Offset3DTuple(50, 0, 0)],
         food_consumed=20,
         pellets_presented=40,
@@ -271,36 +271,36 @@ def test_inference_detection_ready(machine):
 
 
 @pytest.mark.parametrize("feature_enabled", [False, True])
-def test_clean_raw_data_on_session_end(machine, project_info, feature_enabled):
+def test_clean_raw_data_on_trial_end(machine, project_info, feature_enabled):
     algo = machine.algorithm
     machine.project = project_info
-    algo.start_session()
-    algo.intersession_enabled = True
+    algo.start_trial_capture()
+    algo.intertrial_enabled = True
     # check with cam1 file paths:
     cam = project_info.camera_1
     file_paths = list(
         map(Path, chain(project_info.get_video_path(cam), [
-            project_info.get_intersession_pose_path(cam, suffix="_live")]))
+            project_info.get_intertrial_pose_path(cam, suffix="_live")]))
     )
     assert len(file_paths) > 0
     for p in file_paths:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.touch()
-    algo.clean_raw_data_on_inactive_session = feature_enabled
+    algo.clean_raw_data_on_inactive_trial = feature_enabled
     def patch_timer(delay, func):
         m = mock.create_autospec(Timer)
         m.start.side_effect = func
         return m
     with mock.patch("autotrainer.behavior.system_machine._clean_raw_data_timer", new=patch_timer):
-        algo.end_capture_session()
+        algo.end_capture_trial()
     for p in file_paths:
         assert not p.exists() if feature_enabled else p.exists()
 
 #
 
-class TestSessionProcessingEndingIntersessionDisabled(MockSystemMachine):
+class TestTrialProcessingEndingIntertrialDisabled(MockSystemMachine):
 
-    def test_when_intersession_disabled(self, machine):
+    def test_when_intertrial_disabled(self, machine):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -308,22 +308,22 @@ class TestSessionProcessingEndingIntersessionDisabled(MockSystemMachine):
             assert status == CaptureAnalysisResult.CAPTURE_ONLY
         #
         algo = machine.algorithm
-        algo.intersession_enabled = False
-        algo.session_ending += processing_ended
-        algo.start_session()
+        algo.intertrial_enabled = False
+        algo.trial_ending += processing_ended
+        algo.start_trial_capture()
         assert processing_ended_count == 0
-        algo.end_capture_session()
+        algo.end_capture_trial()
         assert processing_ended_count == 1
 
 
-class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
+class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
 
     def _init(self, machine: SystemMachine):
         super()._init(machine)
         algo = machine.algorithm
-        algo.intersession_enabled = True
+        algo.intertrial_enabled = True
 
-    def test_when_intersession_mouse_not_seen(self, machine):
+    def test_when_intertrial_mouse_not_seen(self, machine):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -331,18 +331,18 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
             assert status == CaptureAnalysisResult.CAPTURE_ONLY
         #
         algo = machine.algorithm
-        algo.session_ending += processing_ended
+        algo.trial_ending += processing_ended
         #
-        algo.start_session()
+        algo.start_trial_capture()
         assert processing_ended_count == 0
         algo.update_mouse_seen(False)
         assert processing_ended_count == 0
-        algo.end_capture_session()
+        algo.end_capture_trial()
         assert processing_ended_count == 1
 
     @pytest.mark.parametrize("detection_success", [False, True])
     @pytest.mark.parametrize("system_state", [SystemState.cage, SystemState.tunnel])
-    def test_when_intersession_mouse_seen(self, machine, detection_success, system_state):
+    def test_when_intertrial_mouse_seen(self, machine, detection_success, system_state):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -354,8 +354,8 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
 
         #
         algo = machine.algorithm
-        algo.session_ending += processing_ended
-        algo.start_session()
+        algo.trial_ending += processing_ended
+        algo.start_trial_capture()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
 #         with self.mock_analysis(detection_ok=detection_success):
@@ -365,7 +365,7 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
             stack.enter_context(self.mock_perform_detection())
             assert processing_ended_count == 0
             machine.state = system_state
-            algo.end_capture_session()
+            algo.end_capture_trial()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(True)
             assert processing_ended_count == 0
@@ -373,7 +373,7 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
             assert processing_ended_count == 1
         assert processing_ended_count == 1
 
-    def test_when_intersession_mouse_seen_segmentation_fails(self, machine, caplog):
+    def test_when_intertrial_mouse_seen_segmentation_fails(self, machine, caplog):
         processing_ended_count = 0
         def processing_ended(prj, status):
             nonlocal processing_ended_count
@@ -381,14 +381,14 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
             assert status == CaptureAnalysisResult.ANALYSIS_FAILED
         #
         algo = machine.algorithm
-        algo.session_ending += processing_ended
-        algo.start_session()
+        algo.trial_ending += processing_ended
+        algo.start_trial_capture()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
             assert processing_ended_count == 0
-            algo.end_capture_session()
+            algo.end_capture_trial()
             assert processing_ended_count == 0
             self.mock_complete_segmentation(False)
             assert "Unexpected end_analysis while no segmentation or detection configuration" not in caplog.text
@@ -399,46 +399,46 @@ class TestSessionProcessingEndingIntersessionEnabled(MockSystemMachine):
 
     def test_invalid_end_segmentation(self, machine, caplog):
         algo = machine.algorithm
-        algo.start_session()
+        algo.start_trial_capture()
         algo.update_mouse_seen(True)
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
-            # intersession state must be segmentation for end_analysis() .. (or detection).
-            machine.intersession.state = IntersessionState.segmentation  # so set it manually.
+            # intertrial state must be segmentation for end_analysis() .. (or detection).
+            machine.intertrial.state = IntertrialState.segmentation  # so set it manually.
             # algo.end_capture_session()    # don't end_capture_session so.
             # otherwise it would set the segmentation config.
             assert "Unexpected end_analysis" not in caplog.text
-            machine.intersession.end_analysis(algo.project, True)
+            machine.intertrial.end_analysis(algo.project, True)
             assert "Unexpected end_analysis" in caplog.text
             assert "Unexpected segment" not in caplog.text
             assert "Unexpected detection" not in caplog.text
 
     def test_unexpected_segmentation(self, machine, caplog):
         algo = machine.algorithm
-        algo.start_session()
+        algo.start_trial_capture()
         algo.update_mouse_seen(True)
         bad_project = algo.project.to_local_value()
         bad_project.trial += 1
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
-            algo.end_capture_session()
+            algo.end_capture_trial()
             assert "Unexpected segment" not in caplog.text
-            machine.intersession.end_analysis(bad_project, False)
+            machine.intertrial.end_analysis(bad_project, False)
             assert "Unexpected segment" in caplog.text
 
     def test_unexpected_detection(self, machine, caplog):
         algo = machine.algorithm
-        algo.start_session()
+        algo.start_trial_capture()
         algo.update_mouse_seen(True)
         bad_project = algo.project.to_local_value()
         bad_project.trial += 1
         with contextlib.ExitStack() as stack:
             stack.enter_context(self.mock_perform_segmentation())
-            algo.end_capture_session()
+            algo.end_capture_trial()
             stack.enter_context(self.mock_perform_detection())
             self.mock_complete_segmentation(True)
             assert "Unexpected detection" not in caplog.text
-            machine.intersession.end_analysis(bad_project, True)
+            machine.intertrial.end_analysis(bad_project, True)
             assert "Unexpected detection" in caplog.text
 
 
@@ -447,7 +447,7 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     algo = machine.algorithm
     algo.reload_diamond_triangle_config()  # ensure it's loaded
     mock_system.mock_pose_response(pellet_seen=True)
-    mock_system.start_session_in_tunnel(set_recording_status=True)
+    mock_system.start_trial_in_tunnel(set_recording_status=True)
     mock_system.mock_pellet_ack(until_none=True)
     pellet_m = machine.pellet
     diamond_cfg = machine.algorithm.diamond_triangle_config

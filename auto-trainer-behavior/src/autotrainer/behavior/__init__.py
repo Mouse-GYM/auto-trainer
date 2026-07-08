@@ -38,13 +38,13 @@ class DetectionConfiguration:
 
 
 @dataclass
-class IntersessionBlock:
+class IntertrialBlock:
     configuration: SegmentationConfiguration
     frame_count: int = 0
 
 
 @dataclass
-class IntersessionDetection:
+class IntertrialDetection:
     configuration: DetectionConfiguration
 
 
@@ -58,8 +58,7 @@ class TrainingMode(str, enum.Enum):  # todo: eventually find better place
 from .inference_protocol import InferenceProtocol
 from .pellet_device_protocol import PelletDeviceProtocol
 
-from .intersession import IntersessionState
-from .intersession.intersession_machine import IntersessionMachine
+from .intertrial import IntertrialState, IntertrialMachine
 from .behavior_algorithm import BehaviorAlgorithm
 
 from .system_machine import SystemMachine

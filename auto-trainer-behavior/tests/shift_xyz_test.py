@@ -5,12 +5,12 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.behavior import SystemMachine, SystemState, IntersessionState
+from autotrainer.behavior import SystemMachine, SystemState, IntertrialState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.reach_event import ReachEvent, ReachEventMethod
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 from top_fixtures import MockSystemMachine, AlmostEqualFloat, FifoExitStack
 
 
@@ -39,32 +39,32 @@ class TestShiftXYZ(MockSystemMachine):
         cfg = self.algo.active_config
         min_reach_fail = 5
         cfg.shift_xyz_handler.buffer.minimum_reach_fail = min_reach_fail
-        cfg.batch_session_recording.enabled = True
-        cfg.batch_session_recording.maximum_batch_size = 6 * min_reach_fail  # big enough to hold 2+ * minimum_reach_fail
-        cfg.pellet_delivery.is_intersession_analysis_enabled = True
-        machine._delay_timer_consider_end_session = 0
-        assert self.algo.intersession_enabled is True
+        cfg.batch_trial_recording.enabled = True
+        cfg.batch_trial_recording.maximum_batch_size = 6 * min_reach_fail  # big enough to hold 2+ * minimum_reach_fail
+        cfg.pellet_delivery.is_intertrial_analysis_enabled = True
+        machine._delay_timer_consider_end_trial = 0
+        assert self.algo.intertrial_enabled is True
         def perf_seg(cfg):
             return cfg
         self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
 
-    def make_session(self, stack: contextlib.ExitStack, reach_events, rh_max_vp_list):
+    def make_trial(self, stack: contextlib.ExitStack, reach_events, rh_max_vp_list):
         algo = self.algo
         self.mock_pellet_ack(until_none=True)
-        assert algo.is_in_session
+        assert algo.is_in_trial_capture
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         cfg = algo.active_config
         other_events = list(filter(
             lambda r: r.method not in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}, reach_events))
-        rsp = IntersessionResponse(
+        rsp = IntertrialResponse(
             reach_events=reach_events,
             rh_max_vp_list=rh_max_vp_list,
             other_events=other_events,
         )
         project = self._machine.project.to_local_value()
         stack.enter_context(
-            self.mock_intersession_analysis(results=rsp, project=project, stack=stack)
+            self.mock_intertrial_analysis(results=rsp, project=project, stack=stack)
         )
         self.mock_pose_response(pellet_seen=False)
         self.mock_pellet_ack(until_none=True)
@@ -73,12 +73,12 @@ class TestShiftXYZ(MockSystemMachine):
         
         # pellet not seen for missing delay
         #   -> load pellet triggered -> stop-session-recording -> not algo.is_in_session
-        assert not algo.is_in_session
+        assert not algo.is_in_trial_capture
         self.increment_perf_now(1)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         self.mock_pellet_ack(until_none=True)
         assert pellet.state == PelletState.monitoring
-        assert algo.is_in_session
+        assert algo.is_in_trial_capture
 
     def test_with_many_failed_reaches_clear_buffer(self, caplog):
         """Assert that the failed RH max vp buffer is only applied once in a batch of trials,
@@ -103,7 +103,7 @@ class TestShiftXYZ(MockSystemMachine):
         expected_shift = Offset3DTuple(-2.0375, 3.4875, 0)
         self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
         self.mock_pose_response(pellet_seen=True)
-        self.start_session_in_tunnel(set_recording_status=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
         caplog.clear()
         caplog.set_level(logging.INFO)
@@ -115,7 +115,7 @@ class TestShiftXYZ(MockSystemMachine):
         with contextlib.ExitStack() as stack:
             for rh_max_vp_list in rh_max_vp_lists:
                 #with caplog.at_level(logging.DEBUG):
-                self.make_session(stack, reach_events, rh_max_vp_list)
+                self.make_trial(stack, reach_events, rh_max_vp_list)
                 self.increment_perf_now(3)
             assert pellet_dev.set_x.call_args_list == []
             assert pellet_dev.set_y.call_args_list == []
@@ -123,7 +123,7 @@ class TestShiftXYZ(MockSystemMachine):
             assert system.state == SystemState.tunnel
             self.exit_tunnel()
         assert system.state == SystemState.cage
-        assert system.intersession.state == IntersessionState.idle
+        assert system.intertrial.state == IntertrialState.idle
         assert f"applying pellet send_position shift: {expected_shift.round(1)}" in caplog.text
         # NB: applied shift are in motor coordinate:
         f_m_d = algo.diamond_triangle_config.flips_motor_diamond
@@ -173,7 +173,7 @@ class TestShiftXYZ(MockSystemMachine):
         #
         expected_shift = Offset3DTuple(0, 0.5, 0)
         self.mock_pose_response(pellet_seen=True)
-        self.start_session_in_tunnel(set_recording_status=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
 
         self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
@@ -182,7 +182,7 @@ class TestShiftXYZ(MockSystemMachine):
         with FifoExitStack() as stack:
             for reach_events, rh_max_vp_list in zip(reaches_list, rh_max_vp_lists):
                 # with caplog.at_level(logging.DEBUG):
-                self.make_session(stack, reach_events, rh_max_vp_list)
+                self.make_trial(stack, reach_events, rh_max_vp_list)
                 self.increment_perf_now(3)
             # ensure the shift is only applied after the batch finishes:
             assert pellet_dev.set_x.call_args_list == []
@@ -194,7 +194,7 @@ class TestShiftXYZ(MockSystemMachine):
         #
         assert algo.pellet_shift_y_limit == 25.5
         assert system.state == SystemState.cage
-        assert system.intersession.state == IntersessionState.idle
+        assert system.intertrial.state == IntertrialState.idle
         assert (
             f"applying pellet send_position shift: {expected_shift.round(1)}"
             in caplog.text

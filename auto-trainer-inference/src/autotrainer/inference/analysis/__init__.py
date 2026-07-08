@@ -5,14 +5,14 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.reach_event import ReachEvent
 
 __all__ = [
-    "intersession_process",
-    "intersession_inference",
-    "IntersessionResponse",
+    "intertrial_process",
+    "intertrial_inference",
+    "IntertrialResponse",
 ]
 
 # NB: keep me up:
 @dataclasses.dataclass
-class IntersessionResponse:
+class IntertrialResponse:
     # NB: all 3 x/y/z are relative values here:
     rh_max_vp_list: List[Optional[Offset3DTuple]] = dataclasses.field(default_factory=list)
     # NB: some values can None if offset cannot be determined.
@@ -40,6 +40,6 @@ class IntersessionResponse:
 
 # importing function/name from a module where the function name equals the module name imported from,
 # creates slight issues with IDEs and eventual real import code.
-from .intersession_process import intersession_process
-from .intersession_inference import intersession_inference
+from .intertrial_process import intertrial_process
+from .intertrial_inference import intertrial_inference
 # might need change this.

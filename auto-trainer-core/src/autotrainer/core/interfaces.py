@@ -236,12 +236,12 @@ class TunnelHardwareProtocol(Protocol):
 
 class BatchAnalysisStartingEvent:
     def __call__(self, *, batch_len: int):
-        """When a session batch analysis starts"""
+        """When a trial(s) batch analysis starts"""
 
 
 class BatchAnalysisEndingEvent:
     def __call__(self, *, failed_count: int):
-        """When a session batch analysis is finished"""
+        """When a trial(s) batch analysis is finished"""
 
 
 class BehaviorAlgoEvents:
@@ -249,16 +249,16 @@ class BehaviorAlgoEvents:
     # NB: *assigned/defined* here,
     # but used as typehints in BehaviorAlgoProtocol below.
 
-    session_starting_before_record_start = EventHandler[Callable[[], None]]
-    session_starting = EventHandler[Callable[[], None]]
-    session_capture_ending = EventHandler[Callable[[RecordingEndingReason], None]]
+    trial_starting_before_record_start = EventHandler[Callable[[], None]]
+    trial_starting = EventHandler[Callable[[], None]]
+    trial_capture_ending = EventHandler[Callable[[RecordingEndingReason], None]]
 
-    session_processing_starting = EventHandler[Callable[[], None]]
+    trial_processing_starting = EventHandler[Callable[[], None]]
 
     batch_analysis_starting = EventHandler[BatchAnalysisStartingEvent]
     batch_analysis_ending = EventHandler[BatchAnalysisEndingEvent]
 
-    session_ending = EventHandler[Callable[[ProjectInfo, CaptureAnalysisResult], None]]
+    trial_ending = EventHandler[Callable[[ProjectInfo, CaptureAnalysisResult], None]]
 
     cover_servo_status_changed = EventHandler[Callable[[CoverServoStatus], None]]
 
@@ -285,9 +285,9 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
     def pellet_cover_enabled(self, value: bool): ...
 
     @property
-    def intersession_pellet_shift_enabled(self) -> bool: ...
-    @intersession_pellet_shift_enabled.setter
-    def intersession_pellet_shift_enabled(self, value: bool): ...
+    def intertrial_pellet_shift_enabled(self) -> bool: ...
+    @intertrial_pellet_shift_enabled.setter
+    def intertrial_pellet_shift_enabled(self, value: bool): ...
 
     @property
     def pellet_hands_min_distance(self) -> float: ...
@@ -326,15 +326,15 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
 
     # 3) events:
 
-    session_starting_before_record_start: BehaviorAlgoEvents.session_starting_before_record_start
+    trial_starting_before_record_start: BehaviorAlgoEvents.trial_starting_before_record_start
 
-    session_starting: BehaviorAlgoEvents.session_starting
+    trial_starting: BehaviorAlgoEvents.trial_starting
     """Emitted when a new trial recording starts"""
 
-    session_capture_ending: BehaviorAlgoEvents.session_capture_ending
+    trial_capture_ending: BehaviorAlgoEvents.trial_capture_ending
     """Emitted when a new trial recording ends"""
 
-    session_ending: BehaviorAlgoEvents.session_ending
+    trial_ending: BehaviorAlgoEvents.trial_ending
     """Emitted when a trial "full session" ended, this can have analysis processed or not"""
 
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt

@@ -25,7 +25,7 @@ from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, Syste
 from autotrainer.core.analysis import detector
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import MotorConfigurationFile, CompoundMovements
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
@@ -390,7 +390,7 @@ def machine(project_info, tunnel_device, pellet_device, inference, sensor_analys
     algo.record_prebuffer_duration = 0
     algo.pellet_uncover_delay = 0
     algo.pellet_uncover_y_dcs = -math.inf
-    algo.session_minimum_duration = 0  # needed for most current tests
+    algo.trial_minimum_duration = 0  # needed for most current tests
     # might be needed to reset:
     algo.capture_status = CaptureProcessStatus.RUNNING
     algo.status = BehaviorAlgoStatus.ANIMAL_IN_TRAINING
@@ -422,9 +422,9 @@ class MockSystemMachine:
         self.pellet_state_trans = []
         self.pellet.events.state_changed += partial(
             property_value_save_transitions, transitions=self.pellet_state_trans)
-        self.intersession_state_trans = []
-        machine.intersession.events.state_changed += partial(
-            property_value_save_transitions, transitions=self.intersession_state_trans)
+        self.intertrial_state_trans = []
+        machine.intertrial.events.state_changed += partial(
+            property_value_save_transitions, transitions=self.intertrial_state_trans)
         self._pose_response_idx = 0
 
     increment_perf_now = staticmethod(increase_simulate_perf_now)
@@ -470,9 +470,9 @@ class MockSystemMachine:
 
     #
 
-    def start_session_in_tunnel(self, set_recording_status: bool = False):
+    def start_trial_in_tunnel(self, set_recording_status: bool = False):
         algo = self.algo
-        assert not algo.is_in_session
+        assert not algo.is_in_trial_capture
         assert self._machine.state == SystemState.cage
         self.make_load_cell_active()
         self.sensor_analysis.load_cell_monitor.is_engaged = True
@@ -503,9 +503,9 @@ class MockSystemMachine:
             yield mock_t  # noqa
 
     @contextlib.contextmanager
-    def mock_intersession_analysis(
+    def mock_intertrial_analysis(
         self,
-        results: Optional[IntersessionResponse] = None,
+        results: Optional[IntertrialResponse] = None,
         *,
         segmentation_ok: bool = True,
         detection_ok: bool = True,
@@ -513,10 +513,10 @@ class MockSystemMachine:
         project: Optional[ProjectInfo] = None,
         stack: Optional["FifoExitStack"] = None,
     ):
-        """Allow fake fully 1 intersession/trial analysis (segmentation+detection)"""
+        """Allow fake fully 1 trial analysis (segmentation+detection)"""
         if results is None:
-            results = IntersessionResponse()
-        results: IntersessionResponse
+            results = IntertrialResponse()
+        results: IntertrialResponse
         if project is None:
             project = self._machine.project.to_local_value()
         if stack is None:
@@ -554,7 +554,7 @@ class MockSystemMachine:
             yield m_seg
 
     def mock_complete_segmentation(self, success: bool):
-        seg_cfg = self._machine.intersession._segmentation_configuration
+        seg_cfg = self._machine.intertrial._segmentation_configuration
         logger.info("calling segmentation complete")
         assert seg_cfg is not None
         seg_cfg.complete(success)
@@ -566,7 +566,7 @@ class MockSystemMachine:
             yield m_det
 
     def mock_complete_detection(self, success: bool):
-        det_cfg = self._machine.intersession._detection_configuration
+        det_cfg = self._machine.intertrial._detection_configuration
         assert det_cfg is not None
         det_cfg.complete(success)
 

@@ -23,11 +23,11 @@ from autotrainer.core.configuration.behavior_configuration import (
 )
 
 from autotrainer.inference import PoseResponse, InferenceStatus, InferenceCommandMessageKind
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 from .behavior_algorithm import BehaviorAlgorithm, BehaviorAlgoProps, BehaviorAlgoStatus
 from .inference_protocol import InferenceProtocol
-from .intersession import IntersessionMachine, IntersessionState
+from .intertrial import IntertrialMachine, IntertrialState
 from .pellet import PelletState
 from .pellet.pellet_machine import PelletMachine
 from .pellet_device_protocol import PelletDeviceProtocol
@@ -41,9 +41,9 @@ logger = get_verbose_logger(__name__)
 # NB: this is to ensure we can patch the exact desired one (and only that one) from tests:
 _clean_raw_data_timer = make_daemon_timer
 _auto_clamp_release_timer = make_daemon_timer
-_consider_start_session_timer = make_daemon_timer
-_consider_end_session_timer = make_daemon_timer
-_consider_auto_end_session_timer = make_daemon_timer
+_consider_start_trial_timer = make_daemon_timer
+_consider_end_trial_timer = make_daemon_timer
+_consider_auto_end_trial_timer = make_daemon_timer
 _check_missing_timer = make_daemon_timer
 _consider_disengage_autoclamp_timer = make_daemon_timer
 _consider_close_gate_timer = make_daemon_timer
@@ -91,24 +91,24 @@ class SystemMachine(StateMachine):
         self._tot_trials_failed_analysed = 0
         #
         self._next_shift_xyz_to_apply: Optional[Offset3DTuple] = None
-        self._batch_project_sessions_start_list: List[ProjectInfo] = []
-        self._batch_project_sessions_list: List[ProjectInfo] = []
+        self._batch_project_trials_start_list: List[ProjectInfo] = []
+        self._batch_project_trials_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
-        self._batch_project_sessions_finished: int = 0
+        self._batch_project_trials_finished: int = 0
         self._batch_current_trial_index: int = 0  # 0 -> #trials-in-batch - 1
         self._batch_failed_count: int = 0
-        self._batch_sessions_total_duration: float = 0
+        self._batch_trials_total_duration: float = 0
         #
-        self._timer_consider_start_session = no_op_timer
-        self._timer_consider_end_session = no_op_timer  # this is used when pellet-load command is executed
-        self._timer_consider_auto_end_session = no_op_timer  # this is used from start of session, for session timeout basically
+        self._timer_consider_start_trial_capture = no_op_timer
+        self._timer_consider_end_trial_capture = no_op_timer  # this is used when pellet-load command is executed
+        self._timer_consider_auto_end_trial_capture = no_op_timer  # this is used from start of trial, for trial timeout basically
         self._timer_consider_close_gate = no_op_timer
 
         # TODO: should be moved to config somewhere:
-        self._delay_timer_consider_end_session: float = 1
+        self._delay_timer_consider_end_trial: float = 1
         # delay to wait, when/once a pellet load is executed (on start),
-        # and that a session is active, to trigger an eventual end_session().
-        # If 0 (or lower) : immediately consider end session on start of pellet-load.
+        # and that a trial is active, to trigger an eventual end_trial().
+        # If 0 (or lower) : immediately consider end trial on start of pellet-load.
 
         # todo: should probably make/use a state "Machine" for AutoClamp itself
         self._auto_clamp_in_progress = False
@@ -120,7 +120,7 @@ class SystemMachine(StateMachine):
 
         self._is_handling_diamond_triangle = False
 
-        self._session_started_perf_c = -math.inf
+        self._trial_started_perf_c = -math.inf
 
         self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
@@ -132,9 +132,9 @@ class SystemMachine(StateMachine):
         ) if algorithm is None else algorithm
         del algorithm  # using algo
 
-        algo.session_starting += self._on_session_capture_started
-        algo.session_capture_ending += self.on_session_capture_ended
-        algo.session_ending += self._on_session_ending
+        algo.trial_starting += self._on_trial_capture_started
+        algo.trial_capture_ending += self._on_trial_capture_ended
+        algo.trial_ending += self._on_trial_ending
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
@@ -179,18 +179,18 @@ class SystemMachine(StateMachine):
         self._last_pellet_loading_perf_c = -math.inf
         self._last_pellet_failed_loaded_perf_c = -math.inf
 
-        intersession_machine = self._intersession = IntersessionMachine(
+        intertrial_machine = self._intertrial = IntertrialMachine(
             algorithm=algo,
             inference=inference,
         )
-        intersession_machine.events.on_analysis_ended += self._on_intersession_analysis_ended
-        intersession_machine.events.state_changed += self._on_intersession_state_changed
+        intertrial_machine.events.on_analysis_ended += self._on_intertrial_analysis_ended
+        intertrial_machine.events.state_changed += self._on_intertrial_state_changed
 
     def cancel_timers(self):
         for timer in (
-            self._timer_consider_start_session,
-            self._timer_consider_end_session,
-            self._timer_consider_auto_end_session,
+            self._timer_consider_start_trial_capture,
+            self._timer_consider_end_trial_capture,
+            self._timer_consider_auto_end_trial_capture,
             self._timer_consider_close_gate,
             self._timer_auto_clamp_disengage,
             self._timer_auto_clamp_evaluate,
@@ -198,8 +198,8 @@ class SystemMachine(StateMachine):
             if not timer.finished.is_set():
                 logger.debug("cancelling timer %s", timer)
                 timer.cancel()
-        self._timer_consider_start_session = no_op_timer
-        self._timer_consider_end_session = no_op_timer
+        self._timer_consider_start_trial_capture = no_op_timer
+        self._timer_consider_end_trial_capture = no_op_timer
         self._timer_consider_close_gate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
 
@@ -216,8 +216,8 @@ class SystemMachine(StateMachine):
         return self._pellet_machine
 
     @property
-    def intersession(self) -> IntersessionMachine:
-        return self._intersession
+    def intertrial(self) -> IntertrialMachine:
+        return self._intertrial
 
     @property
     def project(self) -> ProjectInfo:
@@ -246,51 +246,51 @@ class SystemMachine(StateMachine):
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.sessionStarted,
                 dict(session_id=self._project_info.session_id,
-                     is_analysis_deferred=self._algorithm.batch_session_recording_config.enabled)))
+                     is_analysis_deferred=self._algorithm.batch_trial_recording_config.enabled)))
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
     def after_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
-        self._consider_start_session(reason=reason)
+        self._consider_start_trial(reason=reason)
         if self._analysis is not None:
             self._evaluate_auto_clamp(caller="after_enter_tunnel")
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
         algo = self._algorithm
-        self._timer_consider_start_session.cancel()
-        self._timer_consider_end_session.cancel()
+        self._timer_consider_start_trial_capture.cancel()
+        self._timer_consider_end_trial_capture.cancel()
         with algo.set_allow_reentrant(True):
             self._execute_disengage_auto_clamp_if_in_progress()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
-        if algo.is_in_session:
-            algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
+        if algo.is_in_trial_capture:
+            algo.end_capture_trial(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
-            batch_projects = self._batch_project_sessions_list
-            intersession_is_idle = self._intersession.state == IntersessionState.idle
-            if intersession_is_idle and len(batch_projects) == 0:
+            batch_projects = self._batch_project_trials_list
+            intertrial_is_idle = self._intertrial.state == IntertrialState.idle
+            if intertrial_is_idle and len(batch_projects) == 0:
                 self._post_api_session_ended(self._project_info.session_id)
             else:
-                if not intersession_is_idle:
+                if not intertrial_is_idle:
                     # this can happen when a trial is in analysis processing (offline or analysis), for instance
-                    logger.verbose("exit_tunnel but intersession state=%s, doing nothing. n_batch_trials=%s",
-                                   self._intersession.state, len(batch_projects))
+                    logger.verbose("exit_tunnel but intertrial state=%s, doing nothing. n_batch_trials=%s",
+                                   self._intertrial.state, len(batch_projects))
                 elif len(batch_projects) > 0:
                     prj = batch_projects[0]
                     with algo.set_allow_reentrant(True):
-                        self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
+                        self.enter_intertrial(prj, reason="exit-tunnel-with-trials-batch-list")
 
-    def after_enter_intersession(self, project_info: ProjectInfo, *, reason="NA"):
+    def after_enter_intertrial(self, project_info: ProjectInfo, *, reason="NA"):
         algo = self._algorithm
-        intersession = self._intersession
+        intertrial = self._intertrial
         inference = self._inference
-        batch_list = self._batch_project_sessions_list
-        logger.verbose("enter_intersession: reason=%s, n_batch=%s, in-session=%s",
-                       reason, len(batch_list), algo.is_in_session)
+        batch_list = self._batch_project_trials_list
+        logger.verbose("enter_intertrial: reason=%s, n_batch=%s, in-session=%s",
+                       reason, len(batch_list), algo.is_in_trial_capture)
 
         if len(batch_list) > 0:
             # set intersession and inference current project to the one from the batch:
-            logger.verbose("setting project_info to intersession and inference")
+            logger.verbose("setting project_info to intertrial and inference")
             inference.project = project_info
             wait_stop_recorded = len(batch_list) == 1 and project_info == self._project_info
             # only wait stop_recorded if batch_list len is 1, and it's currently set/activated self._projet_info
@@ -298,58 +298,58 @@ class SystemMachine(StateMachine):
 
             if not self._batch_processing_in_progress:
                 self._batch_processing_in_progress = True
-                self._batch_project_sessions_start_list = batch_list.copy()
+                self._batch_project_trials_start_list = batch_list.copy()
                 self._batch_current_trial_index = 0
                 self._batch_failed_count = 0
-                self._batch_project_sessions_finished = 0
+                self._batch_project_trials_finished = 0
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
                 self._event_manager.post_api_event(build_event(
                     ApiEventKind.batchAnalysisStarted,
                     {"session_id": self._project_info.session_id, "trial_count": len(batch_list)}))
         else:
-            self._batch_project_sessions_start_list = []
-            self._batch_project_sessions_finished = 0
+            self._batch_project_trials_start_list = []
+            self._batch_project_trials_finished = 0
             wait_stop_recorded = True
 
-        logger.info("processing session project %s", project_info)
-        algo.session_processing_starting()
+        logger.info("processing trial project %s", project_info)
+        algo.trial_processing_starting()
         with algo.set_allow_reentrant(True):
-            intersession.perform_segmentation(project_info)
+            intertrial.perform_segmentation(project_info)
         self._inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
-        self._consider_close_gate_during_intersession()
-        # pellet machine can react to system-state == intersession,
-        # which is here the case (def *after*_enter_intersession):
+        self._consider_close_gate_during_intertrial()
+        # pellet machine can react to system-state == intertrial,
+        # which is here the case (def *after*_enter_intertrial):
         with algo.set_allow_reentrant(True):
             self._pellet_machine.environment_changed()
 
-    def after_exit_intersession(self, project: ProjectInfo):
+    def after_exit_intertrial(self, project: ProjectInfo):
         if self._analysis.load_cell_monitor.is_engaged:
             with self._algorithm.set_allow_reentrant(True):
-                self.exit_intersession_to_tunnel(project)
+                self.exit_intertrial_to_tunnel(project)
         else:
-            # always ensure open gate on intersession ended (to cage)
+            # always ensure open gate on intertrial ended (to cage)
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()
             self._execute_disengage_auto_clamp_if_in_progress()
             with self._algorithm.set_allow_reentrant(True):
-                self.exit_intersession_to_cage(project)
+                self.exit_intertrial_to_cage(project)
 
-    def after_exit_intersession_to_cage(self, project: ProjectInfo):
+    def after_exit_intertrial_to_cage(self, project: ProjectInfo):
         self._post_api_session_ended(project.session_id)
         # ensure pellet goes back where necessary:
-        self._pellet_machine.environment_changed(caller="exit_intersession_to_cage")
+        self._pellet_machine.environment_changed(caller="exit_intertrial_to_cage")
 
-    def after_exit_intersession_to_tunnel(self, project: ProjectInfo):
+    def after_exit_intertrial_to_tunnel(self, project: ProjectInfo):
         if project.session_id != self._project_info.session_id:
-            # animal has exited/re-entered the tunnel during the intersession, so:
+            # animal has exited/re-entered the tunnel during the intertrial, so:
             self._post_api_session_ended(project.session_id)
             force_from_cage = True
             # this allows to have new tunnelEnter / sessionStarted events emitted.
         else:
             force_from_cage = False
         with self._algorithm.set_allow_reentrant(True):
-            self.enter_tunnel(reason="exit_intersession_to_tunnel", force_from_cage=force_from_cage)
+            self.enter_tunnel(reason="exit_intertrial_to_tunnel", force_from_cage=force_from_cage)
 
     @staticmethod
     def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
@@ -359,7 +359,7 @@ class SystemMachine(StateMachine):
             for cam_name in (project.camera_1, project.camera_2):
                 paths = map(Path, chain(
                     project.get_video_path(cam_name, allow_overwrite=True),
-                    [project.get_intersession_pose_path(cam_name, suffix="_live")],
+                    [project.get_intertrial_pose_path(cam_name, suffix="_live")],
                 ))
                 for path in paths:
                     if path.exists():
@@ -367,7 +367,7 @@ class SystemMachine(StateMachine):
                         path.unlink(missing_ok=True)
             logger.debug("removed %s", paths_removed)
 
-        # using timer given when called the monitor data queue might still be writing to disk/still be in live session,
+        # using timer given when called the monitor data queue might still be writing to disk/still be in live trial,
         # making the deletes to not work here
         t = _clean_raw_data_timer(wait_before_clean, do_clean)
         # changed timer to 15s: seen some cases where close of file handles in monitor data queue was bit slower,
@@ -376,20 +376,20 @@ class SystemMachine(StateMachine):
         t.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_auto_end_session(self):
-        self._timer_consider_auto_end_session.cancel()  # required
+    def _consider_auto_end_trial_capture(self):
+        self._timer_consider_auto_end_trial_capture.cancel()  # required
         analysis = self._analysis
         load_cell_tare = analysis.load_cell_tare_monitor
         algo = self._algorithm
-        cfg = algo.auto_end_session_config
-        if not algo.is_in_session or cfg is None:
+        cfg = algo.auto_end_trial_config
+        if not algo.is_in_trial_capture or cfg is None:
             return
         perf_now = get_perf_now()
-        in_session_age = algo.is_in_session_age
+        in_trial_age = algo.is_in_trial_age
         # first possibility:
         if cfg.no_activity_delay_minutes > 0:
             mouse_last_seen_age = algo.mouse_last_seen_age  # reminder: this is the nose part which is accounted for mouse_seen
-            last_activity_age1 = min(mouse_last_seen_age, in_session_age)
+            last_activity_age1 = min(mouse_last_seen_age, in_trial_age)
             remains1 = 60 * cfg.no_activity_delay_minutes - last_activity_age1
         else:
             remains1 = math.inf
@@ -400,7 +400,7 @@ class SystemMachine(StateMachine):
         if remains1 > 0 and cfg.animal_tunnel_no_activity_delay > 0:
             if ctx.low_variance_engaged:
                 min_age = min(tun_missing_age, load_cell_low_var_age)
-                last_activity_age2 = min(min_age, in_session_age)
+                last_activity_age2 = min(min_age, in_trial_age)
                 remains2 = cfg.animal_tunnel_no_activity_delay - last_activity_age2
                 if math.isinf(remains2):
                     remains2 = cfg.animal_tunnel_no_activity_delay
@@ -411,117 +411,117 @@ class SystemMachine(StateMachine):
         #
         min_remain = min(remains1, remains2)
         if min_remain <= 0:
-            algo.end_capture_session(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
+            algo.end_capture_trial(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
             return
         if math.isinf(min_remain):  # both disabled
             return
-        logger.info("started new timer for consider_auto_end_session in %.1fs ; variance=%s age=%s ; missing_age=%s "
+        logger.info("started new timer for consider_auto_end_trial in %.1fs ; variance=%s age=%s ; missing_age=%s "
                     "r1=%s r2=%s",
                     min_remain, ctx.low_variance_engaged, load_cell_low_var_age, tun_missing_age,
                     remains1, remains2)
-        timer = self._timer_consider_auto_end_session = _consider_auto_end_session_timer(
-            min_remain, self._consider_auto_end_session
+        timer = self._timer_consider_auto_end_trial_capture = _consider_auto_end_trial_timer(
+            min_remain, self._consider_auto_end_trial_capture
         )
         timer.start()
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_session_capture_started(self):
+    def _on_trial_capture_started(self):
         project = self._project_info
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         if dcs_send_pos is None:
             logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
-        p_now = self._session_started_perf_c = get_perf_now()
+        p_now = self._trial_started_perf_c = get_perf_now()
         pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
-        logger.verbose("session_capture_started: dcs_send_pos=%s prj.when=%s",
+        logger.verbose("trial_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, project.when)
         # ensure inference has the correct project info,
-        # this is required for session batch processing.
-        #  EDIT: maybe not anymore since we added project_info as argument to intersession state trigger functions..
+        # this is required for trial batch processing.
+        #  EDIT: maybe not anymore since we added project_info as argument to intertrial state trigger functions..
         project.send_position = self._pellet_device.last_set_position
         project.dcs_send_position = dcs_send_pos
         logger.info("Associated dcs_send_pos=%s with project", dcs_send_pos)
         if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
             self._set_pellet_delivered_presented(project, 0)
         self._inference.project = project
-        self._consider_auto_end_session()  # this will postpone the auto-end of the needed delay
+        self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def on_session_capture_ended(self, reason: RecordingEndingReason):
-        self._timer_consider_auto_end_session.cancel()
+    def _on_trial_capture_ended(self, reason: RecordingEndingReason):
+        self._timer_consider_auto_end_trial_capture.cancel()
         if reason == RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT:
             logger.notice("Forcing tare load cell due to %s", reason)
             self._tunnel_device.tare_load_cell()
         p_now = get_perf_now()
-        self._batch_sessions_total_duration += p_now - self._session_started_perf_c
+        self._batch_trials_total_duration += p_now - self._trial_started_perf_c
         cur_project = self._project_info.to_local_value()
         logger.verbose("capture_ended: project=%s", cur_project)
         algo = self._algorithm
         if not algo.active_config.pellet_delivery.retract_enabled:
             # then stays at current position, whatever it is,
-            # it will be resumed/continued once intersession finishes (and inference comes back live).
+            # it will be resumed/continued once intertrial finishes (and inference comes back live).
             pass
         elif self._pellet_machine.state == PelletState.monitoring:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
 
         can_perform_analysis = (
-            algo.can_perform_intersession_analysis()
-            and self._intersession.can_perform_segmentation(cur_project)
+            algo.can_perform_intertrial_analysis()
+            and self._intertrial.can_perform_segmentation(cur_project)
         )
         real_can_perform_analysis = can_perform_analysis
-        can_batch_session = False
-        cur_sessions_batch = self._batch_project_sessions_list
-        batch_sess_cfg = algo.batch_session_recording_config
+        can_batch_trial = False
+        cur_trials_batch = self._batch_project_trials_list
+        batch_trial_cfg = algo.batch_trial_recording_config
         load_cell_engaged = self._analysis.load_cell_monitor.is_engaged
         if can_perform_analysis:
-            if batch_sess_cfg.enabled or len(cur_sessions_batch) > 0:
-                # > 0:  in case it's disabled while there is some session(s) currently batched
-                cur_sessions_batch.append(cur_project)
-                if 0 < batch_sess_cfg.maximum_batch_size <= len(cur_sessions_batch):
-                    logger.verbose("reached maximum_batch_size, doing batch-intersession analysis")
+            if batch_trial_cfg.enabled or len(cur_trials_batch) > 0:
+                # > 0:  in case it's disabled while there is some trial(s) currently batched
+                cur_trials_batch.append(cur_project)
+                if 0 < batch_trial_cfg.maximum_batch_size <= len(cur_trials_batch):
+                    logger.verbose("reached maximum_batch_size, doing batch-intertrial analysis")
                 elif not load_cell_engaged:
-                    logger.verbose("load-cell disengaged, doing batch-intersession analysis")
-                elif not batch_sess_cfg.enabled:
-                    logger.verbose("batch disabled, doing batch-intersession analysis")
+                    logger.verbose("load-cell disengaged, doing batch-intertrial analysis")
+                elif not batch_trial_cfg.enabled:
+                    logger.verbose("batch disabled, doing batch-intertrial analysis")
                 else:
-                    logger.info("added session %s to current batch list len=%s", cur_project, len(cur_sessions_batch))
-                    can_batch_session = True
+                    logger.info("added trial %s to current batch list len=%s", cur_project, len(cur_trials_batch))
+                    can_batch_trial = True
                     can_perform_analysis = False
         else:
-            can_batch_session = (
+            can_batch_trial = (
                 load_cell_engaged
-                and batch_sess_cfg.enabled  #  or len(cur_sessions_batch) > 0
+                and batch_trial_cfg.enabled  #  or len(cur_trials_batch) > 0
             )
         #
         logger.notice(
-            "session ended: prj=%s intersession.state=%s system_machine.state=%s algo.system_state=%s "
-            "pellet_machine.state=%s intersession_enabled=%s session_mouse_seen=%s "
+            "trial ended: prj=%s intertrial.state=%s system_machine.state=%s algo.system_state=%s "
+            "pellet_machine.state=%s intertrial_enabled=%s trial_mouse_seen=%s "
             "can_batch=%s can_perform_analysis=%s real=%s",
             cur_project.short_id,
-            self._intersession.state, self.state, algo.system_state,
+            self._intertrial.state, self.state, algo.system_state,
             self._pellet_machine.state,
-            algo.intersession_enabled, algo.session_mouse_seen,
-            can_batch_session, can_perform_analysis, real_can_perform_analysis,
+            algo.intertrial_enabled, algo.trial_mouse_seen,
+            can_batch_trial, can_perform_analysis, real_can_perform_analysis,
         )
         # first:
         if (    not can_perform_analysis
-            and not can_batch_session
-            and not algo.session_mouse_seen
+            and not can_batch_trial
+            and not algo.trial_mouse_seen
         ):
-            if algo.clean_raw_data_on_inactive_session:
+            if algo.clean_raw_data_on_inactive_trial:
                 self._clean_raw_data(cur_project)
         #
-        self._batch_project_sessions_finished = 0
-        if (can_perform_analysis or len(cur_sessions_batch) > 0) and not can_batch_session:
-            prj = cur_project if len(cur_sessions_batch) == 0 else cur_sessions_batch[0]
+        self._batch_project_trials_finished = 0
+        if (can_perform_analysis or len(cur_trials_batch) > 0) and not can_batch_trial:
+            prj = cur_project if len(cur_trials_batch) == 0 else cur_trials_batch[0]
             with algo.set_allow_reentrant(True):
-                self.enter_intersession(prj, reason="capture-ended-and-can-perform-analysis")
+                self.enter_intertrial(prj, reason="capture-ended-and-can-perform-analysis")
         else:
             # at the end of live recording pose-process automatically goes to offline mode,
             # so we ask it to switch back to live:
             self._inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
-            algo.end_session(
+            algo.end_trial(
                 cur_project,
                 CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                 else CaptureAnalysisResult.CAPTURE_ONLY)
@@ -536,34 +536,34 @@ class SystemMachine(StateMachine):
             ),
         )
 
-    def _on_session_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
+    def _on_trial_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
         pass
         # was used to post api-event-sessionEnded, but correct place is in exit_interession_xxx triggers
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
-        logger.verbose("intersession ended: trial=%s result=%s", project.short_id, result)
+    def _on_intertrial_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        logger.verbose("intertrial ended: trial=%s result=%s", project.short_id, result)
         self._tot_trials_analysed += 1
-        cur_batch = self._batch_project_sessions_list
+        cur_batch = self._batch_project_trials_list
         if result == CaptureAnalysisResult.ANALYSIS_FAILED:
             self._batch_failed_count += 1
             self._tot_trials_failed_analysed += 1
         algo = self._algorithm
         if len(cur_batch) > 0:
-            self._batch_project_sessions_finished += 1
+            self._batch_project_trials_finished += 1
             del cur_batch[0]
             if len(cur_batch) > 0:  #  and not self._algorithm.algo_paused:
-                # continue remaining session(s) in batch in all cases
+                # continue remaining trial(s) in batch in all cases
                 self._batch_current_trial_index += 1
                 with algo.set_allow_reentrant(True):
-                    self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
+                    self.reenter_intertrial(cur_batch[0], reason="reenter-batch-trial")
                 return
             shift_xyz = self._next_shift_xyz_to_apply
             if shift_xyz is not None:
                 self._next_shift_xyz_to_apply = None
                 self._apply_processed_shift_xyz(shift_xyz)
             self._batch_processing_in_progress = False
-            self._batch_sessions_total_duration = 0
+            self._batch_trials_total_duration = 0
             logger.info("batch analysis ending, failed=%s", self._batch_failed_count)
             # force inference project-info back to current/live one:
             self._inference.project = self._project_info
@@ -574,7 +574,7 @@ class SystemMachine(StateMachine):
                  "failed_trial_count": self._batch_failed_count}))
 
         with algo.set_allow_reentrant(True):
-            self.exit_intersession(project)
+            self.exit_intertrial(project)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_property_changed(self, name: str, new_value, prev_value):
@@ -587,7 +587,7 @@ class SystemMachine(StateMachine):
     def _on_inference_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
         logger.verbose("got inference segmentation finished: %s ; err=%s prj=%s", success, error, project)
         inference = self._inference
-        cur_batch_list = self._batch_project_sessions_list
+        cur_batch_list = self._batch_project_trials_list
         logger.debug("remaining batch trials list size: %s", len(cur_batch_list))
         if len(cur_batch_list) <= 1:
             inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
@@ -602,7 +602,7 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_monitor_property_changed(self, name: str, value, _):
-        if self._state == SystemState.intersession:
+        if self._state == SystemState.intertrial:
             self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedInIntersession,
                                                    data=dict(is_enabled=value))
 
@@ -620,15 +620,15 @@ class SystemMachine(StateMachine):
             else:
                 if self._inference.status == InferenceStatus.live:
                     self._analysis.global_animal_presence_alarm.start()
-                inter_state = self.intersession.state
+                inter_state = self.intertrial.state
                 if self._state != SystemState.cage:
-                    if inter_state == IntersessionState.idle:
+                    if inter_state == IntertrialState.idle:
                         with self._algorithm.set_allow_reentrant(True):
-                            self.exit_tunnel(reason="load_cell_disengaged_intersession_idle")
+                            self.exit_tunnel(reason="load_cell_disengaged_intertrial_idle")
                     else:
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
-                        self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
+                        self.after_exit_tunnel(reason="load_cell_disengaged_intertrial_in_progress")
                 else:
                     self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
                                                            data=dict(is_enabled=self._state))
@@ -649,11 +649,11 @@ class SystemMachine(StateMachine):
         if not self._analysis.load_cell_monitor.is_engaged:
             logger.info("auto-clamp: load-cell not engaged (no action taken)")
             return
-        if self._intersession.state != IntersessionState.idle:
-            logger.info("auto-clamp: intersession not idle (no action taken)")
+        if self._intertrial.state != IntertrialState.idle:
+            logger.info("auto-clamp: intertrial not idle (no action taken)")
             return
-        if not algo.is_in_session:
-            logger.info("auto-clamp: algo not in-session (no action taken)")
+        if not algo.is_in_trial_capture:
+            logger.info("auto-clamp: algo not in-trial (no action taken)")
             return
         if not is_headbar_pressure_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")
@@ -690,11 +690,11 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_tare_requested(self, *, force: bool = False):
-        if force or not self._algorithm.is_in_session:
+        if force or not self._algorithm.is_in_trial_capture:
             self._tunnel_device.tare_load_cell()
             self._event_manager.post_event_content(ApiEventKind.headfixAutoTare)
         else:
-            logger.notice("skipping tare given algo.is_in_session and not forced")
+            logger.notice("skipping tare given algo.is_in_trial and not forced")
         return False
 
     def _evaluate_home_on_excessive_drift(self):
@@ -720,9 +720,9 @@ class SystemMachine(StateMachine):
             ApiEventKind.pelletDriftReset, data=dict(drift=dict(x=cur_drift.x, y=cur_drift.y, z=cur_drift.z)))
         with algo.set_allow_reentrant(True):
             self._pellet_machine.move_home()
-        if algo.is_in_session:
+        if algo.is_in_trial_capture:
             with algo.set_allow_reentrant(True):
-                algo.end_capture_session(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
+                algo.end_capture_trial(reason=RecordingEndingReason.MOTOR_DRIFT_HOMING)
 
     # @BehaviorAlgorithm.relay_func(wait=False)
     # not needed, already called by _pose_changed which has already it.
@@ -747,7 +747,7 @@ class SystemMachine(StateMachine):
                     algo.get_diamond_triangle_drifts(reset=True, show_log=False)
                     # don't show log, to not show most likely bad value due to previous motor move
                 algo.handle_diamond_triangle_offset(offset, last_pos)
-                # if not algo.is_in_session:
+                # if not algo.is_in_trial:
                 self._evaluate_home_on_excessive_drift()
         else:
             if self._is_handling_diamond_triangle:
@@ -767,8 +767,8 @@ class SystemMachine(StateMachine):
             # never consider any release or cover check when pellet cannot be used yet.
             return
         algo = self._algorithm
-        # only check cover if not in session and pellet covered state is True (== covered) and in monitoring
-        check_cover_distance = not algo.is_in_session and (
+        # only check cover if not in trial and pellet covered state is True (== covered) and in monitoring
+        check_cover_distance = not algo.is_in_trial_capture and (
             (pellet_machine.state == PelletState.monitoring
              and pellet_machine.covered_state is True)
         )
@@ -789,7 +789,7 @@ class SystemMachine(StateMachine):
         project = self._project_info
         algo = self._algorithm
         active_cfg = self._algorithm.active_config
-        if not (algo.is_in_session and active_cfg.pellet_delivery.is_pellet_cover_enabled):
+        if not (algo.is_in_trial_capture and active_cfg.pellet_delivery.is_pellet_cover_enabled):
             return
         pellet_m = self._pellet_machine
         if pellet_m.covered_state is False:  # already uncovered/released
@@ -831,8 +831,8 @@ class SystemMachine(StateMachine):
         p_now = get_perf_now()
         analysis = self._analysis
         algo = self._algorithm
-        if algo.is_in_session and not algo.session_mouse_seen and response.mouse_seen:
-            logger.success("session first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
+        if algo.is_in_trial_capture and not algo.trial_mouse_seen and response.mouse_seen:
+            logger.success("trial first mouse_seen: parts=%s locations=%s", response.parts_flags, response.locations)
         if __debug__:
             t_last = getattr(self, "_last_pose_changed_logged", 0)
             p_now = get_perf_now()
@@ -869,15 +869,15 @@ class SystemMachine(StateMachine):
         #
         if not prev_pellet_seen and response.pellet_seen and (
             self._state == SystemState.tunnel
-            and not algo.is_in_session
+            and not algo.is_in_trial_capture
             and self._analysis.load_cell_monitor.is_engaged
             and (
                 self._pellet_machine.state == PelletState.monitoring
-                or algo.head_fixation_enabled)  # or using auto-clamp which allows start session before
+                or algo.head_fixation_enabled)  # or using auto-clamp which allows start trial before
         ):
             # this is mainly for when app/acquisition starts :
             # if load-cell is engaged before inference is live then we need this case/if.
-            self._consider_start_session(reason="first-pellet-seen")
+            self._consider_start_trial(reason="first-pellet-seen")
         #
         self._handle_pellet_uncover(response)
         self._pellet_machine.pellet_seen(response.pellet_seen)
@@ -940,7 +940,7 @@ class SystemMachine(StateMachine):
         pellet_dev = self._pellet_device
         algo = self._algorithm
         clamp_cfg = algo.head_clamp_config
-        if algo.is_in_session:
+        if algo.is_in_trial_capture:
             freq = clamp_cfg.auto_clamp_release_tone_freq
             logger.debug("sending tone (freq=%s) to indicate auto-clamp disengaging", freq)
             pellet_dev.play_tone(freq, 0.5)
@@ -960,10 +960,10 @@ class SystemMachine(StateMachine):
                 self._pre_disengage_auto_clamp()
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_close_gate_during_intersession(self):
+    def _consider_close_gate_during_intertrial(self):
         self._timer_consider_close_gate.cancel()  # always
         algo = self._algorithm
-        close_cfg = algo.auto_close_gate_on_intersession_config
+        close_cfg = algo.auto_close_gate_on_intertrial_config
         if not close_cfg.enabled:
             logger.debug("auto_close_gate disabled, skipping auto-close-gate")
             return
@@ -974,15 +974,15 @@ class SystemMachine(StateMachine):
         if algo.algo_paused:
             logger.debug("algo disabled, skipping auto-close-gate")
             return
-        if self._state != SystemState.intersession:
-            logger.debug("not anymore intersession, skipping auto-close-gate")
+        if self._state != SystemState.intertrial:
+            logger.debug("not anymore intertrial, skipping auto-close-gate")
             return
-        duration = self._batch_sessions_total_duration
-        if duration < close_cfg.session_min_duration:
-            logger.debug("session duration too short, skipping auto-close-gate ; duration=%.1fs", duration)
+        duration = self._batch_trials_total_duration
+        if duration < close_cfg.trial_min_duration:
+            logger.debug("trial duration too short, skipping auto-close-gate ; duration=%.1fs", duration)
             return
         load_cell_mon = self._analysis.load_cell_monitor.context
-        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        auto_close_gate_cfg = algo.auto_close_gate_on_intertrial_config
         topcam_pres = topcam_pres.to_local_value()  # get local value to ensure consistency lookups
         perf_now = get_perf_now()
         if (
@@ -993,7 +993,7 @@ class SystemMachine(StateMachine):
             and perf_now - topcam_pres.last_presence_start_perf_c > close_cfg.delay_after_cage_enter
         ):
             logger.notice(
-                "Closing tunnel gate for intersession ;"
+                "Closing tunnel gate for intertrial ;"
                 " perf_now=%.1f load_cell.last_disengaged=%.1f last_engaged=%.1f topcam.last_pres=%.1f",
                 perf_now, load_cell_mon.last_disengaged_perf_c, load_cell_mon.last_engaged_perf_c,
                 topcam_pres.last_presence_start_perf_c,
@@ -1008,7 +1008,7 @@ class SystemMachine(StateMachine):
             )
             # logger.debug("starting timer for consider_close_gate in %.1fs", delay)
             timer = self._timer_consider_close_gate = _consider_close_gate_timer(
-                delay, self._consider_close_gate_during_intersession)
+                delay, self._consider_close_gate_during_intertrial)
             timer.start()
 
     def _set_pellet_delivered_presented(self, project: ProjectInfo, t_rel_start: float):
@@ -1051,9 +1051,9 @@ class SystemMachine(StateMachine):
                 with algo.set_allow_reentrant(True):
                     self._execute_disengage_auto_clamp_if_in_progress()
             if new_value:
-                if algo.is_in_session:
-                    if algo.intersession_state == IntersessionState.idle:
-                        algo.end_capture_session(reason=RecordingEndingReason.ALGO_PAUSED)
+                if algo.is_in_trial_capture:
+                    if algo.intertrial_state == IntertrialState.idle:
+                        algo.end_capture_trial(reason=RecordingEndingReason.ALGO_PAUSED)
                 if algo.status != BehaviorAlgoStatus.IDLE:
                     with algo.set_allow_reentrant(True):
                         for action_func in (
@@ -1073,7 +1073,7 @@ class SystemMachine(StateMachine):
                 # pellet-machine will resume whatever operation needs to be, like going from home -> send-pellet,
                 # or load-pellet, depending on live conditions.
                 #
-                # trigger load cell property changed check, so that new session will be started if mouse still in tunnel
+                # trigger load cell property changed check, so that new trial will be started if mouse still in tunnel
                 self._on_load_cell_monitor_property_changed(
                     LoadCellMonitor.IS_ENGAGED_PROPERTY, self._analysis.load_cell_monitor.is_engaged, None
                 )
@@ -1108,7 +1108,7 @@ class SystemMachine(StateMachine):
         if consumed:
             analysis.autoclamp_evasion_detector.increment_pellets_consumed()
 
-        self._timer_consider_start_session.cancel()  # we will get a pellet_loaded event once it's finished
+        self._timer_consider_start_trial_capture.cancel()  # we will get a pellet_loaded event once it's finished
 
         #
         clamp_cfg = algo.active_config.head_clamp
@@ -1117,8 +1117,8 @@ class SystemMachine(StateMachine):
             if self._disengage_auto_clamp_load_count >= clamp_cfg.auto_clamp_release_load_count:
                 self._disengage_auto_clamp()
 
-        if algo.is_in_session and self._state != SystemState.intersession:
-            self._consider_end_session(reason=RecordingEndingReason.PELLET_LOADING)
+        if algo.is_in_trial_capture and self._state != SystemState.intertrial:
+            self._consider_end_trial(reason=RecordingEndingReason.PELLET_LOADING)
 
     def _on_pellet_loaded(self):
         p_now = get_perf_now()
@@ -1126,7 +1126,7 @@ class SystemMachine(StateMachine):
         logger.verbose("received pellet_loaded p_now=%.4f", self._last_pellet_loaded_perf_c)
         self._algorithm.pellet_loaded()
         self._analysis.system_maintenance_alarm.update_failed_pellet_load(consecutive=0)
-        self._consider_start_session(reason="pellet_loaded")
+        self._consider_start_trial(reason="pellet_loaded")
 
     def _on_pellet_load_failed(self, *, consecutive: int):
         logger.verbose("received pellet_load_failed consecutive=%s", consecutive)
@@ -1137,23 +1137,23 @@ class SystemMachine(StateMachine):
         logger.verbose("pellet_state_changed: %s -> %s", old_value, new_value)
         algo = self._algorithm
         if new_value == PelletState.monitoring:
-            if not algo.is_in_session:
-                self._consider_start_session(reason="pellet-monitoring")
+            if not algo.is_in_trial_capture:
+                self._consider_start_trial(reason="pellet-monitoring")
         elif new_value == PelletState.releasing:
-            if algo.is_in_session:
+            if algo.is_in_trial_capture:
                 algo.pellet_uncover_context.has_released = True
 
     def _on_pellet_sending(self):
-        self._consider_start_session(reason="pellet-sending")
+        self._consider_start_trial(reason="pellet-sending")
 
     def _on_pellet_sent(self, *, perf_c: float):
-        if self._algorithm.is_in_session:
+        if self._algorithm.is_in_trial_capture:
             project = self._project_info
             if not math.isfinite(project.t_pellet_delivered):
                 t_delivered = perf_c - self._algorithm.recording_start_perf_c
                 self._set_pellet_delivered_presented(project, t_delivered)
         else:
-            self._consider_start_session(reason="pellet-sent")
+            self._consider_start_trial(reason="pellet-sent")
 
     def _on_pellet_released(self, *, perf_c: float):
         project = self._project_info
@@ -1163,8 +1163,8 @@ class SystemMachine(StateMachine):
         algo = self._algorithm
         logger.debug(
             "_on_pellet_released: perf_c=%.2f in_session=%s sess_started=%.2f project=%s",
-            perf_c, algo.is_in_session, self._session_started_perf_c, project)
-        if algo.is_in_session:
+            perf_c, algo.is_in_trial_capture, self._trial_started_perf_c, project)
+        if algo.is_in_trial_capture:
             self._set_pellet_delivered_presented(project, perf_c - algo.recording_start_perf_c)
 
     def _update_magnet_position(self, position: float):
@@ -1182,9 +1182,9 @@ class SystemMachine(StateMachine):
             self.enter_tunnel(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_start_session(self, reason: str = "NA"):
-        self._timer_consider_start_session.cancel()  # in case of
-        self._timer_consider_start_session = no_op_timer
+    def _consider_start_trial(self, reason: str = "NA"):
+        self._timer_consider_start_trial_capture.cancel()  # in case of
+        self._timer_consider_start_trial_capture = no_op_timer
         algo = self._algorithm
         if algo.algo_paused:
             return
@@ -1201,10 +1201,10 @@ class SystemMachine(StateMachine):
             "send_begin_age=%.1f send_end_age=%.1f",
             self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
-            algo.is_in_session, send_begin_age, send_end_age)
+            algo.is_in_trial_capture, send_begin_age, send_end_age)
         if not (
             self._state == SystemState.tunnel
-            and not algo.is_in_session
+            and not algo.is_in_trial_capture
             and self._analysis.load_cell_monitor.is_engaged
             and algo.is_pellet_recently_seen()
         ):
@@ -1213,38 +1213,38 @@ class SystemMachine(StateMachine):
         if not self._project_info.is_valid():
             logger.error("refusing start_session without valid project")
             return
-        algo.start_session(reason=reason)
+        algo.start_trial_capture(reason=reason)
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _consider_end_session(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
+    def _consider_end_trial(self, *, reason: RecordingEndingReason = RecordingEndingReason.NA):
         algo = self._algorithm
-        if not algo.is_in_session:
-            logger.debug("_consider_end_session: reason=%s but not in session ; state=%s pellet=%s",
+        if not algo.is_in_trial_capture:
+            logger.debug("_consider_end_trial: reason=%s but not in trial ; state=%s pellet=%s",
                          reason, self._state, self._pellet_machine.state)
             return
-        delay = self._delay_timer_consider_end_session
+        delay = self._delay_timer_consider_end_trial
         if delay > 0:
-            prev_timer = self._timer_consider_end_session
+            prev_timer = self._timer_consider_end_trial_capture
             # check if there is not an eventual previous timer not finished,
             # in case timer delay is greater than load duration and that many load-pellet happens due
             # to missed load.
             if prev_timer.finished.is_set():
-                logger.verbose("creating timer for consider_end_session within %.1f", delay)
-                timer = self._timer_consider_end_session = _consider_end_session_timer(
+                logger.verbose("creating timer for consider_end_trial within %.1f", delay)
+                timer = self._timer_consider_end_trial_capture = _consider_end_trial_timer(
                     # NB: using algo.put_func_call to ensure it's executed with algo thread handler
-                    delay, lambda: algo.put_func_call(algo.end_capture_session, kwargs=dict(reason=reason), wait=False))
+                    delay, lambda: algo.put_func_call(algo.end_capture_trial, kwargs=dict(reason=reason), wait=False))
                 timer.start()
         else:
-            algo.end_capture_session(reason=reason)
+            algo.end_capture_trial(reason=reason)
 
-    def _on_intersession_state_changed(self, old, new):
-        self._algorithm.intersession_state = new
+    def _on_intertrial_state_changed(self, old, new):
+        self._algorithm.intertrial_state = new
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _on_detection_result_ready(self, prj: ProjectInfo, res: IntersessionResponse):
-        logger.success("Intersession analysis result: prj=%s result=%s", prj, res)
+    def _on_detection_result_ready(self, prj: ProjectInfo, res: IntertrialResponse):
+        logger.success("Intertrial analysis result: prj=%s result=%s", prj, res)
         #
-        start_list = self._batch_project_sessions_start_list
+        start_list = self._batch_project_trials_start_list
         if len(start_list) > 0:
             is_batch = True
             is_first = prj == start_list[0]
@@ -1253,11 +1253,11 @@ class SystemMachine(StateMachine):
             is_batch = False
             is_first = is_last = True
         #
-        self._shift_xyz_handler.put_intersession_response(prj, res,
-                                                          is_first=is_first, is_last=is_last, is_batch=is_batch)
+        self._shift_xyz_handler.put_intertrial_response(prj, res,
+                                                        is_first=is_first, is_last=is_last, is_batch=is_batch)
         #
         algo = self._algorithm
-        algo.set_previous_intersession_analysis_rsp(prj, res)
+        algo.set_previous_intertrial_analysis_rsp(prj, res)
         #
         if res.food_consumed > 0:
             algo.increase_pellets_consumed(res.food_consumed)
@@ -1272,11 +1272,11 @@ class SystemMachine(StateMachine):
 
     def _handle_processed_shift_xyz(self, project: ProjectInfo, shift: Offset3DTuple):
         logger.success("Received processed shift xyz: %s ; project=%s", shift.round(1), project)
-        if len(self._batch_project_sessions_list) > 0:
+        if len(self._batch_project_trials_list) > 0:
             self._next_shift_xyz_to_apply = shift
             return
         if __debug__:
-            start_batch_list = self._batch_project_sessions_start_list
+            start_batch_list = self._batch_project_trials_start_list
             if len(start_batch_list) > 0:
                 assert project == start_batch_list[-1]
         self._apply_processed_shift_xyz(shift)
@@ -1284,8 +1284,8 @@ class SystemMachine(StateMachine):
     def _apply_processed_shift_xyz(self, shift: Offset3DTuple):
         algo = self._algorithm
         dev = self._pellet_device
-        if dev is None or not algo.intersession_pellet_shift_enabled:
-            logger.debug("intersession_pellet_shift_enabled False or pellet_device None")
+        if dev is None or not algo.intertrial_pellet_shift_enabled:
+            logger.debug("intertrial_pellet_shift_enabled False or pellet_device None")
             return
         # flips are at the moment statics, but handle possible custom flips ; defensive:
         cfg = algo.diamond_triangle_config
@@ -1330,35 +1330,35 @@ class SystemMachine(StateMachine):
     def may_exit_tunnel(self):
         """Exit tunnel"""
 
-    def enter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
-        """Enter intersession"""
+    def enter_intertrial(self, project_info: ProjectInfo, *, reason: str= "NA"):
+        """Enter intertrial"""
 
-    def may_enter_intersession(self):
-        """May Enter intersession"""
+    def may_enter_intertrial(self):
+        """May Enter intertrial"""
 
-    def reenter_intersession(self, project_info: ProjectInfo, *, reason: str="NA"):
-        """ReEnter intersession (from previous intersession)"""
+    def reenter_intertrial(self, project_info: ProjectInfo, *, reason: str= "NA"):
+        """ReEnter intertrial (from previous intertrial)"""
 
-    def may_reenter_intersession(self):
-        """May ReEnter intersession"""
+    def may_reenter_intertrial(self):
+        """May ReEnter intertrial"""
 
-    def exit_intersession(self, project: ProjectInfo):
-        """Exit intersession"""
+    def exit_intertrial(self, project: ProjectInfo):
+        """Exit intertrial"""
 
-    def exit_intersession_to_tunnel(self, project: ProjectInfo):
-        """Exit intersession"""
+    def exit_intertrial_to_tunnel(self, project: ProjectInfo):
+        """Exit intertrial"""
 
-    def exit_intersession_to_cage(self, project: ProjectInfo):
-        """Exit intersession"""
+    def exit_intertrial_to_cage(self, project: ProjectInfo):
+        """Exit intertrial"""
 
-    def may_exit_intersession(self):
-        """Exit intersession"""
+    def may_exit_intertrial(self):
+        """Exit intertrial"""
 
-    def may_exit_intersession_to_tunnel(self):
-        """Exit intersession"""
+    def may_exit_intertrial_to_tunnel(self):
+        """Exit intertrial"""
 
-    def may_exit_intersession_to_cage(self):
-        """Exit intersession"""
+    def may_exit_intertrial_to_cage(self):
+        """Exit intertrial"""
 
     def is_cage(self):
         """Is cage"""
@@ -1366,8 +1366,8 @@ class SystemMachine(StateMachine):
     def is_tunnel(self):
         """Is tunnel"""
 
-    def is_intersession(self):
-        """Is intersession"""
+    def is_intertrial(self):
+        """Is intertrial"""
     # endregion
 
     transitions = transitions_allow_functions([
@@ -1387,35 +1387,35 @@ class SystemMachine(StateMachine):
         ),
 
         dict(
-            trigger=enter_intersession,
+            trigger=enter_intertrial,
             source=(SystemState.cage, SystemState.tunnel),
-            dest=SystemState.intersession,
-            after=after_enter_intersession,
+            dest=SystemState.intertrial,
+            after=after_enter_intertrial,
         ),
 
         dict(
-            trigger=reenter_intersession,
-            source=SystemState.intersession,
-            dest=SystemState.intersession,
-            after=after_enter_intersession,
+            trigger=reenter_intertrial,
+            source=SystemState.intertrial,
+            dest=SystemState.intertrial,
+            after=after_enter_intertrial,
         ),
 
         dict(  # previous behavior
-            trigger=exit_intersession,
-            source=SystemState.intersession,
-            dest=SystemState.intersession,
-            after=after_exit_intersession,
+            trigger=exit_intertrial,
+            source=SystemState.intertrial,
+            dest=SystemState.intertrial,
+            after=after_exit_intertrial,
         ),
 
         dict(
-            trigger=exit_intersession_to_tunnel,
-            source=SystemState.intersession,
+            trigger=exit_intertrial_to_tunnel,
+            source=SystemState.intertrial,
             dest=SystemState.tunnel,
-            after=after_exit_intersession_to_tunnel,
+            after=after_exit_intertrial_to_tunnel,
         ),
         dict(
-            trigger=exit_intersession_to_cage,
-            source=SystemState.intersession, dest=SystemState.cage,
-            after=after_exit_intersession_to_cage,
+            trigger=exit_intertrial_to_cage,
+            source=SystemState.intertrial, dest=SystemState.cage,
+            after=after_exit_intertrial_to_cage,
         )
     ])
