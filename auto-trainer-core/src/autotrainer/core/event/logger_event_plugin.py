@@ -33,8 +33,8 @@ class LoggerEventPlugin(EventManagerPlugin):
         pass
 
     def process_event(self, info: EventInfo, repeat_count: int) -> None:
-        output = f"{info.when}, {info.index}, {info.kind}, {str(info.kind)}, {str(info.context)}, {repeat_count}"
-        logger.log(self._level, output)
+        logger.log(self._level, "%(when)s, %(index)s, %(kind)r, %(kind)s, %(ctx)s, %(repeat)s",
+                   dict(when=info.when, index=info.index, kind=info.kind, ctx=info.context, repeat=repeat_count))
 
     def flush(self) -> None:
         pass

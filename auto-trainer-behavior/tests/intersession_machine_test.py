@@ -4,8 +4,9 @@ import logging
 from unittest import mock
 
 import pytest
+from autotrainer.api import ApiEventKind
 
-from autotrainer.core import ProjectInfo
+from autotrainer.core import ProjectInfo, EventManager, EventInfo
 from transitions import MachineError
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
@@ -96,14 +97,24 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     #
     after_exit_tunnel_msg = "after_exit_tunnel: load_cell_disengaged_intersession_in_progress"
 
-    def perform_exit_tunnel():
-        assert machine.state == SystemState.intersession
-        mock_system.exit_tunnel()
-        assert machine.state == SystemState.intersession
-        assert after_exit_tunnel_msg in caplog.text
-
     mock_system.start_session_in_tunnel()
     mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
+
+    event_mgr = EventManager.default()
+    m_post_event = mock.patch.object(event_mgr, "post_event").start()
+
+    def has_event(kind: ApiEventKind):
+        return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
+
+    def perform_exit_tunnel():
+        assert machine.state == SystemState.intersession
+        assert not has_event(ApiEventKind.tunnelExit)
+        mock_system.exit_tunnel()
+        assert has_event(ApiEventKind.tunnelExit)
+        assert machine.state == SystemState.intersession
+        assert after_exit_tunnel_msg in caplog.text
+        assert not has_event(ApiEventKind.sessionEnded), \
+            "sessionEnded will only be emitted after the intersession is finished"
 
     with caplog.at_level(logging.DEBUG):
         with mock_system.mock_intersession_analysis(concurrent_func=perform_exit_tunnel):
@@ -117,3 +128,4 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
 
     assert machine.state == SystemState.cage, "Must be back in cage after end intersession analysis"
     assert after_exit_tunnel_msg in caplog.text
+    assert has_event(ApiEventKind.sessionEnded), "Now that intersession is finished sessionEnded must also be posted"

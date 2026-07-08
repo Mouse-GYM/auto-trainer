@@ -86,6 +86,10 @@ class SystemMachine(StateMachine):
         project_info: ProjectInfo
         self._project_info = project_info
         #
+        # during same tunnel session:
+        self._tot_trials_analysed = 0
+        self._tot_trials_failed_analysed = 0
+        #
         self._next_shift_xyz_to_apply: Optional[Offset3DTuple] = None
         self._batch_project_sessions_start_list: List[ProjectInfo] = []
         self._batch_project_sessions_list: List[ProjectInfo] = []
@@ -130,6 +134,7 @@ class SystemMachine(StateMachine):
 
         algo.session_starting += self._on_session_capture_started
         algo.session_capture_ending += self.on_session_capture_ended
+        algo.session_ending += self._on_session_ending
         algo.property_changed += self._on_algorithm_property_changed
         algo.relay_transitions(self, wait=False)  # NB: must be done AFTER creation of previous `self.machine` instance
 
@@ -230,16 +235,22 @@ class SystemMachine(StateMachine):
     def shift_xyz_handler(self) -> ShiftXYZHandler:
         return self._shift_xyz_handler
 
-    def before_enter_tunnel(self, *, reason: str = "NA"):
+    def before_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         pellet_state = self._pellet_machine.state
         logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
                      reason, self._state, pellet_state, self._algorithm.is_pellet_recently_seen())
-        if self._state == SystemState.cage:
-            self._event_manager.post_event_content(ApiEventKind.tunnelEnter)
+        if self._state == SystemState.cage or force_from_cage:
+            self._tot_trials_analysed = 0
+            self._tot_trials_failed_analysed = 0
+            self._event_manager.post_api_event(build_event(ApiEventKind.tunnelEnter))
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.sessionStarted,
+                dict(session_id=self._project_info.session_id,
+                     is_analysis_deferred=self._algorithm.batch_session_recording_config.enabled)))
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
-    def after_enter_tunnel(self, *, reason: str = "NA"):
+    def after_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         self._consider_start_session(reason=reason)
         if self._analysis is not None:
             self._evaluate_auto_clamp(caller="after_enter_tunnel")
@@ -256,12 +267,15 @@ class SystemMachine(StateMachine):
             algo.end_capture_session(reason=RecordingEndingReason.EXIT_TUNNEL)
         else:
             batch_projects = self._batch_project_sessions_list
-            if len(batch_projects) > 0:
-                if self._intersession.state != IntersessionState.idle:
-                    # this can happen is a batch-list is in processing, for instance
+            intersession_is_idle = self._intersession.state == IntersessionState.idle
+            if intersession_is_idle and len(batch_projects) == 0:
+                self._post_api_session_ended(self._project_info.session_id)
+            else:
+                if not intersession_is_idle:
+                    # this can happen when a trial is in analysis processing (offline or analysis), for instance
                     logger.verbose("exit_tunnel but intersession state=%s, doing nothing. n_batch_trials=%s",
                                    self._intersession.state, len(batch_projects))
-                else:
+                elif len(batch_projects) > 0:
                     prj = batch_projects[0]
                     with algo.set_allow_reentrant(True):
                         self.enter_intersession(prj, reason="exit-tunnel-with-sessions-batch-list")
@@ -309,24 +323,33 @@ class SystemMachine(StateMachine):
         with algo.set_allow_reentrant(True):
             self._pellet_machine.environment_changed()
 
-    def after_exit_intersession(self):
+    def after_exit_intersession(self, project: ProjectInfo):
         if self._analysis.load_cell_monitor.is_engaged:
             with self._algorithm.set_allow_reentrant(True):
-                self.exit_intersession_to_tunnel()
+                self.exit_intersession_to_tunnel(project)
         else:
             # always ensure open gate on intersession ended (to cage)
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()
             self._execute_disengage_auto_clamp_if_in_progress()
             with self._algorithm.set_allow_reentrant(True):
-                self.exit_intersession_to_cage()
+                self.exit_intersession_to_cage(project)
 
-    def after_exit_intersession_to_cage(self):
+    def after_exit_intersession_to_cage(self, project: ProjectInfo):
+        self._post_api_session_ended(project.session_id)
         # ensure pellet goes back where necessary:
         self._pellet_machine.environment_changed(caller="exit_intersession_to_cage")
 
-    def after_exit_intersession_to_tunnel(self):
-        self.enter_tunnel(reason="exit_intersession_to_tunnel")
+    def after_exit_intersession_to_tunnel(self, project: ProjectInfo):
+        if project.session_id != self._project_info.session_id:
+            # animal has exited/re-entered the tunnel during the intersession, so:
+            self._post_api_session_ended(project.session_id)
+            force_from_cage = True
+            # this allows to have new tunnelEnter / sessionStarted events emitted.
+        else:
+            force_from_cage = False
+        with self._algorithm.set_allow_reentrant(True):
+            self.enter_tunnel(reason="exit_intersession_to_tunnel", force_from_cage=force_from_cage)
 
     @staticmethod
     def _clean_raw_data(project: ProjectInfo, *, wait_before_clean: float = 10):
@@ -503,12 +526,28 @@ class SystemMachine(StateMachine):
                 CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                 else CaptureAnalysisResult.CAPTURE_ONLY)
 
+    def _post_api_session_ended(self, session_id):
+        self._event_manager.post_event_content(
+            ApiEventKind.sessionEnded,
+            data=dict(
+                session_id=session_id,
+                trial_count=self._tot_trials_analysed,
+                failed_trial_count=self._tot_trials_failed_analysed,
+            ),
+        )
+
+    def _on_session_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
+        pass
+        # was used to post api-event-sessionEnded, but correct place is in exit_interession_xxx triggers
+
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_intersession_analysis_ended(self, project: ProjectInfo, result: CaptureAnalysisResult):
         logger.verbose("intersession ended: trial=%s result=%s", project.short_id, result)
+        self._tot_trials_analysed += 1
         cur_batch = self._batch_project_sessions_list
         if result == CaptureAnalysisResult.ANALYSIS_FAILED:
             self._batch_failed_count += 1
+            self._tot_trials_failed_analysed += 1
         algo = self._algorithm
         if len(cur_batch) > 0:
             self._batch_project_sessions_finished += 1
@@ -519,7 +558,6 @@ class SystemMachine(StateMachine):
                 with algo.set_allow_reentrant(True):
                     self.reenter_intersession(cur_batch[0], reason="reenter-batch-session")
                 return
-            finished_batch = True
             shift_xyz = self._next_shift_xyz_to_apply
             if shift_xyz is not None:
                 self._next_shift_xyz_to_apply = None
@@ -530,17 +568,13 @@ class SystemMachine(StateMachine):
             # force inference project-info back to current/live one:
             self._inference.project = self._project_info
             algo.batch_analysis_ending(failed_count=self._batch_failed_count)
-        else:
-            finished_batch = False
-
-        if finished_batch:
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.batchAnalysisEnded,
-                {"session_id": self._project_info.session_id,
+                {"session_id": project.session_id,
                  "failed_trial_count": self._batch_failed_count}))
 
         with algo.set_allow_reentrant(True):
-            self.exit_intersession()
+            self.exit_intersession(project)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_inference_property_changed(self, name: str, new_value, prev_value):
@@ -578,6 +612,10 @@ class SystemMachine(StateMachine):
                 ApiEventKind.headfixLoadCellEnabledChanged, data=dict(is_enabled=value))
             if value:
                 self._analysis.global_animal_presence_alarm.stop()
+                # always reset new session_id for any seen "tunnel enter" (or re-enter)
+                self._project_info.reset_session_id()
+                # so that, in case of batch analysis in progress,
+                # if animal reenter the tunnel, then a new session_id is set.
                 self._consider_enter_tunnel(reason="load_cell_engaged_when_in_cage")
             else:
                 if self._inference.status == InferenceStatus.live:
@@ -591,7 +629,6 @@ class SystemMachine(StateMachine):
                         # this does same than exit_tunnel, without updating the current state,
                         # which is either segmentation or detection
                         self.after_exit_tunnel(reason="load_cell_disengaged_intersession_in_progress")
-                        # logger.verbose("skipping exit_tunnel due to intersession still in progress: %s", inter_state)
                 else:
                     self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
                                                            data=dict(is_enabled=self._state))
@@ -1141,7 +1178,6 @@ class SystemMachine(StateMachine):
             and self._analysis.load_cell_monitor.is_engaged
         ):
             return
-        self._project_info.reset_session_id()
         with self._algorithm.set_allow_reentrant(True):
             self.enter_tunnel(reason=reason)
 
@@ -1282,7 +1318,7 @@ class SystemMachine(StateMachine):
     def may_trigger(self):
         """Trigger"""
 
-    def enter_tunnel(self, *, reason: str = "NA"):
+    def enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         """Enter tunnel"""
 
     def may_enter_tunnel(self):
@@ -1306,13 +1342,13 @@ class SystemMachine(StateMachine):
     def may_reenter_intersession(self):
         """May ReEnter intersession"""
 
-    def exit_intersession(self):
+    def exit_intersession(self, project: ProjectInfo):
         """Exit intersession"""
 
-    def exit_intersession_to_tunnel(self):
+    def exit_intersession_to_tunnel(self, project: ProjectInfo):
         """Exit intersession"""
 
-    def exit_intersession_to_cage(self):
+    def exit_intersession_to_cage(self, project: ProjectInfo):
         """Exit intersession"""
 
     def may_exit_intersession(self):
