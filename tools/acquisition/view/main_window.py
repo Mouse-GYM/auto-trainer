@@ -13,7 +13,7 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple, Callable, Union, Literal
 
-from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination
+from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
@@ -48,7 +48,7 @@ from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult, Tra
 from autotrainer.pyside.xyz_label import XYZQLabel
 
 from tools.autotrainer_version import __version__ as app_version
-from tools.acquisition.model.app_model import AppModel
+from tools.acquisition.model.app_model import AppModel, WatchdogItems
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
 from tools.acquisition.model.training_plan import get_plan_id
@@ -186,6 +186,16 @@ class MainWindow(QMainWindow):
         self._set_reset_vat_text()
         self._set_reset_cage_clean_text()
         self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
+
+        self._watchdog_perf_c = time.perf_counter()
+        watchdog_timer = self._watchdog_timer = QTimer(self)
+        watchdog_timer.timeout.connect(self._update_watchdog_perf_c)
+        watchdog_timer.start(1000)  # every 1s
+        app_model.analysis.watchdog_monitor.register_watchdog(WatchdogItems.MAIN_UI_THREAD, lambda: self._watchdog_perf_c)
+
+    def _update_watchdog_perf_c(self):
+        # logger.spam("updating watchog")
+        self._watchdog_perf_c = time.perf_counter()
 
     @property
     def app_model(self) -> AppModel:

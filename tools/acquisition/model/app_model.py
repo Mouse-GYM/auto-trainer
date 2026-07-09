@@ -192,6 +192,7 @@ class AppModelEvents:
 
 class WatchdogItems(str, enum.Enum):
 
+    MAIN_UI_THREAD = "main_ui_thread"
     DEVICE_READER = "device_reader"
     DEVICE_WRITER = "device_writer"
     POSE_PROCESS = "pose_process"
@@ -1459,7 +1460,8 @@ class AppModel(ObservableObject):
 
         watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
         for item in WatchdogItems:
-            watchdog_mon_unregister(item)
+            if item is not WatchdogItems.MAIN_UI_THREAD:
+                watchdog_mon_unregister(item)
 
         self._inference.stop()
         self._hardware.disconnect()
