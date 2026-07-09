@@ -3,6 +3,7 @@ import dataclasses
 import io
 from pathlib import Path
 
+import humps
 import pytest
 import yaml
 
@@ -10,7 +11,7 @@ from autotrainer.core import (
     SystemConfiguration,
     CameraId,
     CameraConfiguration,
-    Offset3DTuple,
+    Offset3DTuple, camelize_dict_deep,
 )
 from autotrainer.core.configuration.device_comm_alarm_config import DeviceCommAlarmConfig
 from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
@@ -20,7 +21,8 @@ from autotrainer.core.configuration import (
     SystemConfigurationLoader,
 )
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
-from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration
+from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
+    AutoEndTrialConfiguration
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -101,10 +103,10 @@ v0_expected_result_config = {
             "is_enabled": True,
             "retract_enabled": True,
             "is_pellet_cover_enabled": True,
-            "is_intertrial_analysis_enabled": False,
+            "is_intertrial_analysis_enabled": True,
             "is_intertrial_pellet_shift_enabled": True,
             "pellet_send_wait_delay": 1.0,
-            "max_pellets_per_trial": 10,
+            "max_pellets_per_trial": 20,
             "max_pellets_per_day": 25,
             "max_pellet_missing_seconds": 10,
             "auto_correct_motors_drift": False,
@@ -334,3 +336,36 @@ def test_offset3d_yaml():
 def test_device_comm_default():
     cfg = DeviceCommAlarmConfig()
     assert cfg.is_emergency_condition is True
+
+
+@pytest.mark.parametrize("analysis_enabled", (False, True))
+@pytest.mark.parametrize("max_pellets", (0, 15))
+@pytest.mark.parametrize("shift_enabled", (False, True))
+@pytest.mark.parametrize("auto_end_session", (
+    AutoEndTrialConfiguration(no_activity_delay_minutes=12),
+    AutoEndTrialConfiguration(no_activity_delay_minutes=15),
+))
+def test_renames_on_v52_are_respected(
+    analysis_enabled,
+    max_pellets,
+    shift_enabled,
+    auto_end_session,
+):
+    config_text = f"""
+    !SystemConfiguration
+    version: 51
+    behavior: !BehaviorConfiguration
+        pelletDelivery: !PelletDeliveryConfiguration
+            isIntersessionAnalysisEnabled: {"true" if analysis_enabled else "false"}
+            isIntersessionPelletShiftEnabled: {"true" if shift_enabled else "false"}
+            maxPelletsPerSession: {max_pellets}
+        autoEndSession: !AutoEndSessionConfiguration
+            noActivityDelayMinutes: {auto_end_session.no_activity_delay_minutes}
+            animalTunnelNoActivityDelay: {auto_end_session.animal_tunnel_no_activity_delay}
+    """
+    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
+    assert isinstance(cfg, SystemConfiguration)
+    assert cfg.behavior.pellet_delivery.is_intertrial_analysis_enabled is analysis_enabled
+    assert cfg.behavior.pellet_delivery.is_intertrial_pellet_shift_enabled is shift_enabled
+    assert cfg.behavior.pellet_delivery.max_pellets_per_trial == max_pellets
+    assert cfg.behavior.auto_end_trial == auto_end_session

@@ -477,10 +477,8 @@ class MockSystemMachine:
         self.make_load_cell_active()
         self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
-        # algo.start_session(reason="manual")
         if set_recording_status:
             algo.set_capture_status(CaptureProcessStatus.RECORDING)
-        # assert algo.is_in_session
         assert self._machine.state == SystemState.tunnel
 
     def exit_tunnel(self):

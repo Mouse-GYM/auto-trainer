@@ -139,7 +139,7 @@ _DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
 # False: faster for caller/putter
 
 
-def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+def _relay_func(func: Callable, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE) -> Callable:
     """See BehaviorAlgorithm.relay_func()"""
     orig_func = func
     # skip any partial(s):
@@ -153,7 +153,9 @@ def _relay_func(func, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_
     def wrapped(*args, **kwargs):
         BehaviorAlgorithm.put_func_call(orig_func, args, kwargs, wait=wait)
     #
-    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # used by log in hardware-control
+    # used by log in hardware-control
+    # pyrefly: ignore [missing-attribute]
+    wrapped._orig_func_qualname = getattr(orig_func, "__qualname__", str(orig_func))  # noqa
     #
     return wrapped
 
@@ -167,51 +169,7 @@ class BehaviorAlgoStatus(str, enum.Enum):
     ANIMAL_IN_TRAINING = "animal_in_training"  # this is ANIMAL_IN_DEVICE with training behavior algo **enabled**
 
 
-class _RelayEventTrialRenamed:
-    # allows to use old event names to new one, see below where used.
-    # remove me once training converted to new event names.
-
-    def __set_name__(self, owner, name):
-        self.ev_name = name.replace("session", "trial")
-
-    def __get__(self, instance, owner):
-        return getattr(instance, self.ev_name)
-
-    def __set__(self, *a):
-        pass
-
-
 class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
-    # dynamic events type hints,
-    # helps IDE search/completion/type-verification:
-    trial_starting_before_record_start: BehaviorAlgoEvents.trial_starting_before_record_start
-    trial_starting: BehaviorAlgoEvents.trial_starting
-    trial_capture_ending: BehaviorAlgoEvents.trial_capture_ending
-
-    # back-compat:
-    session_starting_before_record_start = _RelayEventTrialRenamed()
-    session_starting = _RelayEventTrialRenamed()
-    session_capture_ending = _RelayEventTrialRenamed()
-
-    batch_analysis_starting: BehaviorAlgoEvents.batch_analysis_starting
-    trial_processing_starting: BehaviorAlgoEvents.trial_processing_starting
-    trial_ending: BehaviorAlgoEvents.trial_ending
-    # back-compat:
-    session_processing_starting = _RelayEventTrialRenamed()
-    session_ending = _RelayEventTrialRenamed()
-
-    batch_analysis_ending: BehaviorAlgoEvents.batch_analysis_ending
-
-    cover_servo_status_changed: BehaviorAlgoEvents.cover_servo_status_changed  # unused
-
-    # NB:
-    # these events receive as single param/arg the **increment** applied to the previous value (whatever it was):
-    pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
-    pellets_consumed_evt: BehaviorAlgoEvents.pellets_consumed_evt
-    successful_reaches_evt: BehaviorAlgoEvents.successful_reaches_evt
-    total_reaches_evt: BehaviorAlgoEvents.total_reaches_evt
-
-    #
 
     _thread_locals: ClassVar[threading.local] = threading.local()
     _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue], List]] = (threading.current_thread(), None, [])
@@ -328,7 +286,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         #
 
     @classmethod
-    def _check_start_thread(cls: "BehaviorAlgorithm", *, thread_lock: threading.RLock):
+    def _check_start_thread(cls, *, thread_lock: threading.RLock):
         handler_thread, handler_queue, reentrant_list = cls._handler_thread_queue
         if cls._no_handler_thread:
             if handler_queue is not None:
@@ -380,7 +338,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         finally:
             t_locals.sync_call_mode = prev
 
-    def relay_func(func=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
+    def relay_func(func: Optional[Callable]=None, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE) -> Callable:
         """Decorator for marking a function/method as having to be relayed to our algo dedicated thread"""
         if func is None:
             return partial(_relay_func, wait=wait)
@@ -388,7 +346,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @classmethod
     def _handler_thread_run(
-        cls: "BehaviorAlgorithm",
+        cls,
         input_queue: queue.Queue,
         thread_lock: threading.RLock,
         reentrant_list: List,
@@ -442,7 +400,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         logger.debug("Exiting ; left queue_size=%s", input_queue.qsize())
 
     @classmethod
-    def relay_transitions(cls: "BehaviorAlgorithm", machine_transitions: Any,
+    def relay_transitions(cls, machine_transitions: Any,
                           *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE):
         """Relay all transition triggers of the given machine_transitions instance to the algo dedicated thread"""
         for trans in machine_transitions.transitions:
@@ -457,9 +415,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
     @classmethod
     def put_func_call(
-        cls: "BehaviorAlgorithm",
+        cls,
         func: Callable,
-        args: Tuple[Any, ...] = (),
+        args: Tuple = (),
         kwargs: Optional[Dict]=None,
         *,
         wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE,
@@ -1130,7 +1088,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
     #
 
     def start_trial_capture(self, *, reason: str = "NA"):
-        """Start a session/trial recording"""
+        """Start a trial recording"""
         with self._thread_lock:
             return self._start_trial(reason=reason)
 

@@ -18,6 +18,7 @@ from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 from . import PelletState
+from ...core.observable_object import EventHandler
 
 logger = get_verbose_logger(__name__)
 
@@ -42,12 +43,12 @@ class PelletReleasedEventT(Protocol):
 
 class PelletMachineEvents(StateMachineEvents):
 
-    pellet_loading: Callable[[], None]  # when a load-pellet is started executing
-    pellet_sending: Callable[[], None]  # now unused
-    pellet_loaded: Callable[[], None]  # when a load-pellet is finished executing AND a pellet is seen on it
-    pellet_sent: PelletSentEventT  # when a send-pellet is finished executing
-    pellet_load_failed: PelletLoadFailedEventT
-    pellet_released: PelletReleasedEventT
+    pellet_loading: EventHandler[Callable[[], None]]  # when a load-pellet is started executing
+    pellet_sending: EventHandler[Callable[[], None]]  # now unused
+    pellet_loaded: EventHandler[Callable[[], None]]  # when a load-pellet is finished executing AND a pellet is seen on it
+    pellet_sent: EventHandler[PelletSentEventT]  # when a send-pellet is finished executing
+    pellet_load_failed: EventHandler[PelletLoadFailedEventT]
+    pellet_released: EventHandler[PelletReleasedEventT]
 
 
 class PelletDeviceCommandFailed(RuntimeError):

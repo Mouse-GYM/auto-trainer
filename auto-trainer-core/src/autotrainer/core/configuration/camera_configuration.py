@@ -9,7 +9,6 @@ from typing_extensions import Self
 import yaml
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import make_camelize_representer, make_decamelize_constructor
 from autotrainer.core.configuration import SystemConfigurationDumper
 
 

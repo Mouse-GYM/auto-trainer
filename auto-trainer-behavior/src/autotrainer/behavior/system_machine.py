@@ -83,7 +83,7 @@ class SystemMachine(StateMachine):
 
         if project_info is None:
             project_info = ProjectInfo()
-        project_info: ProjectInfo
+        assert project_info is not None
         self._project_info = project_info
         #
         # during same tunnel session:
@@ -247,6 +247,7 @@ class SystemMachine(StateMachine):
                 ApiEventKind.sessionStarted,
                 dict(session_id=self._project_info.session_id,
                      is_analysis_deferred=self._algorithm.batch_trial_recording_config.enabled)))
+            self._algorithm.session_starting(self._project_info.session_id)
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
@@ -526,15 +527,15 @@ class SystemMachine(StateMachine):
                 CaptureAnalysisResult.ANALYSIS_DELAYED if real_can_perform_analysis
                 else CaptureAnalysisResult.CAPTURE_ONLY)
 
-    def _post_api_session_ended(self, session_id):
-        self._event_manager.post_event_content(
+    def _post_api_session_ended(self, session_id: str):
+        self._event_manager.post_api_event(build_event(
             ApiEventKind.sessionEnded,
-            data=dict(
+            dict(
                 session_id=session_id,
                 trial_count=self._tot_trials_analysed,
                 failed_trial_count=self._tot_trials_failed_analysed,
-            ),
-        )
+            )))
+        self._algorithm.session_ending(session_id)
 
     def _on_trial_ending(self, project: ProjectInfo, result: CaptureAnalysisResult):
         pass
@@ -714,6 +715,7 @@ class SystemMachine(StateMachine):
         drift_dist = math.nan if cur_drift is None else cur_drift.distance
         if math.isnan(drift_dist) or drift_dist < home_on_drift_cfg.excessive_distance_threshold:
             return
+        assert cur_drift is not None
         logger.notice("Measured motor drift too high (%.1fmm), executing home procedure",
                       drift_dist)
         self._event_manager.post_event_content(
@@ -1196,8 +1198,8 @@ class SystemMachine(StateMachine):
         send_begin_age = pellet_machine.get_pellet_send_begin_age(perf_now)
         send_end_age = pellet_machine.get_pellet_send_end_age(perf_now)
         logger.verbose(
-            "consider_start_session: load_cell.engaged=%s "
-            "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_session=%s "
+            "consider_start_trial: load_cell.engaged=%s "
+            "state=%s pellet-state=%s recently_seen=%s seen_age=%.1f in_trial=%s "
             "send_begin_age=%.1f send_end_age=%.1f",
             self._analysis.load_cell_monitor.is_engaged,
             self._state, self._pellet_machine.state, algo.pellet_recently_seen, pellet_seen_age,
@@ -1211,7 +1213,7 @@ class SystemMachine(StateMachine):
             logger.debug("Not good state")
             return
         if not self._project_info.is_valid():
-            logger.error("refusing start_session without valid project")
+            logger.error("refusing start_trial without valid project")
             return
         algo.start_trial_capture(reason=reason)
 

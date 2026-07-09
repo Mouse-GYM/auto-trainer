@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
+
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Union, ClassVar, TextIO, Type, Any
 from typing_extensions import Self
-import yaml
 
+import yaml
 import humps
+from dacite import from_dict
 
 from autotrainer.core.logging import get_verbose_logger
 from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader
@@ -28,6 +31,28 @@ from ..project.project_info import DATE_FORMAT, TIME_FORMAT
 logger = get_verbose_logger(__name__)
 
 #
+
+# renames which occurred at version-52 :
+_BEHAVIOR_FIELD_RENAMES = {
+    "auto_end_session": "auto_end_trial",
+    "batch_session_recording": "batch_trial_recording",
+    "auto_close_gate_on_intersession": "auto_close_gate_on_intertrial",
+}
+_PELLET_FIELD_RENAMES = {
+    "is_intersession_analysis_enabled": "is_intertrial_analysis_enabled",
+    "is_intersession_pellet_shift_enabled": "is_intertrial_pellet_shift_enabled",
+    "max_pellets_per_session": "max_pellets_per_trial",
+}
+
+# can merge them together:
+_V52_RENAMES = {**_BEHAVIOR_FIELD_RENAMES, **_PELLET_FIELD_RENAMES}
+
+
+def _camelize_deep(dct):
+    for k, v in tuple(dct.items()):
+        dct[humps.camelize(k)] = dct.pop(k)
+        if isinstance(v, dict):
+            _camelize_deep(v)
 
 
 @dataclass
@@ -66,13 +91,26 @@ class SystemConfiguration:
             configuration: Self = yaml.load(data, SystemConfigurationLoader)
         elif version < SystemConfiguration.version:
             content = humps.decamelize(raw_content)
-            configuration = cls()
+            if version < 52:
+                behavior_dct = content.get("behavior", {})
+                if version == 0:
+                    pellet_dct = content.get("pellet", {})
+                else:
+                    pellet_dct = behavior_dct.get("pellet_delivery", {})
+                for old_key, new_key in _V52_RENAMES.items():
+                    if old_key in behavior_dct:
+                        behavior_dct[new_key] = behavior_dct.pop(old_key)
+                    if old_key in pellet_dct:
+                        pellet_dct[new_key] = pellet_dct.pop(old_key)
             if version == 0:
+                configuration = cls()
                 configuration._deserialize_version_zero(content)
             elif version == 1:
+                configuration = cls()
                 configuration._deserialize_version_one(content)
             else:
-                configuration: Self = yaml.load(data, SystemConfigurationSafeLoader)
+                # dataclass recursive construct from nested dicts:
+                configuration: Self = from_dict(data_class=SystemConfiguration, data=content)  # noqa
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "

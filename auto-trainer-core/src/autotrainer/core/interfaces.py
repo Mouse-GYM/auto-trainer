@@ -249,6 +249,8 @@ class BehaviorAlgoEvents:
     # NB: *assigned/defined* here,
     # but used as typehints in BehaviorAlgoProtocol below.
 
+    session_starting = EventHandler[Callable[[str], None]]  # arg0 is session_id
+
     trial_starting_before_record_start = EventHandler[Callable[[], None]]
     trial_starting = EventHandler[Callable[[], None]]
     trial_capture_ending = EventHandler[Callable[[RecordingEndingReason], None]]
@@ -259,6 +261,8 @@ class BehaviorAlgoEvents:
     batch_analysis_ending = EventHandler[BatchAnalysisEndingEvent]
 
     trial_ending = EventHandler[Callable[[ProjectInfo, CaptureAnalysisResult], None]]
+
+    session_ending = EventHandler[Callable[[str], None]]  # arg0 is session_id
 
     cover_servo_status_changed = EventHandler[Callable[[CoverServoStatus], None]]
 
@@ -326,7 +330,11 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
 
     # 3) events:
 
+    session_starting: BehaviorAlgoEvents.session_starting
+    """Emitted when a new session occurs (== tunnel enter)"""
+
     trial_starting_before_record_start: BehaviorAlgoEvents.trial_starting_before_record_start
+    """Emitted when a new trial recording start, before camera start record has been requested"""
 
     trial_starting: BehaviorAlgoEvents.trial_starting
     """Emitted when a new trial recording starts"""
@@ -336,6 +344,11 @@ class BehaviorAlgorithmProtocol(ObservableObjectProtocol, Protocol):
 
     trial_ending: BehaviorAlgoEvents.trial_ending
     """Emitted when a trial "full session" ended, this can have analysis processed or not"""
+
+    session_ending: BehaviorAlgoEvents.session_ending
+    """Emitted when current session ends"""
+
+    # pellet events:
 
     pellets_presented_evt: BehaviorAlgoEvents.pellets_presented_evt
     """When a pellet is "presented" ; i.e: when it's arrived at deliver/send position"""

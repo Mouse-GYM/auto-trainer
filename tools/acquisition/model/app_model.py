@@ -48,6 +48,7 @@ from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
+from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -182,11 +183,11 @@ class AppModelEvents:
     # NB: events "definition/typehint" are forwarded *into* AppModel below,
     # so we *assign* them here (=), but we'll typehint (:) in AppModel.
 
-    configuration_loaded_event = Callable[[SystemConfiguration], None]
-    on_error = Callable[[str, str], None]
-    training_plan_deserialized = TrainingPlanDeserializedEvent
+    configuration_loaded_event = EventHandler[Callable[[SystemConfiguration], None]]
+    on_error = EventHandler[Callable[[str, str], None]]
+    training_plan_deserialized = EventHandler[TrainingPlanDeserializedEvent]
 
-    current_day_changed = Callable[[date], None]
+    current_day_changed = EventHandler[Callable[[date], None]]
 
 
 class WatchdogItems(str, enum.Enum):
@@ -266,7 +267,8 @@ class AppModel(ObservableObject):
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
-        self._left_camera = self._right_camera = None
+        self._left_camera = VideoCaptureModel("left")
+        self._right_camera = VideoCaptureModel("right")
 
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None

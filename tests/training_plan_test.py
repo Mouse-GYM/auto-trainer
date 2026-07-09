@@ -122,10 +122,9 @@ class BaseTrainingPlan(MockSystemMachine):
 
         algo = self.algo
         # TODO:
-        expected_plan_id = '57094295-5234-44f3-a925-14ceb772c8e5'
-        expected_plan_id = '8fd60c5d-d543-45b9-8287-b5b97602f8e0'
-        expected_plan_id = '58cc7a5b-8d75-40ff-9b8c-6d2b3a7ab814'
+        expected_plan_id = 'd0707295-9917-4639-bf56-9b86dc682ad0'  # coming from auto-trainer-training itself
         plan = app_model.get_training_plan_by_id(expected_plan_id)
+        assert plan is not None, f"is auto-trainer-training updated? we need the plan {expected_plan_id}"
         animal = app_model.selected_animal
         animal.training.current_protocol = plan.plan_id
         app_model.training_plan = plan
@@ -173,9 +172,11 @@ class TestTrainingPlan(BaseTrainingPlan):
         # see below
         algo = self.algo
         plan = app_model.training_plan
+        assert plan is not None
         plan_start_phase = plan.current_phase
-
-        assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False
+        assert plan_start_phase is not None
+        advance_pred = plan_start_phase.advance_predicate
+        assert advance_pred is None or advance_pred.evaluate(plan_start_phase, plan._system_context) is False
         # NB:
         results = [
             IntertrialResponse(
@@ -323,7 +324,7 @@ class TestTrainingPlan(BaseTrainingPlan):
         algo.pellet_delivery_enabled = True
         # so that pellet-send will be allowed with ack of previous retract:
 
-        self.mock_pellet_ack()  # for retract
+        self.mock_pellet_ack(until_none=True)  # for retract and eventual cover
         assert pellet_m._api_status_token is None
         # assert pellet_m.covered_state is False  # depends todo
 

@@ -13,14 +13,14 @@ from .intertrial_state import IntertrialState
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine, StateMachineEvents
-
+from ...core.observable_object import EventHandler
 
 logger = get_verbose_logger(__name__)
 
 
 class IntertrialMachineEvents(StateMachineEvents):
-    on_analysis_started: Callable[[], None]  # unused
-    on_analysis_ended: Callable[[ProjectInfo, CaptureAnalysisResult], None]
+    on_analysis_started: EventHandler[Callable[[], None]]  # unused
+    on_analysis_ended: EventHandler[Callable[[ProjectInfo, CaptureAnalysisResult], None]]
 
 
 class IntertrialMachine(StateMachine):

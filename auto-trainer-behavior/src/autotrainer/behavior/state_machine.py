@@ -5,6 +5,7 @@ from events import Events
 
 from autotrainer.core import EventManager
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.observable_object import EventHandler
 
 AnyOldValue = AnyNewValue = Any
 
@@ -14,8 +15,8 @@ logger = get_verbose_logger(__name__)
 
 class StateMachineEvents(Events):
 
-    state_changed: Callable[[AnyOldValue, AnyNewValue], None]
-    property_changed: Callable[[str, AnyNewValue, AnyOldValue], None]
+    state_changed: EventHandler[Callable[[AnyOldValue, AnyNewValue], None]]
+    property_changed: EventHandler[Callable[[str, AnyNewValue, AnyOldValue], None]]
 
 
 class StateMachine:
@@ -29,7 +30,7 @@ class StateMachine:
     def __init__(self, *, initial_state, event_names: Tuple[str, ...] = ()):
         super().__init__()
         self._state = initial_state
-        event_names = sorted(event_names + tuple(get_type_hints(self._events_class)))
+        event_names = tuple(sorted(event_names + tuple(get_type_hints(self._events_class))))
         logger.debug("%s: creating events instance for events: %s",
                      self.__class__.__name__, event_names)
         self._events = self._events_class(event_names)

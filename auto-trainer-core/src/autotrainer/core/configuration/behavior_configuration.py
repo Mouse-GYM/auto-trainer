@@ -274,10 +274,6 @@ class _BehaviorConfiguration:
         if baseline is not None:
             headclamp['baseline_intensity'] = baseline
         pellet_dev = content.get("pellet_delivery", {})
-        if "is_intersession_analysis_enabled" in pellet_dev:
-            pellet_dev["is_intertrial_analysis_enabled"] = pellet_dev.pop("is_intersession_analysis_enabled")
-        if "max_pellets_per_session" in pellet_dev:
-            pellet_dev["max_pellets_per_trial"] = pellet_dev.pop("max_pellets_per_session")
         return cls(
             load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),
             headbar_pressure=HeadbarPressureConfiguration(**content.get("headbar_pressure", {})),
