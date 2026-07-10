@@ -243,13 +243,6 @@ def build_kwargs_apply_mapping(
 ConfigItemCls = TypeVar("ConfigItemCls")
 
 
-def camelize_dict_deep(dct: Dict):
-    for k, v in dct.items():
-        dct[humps.camelize(k)] = dct.pop(k)
-        if isinstance(v, dict):
-            camelize_dict_deep(v)
-
-
 def make_camelize_representer(section_name: str):
 
     def representer(dumper: yaml.SafeDumper, obj):

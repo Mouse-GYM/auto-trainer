@@ -11,7 +11,7 @@ from autotrainer.core import (
     SystemConfiguration,
     CameraId,
     CameraConfiguration,
-    Offset3DTuple, camelize_dict_deep,
+    Offset3DTuple
 )
 from autotrainer.core.configuration.device_comm_alarm_config import DeviceCommAlarmConfig
 from autotrainer.core.configuration.load_cell_config import LoadCellConfiguration
