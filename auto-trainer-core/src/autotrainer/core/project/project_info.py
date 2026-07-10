@@ -278,12 +278,12 @@ class ProjectInfo(_ProjectInfo):
         (location, today) = self.get_day_path(True, when=when)
         if trial < 0:
             trial = self.trial
-        session_str = f"trial{trial:03}"
-        location = os.path.join(location, session_str)
+        trial_str = f"trial{trial:03}"
+        location = os.path.join(location, trial_str)
         if not skip_ensure and self.ensure_exists:
             _ensure_location(location)
         d = f"_{self.device_id}" if self.device_id else ""
-        prefix = f"{today}{d}_{session_str}"
+        prefix = f"{today}{d}_{trial_str}"
         s = f"_{name}" if name else ""
         prefix = f"{prefix}{s}"
         return TrialSource(location, prefix, trial)
@@ -392,7 +392,7 @@ class ProjectInfo(_ProjectInfo):
         base = self.get_source_path("")
         return Path(base.location).joinpath(f"{base.prefix}{REACH_EVENT_SUFFIX}")
 
-    def get_intersession_pose_path(
+    def get_intertrial_pose_path(
         self,
         name: str = "",
         trial: int = -1,

@@ -362,15 +362,15 @@ class PreferencesContent(QWidget):
         #
         shift_xyz_cfg = algo.active_config.shift_xyz_handler
         left_grid_layout.addWidget(QLabel("<b>Intertrial Pellet Shift:</b>"), cur_row, cur_col)
-        toggle = self._intersession_pellet_shift_toggle = QSwitch()
+        toggle = self._intertrial_pellet_shift_toggle = QSwitch()
         toggle.setToolTip("Enables adjustment of the pellet delivery position based on post trial reach analysis.")
         add_enabled_state(lambda t=toggle: t.setEnabled(self._inference_enabled_toggle.isChecked()))
-        toggle.setChecked(algo.intersession_pellet_shift_enabled)
-        def allow_intersession_shift_toggle_state_changed(x: int):
+        toggle.setChecked(algo.intertrial_pellet_shift_enabled)
+        def allow_intertrial_shift_toggle_state_changed(x: int):
             enabled = x != 0
-            algo.intersession_pellet_shift_enabled = enabled
+            algo.intertrial_pellet_shift_enabled = enabled
             refresh_enabled_states()
-        toggle.stateChanged.connect(allow_intersession_shift_toggle_state_changed)
+        toggle.stateChanged.connect(allow_intertrial_shift_toggle_state_changed)
         left_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
         cur_row += 1
 
@@ -378,7 +378,7 @@ class PreferencesContent(QWidget):
         toggle = self._use_minimum_reach_fail_toggle = QSwitch()
         toggle.setChecked(shift_xyz_cfg.use_reach_buffer)
         add_enabled_state(lambda t=toggle: t.setEnabled(
-            self._intersession_pellet_shift_toggle.isChecked() and self._inference_enabled_toggle.isChecked()))
+            self._intertrial_pellet_shift_toggle.isChecked() and self._inference_enabled_toggle.isChecked()))
         def use_minimum_reach_fail_changed(x: int):
             enabled = x != 0
             algo.active_config.shift_xyz_handler.use_reach_buffer = enabled
@@ -407,7 +407,7 @@ class PreferencesContent(QWidget):
         toggle.setChecked(shift_xyz_cfg.use_tongue_eaten)
         add_enabled_state(
             lambda t=toggle: t.setEnabled(
-                self._intersession_pellet_shift_toggle.isChecked()
+                self._intertrial_pellet_shift_toggle.isChecked()
                 and self._inference_enabled_toggle.isChecked()
             ))
         def use_tongue_eaten_changed(x: int):
@@ -491,12 +491,12 @@ class PreferencesContent(QWidget):
         cur_row += 1
         #
         left_grid_layout.addWidget(QLabel("<b>Auto-close gate during intertrial analysis:</b>"), cur_row, cur_col)
-        auto_close_gate_cfg = algo.auto_close_gate_on_intersession_config
+        auto_close_gate_cfg = algo.auto_close_gate_on_intertrial_config
         toggle = QSwitch()
         toggle.setChecked(auto_close_gate_cfg.enabled)
         def toggle_changed(value):
             enabled = value != 0
-            algo.auto_close_gate_on_intersession_config.enabled = enabled
+            algo.auto_close_gate_on_intertrial_config.enabled = enabled
             refresh_enabled_states()
         toggle.stateChanged.connect(toggle_changed)
         left_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
@@ -505,11 +505,11 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(QLabel("trial minimum duration (sec.):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
-        spinbox.setRange(0, max(1_000_000., auto_close_gate_cfg.session_min_duration))
+        spinbox.setRange(0, max(1_000_000., auto_close_gate_cfg.trial_min_duration))
         spinbox.setDecimals(1)
-        spinbox.setValue(auto_close_gate_cfg.session_min_duration)
+        spinbox.setValue(auto_close_gate_cfg.trial_min_duration)
         def spinbox_value_changed(value):
-            auto_close_gate_cfg.session_min_duration = value
+            auto_close_gate_cfg.trial_min_duration = value
         spinbox.valueChanged.connect(spinbox_value_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -823,22 +823,22 @@ class PreferencesContent(QWidget):
         #
         right_grid_layout.addWidget(QLabel("<b>Batch trials while in tunnel:</b>"), cur_row, cur_col)
         toggle = QSwitch()
-        toggle.setChecked(algo.batch_session_recording_config.enabled)
+        toggle.setChecked(algo.batch_trial_recording_config.enabled)
         right_grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-        def batch_session_toggled(x: int):
+        def batch_trial_toggled(x: int):
             enabled = x != 0
-            algo.batch_session_recording_config.enabled = enabled
+            algo.batch_trial_recording_config.enabled = enabled
             refresh_enabled_states()
-        toggle.stateChanged.connect(batch_session_toggled)
+        toggle.stateChanged.connect(batch_trial_toggled)
         cur_row += 1
         right_grid_layout.addWidget(QLabel("Maximum trials per batch"), cur_row, cur_col)
         spinbox = QSpinBox()
         add_enabled_state(lambda s=spinbox, t=toggle: s.setEnabled(t.isChecked()))
         spinbox.setToolTip("0 for unlimited")
         spinbox.setRange(0, 1_000)
-        spinbox.setValue(algo.batch_session_recording_config.maximum_batch_size)
+        spinbox.setValue(algo.batch_trial_recording_config.maximum_batch_size)
         def max_sess_per_batch_changed(value):
-            algo.batch_session_recording_config.maximum_batch_size = value
+            algo.batch_trial_recording_config.maximum_batch_size = value
         spinbox.valueChanged.connect(max_sess_per_batch_changed)
         right_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         #
@@ -935,12 +935,12 @@ class PreferencesContent(QWidget):
         # form_layout.addRow(ATSeparator())
         # form_layout.addRow(QWidget())
 
-        self._checkbox_remove_raw_data_inactive_session = QCheckBox()
-        self._checkbox_remove_raw_data_inactive_session.setChecked(
-            self._preferences.remove_raw_data_when_inactive_session)
-        self._checkbox_remove_raw_data_inactive_session.stateChanged.connect(
-            self._remove_raw_data_when_inactive_session_changed)
-        form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_session)
+        self._checkbox_remove_raw_data_inactive_trial = QCheckBox()
+        self._checkbox_remove_raw_data_inactive_trial.setChecked(
+            self._preferences.remove_raw_data_when_inactive_trial)
+        self._checkbox_remove_raw_data_inactive_trial.stateChanged.connect(
+            self._remove_raw_data_when_inactive_trial_changed)
+        form_layout.addRow("Remove saved videos when animal not seen:", self._checkbox_remove_raw_data_inactive_trial)
 
         tab = QWidget(None)
         tab.setLayout(form_layout)
@@ -1490,8 +1490,8 @@ class PreferencesContent(QWidget):
     def _log_location_changed(self, value: str):
         self._preferences.log_location = value
 
-    def _remove_raw_data_when_inactive_session_changed(self, value: bool):
-        self._preferences.remove_raw_data_when_inactive_session = value
+    def _remove_raw_data_when_inactive_trial_changed(self, value: bool):
+        self._preferences.remove_raw_data_when_inactive_trial = value
 
     def _browse_for_location(self, which: str):
         if which == "animal":

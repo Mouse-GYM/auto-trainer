@@ -48,6 +48,7 @@ from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
+from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.multiproc import no_op_timer
@@ -64,15 +65,15 @@ from autotrainer.inference import (
     calibration_FLIR,
     DlcPoseModel,
 )
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 from autotrainer.inference.config import load_calib_stereo_params
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME
 
 from autotrainer.core.capture import CaptureProcessStatus
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
-from autotrainer.behavior import IntersessionState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
-    IntersessionMachine
+from autotrainer.behavior import IntertrialState, BehaviorAlgorithm, TrainingMode, InferenceProtocol, SystemMachine, \
+    IntertrialMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
 
@@ -182,11 +183,11 @@ class AppModelEvents:
     # NB: events "definition/typehint" are forwarded *into* AppModel below,
     # so we *assign* them here (=), but we'll typehint (:) in AppModel.
 
-    configuration_loaded_event = Callable[[SystemConfiguration], None]
-    on_error = Callable[[str, str], None]
-    training_plan_deserialized = TrainingPlanDeserializedEvent
+    configuration_loaded_event = EventHandler[Callable[[SystemConfiguration], None]]
+    on_error = EventHandler[Callable[[str, str], None]]
+    training_plan_deserialized = EventHandler[TrainingPlanDeserializedEvent]
 
-    current_day_changed = Callable[[date], None]
+    current_day_changed = EventHandler[Callable[[date], None]]
 
 
 class WatchdogItems(str, enum.Enum):
@@ -267,7 +268,8 @@ class AppModel(ObservableObject):
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
-        self._left_camera = self._right_camera = None
+        self._left_camera = VideoCaptureModel("left")
+        self._right_camera = VideoCaptureModel("right")
 
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None
@@ -415,15 +417,14 @@ class AppModel(ObservableObject):
 
         algo = behavior_model.algorithm
         algo.property_changed += self._on_behavior_algo_property_changed
-        algo.session_starting_before_record_start += self._on_session_starting_before_record_start
-        algo.session_capture_ending += self._on_session_capture_ended
-        # algo.session_ending += self._on_session_ending
+        algo.trial_starting_before_record_start += self._on_trial_starting_before_record_start
+        algo.trial_capture_ending += self._on_trial_capture_ended
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
 
-        intersession = system_machine.intersession
-        intersession.events.property_changed += self._on_intersession_property_changed
+        intertrial = system_machine.intertrial
+        intertrial.events.property_changed += self._on_intertrial_property_changed
 
         pellet_m = system_machine.pellet
         pellet_m.events.pellet_loaded += self._on_pellet_loaded
@@ -1202,7 +1203,7 @@ class AppModel(ObservableObject):
         analysis = self._analysis
 
         # first:
-        self._behavior.system_machine.intersession.reset_to_idle()
+        self._behavior.system_machine.intertrial.reset_to_idle()
         # to ensure clear state on start, previous segmentation/detection could have fails,
         # and left behind their context.
 
@@ -1536,7 +1537,7 @@ class AppModel(ObservableObject):
         # also reset it to inference:
         self._inference.pose_algorithm = pose_algo
         # which force a sync to pose-result process.
-        self._behavior.system_machine.intersession.frame_rate = frame_rate
+        self._behavior.system_machine.intertrial.frame_rate = frame_rate
 
         if (right_cam_cfg := configuration.get_camera(CameraId.Right)) is not None:
             prebuffer_duration = max(prebuffer_duration, right_cam_cfg.record_prebuffer_duration)
@@ -1736,12 +1737,12 @@ class AppModel(ObservableObject):
     def _update_status_text_overlay(self):
         parts = []
         cur_inf_status = self._inference.status
-        is_running = cur_inf_status in {InferenceStatus.live, InferenceStatus.intersession}
+        is_running = cur_inf_status in {InferenceStatus.live, InferenceStatus.intertrial}
         if not is_running:
             parts.append(f"Inference: {cur_inf_status}")
-        cur_inter_state = self._behavior.system_machine.intersession.state
-        if cur_inter_state != IntersessionState.idle:
-            parts.append(f"Intersession: {cur_inter_state}")
+        cur_inter_state = self._behavior.system_machine.intertrial.state
+        if cur_inter_state != IntertrialState.idle:
+            parts.append(f"Intertrial: {cur_inter_state}")
         self._left_camera.text_overlay = None if len(parts) == 0 else "\n".join(parts)
 
     def _set_animal_base_positions(self, animal: AnimalSubject):
@@ -1839,24 +1840,24 @@ class AppModel(ObservableObject):
                 animal.autoclamp_evasion_pellets_consumed = value
                 self._save_animal_metadata(animal, sender="autoclamp_evasion_pellets_consumed")
 
-    def _on_intersession_property_changed(self, name, value, _):
-        if name == IntersessionMachine.Properties.STATE_PROPERTY:
+    def _on_intertrial_property_changed(self, name, value, _):
+        if name == IntertrialMachine.Properties.STATE_PROPERTY:
             self._update_status_text_overlay()
 
-    def _on_session_starting_before_record_start(self):
+    def _on_trial_starting_before_record_start(self):
         drained = 0
         while self._record_stop_sema.acquire(block=False):
             drained += 1
         if drained:
             logger.verbose("drained record_stop_sema by %s", drained)
 
-    def _on_session_capture_ended(self, reason: RecordingEndingReason):
+    def _on_trial_capture_ended(self, reason: RecordingEndingReason):
         project = self._project_info
         if project is not None:
-            self._save_project_metadata(project, caller="session_capture_ended")
-        # self._behavior.system_machine.on_session_capture_ended(reason)
+            self._save_project_metadata(project, caller="trial_capture_ended")
+        # self._behavior.system_machine.on_trial_capture_ended(reason)
         # NB: had to keep in system_machine for many tests.
-        # is ok as long as the project isn't modified in system_machine.on_session_capture_ended()
+        # is ok as long as the project isn't modified in system_machine.on_trial_capture_ended()
 
     def _remove_timestamps_txt_files(self, project: ProjectInfo):
         removed = []
@@ -1944,7 +1945,7 @@ class AppModel(ObservableObject):
             if new_is_live:
                 self._p_inference_live_begin = time.perf_counter()
 
-            if new_is_live or value == InferenceStatus.intersession:
+            if new_is_live or value == InferenceStatus.intertrial:
                 self._analysis.watchdog_monitor.register_watchdog(
                     WatchdogItems.POSE_PROCESS, lambda: self._inference.watchdog_pose_process_perf_c)
             else:
@@ -2010,7 +2011,7 @@ class AppModel(ObservableObject):
                                  diff.distance,
                                  loc3d.humanize(), cfg.diamond_coord.humanize())
 
-    def _on_detection_result_ready(self, project: ProjectInfo, result: IntersessionResponse):
+    def _on_detection_result_ready(self, project: ProjectInfo, result: IntertrialResponse):
         animal = self._selected_animal
         if animal is None:
             return
@@ -2091,7 +2092,7 @@ class AppModel(ObservableObject):
     def _save_project_metadata(self, project_info: ProjectInfo, *,
                                when: Optional[datetime] = None, trial: Optional[int] = -1,
                                caller: str="NA"):
-        """Save the given project_info metadata, if session is None : it's main/global metadata"""
+        """Save the given project_info metadata, if trial is None : it's main/global metadata"""
         when = when if when is not None else project_info.when
         file_name = project_info.get_metadata_file(trial, when)
         logger.verbose(

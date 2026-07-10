@@ -15,7 +15,7 @@ from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference.analysis.prepare_jetson_data import process_raw_data
 from autotrainer.inference.analysis.parse_pellet_presentations_jetson import segment_reaches
 
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 logger = get_verbose_logger(__name__)
 
@@ -26,23 +26,24 @@ AvailableShiftXYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 _segment_reach_debug: int = int(os.getenv("AUTOTRAINER_SEGMENT_REACH_DEBUG", 0))
 
 
-def intersession_process(
+def intertrial_process(
     project: ProjectInfo,
     *,
     calib_dir: Optional[Path] = None,
     frame_rate: int = 150,
     debug_level: int = _segment_reach_debug,
-) -> IntersessionResponse:
+) -> IntertrialResponse:
     """
-    Called after pose processing for intersession analysis.
+    Called after pose processing for intertrial analysis.
 
     :param project: current project info for finding/defining file names
     :param calib_dir: calibration directory if not default.
+    :param frame_rate: FPS used for video records.
     :param debug_level: integer debug level.
     :return: information required to update behavior for future sessions
     """
     location, _, _ = project.get_trial_path()
-    logger.info("process intersession pose data using %s", location)
+    logger.info("process intertrial pose data using %s", location)
     calib_src_dir = (
         Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None else calib_dir
     ).expanduser()
@@ -68,7 +69,7 @@ def intersession_process(
         debug=debug_level,
         frame_rate=frame_rate,
     )
-    logger.verbose("process intersession pose data complete %s", results_dict)
+    logger.verbose("process intertrial pose data complete %s", results_dict)
     # rename:
     results_dict["food_consumed"] = results_dict.pop("pellets_consumed")
     # all others keys are same than IntersessionResponse fields
@@ -85,4 +86,4 @@ def intersession_process(
             delay_since_presented=d['placed'] / frame_rate - project.get_t_pellet_presented_or_default(),
         ) for d in results_dict["other_events"]
     ]
-    return IntersessionResponse(**results_dict)
+    return IntertrialResponse(**results_dict)

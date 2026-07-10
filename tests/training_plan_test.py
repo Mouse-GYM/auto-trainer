@@ -11,14 +11,14 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
-    IntersessionState
+    IntertrialState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import Offset3DTuple, EventManager, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 from autotrainer.core.capture import CaptureProcessStatus
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -116,16 +116,15 @@ class BaseTrainingPlan(MockSystemMachine):
         assert app_model.load_configuration() is True
         assert app_model.loaded_configuration is not None
 
-        assert algo.intersession_enabled is True  # required
+        assert algo.intertrial_enabled is True  # required
         # NB: do not try change some settings after config is loaded,
         # the loaded parameters/settings (from config file) will be reused/reset with training plan enter.
 
         algo = self.algo
         # TODO:
-        expected_plan_id = '57094295-5234-44f3-a925-14ceb772c8e5'
-        expected_plan_id = '8fd60c5d-d543-45b9-8287-b5b97602f8e0'
-        expected_plan_id = '58cc7a5b-8d75-40ff-9b8c-6d2b3a7ab814'
+        expected_plan_id = 'd0707295-9917-4639-bf56-9b86dc682ad0'  # coming from auto-trainer-training itself
         plan = app_model.get_training_plan_by_id(expected_plan_id)
+        assert plan is not None, f"is auto-trainer-training updated? we need the plan {expected_plan_id}"
         animal = app_model.selected_animal
         animal.training.current_protocol = plan.plan_id
         app_model.training_plan = plan
@@ -173,18 +172,20 @@ class TestTrainingPlan(BaseTrainingPlan):
         # see below
         algo = self.algo
         plan = app_model.training_plan
+        assert plan is not None
         plan_start_phase = plan.current_phase
-
-        assert plan_start_phase.advance_predicate.evaluate(plan_start_phase, plan._system_context) is False
+        assert plan_start_phase is not None
+        advance_pred = plan_start_phase.advance_predicate
+        assert advance_pred is None or advance_pred.evaluate(plan_start_phase, plan._system_context) is False
         # NB:
         results = [
-            IntersessionResponse(
+            IntertrialResponse(
                 pellets_presented=3,
                 successful_reaches=2,
                 food_consumed=1,
                 rh_max_vp_list=[Offset3DTuple(1, 0.5, 0.5)]
             ),
-            IntersessionResponse(
+            IntertrialResponse(
                 pellets_presented=3,
                 successful_reaches=2,
                 food_consumed=2,
@@ -216,7 +217,7 @@ class TestTrainingPlan(BaseTrainingPlan):
 
         prev_phase = plan.current_phase
         #
-        result = IntersessionResponse(
+        result = IntertrialResponse(
             pellets_presented=3,
             successful_reaches=3,
             food_consumed=3,
@@ -228,7 +229,7 @@ class TestTrainingPlan(BaseTrainingPlan):
         # TODO: check
         #
         prev_phase = plan.current_phase
-        result = IntersessionResponse(
+        result = IntertrialResponse(
             pellets_presented=3,
             successful_reaches=3,
             food_consumed=3,
@@ -256,7 +257,7 @@ class TestTrainingPlan(BaseTrainingPlan):
         self.mock_pellet_ack(until_none=True)
         #
         # self._load_cell.is_engaged = True
-        self.start_session_in_tunnel(set_recording_status=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pellet_ack(until_none=True)
         #
         assert machine.state == SystemState.tunnel
@@ -270,8 +271,8 @@ class TestTrainingPlan(BaseTrainingPlan):
                 self.mock_pose_response(pellet_seen=True)
                 self.sensor_analysis.headbar_pressure_monitor.is_engaged = False
         self.mock_pellet_ack(until_none=True)
-        assert algo.is_in_session, (
-            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
+        assert algo.is_in_trial_capture, (
+            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intertrial.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"
         )
         half = algo.active_config.pellet_delivery.pellet_send_wait_delay / 2
@@ -289,7 +290,7 @@ class TestTrainingPlan(BaseTrainingPlan):
         if pellet_m.state != PelletState.monitoring:
             x = algo.can_send_pellet()
         assert pellet_m.state == PelletState.monitoring, (
-            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intersession.state=} {algo.head_fixation_enabled=}\n"
+            f"{algo.algo_paused=} {app_model.status=} {machine.state=} {machine.intertrial.state=} {algo.head_fixation_enabled=}\n"
             f"{pellet_m.state=} {algo.status=}"
         )
         # assert algo.can_release_pellet()  some training phase sets cover-pellet-enabled to True..
@@ -303,27 +304,27 @@ class TestTrainingPlan(BaseTrainingPlan):
             stack.enter_context(self.mock_perform_detection())
             assert pellet_m.state == PelletState.monitoring  # still
             self._load_cell.is_engaged = False  # exit tunnel
-            assert not algo.is_in_session
-            assert algo.system_state == SystemState.intersession
-            assert algo.intersession_state == IntersessionState.segmentation
+            assert not algo.is_in_trial_capture
+            assert algo.system_state == SystemState.intertrial
+            assert algo.intertrial_state == IntertrialState.segmentation
             assert pellet_m.state == PelletState.retract  # Retract !!
             self.mock_complete_segmentation(True)
-            assert algo.system_state == SystemState.intersession
-            assert algo.intersession_state == IntersessionState.detection
+            assert algo.system_state == SystemState.intertrial
+            assert algo.intertrial_state == IntertrialState.detection
             machine._inference.detection_result_ready(machine.project, analysis_result)
             self.mock_complete_detection(True)
-            assert algo.intersession_state == IntersessionState.idle
+            assert algo.intertrial_state == IntertrialState.idle
             assert algo.system_state == SystemState.cage
             assert pellet_m.state == PelletState.retract  # still
 
-        assert not algo.is_in_session
+        assert not algo.is_in_trial_capture
 
         assert pellet_m.state == PelletState.retract  # still
         # NB: at least one of the training phase is setting pellet-delivery-enabled to False, reset it here:
         algo.pellet_delivery_enabled = True
         # so that pellet-send will be allowed with ack of previous retract:
 
-        self.mock_pellet_ack()  # for retract
+        self.mock_pellet_ack(until_none=True)  # for retract and eventual cover
         assert pellet_m._api_status_token is None
         # assert pellet_m.covered_state is False  # depends todo
 
@@ -337,15 +338,15 @@ class TestWithBatch(BaseTrainingPlan):
 
     def test_plan_gets_batch_events(self, app_model, user_pref, machine, caplog):
         algo = self.algo
-        algo.batch_session_recording_config.enabled = True
-        max_batch_size = algo.batch_session_recording_config.maximum_batch_size = 3
+        algo.batch_trial_recording_config.enabled = True
+        max_batch_size = algo.batch_trial_recording_config.maximum_batch_size = 3
         algo.update_pellet_seen(True)
 
         self.ack_pending_tokens()
 
-        self.start_session_in_tunnel()
+        self.start_trial_in_tunnel()
 
-        assert algo.is_in_session
+        assert algo.is_in_trial_capture
 
         def fake_mouse_eat_pellet():
             logger.info("before pellet_seen=False")
@@ -367,8 +368,8 @@ class TestWithBatch(BaseTrainingPlan):
             for idx in range(max_batch_size):
                 assert machine.state == SystemState.tunnel
                 self.mock_pose_response(pellet_seen=True, mouse_seen=True)
-                assert algo.is_in_session
-                stack.enter_context(self.mock_intersession_analysis(
+                assert algo.is_in_trial_capture
+                stack.enter_context(self.mock_intertrial_analysis(
                     concurrent_func=lambda i=idx: conc(i)
                 ))
                 fake_mouse_eat_pellet()

@@ -2,7 +2,7 @@ import dataclasses
 from datetime import datetime
 from typing import Optional, Callable
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntersessionState
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntertrialState
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
@@ -202,11 +202,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def on_prepare_capture(self):
         self._system_machine.project = self._project
         self._system_machine.state = SystemState.cage  # forced,
-        self._system_machine.intersession.state = IntersessionState.idle
-        # if acquisition is/was stopped during an intersession analysis,
-        # then it's left on intersession+(segmentation | detection) state..
+        self._system_machine.intertrial.state = IntertrialState.idle
+        # if acquisition is/was stopped during an intertrial analysis,
+        # then it's left on intertrial+(segmentation | detection) state..
         # which further prevent everything after.
-        # todo: try have intersession stop "normally" too
+        # todo: try have intertrial stop "normally" too
 
     def use_current_head_magnet_position_as_baseline(self):
         head_magnet_intensity = self._hardware_model.head_magnet_intensity

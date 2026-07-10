@@ -34,31 +34,31 @@ def test_hourly(root):
     assert hourly_source.interval == 8
 
 
-def test_implicit_session(root):
+def test_implicit_trial(root):
     when = datetime(2024, 6, 8, 8, 45, 23)
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-    session_source = info.get_trial_path("camera-1")
-    assert session_source.location == os.path.join(root, "20240608", "A1357", "trial001")
-    assert session_source.prefix == f"20240608_A1357_trial001_camera-1"
-    assert session_source.trial == 1
+    trial_source = info.get_trial_path("camera-1")
+    assert trial_source.location == os.path.join(root, "20240608", "A1357", "trial001")
+    assert trial_source.prefix == "20240608_A1357_trial001_camera-1"
+    assert trial_source.trial == 1
     # Would normally happen through calculate_next_session_index, but this uses the filesystem
     info.trial = 9
-    session_source = info.get_trial_path("camera-1")
-    assert session_source.location == os.path.join(root, "20240608", "A1357", "trial009")
-    assert session_source.prefix == f"20240608_A1357_trial009_camera-1"
-    assert session_source.trial == 9
+    trial_source = info.get_trial_path("camera-1")
+    assert trial_source.location == os.path.join(root, "20240608", "A1357", "trial009")
+    assert trial_source.prefix == "20240608_A1357_trial009_camera-1"
+    assert trial_source.trial == 9
 
 
-def test_explicit_session(root):
+def test_explicit_trial(root):
     when = datetime(2023, 6, 8, 8, 45, 23)
     info = ProjectInfo(root=root, device_id=device_id, when=when)
-    session_source = info.get_trial_path("camera-1", trial=12)
-    assert session_source.location == os.path.join(root, "20230608", "A1357", "trial012")
-    assert session_source.prefix == f"20230608_A1357_trial012_camera-1"
-    assert session_source.trial == 12
+    trial_source = info.get_trial_path("camera-1", trial=12)
+    assert trial_source.location == os.path.join(root, "20230608", "A1357", "trial012")
+    assert trial_source.prefix == "20230608_A1357_trial012_camera-1"
+    assert trial_source.trial == 12
 
 
-def test_without_session_and_when_are_shared(root):
+def test_without_trial_and_when_are_shared(root):
     module = importlib.import_module(ProjectInfo.__module__)
     unix_start_as_local = datetime(2001, 1, 1, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
     with mock.patch.object(module, "_get_datetime_now") as m_get_datetime:

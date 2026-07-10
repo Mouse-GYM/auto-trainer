@@ -16,8 +16,8 @@ from autotrainer.core import Offset3DTuple, ProjectInfo, get_verbose_logger
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.inference import PoseResponse, PoseLocation
 from autotrainer.inference.analysis import (
-    intersession_process,
-    IntersessionResponse,
+    intertrial_process,
+    IntertrialResponse,
     prepare_jetson_data,
 )
 from autotrainer.core.reach_event import ReachEvent
@@ -180,12 +180,12 @@ def test_fp_and_xp_not_same(project_info, caplog):
     project_info.device_id = "agx001"
     project_info.when = datetime(2025, 6, 23)
     caplog.set_level(verboselogs.VERBOSE)
-    res = intersession_process(
+    res = intertrial_process(
         project_info,
         calib_dir=this_dir.joinpath(DEFAULT_3D_CALIB_DIR_NAME),
     )
     assert "Correcting expected_frame_count from " in caplog.text
-    assert isinstance(res, IntersessionResponse)
+    assert isinstance(res, IntertrialResponse)
     assert res.pellets_presented == 1
     assert res.food_consumed == 0
     assert res.successful_reaches == 0
@@ -206,12 +206,12 @@ def test_agx001_20250806_59(project_info, caplog):
     caplog.set_level(verboselogs.VERBOSE)
     # with pytest.raises(IndexError, match="fp and xp are not of the same length"):
     # previously was raising an index error, but is now fixed.
-    res = intersession_process(
+    res = intertrial_process(
         project_info,
         calib_dir=calib_dir,
     )
     #
-    expected = IntersessionResponse(
+    expected = IntertrialResponse(
         rh_max_vp_list=[Offset3DTuple(AEF(0.54), AEF(-3.72), AEF(1.28))],
         reach_events=[
             ReachEvent(
@@ -231,7 +231,7 @@ def test_agx001_20250806_59(project_info, caplog):
     assert_deep_almost_equal(res, expected)
 
 
-agx001_20251015_15_expected_result = IntersessionResponse(
+agx001_20251015_15_expected_result = IntertrialResponse(
     rh_max_vp_list=[Offset3DTuple(AEF(-1.61), AEF(-2.43), AEF(1.25))],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
     reach_events=[
@@ -256,8 +256,8 @@ def agx001_20251015_15(project_info):
     return project_info
 
 
-def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
-    res = intersession_process(
+def test_intertrial_process_agx001_20251015_15(agx001_20251015_15):
+    res = intertrial_process(
         agx001_20251015_15,
         calib_dir=calib_dir,
     )
@@ -265,15 +265,15 @@ def test_intersession_process_agx001_20251015_15(agx001_20251015_15):
 
 
 @pytest.mark.bench
-def test_intersession_process_bench_agx001_20251015_15(agx001_20251015_15, benchmark):
-    res =  benchmark(lambda: intersession_process(
+def test_intertrial_process_bench_agx001_20251015_15(agx001_20251015_15, benchmark):
+    res =  benchmark(lambda: intertrial_process(
         agx001_20251015_15,
         calib_dir=calib_dir,
     ))
     assert_deep_almost_equal(res, agx001_20251015_15_expected_result)
 
 
-agx001_20260205_11_expected_result = IntersessionResponse(
+agx001_20260205_11_expected_result = IntertrialResponse(
     rh_max_vp_list=[Offset3DTuple(AEF(-0.40), AEF(-5.70), AEF(-0.22))],
     food_consumed=0, successful_reaches=0, pellets_presented=1, total_reaches=1,
     reach_events=[ReachEvent(
@@ -297,7 +297,7 @@ agx001_20260205_11_project_info = ProjectInfo(
 
 
 def test_agx001_20260205_11():
-    res = intersession_process(agx001_20260205_11_project_info, calib_dir=calib_dir)
+    res = intertrial_process(agx001_20260205_11_project_info, calib_dir=calib_dir)
     assert_deep_almost_equal(res, agx001_20260205_11_expected_result)
 
 

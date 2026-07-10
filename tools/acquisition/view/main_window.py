@@ -34,7 +34,7 @@ from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 
 from autotrainer.inference import InferenceStatus, PoseResponse
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 from autotrainer.inference.analysis.prepare_jetson_data import DEFAULT_CAM_OFFSET_FILE_NAME, make_cam_offsets_dict
 
 from autotrainer.behavior import TrainingMode, SystemState
@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
         self._diamond_triangle_calib_run = None
         self._warned_invalid_dcs_config = False
 
-        self._previous_intersession_analysis_rsp: Optional[Tuple[ProjectInfo, IntersessionResponse]] = None
+        self._previous_intertrial_analysis_rsp: Optional[Tuple[ProjectInfo, IntertrialResponse]] = None
 
         app_model = self._app_model = AppModel(prefs)
 
@@ -333,10 +333,10 @@ class MainWindow(QMainWindow):
             self._app_model.status = AppModelStatus.ANIMAL_IN_DEVICE
 
     def on_show_reach_event(self, is_toggled):
-        raw = self._previous_intersession_analysis_rsp
+        raw = self._previous_intertrial_analysis_rsp
         # uncomment for being able show agx001_20260205_11 reach
         # if is_toggled and raw is None:
-        #     from tests.real_data_intersession_process_test import (
+        #     from tests.real_data_intertrial_process_test import (
         #         agx001_20260205_11_project_info,
         #     )
         #     raw = (agx001_20260205_11_project_info, None)
@@ -1266,8 +1266,8 @@ class MainWindow(QMainWindow):
         prefs = self._preferences
         if name == prefs.LOG_LEVEL:
             self._update_log_level(value)
-        elif name == prefs.REMOVE_RAW_DATA_WHEN_INACTIVE_SESSION:
-            self._app_model.behavior.algorithm.clean_raw_data_on_inactive_session = value
+        elif name == prefs.REMOVE_RAW_DATA_WHEN_INACTIVE_TRIAL:
+            self._app_model.behavior.algorithm.clean_raw_data_on_inactive_trial = value
         elif name == prefs.PELLET_LOAD_COUNT_TOTAL:
             self._set_reset_vat_text()
         elif name == prefs.SERIAL_NUMBER:
@@ -1284,20 +1284,20 @@ class MainWindow(QMainWindow):
         if name == mon.CONFIG:
             self._set_reset_vat_text()
 
-    def _simulate_intersession_segmentation(self, intersession_block):
-        logger.verbose("Simulate feed-intersession-analysis: %s", intersession_block)
+    def _simulate_intertrial_segmentation(self, intertrial_block):
+        logger.verbose("Simulate feed-intertrial-analysis: %s", intertrial_block)
         inference = self._app_model.inference
         inference._data_monitor_proc.stop_recorded.wait()
         logger.debug("got stop recorded")
         inference._data_monitor_proc.stop_recorded.clear()
-        intersession_block.frame_count = 42
+        intertrial_block.frame_count = 42
         time.sleep(2.5)
 
     @staticmethod
-    def _simulate_intersession_process(*args, fake_result, **kwargs):
+    def _simulate_intertrial_process(*args, fake_result, **kwargs):
         # NB: must be static method given it's executed in a sub-process, so must no get the whole main-window
         # instance tried to be serialized (would most likely fails/error) !
-        logger.verbose("Simulate intersession process: %s", fake_result)
+        logger.verbose("Simulate intertrial process: %s", fake_result)
         time.sleep(1.5)
         return fake_result
 
@@ -1306,19 +1306,19 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
         if not is_checked and self.analysis_results_action.isChecked():
-            logger.verbose("Patching intersession segmentation and detection with simulate")
+            logger.verbose("Patching intertrial segmentation and detection with simulate")
             inference = app_model.inference
-            inference._feed_intersession_analysis_execute = self._simulate_intersession_segmentation
+            inference._feed_intertrial_analysis_execute = self._simulate_intertrial_segmentation
             x, y, z = (spinbox.value() for spinbox in (
                 self._internal_shift_x_spinbox, self._internal_shift_y_spinbox, self._internal_shift_z_spinbox))
-            res = IntersessionResponse(
+            res = IntertrialResponse(
                 pellets_presented=self._internal_pellet_presented_spinbox.value(),
                 total_reaches=self._internal_pellet_total_reaches_spinbox.value(),
                 successful_reaches=self._internal_success_reaches_spinbox.value(),
                 food_consumed=self._internal_pellet_consumed_spinbox.value(),
                 rh_max_vp_list=[Offset3DTuple(x, y, z)]
             )
-            inference._intersession_process_execute = partial(self._simulate_intersession_process, fake_result=res)
+            inference._intertrial_process_execute = partial(self._simulate_intertrial_process, fake_result=res)
         load_cell_monitor.force_engaged(is_checked)
 
     def _internal_set_force_headbar_detector(self):
@@ -1345,12 +1345,12 @@ class MainWindow(QMainWindow):
         is_checked = self.analysis_results_action.isChecked()
         self._internal_analysis_widget_toolbar.setVisible(is_checked)
         if is_checked:
-            self._orig_inference_analysis_feed = inference._feed_intersession_analysis_execute
-            self._orig_inference_analysis_process = inference._intersession_process_execute
+            self._orig_inference_analysis_feed = inference._feed_intertrial_analysis_execute
+            self._orig_inference_analysis_process = inference._intertrial_process_execute
         else:
-            logger.verbose("Restoring intersession segmentation and detection to real procedures")
-            inference._feed_intersession_analysis_execute = self._orig_inference_analysis_feed
-            inference._intersession_process_execute = self._orig_inference_analysis_process
+            logger.verbose("Restoring intertrial segmentation and detection to real procedures")
+            inference._feed_intertrial_analysis_execute = self._orig_inference_analysis_feed
+            inference._intertrial_process_execute = self._orig_inference_analysis_process
 
     def _simulate_sessions(
         self,
@@ -1409,7 +1409,7 @@ class MainWindow(QMainWindow):
                     if algo.status != BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                         return
                     time.sleep(0.1)
-                    if algo.system_state == SystemState.intersession:
+                    if algo.system_state == SystemState.intertrial:
                         continue
                     if time.perf_counter() > t_end:
                         print(f"waited monitoring but still {pellet_m.state}")
@@ -1460,7 +1460,7 @@ class MainWindow(QMainWindow):
                         InferenceStatus.stopping,
                     }:
                         return
-                # if infe.status == InferenceStatus.intersession or pellet_m.state == PelletState.retract:
+                # if infe.status == InferenceStatus.intertrial or pellet_m.state == PelletState.retract:
                 #     break
                 do_sleep()
             #
@@ -1759,9 +1759,9 @@ class MainWindow(QMainWindow):
         self._set_training_plans(self._app_model.training_plans)
 
     @invoke_method
-    def _on_inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntersessionResponse):
+    def _on_inference_analysis_result_ready(self, prj: ProjectInfo, rsp: IntertrialResponse):
         # logger.debug("enabling show_reach_event_action, rsp=%s", rsp)
-        self._previous_intersession_analysis_rsp = (prj, rsp)
+        self._previous_intertrial_analysis_rsp = (prj, rsp)
         self.show_reach_event_action.setEnabled(True)
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)

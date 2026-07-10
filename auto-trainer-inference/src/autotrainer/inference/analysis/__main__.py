@@ -13,7 +13,7 @@ from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
 from autotrainer.core.logging import setup_logging, get_console_handler
 
-from autotrainer.inference.analysis import intersession_process
+from autotrainer.inference.analysis import intertrial_process
 
 logger = get_verbose_logger(__name__)
 
@@ -39,7 +39,7 @@ def main():
         when=args.date,
         trial=args.trial,
     )
-    result = intersession_process(
+    result = intertrial_process(
         project_info,
         calib_dir=args.calib_dir,
         debug_level=args.analysis_debug_level,

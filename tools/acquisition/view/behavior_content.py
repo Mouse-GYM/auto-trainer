@@ -5,7 +5,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QLabel, QWidget, QVBoxLayout,
                                QHBoxLayout, QStackedLayout, QGridLayout, QPushButton, QSizePolicy)
 
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
 from autotrainer.behavior.pellet_shift import ShiftXYZHandler
 from autotrainer.pyside import CardWidget, QSwitch
@@ -34,7 +34,7 @@ class BehaviorContent(ContentWidget):
         system_machine = behavior_model.system_machine
         algo = system_machine.algorithm
         pellet_machine = system_machine.pellet
-        intersession_machine = system_machine.intersession
+        intertrial_machine = system_machine.intertrial
 
         self._app_model = app_model
         self._behavior_model = behavior_model
@@ -89,14 +89,14 @@ class BehaviorContent(ContentWidget):
         left_cur_row += 1
 
         left_layout.addWidget(QLabel("Intertrial:"), left_cur_row, 0)
-        label = self._intersession_state_label = QLabel(self._behavior_model.system_machine.intersession.state)
+        label = self._intertrial_state_label = QLabel(self._behavior_model.system_machine.intertrial.state)
         label.setContentsMargins(0, 0, 0, 4)
         left_layout.addWidget(label, left_cur_row, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         left_cur_row += 1
 
         left_layout.addWidget(QLabel("Intertrial Analysis:"), left_cur_row, 0)
-        toggle = self._intersession_toggle = QSwitch()
-        toggle.stateChanged.connect(self._intersession_toggle_state_changed)
+        toggle = self._intertrial_toggle = QSwitch()
+        toggle.stateChanged.connect(self._intertrial_toggle_state_changed)
         toggle.setToolTip(
             "Enables reach detection and segmentation after each trial where the mouse is seen.  This may modify "
             "pellet counts and adjust the pellet delivery position.")
@@ -220,7 +220,7 @@ class BehaviorContent(ContentWidget):
         self.setLayout(layout)
 
         self._inference_status.setText(f"Inference: {inference_model.status}")
-        self._intersession_toggle.setChecked(behavior_model.algorithm.intersession_enabled)
+        self._intertrial_toggle.setChecked(behavior_model.algorithm.intertrial_enabled)
 
         self._inference_model_property_changed("model_location", inference_model.model_location, None)
         #
@@ -230,7 +230,7 @@ class BehaviorContent(ContentWidget):
 
         system_machine.events.state_changed += lambda old, new: self._system_machine_state_label.setText(new)
         pellet_machine.events.state_changed += lambda old, new: self._pellet_machine_state_label.setText(new)
-        intersession_machine.events.state_changed += lambda old, new: self._intersession_state_label.setText(new)
+        intertrial_machine.events.state_changed += lambda old, new: self._intertrial_state_label.setText(new)
 
         algo.property_changed += self._algorithm_property_changed
         self.status_changed.connect(self._inference_status.setText)
@@ -242,8 +242,8 @@ class BehaviorContent(ContentWidget):
     def set_is_capture_active(self, is_active: bool):
         pass
 
-    def _intersession_toggle_state_changed(self, x: int):
-        self._behavior_model.algorithm.intersession_enabled = x != 0
+    def _intertrial_toggle_state_changed(self, x: int):
+        self._behavior_model.algorithm.intertrial_enabled = x != 0
 
     def _head_fixation_toggle_state_changed(self, x: int):
         self._behavior_model.algorithm.head_fixation_enabled = x != 0
@@ -255,8 +255,8 @@ class BehaviorContent(ContentWidget):
     @invoke_method
     def _algorithm_property_changed(self, name, value, _):
         props = BehaviorAlgoProps
-        if name == props.INTERSESSION_ENABLED:
-            self._intersession_toggle.setChecked(value)
+        if name == props.INTERTRIAL_ENABLED:
+            self._intertrial_toggle.setChecked(value)
 
         elif name == props.BASELINE_INTENSITY:
             self._head_magnet_baseline_label.setText(f"{value:.1f}%")
@@ -292,7 +292,7 @@ class BehaviorContent(ContentWidget):
     def _inference_model_property_changed(self, name, value, _):
         props = self._inference_model
         if name == props.IS_ENABLED:
-            self._intersession_toggle.setEnabled(value)
+            self._intertrial_toggle.setEnabled(value)
         elif name == props.STATUS:
             self.status_changed.emit(f"Inference: {value}")
         elif name == props.MODEL_LOCATION:

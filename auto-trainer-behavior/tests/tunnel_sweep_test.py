@@ -14,12 +14,12 @@ import pytest
 
 from top_fixtures import MockSystemMachine
 
-from autotrainer.behavior import IntersessionState
+from autotrainer.behavior import IntertrialState
 from autotrainer.core.interfaces import CaptureAnalysisResult
 from autotrainer.behavior import SystemState, SystemMachine
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletMachine
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 
 class TestAutoTunnelSweep(MockSystemMachine):
@@ -36,13 +36,13 @@ class TestAutoTunnelSweep(MockSystemMachine):
         sweep.config.misplaced_trigger_delay = 0
         sweep.start()
 
-    @pytest.mark.parametrize("start_session", [False, True])
-    def test_it_triggers_with_pellet_misplaced(self, caplog, start_session):
+    @pytest.mark.parametrize("start_trial", [False, True])
+    def test_it_triggers_with_pellet_misplaced(self, caplog, start_trial):
         sweep = self.tunnel_sweep
         misplaced = self.sensor_analysis.pellet_misplaced_monitor
         pellet_dev = self.pellet_dev
-        if start_session:
-            self.start_session_in_tunnel()
+        if start_trial:
+            self.start_trial_in_tunnel()
         assert not sweep.is_engaged
         with caplog.at_level(logging.DEBUG):
             misplaced.is_engaged = True

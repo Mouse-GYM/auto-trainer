@@ -27,5 +27,5 @@ class TestStatus:
 def test_it_drain_record_stop_sema_on_session_recording_start(app_model):
     app_model._record_stop_sema.release()
     app_model._record_stop_sema.release()
-    app_model.behavior.algorithm.start_session(reason="manual")
+    app_model.behavior.algorithm.start_trial_capture(reason="manual")
     assert app_model._record_stop_sema.acquire(block=False) is False, "cannot acquire after: it should be back to 0"

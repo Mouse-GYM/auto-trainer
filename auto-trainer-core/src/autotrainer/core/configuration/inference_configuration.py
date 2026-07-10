@@ -12,7 +12,7 @@ class _InferenceConfiguration:
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
-        content.pop("intersession_wait_time", None)  # was deprecated/removed
+        content.pop("intertrial_wait_time", None)  # was deprecated/removed
         return cls(**build_kwargs_apply_mapping(content, (
             ('pose_model_location', 'model'),
         )))

@@ -5,9 +5,10 @@ from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 from autotrainer.inference import InferenceStatus, PoseAlgorithm, PoseResponse, InferenceMonitorDataMsg, InferenceCommandMessageKind
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 from . import SegmentationConfiguration, DetectionConfiguration
+from ..core.observable_object import EventHandler
 
 
 class SegmentationFinishedEvent(Protocol):
@@ -19,12 +20,12 @@ class InferenceEvents:
     # NB: events are *defined/assigned* here,
     # but are type hinted in InferenceProtocol below.
 
-    segmentation_finished = SegmentationFinishedEvent
-    detection_result_ready = Callable[[ProjectInfo, IntersessionResponse], None]
-    pose_response_ready = Callable[[PoseResponse], None]
-    diamond_triangle_offset_changed = Callable[[Optional[Offset3DTuple]], None]
-    star_triangle_offset_changed = Callable[[Optional[Offset3DTuple]], None]
-    triangle_pellet_offset_changed = Callable[[Optional[Offset3DTuple]], None]
+    segmentation_finished = EventHandler[SegmentationFinishedEvent]
+    detection_result_ready = EventHandler[Callable[[ProjectInfo, IntertrialResponse], None]]
+    pose_response_ready = EventHandler[Callable[[PoseResponse], None]]
+    diamond_triangle_offset_changed = EventHandler[Callable[[Optional[Offset3DTuple]], None]]
+    star_triangle_offset_changed = EventHandler[Callable[[Optional[Offset3DTuple]], None]]
+    triangle_pellet_offset_changed = EventHandler[Callable[[Optional[Offset3DTuple]], None]]
 
 
 class _InferenceProtocol(Protocol):

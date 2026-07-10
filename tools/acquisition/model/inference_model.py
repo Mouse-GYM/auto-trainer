@@ -23,10 +23,10 @@ from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus, InferenceMonitorDataMsg
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-from autotrainer.inference.analysis import intersession_process, IntersessionResponse
+from autotrainer.inference.analysis import intertrial_process, IntertrialResponse
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, \
-    InferenceProtocol, IntersessionBlock, IntersessionDetection, BehaviorAlgorithm
+    InferenceProtocol, IntertrialBlock, IntertrialDetection, BehaviorAlgorithm
 
 
 logger = get_verbose_logger(__name__)
@@ -89,8 +89,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frame_height = 1
 
         self._project: ProjectInfo = ProjectInfo()
-        self._intersession_block: Optional[IntersessionBlock] = None
-        self._intersession_detection: Optional[IntersessionDetection] = None
+        self._intertrial_block: Optional[IntertrialBlock] = None
+        self._intertrial_detection: Optional[IntertrialDetection] = None
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}
         self._pair_offsets_2_handler = {
             (SceneElement.Diamond, SceneElement.Triangle): self.diamond_triangle_offset_changed,
@@ -219,12 +219,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             return self._perform_segmentation(configuration)
 
     def _perform_segmentation(self, configuration: SegmentationConfiguration) -> Optional[SegmentationConfiguration]:
-        if self._intersession_block is not None:
-            logger.error("_intersession_block not None, segmentation already started. block=%s segment_cfg=%s",
-                           self._intersession_block, configuration)
+        if self._intertrial_block is not None:
+            logger.error("_intertrial_block not None, segmentation already started. block=%s segment_cfg=%s",
+                         self._intertrial_block, configuration)
             return None
         logger.notice("performing segmentation on %s", configuration)
-        self._intersession_block = IntersessionBlock(configuration=configuration)
+        self._intertrial_block = IntertrialBlock(configuration=configuration)
         return configuration
 
     def perform_detection(self, configuration: DetectionConfiguration) -> Optional[DetectionConfiguration]:
@@ -232,14 +232,14 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             return self._perform_detection(configuration)
 
     def _perform_detection(self, configuration: DetectionConfiguration):
-        if self._intersession_detection is not None:
-            logger.warning("_intersession_detection not None, skipping perform_detection")
+        if self._intertrial_detection is not None:
+            logger.warning("_intertrial_detection not None, skipping perform_detection")
             return None
         self._check_previous_offline_thread("perform_detection", self._offline_analysis_thread)
-        intersession_detection = self._intersession_detection = IntersessionDetection(configuration)
+        intertrial_detection = self._intertrial_detection = IntertrialDetection(configuration)
         thread = self._offline_analysis_thread = Thread(
-            target=self._intersession_process, name="intersession_process",
-            args=(intersession_detection,))
+            target=self._intertrial_process, name="intertrial_process",
+            args=(intertrial_detection,))
         thread.start()
         logger.info("performing detection analysis on %s", configuration)
         return configuration
@@ -247,9 +247,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @staticmethod
     def _pool_init(log_dct_cfg):
         pool_init(log_dct_cfg)
-        # pre-import the intersession_process module, so that it's already imported on first analysis:
-        from autotrainer.inference.analysis import intersession_process
-        logger.info("imported inference analysis intersession_process: %s", intersession_process)
+        # pre-import the intertrial_process module, so that it's already imported on first analysis:
+        from autotrainer.inference.analysis import intertrial_process
+        logger.info("imported inference analysis intertrial_process: %s", intertrial_process)
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
 
@@ -363,10 +363,10 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                     logger.warning("thread %s still alive", thread)
 
         # always:
-        self._intersession_block = None
+        self._intertrial_block = None
         self._offline_segmentation_thread = None
         self._offline_analysis_thread = None
-        self._intersession_detection = None
+        self._intertrial_detection = None
         # finally:
         self._set_status(InferenceStatus.stopped)
 
@@ -449,17 +449,17 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 logger.verbose("pose-process not alive, skipped ack wait for %s", kind)
 
     def _handle_segmentation_finished(self, prj: ProjectInfo, success: bool, *, error: str="NA"):
-        ib = self._intersession_block
+        ib = self._intertrial_block
         if ib is None:
-            logger.critical("Got segmentation_finished but intersession_block is None ; prj=%s", prj)
+            logger.critical("Got segmentation_finished but intertrial_block is None ; prj=%s", prj)
         else:
             ib.configuration.complete(success, error=error)
-            self._intersession_block = None
-            logger.notice("_intersession_block -> None, after ib=%s and prj=%s", ib, prj)
+            self._intertrial_block = None
+            logger.notice("_intertrial_block -> None, after ib=%s and prj=%s", ib, prj)
         self.segmentation_finished(prj, success, error=error)
 
-    def _cb_on_intersession_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str="NA"):
-        logger.debug("_cb_on_intersession_segmentation_finished: success=%s error=%s prj=%s", success, error, project)
+    def _cb_on_intertrial_segmentation_finished(self, project: ProjectInfo, success: bool, *, error: str= "NA"):
+        logger.debug("_cb_on_intertrial_segmentation_finished: success=%s error=%s prj=%s", success, error, project)
         if success:
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.intertrialSegmentationSave,
@@ -471,13 +471,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
         self._handle_segmentation_finished(project, success, error=error)
 
-    def _cb_on_set_feed_intersession_result(self, project: ProjectInfo, error: Optional[str],
-                                            *, event: Optional[synchronize.Event]=None):
+    def _cb_on_set_feed_intertrial_result(self, project: ProjectInfo, error: Optional[str],
+                                          *, event: Optional[synchronize.Event]=None):
         logger.verbose("Got feed error cb: prj=%s err=%s", project, error)
         self._data_monitor_cmd_ack_event.clear()
-        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT, (project, error), None))
+        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_FEED_INTERTRIAL_RESULT, (project, error), None))
         if not self._data_monitor_cmd_ack_event.wait(5):
-            logger.warning("timeout wait ack for SET_FEED_INTERSESSION_RESULT to pose result process")
+            logger.warning("timeout wait ack for SET_FEED_INTERTRIAL_RESULT to pose result process")
         if event is not None:
             event.set()
 
@@ -502,11 +502,11 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             except Exception as err:
                 logger.exception("pose_response_ready event callback failed: %s", err)
 
-        elif msg is InferenceMonitorDataMsg.INTERSESSION_SEGMENTATION_FINISHED:
-            self._cb_on_intersession_segmentation_finished(*args, **kwargs)
+        elif msg is InferenceMonitorDataMsg.INTERTRIAL_SEGMENTATION_FINISHED:
+            self._cb_on_intertrial_segmentation_finished(*args, **kwargs)
 
-        elif msg is InferenceMonitorDataMsg.SET_FEED_INTERSESSION_RESULT:
-            self._cb_on_set_feed_intersession_result(*args, **kwargs)
+        elif msg is InferenceMonitorDataMsg.SET_FEED_INTERTRIAL_RESULT:
+            self._cb_on_set_feed_intertrial_result(*args, **kwargs)
 
         else:
             logger.warning("unknown monitor proc data: %s - ctx=%s", msg, ctx)
@@ -544,7 +544,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                     mode = InferenceMode(context)
                     logger.info(f"predict running with {mode.name} queue")
                     self._set_status(InferenceStatus.live if mode == InferenceMode.Live
-                                     else InferenceStatus.intersession)
+                                     else InferenceStatus.intertrial)
                 elif msg in {
                     InferenceStatusMessageKind.Created,
                     InferenceStatusMessageKind.Terminated,
@@ -556,21 +556,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             except Exception as err:
                 logger.exception("Error processing msg %s: %s", msg, err)
 
-    def _feed_intersession_analysis_execute(self, intersession_block: IntersessionBlock):
+    def _feed_intertrial_analysis_execute(self, intersession_block: IntertrialBlock):
         pass  # todo: adapt for simulate with main window app
 
     @staticmethod
-    def _intersession_process_execute(*args, **kwargs):
-        return intersession_process(*args, **kwargs)
+    def _intertrial_process_execute(*args, **kwargs):
+        return intertrial_process(*args, **kwargs)
 
-    def _intersession_process(self, intersession_detection: IntersessionDetection):
-        det_cfg = intersession_detection.configuration
+    def _intertrial_process(self, intertrial_detection: IntertrialDetection):
+        det_cfg = intertrial_detection.configuration
         project = det_cfg.project
         pool = self._process_pool
         try:
             assert pool is not None
             async_res = pool.apply_async(
-                self._intersession_process_execute,
+                self._intertrial_process_execute,
                 args=(project,),
                 kwds=dict(
                     calib_dir=self._calib_dir,
@@ -579,7 +579,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             )
             result = async_res.get()
         except Exception as err:
-            logger.exception("Error processing intersession: %s", err)
+            logger.exception("Error processing intertrial: %s", err)
             processed_ok = False
             result = None
             error = str(err)
@@ -588,7 +588,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             error = None
 
         if processed_ok:
-            result: IntersessionResponse
+            result: IntertrialResponse
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionSave,
                 {"session_id": project.session_id, "trial_id": project.trial,
@@ -600,5 +600,5 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 ApiEventKind.intertrialDetectionSaveError,
                 {"session_id": project.session_id, "trial_id": project.trial, "error": error or ""}))
 
-        intersession_detection.configuration.complete(processed_ok, error=error)
-        self._intersession_detection = None
+        intertrial_detection.configuration.complete(processed_ok, error=error)
+        self._intertrial_detection = None

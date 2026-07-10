@@ -208,18 +208,18 @@ def test_reset_config(algo, count):
     assert algo.auto_clamp_release_load_count == count
 
 
-def test_start_twice_session_fails(algo):
-    assert algo.is_in_session is False
-    assert algo.start_session(reason="manual") is True
-    assert algo.is_in_session is True
-    assert algo.start_session(reason="manual") is False
-    assert algo.is_in_session is True
+def test_start_twice_trial_fails(algo):
+    assert algo.is_in_trial_capture is False
+    assert algo.start_trial_capture(reason="manual") is True
+    assert algo.is_in_trial_capture is True
+    assert algo.start_trial_capture(reason="manual") is False
+    assert algo.is_in_trial_capture is True
 
 
-def test_end_session_if_not_running_fails(algo):
-    assert algo.is_in_session is False
-    assert algo.end_capture_session() is False
-    assert algo.is_in_session is False
+def test_end_trial_if_not_running_fails(algo):
+    assert algo.is_in_trial_capture is False
+    assert algo.end_capture_trial() is False
+    assert algo.is_in_trial_capture is False
 
 
 def test_delivery_basic(algo):
@@ -255,7 +255,7 @@ def test_delivery_basic(algo):
     #
     algo.active_config.pellet_delivery.pellet_send_wait_delay = 1
     algo.capture_status = CaptureProcessStatus.RUNNING
-    algo.start_session(reason="manual")
+    algo.start_trial_capture(reason="manual")
     assert algo.can_send_pellet() is False
     algo.capture_status = CaptureProcessStatus.RECORDING
     assert algo.can_send_pellet() is False
@@ -271,7 +271,7 @@ def test_can_send_load_pellet_retract_disabled(algo):
     assert algo.can_load_pellet() is False
     algo.update_triangle_seen(True)
     assert algo.can_load_pellet() is True
-    algo.system_state = SystemState.intersession
+    algo.system_state = SystemState.intertrial
     assert algo.can_load_pellet() is False
     assert algo.can_retract_pellet(pellet_state=PelletState.retract) is False
     for pellet_state in set(PelletState) - {PelletState.retract}:
@@ -282,13 +282,13 @@ def test_can_send_load_pellet_retract_disabled(algo):
         assert algo.can_send_pellet() is False
     algo.update_pellet_seen(True)
     assert algo.pellet_recently_seen is True
-    algo.system_state = SystemState.intersession
+    algo.system_state = SystemState.intertrial
     assert algo.can_send_pellet() is False
     for system_state in {SystemState.cage, SystemState.tunnel}:
         algo.system_state = system_state
         assert algo.can_send_pellet() is True
-    algo.start_session()
-    assert algo.is_in_session
+    algo.start_trial_capture()
+    assert algo.is_in_trial_capture
     # algo.active_config.head_clamp.enabled = True
     # need be set on algo itself :
     algo.head_fixation_enabled = True
@@ -316,37 +316,37 @@ def test_can_send_load_pellet_retract_disabled(algo):
 
 
 @pytest.mark.parametrize("enabled", (False, True))
-def test_can_perform_intersession_analysis(algo, enabled):
-    assert algo.can_perform_intersession_analysis() is False
+def test_can_perform_intertrial_analysis(algo, enabled):
+    assert algo.can_perform_intertrial_analysis() is False
     algo.update_mouse_seen(True)
-    assert algo.can_perform_intersession_analysis() is False
-    algo.start_session()
-    assert algo.can_perform_intersession_analysis() is False
+    assert algo.can_perform_intertrial_analysis() is False
+    algo.start_trial_capture()
+    assert algo.can_perform_intertrial_analysis() is False
     algo.update_mouse_seen(True)
-    algo.active_config.pellet_delivery.is_intersession_analysis_enabled = enabled
-    assert algo.can_perform_intersession_analysis() is enabled
+    algo.active_config.pellet_delivery.is_intertrial_analysis_enabled = enabled
+    assert algo.can_perform_intertrial_analysis() is enabled
 
 
 @pytest.mark.parametrize("minimum_duration", (1, 5))
-def test_too_short_session_end_capture_is_delayed(algo, minimum_duration):
-    algo.start_session()
+def test_too_short_trial_end_capture_is_delayed(algo, minimum_duration):
+    algo.start_trial_capture()
     minimum_duration = AlmostEqualFloat(minimum_duration)
-    algo.session_minimum_duration = minimum_duration
-    assert algo.is_in_session
+    algo.trial_minimum_duration = minimum_duration
+    assert algo.is_in_trial_capture
     with mock.patch.object(behavior_algorithm, "make_daemon_timer") as m_make_timer:
-        algo.end_capture_session(reason="manual")
-    assert algo.is_in_session
+        algo.end_capture_trial(reason="manual")
+    assert algo.is_in_trial_capture
     assert m_make_timer.return_value.start.call_args_list == [mock.call()]
     assert m_make_timer.call_args.args[0] == minimum_duration
     func = m_make_timer.call_args.args[1]
     increase_simulate_perf_now(minimum_duration)
     func()
-    assert not algo.is_in_session
+    assert not algo.is_in_trial_capture
 
 
 def test_algo_paused(algo):
     algo.algo_paused = True
-    assert algo.start_session() is False
+    assert algo.start_trial_capture() is False
     assert algo.can_send_pellet() is False
     assert algo.can_release_pellet() is False
     assert algo.can_cover_pellet() is False
@@ -364,10 +364,10 @@ def test_algo_paused(algo):
     assert algo.pellet_recently_seen is False  # but not pellet
 
 
-def test_start_session_with_invalid_project(algo, caplog):
+def test_start_trial_with_invalid_project(algo, caplog):
     algo.project = ProjectInfo()
-    assert algo.start_session() is False
-    assert "refusing start session when project not valid" in caplog.text
+    assert algo.start_trial_capture() is False
+    assert "refusing start trial when project not valid" in caplog.text
 
 
 def test_diamond_triangle_drift(algo):

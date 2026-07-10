@@ -17,7 +17,7 @@ from autotrainer.inference import PoseResponse, PoseAlgorithm, InferenceStatus
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps
-from autotrainer.inference.analysis import IntersessionResponse
+from autotrainer.inference.analysis import IntertrialResponse
 
 from autotrainer.pyside import Separator, CardWidget
 from autotrainer.pyside.StackedContent import StackedWidget, StackedLayout
