@@ -58,6 +58,8 @@ class CaptureCommandKind(IntEnum):
     SET_LOGGER_LEVEL = 6
     """Set a logger log level"""
 
+    SET_CAM_PROPERTY = 100
+
 
 @dataclass
 class CaptureCameraAttrs:
@@ -195,7 +197,7 @@ class VideoCapture(Process):
 
         self._is_running = True
         self._is_capturing = False
-        self._camera = None
+        self._camera: Optional[CameraBase] = None
         self._record: Optional[VideoRecord] = None
         self._record_queue: Optional[queue.Queue] = None
         self._record_queue_list: List[
@@ -212,9 +214,16 @@ class VideoCapture(Process):
             CaptureCommandKind.ENABLE_RECORDING: self._enable_record,
             CaptureCommandKind.DISABLE_RECORDING: self._disable_record,
             CaptureCommandKind.SET_LOGGER_LEVEL: set_logger_level,
+            CaptureCommandKind.SET_CAM_PROPERTY: self._set_cam_property,
         }
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
+
+    def _set_cam_property(self, name: str, value):
+        cam = self._camera
+        if cam is None:
+            return
+        cam.set_property(name, value)
 
     def _do_run(self, log_dict_config: Optional[Dict]):
         signal.signal(signal.SIGINT, signal.SIG_IGN)

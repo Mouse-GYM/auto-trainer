@@ -297,6 +297,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
     def is_trace_enabled(self, value: bool):
         self._is_trace_enabled = value
 
+    def set_cam_property(self, name: str, value):
+        self._send_command(CaptureCommandKind.SET_CAM_PROPERTY, name, value)
+
     def set_display_fcn(self, display_fcn):
         self._display_update_fcn = display_fcn
 
