@@ -22,7 +22,7 @@ from autotrainer.core.configuration import (
 )
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration
+    AutoEndTrialConfiguration
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -369,23 +369,3 @@ def test_renames_on_v52_are_respected(
     assert cfg.behavior.pellet_delivery.is_intertrial_pellet_shift_enabled is shift_enabled
     assert cfg.behavior.pellet_delivery.max_pellets_per_trial == max_pellets
     assert cfg.behavior.auto_end_trial == auto_end_session
-
-
-def test_renamed_batch_and_close_gate_on_v52_are_respected():
-    config_text = """
-    !SystemConfiguration
-    version: 51
-    behavior: !BehaviorConfiguration
-        batchSessionRecording: !BatchSessionRecordingConfiguration
-            enabled: true
-            maximumBatchSize: 5
-        autoCloseGateOnIntersession: !AutoCloseGateOnIntersessionConfiguration
-            enabled: true
-            sessionMinDuration: 42
-    """
-    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
-    assert isinstance(cfg, SystemConfiguration)
-    assert cfg.behavior.batch_trial_recording == BatchTrialRecordingConfiguration(
-        enabled=True, maximum_batch_size=5)
-    assert cfg.behavior.auto_close_gate_on_intertrial == AutoCloseGateOnIntertrialConfiguration(
-        enabled=True, trial_min_duration=42)

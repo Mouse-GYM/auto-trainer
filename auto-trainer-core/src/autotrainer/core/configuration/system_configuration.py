@@ -47,13 +47,6 @@ _PELLET_FIELD_RENAMES = {
 # can merge them together:
 _V52_RENAMES = {**_BEHAVIOR_FIELD_RENAMES, **_PELLET_FIELD_RENAMES}
 
-# renames of fields *inside* a behavior sub-config, keyed by that sub-config's (post-rename) key:
-_V52_NESTED_RENAMES = {
-    "auto_close_gate_on_intertrial": {
-        "session_min_duration": "trial_min_duration",
-    },
-}
-
 
 def _camelize_deep(dct):
     for k, v in tuple(dct.items()):
@@ -109,12 +102,6 @@ class SystemConfiguration:
                         behavior_dct[new_key] = behavior_dct.pop(old_key)
                     if old_key in pellet_dct:
                         pellet_dct[new_key] = pellet_dct.pop(old_key)
-                for parent_key, nested_renames in _V52_NESTED_RENAMES.items():
-                    nested_dct = behavior_dct.get(parent_key)
-                    if isinstance(nested_dct, dict):
-                        for old_key, new_key in nested_renames.items():
-                            if old_key in nested_dct:
-                                nested_dct[new_key] = nested_dct.pop(old_key)
             if version == 0:
                 configuration = cls()
                 configuration._deserialize_version_zero(content)
