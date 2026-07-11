@@ -243,6 +243,7 @@ class SystemMachine(StateMachine):
     def before_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         pellet_state = self._pellet_machine.state
         algo = self._algorithm
+        project = self._project_info
         logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
                      reason, self._state, pellet_state, algo.is_pellet_recently_seen())
         if self._state == SystemState.cage or force_from_cage:
@@ -250,16 +251,16 @@ class SystemMachine(StateMachine):
             self._tot_trials_analysed = 0
             self._tot_trials_failed_analysed = 0
             self._batch_current_id = (
-                self._project_info.set_batch_id() if algo.batch_trial_recording_config.enabled
+                project.set_batch_id() if algo.batch_trial_recording_config.enabled
                 else None
             )
             self._event_manager.post_api_event(build_event(ApiEventKind.tunnelEnter))
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.sessionStarted,
                 SessionStartedContext(
-                    session_id=self._project_info.session_id,
-                    is_analysis_deferred=self._algorithm.batch_trial_recording_config.enabled)))
-            self._algorithm.session_starting(self._project_info.session_id)
+                    session_id=project.session_id,
+                    is_analysis_deferred=algo.batch_trial_recording_config.enabled)))
+            algo.session_starting(project.session_id)
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
