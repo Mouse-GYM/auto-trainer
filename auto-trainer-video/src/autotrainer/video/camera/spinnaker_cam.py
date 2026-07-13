@@ -222,8 +222,9 @@ class SpinCam(CameraBase):
     @exposure.setter
     def exposure(self, value: float) -> None:
         self._exposure = value
-        if self._acquisition_started:
-            self._apply_exposure(self._camera, value)
+        cam = self._camera
+        if self._acquisition_started and cam is not None:
+            self._apply_exposure(cam, value)
 
     def _reinit_cam(self):
         spincam = self._camera
@@ -289,7 +290,7 @@ class SpinCam(CameraBase):
         self._set_bounded_float_property_node(cam.ExposureTime, value)
 
     def _apply_gain(self, cam, value):
-        self._set_bounded_float_property_node(cam.Gain, self._gain)
+        self._set_bounded_float_property_node(cam.Gain, value)
 
     def _apply_gamma(self, cam, value):
         self._set_bounded_float_property_node(cam.Gamma, value)
@@ -343,6 +344,8 @@ class SpinCam(CameraBase):
         spincam = self._camera
         if spincam is None:
             return
+        self._camera = None
+        self._acquisition_started = False
         spincam.EndAcquisition()
         if self._is_primary:
             spincam.LineSelector.SetValue(PySpin.LineSelector_Line1)
@@ -353,7 +356,6 @@ class SpinCam(CameraBase):
         spincam.DeInit()
         self._cameras.pop(self._serial_number, None)
         logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
-        self._camera = None
 
     def _capture(self):
         p_timeout = time.perf_counter() + 15  # eventual todo: allow config
@@ -471,6 +473,7 @@ class SpinCam(CameraBase):
         return frame, self._last_when
 
     def set_property(self, name: str, value) -> bool:
+        cam = self._camera
         if name == "primary":
             self._is_primary = is_truthy(value)
             self._is_secondary = not self._is_primary
@@ -489,12 +492,12 @@ class SpinCam(CameraBase):
             self.exposure = literal_eval_if_str(value)
         elif name == "gain":
             self._gain = literal_eval_if_str(value)
-            if self._acquisition_started:
-                self._apply_gain(self._camera, self._gain)
+            if self._acquisition_started and cam is not None:
+                self._apply_gain(cam, self._gain)
         elif name == "gamma":
             self._gamma = literal_eval_if_str(value)
-            if self._acquisition_started:
-                self._apply_gamma(self._camera, self._gamma)
+            if self._acquisition_started and cam is not None:
+                self._apply_gamma(cam, self._gamma)
         elif name == "skip_duplicate_frame_copy":
             self._skip_duplicate_frame_copy = is_truthy(value)
         else:
