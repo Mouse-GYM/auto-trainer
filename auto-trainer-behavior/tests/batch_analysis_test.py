@@ -162,10 +162,7 @@ class TestBatchAnalysis(MockSystemMachine):
                 assert pellet.state == PelletState.monitoring
                 stack.enter_context(self.mock_intertrial_analysis(stack=stack))
                 # trigger load and end-capture-session:
-                self.mock_pose_response(pellet_seen=False, mouse_seen=True)
-                assert pellet.state == PelletState.monitoring
-                self.increment_perf_now(algo.active_config.pellet_delivery.max_pellet_missing_seconds)
-                self.mock_pose_response(pellet_seen=False, mouse_seen=True)
+                self.mock_pellet_missing(mouse_seen=True)
                 if algo.system_state == SystemState.intertrial:
                     assert pellet.state == PelletState.retract
                 else:

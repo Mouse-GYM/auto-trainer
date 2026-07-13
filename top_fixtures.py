@@ -32,7 +32,7 @@ from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
-    InferenceProtocol, SystemState
+    InferenceProtocol, SystemState, SegmentationConfiguration, DetectionConfiguration
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -488,7 +488,6 @@ class MockSystemMachine:
         assert not algo.is_in_trial_capture
         assert self._machine.state == SystemState.cage
         self.make_load_cell_active()
-        self.sensor_analysis.load_cell_monitor.is_engaged = True
         self._machine.enter_tunnel(reason="manual")
         if set_recording_status:
             algo.set_capture_status(CaptureProcessStatus.RECORDING)
