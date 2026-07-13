@@ -298,6 +298,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._is_trace_enabled = value
 
     def set_cam_property(self, name: str, value):
+        logger.warning("set_cam_property() command is for dev/debug purpose only.")
         self._send_command(CaptureCommandKind.SET_CAM_PROPERTY, name, value)
 
     def set_display_fcn(self, display_fcn):
