@@ -5,21 +5,23 @@ import json
 import shutil
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
+from enum import Enum
 from pathlib import Path
 from typing import List, Dict, Optional, Union, ClassVar, TextIO, Type, Any
 from typing_extensions import Self
 
 import yaml
 import humps
-from dacite import from_dict
+from dacite import Config, from_dict
 
 from autotrainer.core.logging import get_verbose_logger
-from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader
+from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationDumper, SystemConfigurationSafeLoader, \
+    time_from_iso
 from .alarm_detector import AlarmDetectorConfig
 from .autoclamp_evasion_config import AnimalEvasionAlarmConfig, AutoClampEvasionDetectorConfig
 from .watchdog_config import WatchdogConfig
-from .. import make_camelize_representer, make_decamelize_constructor
+from .. import Offset3DTuple, make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
 from .camera_configuration import CameraConfiguration, CameraId
@@ -53,6 +55,41 @@ _V52_NESTED_RENAMES = {
         "session_min_duration": "trial_min_duration",
     },
 }
+
+
+def _to_offset3d(value: Any) -> Offset3DTuple:
+    if isinstance(value, Offset3DTuple):
+        return value
+    if isinstance(value, dict):
+        return Offset3DTuple(**value)
+    return Offset3DTuple(value)
+
+
+def _to_time(value: Any) -> time:
+    if isinstance(value, time):
+        return value
+    return time_from_iso(value)
+
+
+def _to_int(value: Any) -> Any:
+    # older configs hold whole floats (e.g. 8.0) where an int is declared, which the previous loader never
+    # checked.  Anything else is passed through untouched, so genuinely wrong data still raises.
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+# An older config is re-read with GenericSafeLoader, which drops the yaml tags: the values the tags used to
+# carry arrive as plain scalars/dicts, and dacite type-checks strictly rather than deferring to __post_init__.
+# So it has to be told how to rebuild those types, and to coerce enums from their underlying values.
+_MIGRATE_DACITE_CONFIG = Config(
+    cast=[Enum],
+    type_hooks={
+        Offset3DTuple: _to_offset3d,
+        time: _to_time,
+        int: _to_int,
+    },
+)
 
 
 def _camelize_deep(dct):
@@ -123,7 +160,8 @@ class SystemConfiguration:
                 configuration._deserialize_version_one(content)
             else:
                 # dataclass recursive construct from nested dicts:
-                configuration: Self = from_dict(data_class=SystemConfiguration, data=content)  # noqa
+                configuration: Self = from_dict(data_class=SystemConfiguration, data=content,
+                                                config=_MIGRATE_DACITE_CONFIG)  # noqa
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "

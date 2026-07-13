@@ -1,6 +1,8 @@
 import copy
 import dataclasses
+import datetime
 import io
+import shutil
 from pathlib import Path
 
 import humps
@@ -28,6 +30,7 @@ fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
 v0_config_path = fixtures_path.joinpath("v0_config.yaml")
 v1_config_path = fixtures_path.joinpath("v1_config.yaml")
+v51_config_path = fixtures_path.joinpath("v51_config.yaml")
 
 #
 
@@ -389,3 +392,84 @@ def test_renamed_batch_and_close_gate_on_v52_are_respected():
         enabled=True, maximum_batch_size=5)
     assert cfg.behavior.auto_close_gate_on_intertrial == AutoCloseGateOnIntertrialConfiguration(
         enabled=True, trial_min_duration=42)
+
+
+def test_load_older_version_camera_id_is_camera_id_enum():
+    config_text = """
+    !SystemConfiguration
+    version: 51
+    cameras:
+    - !CameraConfiguration
+      id: 0
+      name: left
+    - !CameraConfiguration
+      id: 2
+      name: web
+    """
+    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
+    # equality alone would hold for a plain int, CameraId being an IntEnum:
+    assert [type(cam.id) for cam in cfg.cameras] == [CameraId, CameraId]
+    assert [cam.id for cam in cfg.cameras] == [CameraId.Left, CameraId.Web]
+
+
+def test_load_version_51_file(tmp_path):
+    # loading with save_backup rewrites the file in place on a version change, so work on a copy:
+    path = tmp_path.joinpath("system_configuration.yaml")
+    shutil.copy2(v51_config_path, path)
+
+    config = SystemConfiguration.load_yaml_file(path, save_backup=True)
+
+    assert config.version == SystemConfiguration.version
+
+    assert [type(cam.id) for cam in config.cameras] == [CameraId] * 3
+    assert [cam.id for cam in config.cameras] == [CameraId.Left, CameraId.Right, CameraId.Web]
+    assert [cam.name for cam in config.cameras] == ["left", "right", "web"]
+    left, _right, web = config.cameras
+    assert left.scheme == "spinnaker"
+    assert left.host == "23199919"
+    assert left.record_mode == 1
+    assert left.params == dict(exposure=250, fps=150, hbin=4, vbin=4, width=256, height=256,
+                               offsetx=52, offsety=6, gain=1, gamma=0.7, primary=True)
+    assert web.is_still_image_capture_enabled is True
+    assert web.still_image_capture_interval == 1.0
+
+    # the yaml tags are dropped when re-reading an older config, so these carry the types they used to:
+    shift_xyz = config.behavior.shift_xyz_handler
+    assert shift_xyz.tongue_eaten_shift == Offset3DTuple(0, 0.5, 0)
+    assert isinstance(shift_xyz.tongue_eaten_shift, Offset3DTuple)
+    assert shift_xyz.buffer.target == Offset3DTuple(1.5, -3, 1)
+    assert isinstance(shift_xyz.buffer.target, Offset3DTuple)
+
+    led_alarm = config.behavior.led_alarm
+    assert led_alarm.start_ignore_hour == datetime.time(10, 0)
+    assert isinstance(led_alarm.start_ignore_hour, datetime.time)
+    assert led_alarm.stop_ignore_hour == datetime.time(20, 0)
+
+    # the v52 renames, as they appear in a real v51 file:
+    pellet_delivery = config.behavior.pellet_delivery
+    assert pellet_delivery.max_pellets_per_trial == 10
+    assert pellet_delivery.is_intertrial_analysis_enabled is True
+    assert pellet_delivery.is_intertrial_pellet_shift_enabled is False
+    assert config.behavior.auto_end_trial.no_activity_delay_minutes == 1
+    assert config.behavior.batch_trial_recording.maximum_batch_size == 0
+    assert config.behavior.auto_close_gate_on_intertrial.trial_min_duration == 5
+
+    assert config.persistence.output_location == "/home/autotrainer/auto-trainer-output"
+    assert config.behavior.head_clamp.release_mode == "Activity"
+    assert config.watchdog.timeout_trigger_delay == 5
+
+
+def test_load_version_51_file_is_migrated_on_disk(tmp_path):
+    path = tmp_path.joinpath("system_configuration.yaml")
+    shutil.copy2(v51_config_path, path)
+
+    config = SystemConfiguration.load_yaml_file(path, save_backup=True)
+
+    backups = list(tmp_path.glob("system_configuration_v51_*.yaml"))
+    assert len(backups) == 1
+    assert backups[0].read_text() == v51_config_path.read_text()
+
+    # the migrated file is written back, and reloads through the current-version path:
+    reloaded = SystemConfiguration.load_yaml_file(path)
+    assert reloaded.version == SystemConfiguration.version
+    assert dataclasses.asdict(reloaded) == dataclasses.asdict(config)
