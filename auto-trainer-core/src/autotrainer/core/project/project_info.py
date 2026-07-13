@@ -126,6 +126,7 @@ class _ProjectInfo:
     t_pellet_delivered: float = math.nan  # in seconds (zero-based on start_recording)
     t_pellet_presented: float = math.nan
     session_id: str = dataclasses.field(default_factory=_make_session_id)
+    batch_id: Optional[str] = None
 
 
 @dataclass
@@ -148,6 +149,7 @@ class ProjectInfo(_ProjectInfo):
         t_pellet_delivered: float = _ProjectInfo.t_pellet_delivered,
         t_pellet_presented: float = _ProjectInfo.t_pellet_presented,
         session_id: Optional[str] = None,
+        batch_id: Optional[str] = None,
         #
         mp_manager: Optional[multiprocessing.managers.BaseManager]=None,
     ):
@@ -190,6 +192,7 @@ class ProjectInfo(_ProjectInfo):
         self.t_pellet_delivered = t_pellet_delivered
         self.t_pellet_presented = t_pellet_presented
         self.session_id = session_id
+        self.batch_id = batch_id
 
     @property
     def short_id(self) -> str:
@@ -411,7 +414,13 @@ class ProjectInfo(_ProjectInfo):
 
     def reset_session_id(self):
         self.session_id = _make_session_id()
-        logger.info("Set new session_id=%r", self.session_id)
+        self.batch_id = None
+        logger.notice("Set new session_id=%r", self.session_id)
+
+    def set_batch_id(self) -> str:
+        new_id = self.batch_id = str(uuid.uuid4())
+        logger.info("Set new batch_id=%s", self.batch_id)
+        return new_id
 
     def _reset_vals(self, when, trial):
         with self:

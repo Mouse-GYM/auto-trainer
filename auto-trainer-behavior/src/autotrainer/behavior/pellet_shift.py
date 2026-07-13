@@ -3,6 +3,7 @@ from typing import Callable, Optional, List, Union, Protocol, Any
 
 
 from autotrainer.api import ApiEventKind, ApiPelletShiftSource, build_event
+from autotrainer.api.event import PelletShiftContext
 
 from autotrainer.core import Offset3DTuple, calculate_std_dev_manual, ObservableObject, get_verbose_logger, ProjectInfo, \
     mean_method
@@ -274,14 +275,15 @@ class ShiftXYZHandler(ObservableObject):
             func = self._processed_shift_handler
             post_api_event(build_event(
                 ApiEventKind.intertrialPelletShift,
-                {
-                    "session_id": project.session_id,
-                    "trial_id": project.trial,
-                    "source": ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
-                              else ApiPelletShiftSource.REACH_FAILURES,
-                    "shift": {"x": processed_shift.x, "y": processed_shift.y, "z": processed_shift.z},
-                    "deferred": not is_last,
-                }))
+                PelletShiftContext(
+                    session_id=project.session_id,
+                    trial_id=project.trial,
+                    batch_id=project.batch_id,
+                    source=ApiPelletShiftSource.TONGUE_EATEN if tongue_eaten
+                           else ApiPelletShiftSource.REACH_FAILURES,
+                    shift={"x": processed_shift.x, "y": processed_shift.y, "z": processed_shift.z},
+                    deferred=not is_last,
+                )))
             if func is None:
                 logger.debug("handle_processed_shift_func undefined")
             else:

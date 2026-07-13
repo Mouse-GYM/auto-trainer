@@ -1,10 +1,13 @@
 import dataclasses
 import math
+import uuid
 from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Optional, List
 
+from autotrainer.api.event import BatchAnalysisStartedContext, BatchAnalysisEndedContext, SessionStartedContext, \
+    SessionEndedContext, SessionTrialContext
 from transitions import Machine
 
 from autotrainer.api import ApiEventKind, build_event
@@ -87,10 +90,12 @@ class SystemMachine(StateMachine):
         self._project_info = project_info
         #
         # during same tunnel session:
+        self._tot_trials_recorded = 0
         self._tot_trials_analysed = 0
         self._tot_trials_failed_analysed = 0
         #
         self._next_shift_xyz_to_apply: Optional[Offset3DTuple] = None
+        self._batch_current_id: Optional[str] = None  # NB: is set to batch-id at enter-tunnel
         self._batch_project_trials_start_list: List[ProjectInfo] = []
         self._batch_project_trials_list: List[ProjectInfo] = []
         self._batch_processing_in_progress: bool = False
@@ -237,17 +242,25 @@ class SystemMachine(StateMachine):
 
     def before_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         pellet_state = self._pellet_machine.state
+        algo = self._algorithm
+        project = self._project_info
         logger.debug("before_enter_tunnel: reason=%s state=%s pellet_state=%s pellet_recently_seen=%s",
-                     reason, self._state, pellet_state, self._algorithm.is_pellet_recently_seen())
+                     reason, self._state, pellet_state, algo.is_pellet_recently_seen())
         if self._state == SystemState.cage or force_from_cage:
+            self._tot_trials_recorded = 0
             self._tot_trials_analysed = 0
             self._tot_trials_failed_analysed = 0
+            self._batch_current_id = (
+                project.set_batch_id() if algo.batch_trial_recording_config.enabled
+                else None
+            )
             self._event_manager.post_api_event(build_event(ApiEventKind.tunnelEnter))
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.sessionStarted,
-                dict(session_id=self._project_info.session_id,
-                     is_analysis_deferred=self._algorithm.batch_trial_recording_config.enabled)))
-            self._algorithm.session_starting(self._project_info.session_id)
+                SessionStartedContext(
+                    session_id=project.session_id,
+                    is_analysis_deferred=algo.batch_trial_recording_config.enabled)))
+            algo.session_starting(project.session_id)
             # always when enter tunnel, but only if was in cage before.
             self._execute_disengage_auto_clamp_if_in_progress()
 
@@ -303,11 +316,15 @@ class SystemMachine(StateMachine):
                 self._batch_current_trial_index = 0
                 self._batch_failed_count = 0
                 self._batch_project_trials_finished = 0
+                cur_batch_id = project_info.batch_id or project_info.set_batch_id()
                 logger.info("Starting batch analysis with %s trials", len(batch_list))
                 algo.batch_analysis_starting(batch_len=len(batch_list))
                 self._event_manager.post_api_event(build_event(
                     ApiEventKind.batchAnalysisStarted,
-                    {"session_id": self._project_info.session_id, "trial_count": len(batch_list)}))
+                    BatchAnalysisStartedContext(
+                        session_id=project_info.session_id,
+                        analysis_trial_count=len(batch_list),
+                        batch_id=cur_batch_id)))
         else:
             self._batch_project_trials_start_list = []
             self._batch_project_trials_finished = 0
@@ -346,7 +363,7 @@ class SystemMachine(StateMachine):
             # animal has exited/re-entered the tunnel during the intertrial, so:
             self._post_api_session_ended(project.session_id)
             force_from_cage = True
-            # this allows to have new tunnelEnter / sessionStarted events emitted.
+            # this allows to have new tunnelEnter / sessionStarted events emitted from the below enter_tunnel()
         else:
             force_from_cage = False
         with self._algorithm.set_allow_reentrant(True):
@@ -431,7 +448,8 @@ class SystemMachine(StateMachine):
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         if dcs_send_pos is None:
             logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
-        p_now = self._trial_started_perf_c = get_perf_now()
+        self._trial_started_perf_c = get_perf_now()
+        self._tot_trials_recorded += 1
         pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
         logger.verbose("trial_capture_started: dcs_send_pos=%s prj.when=%s",
@@ -530,9 +548,10 @@ class SystemMachine(StateMachine):
     def _post_api_session_ended(self, session_id: str):
         self._event_manager.post_api_event(build_event(
             ApiEventKind.sessionEnded,
-            dict(
+            SessionEndedContext(
                 session_id=session_id,
-                trial_count=self._tot_trials_analysed,
+                capture_trial_count=self._tot_trials_recorded,
+                analysis_trial_count=self._tot_trials_analysed,
                 failed_trial_count=self._tot_trials_failed_analysed,
             )))
         self._algorithm.session_ending(session_id)
@@ -566,13 +585,22 @@ class SystemMachine(StateMachine):
             self._batch_processing_in_progress = False
             self._batch_trials_total_duration = 0
             logger.info("batch analysis ending, failed=%s", self._batch_failed_count)
-            # force inference project-info back to current/live one:
-            self._inference.project = self._project_info
             algo.batch_analysis_ending(failed_count=self._batch_failed_count)
+            cur_batch_id = project.batch_id or project.set_batch_id()
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.batchAnalysisEnded,
-                {"session_id": project.session_id,
-                 "failed_trial_count": self._batch_failed_count}))
+                BatchAnalysisEndedContext(
+                    session_id=project.session_id, batch_id=cur_batch_id,
+                    analysis_trial_count=len(self._batch_project_trials_start_list),
+                    failed_trial_count=self._batch_failed_count)))
+            #
+            # force inference project-info back to current/live one:
+            live_project = self._project_info
+            self._inference.project = live_project
+            batch_cfg = algo.batch_trial_recording_config
+            cur_batch_id = live_project.batch_id
+            if cur_batch_id is not None or batch_cfg.enabled:  # also check if has been enabled meanwhile.
+                self._batch_current_id = live_project.set_batch_id()
 
         with algo.set_allow_reentrant(True):
             self.exit_intertrial(project)
@@ -1027,7 +1055,7 @@ class SystemMachine(StateMachine):
             project.t_pellet_presented = t_rel_start
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.trialPelletPresented,
-                {"session_id": project.session_id, "trial_id": project.trial}))
+                SessionTrialContext(session_id=project.session_id, trial_id=project.trial)))
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_algorithm_property_changed(self, name: str, new_value, old_value):

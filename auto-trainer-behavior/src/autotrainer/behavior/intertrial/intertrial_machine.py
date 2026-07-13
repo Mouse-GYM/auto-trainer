@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Callable, Optional
 
+from autotrainer.api.event import AnalysisTrialContext, IntertrialErrorContext
 from transitions import Machine
 
 from autotrainer.api import ApiEventKind, build_event
@@ -86,25 +87,27 @@ class IntertrialMachine(StateMachine):
             self.events.on_analysis_started()
             self.post_api_event(build_event(
                 ApiEventKind.intertrialSegmentationBegin,
-                {"session_id": project_info.session_id, "trial_id": project_info.trial}))
+                AnalysisTrialContext(session_id=project_info.session_id,
+                                     trial_id=project_info.trial, batch_id=project_info.batch_id)))
 
     def after_enter_detection(self, segment_config: SegmentationConfiguration):
+        project = segment_config.project
         detection_config = DetectionConfiguration(
-            project=segment_config.project,
+            project=project,
             frame_rate=segment_config.frame_rate,
         )
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)
         if res is None:
             logger.warning("inference perform_detection() returned None")
-            self.end_analysis(segment_config.project, False)
+            self.end_analysis(project, False)
         else:
             self._segmentation_configuration = None  # can now unset this one
             self._detection_configuration = detection_config
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionBegin,
-                {"session_id": segment_config.project.session_id,
-                 "trial_id": segment_config.project.trial}))
+                AnalysisTrialContext(session_id=project.session_id,
+                                     trial_id=project.trial, batch_id=project.batch_id)))
 
     def after_end_analysis(self, project: ProjectInfo, success: bool):
         logger.info("end_analysis(success=%s) of %s", success, project)
@@ -164,7 +167,8 @@ class IntertrialMachine(StateMachine):
         if success:
             self.post_api_event(build_event(
                 ApiEventKind.intertrialSegmentationEnd,
-                {"session_id": project.session_id, "trial_id": project.trial}))
+                AnalysisTrialContext(session_id=project.session_id,
+                                     trial_id=project.trial, batch_id=project.batch_id)))
             if self.can_perform_detection(segment_config):  # must check, and if cannot must end_analysis
                 def algo_action():
                     self.perform_detection(segment_config)
@@ -176,7 +180,8 @@ class IntertrialMachine(StateMachine):
             logger.error("perform segmentation failed. config=%s", segment_config)
             self.post_api_event(build_event(
                 ApiEventKind.intertrialSegmentationError,
-                {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
+                IntertrialErrorContext(session_id=project.session_id, trial_id=project.trial,
+                                       batch_id=project.batch_id, error=error)))
             def algo_action():
                 self.end_analysis(project, False)
         if algo_action is not None:
@@ -191,11 +196,13 @@ class IntertrialMachine(StateMachine):
             logger.error("perform detection failed. det_config=%s", detection_config)
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionError,
-                {"session_id": project.session_id, "trial_id": project.trial, "error": error}))
+                IntertrialErrorContext(session_id=project.session_id,
+                                       trial_id=project.trial, batch_id=project.batch_id, error=error)))
         else:
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionEnd,
-                {"session_id": project.session_id, "trial_id": project.trial}))
+                AnalysisTrialContext(session_id=project.session_id,
+                                     trial_id=project.trial, batch_id=project.batch_id)))
         with self._algorithm.set_allow_reentrant(True):
             self.end_analysis(detection_config.project, success)
 

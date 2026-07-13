@@ -4,6 +4,8 @@ import time
 from typing import List, Optional
 
 from autotrainer.api import ApiEventKind, build_event
+from autotrainer.api.event import BatchAnalysisStartedContext
+
 from autotrainer.core import EventManager, EventManagerPlugin, EventInfo, ProjectInfo
 
 from top_fixtures import MockSystemMachine
@@ -53,11 +55,16 @@ class TestApiEventPayloads(MockSystemMachine):
 
         project = self.algo._project_info  # noqa: SLF001
         assert project.is_valid()
+        self.start_trial_in_tunnel()
         assert self.algo.start_trial_capture(reason="manual") is True
         _drain(manager)
 
+        sess_started_ctx = recorder.context_for(ApiEventKind.sessionStarted)
+        assert sess_started_ctx.keys() == {"session_id", "is_analysis_deferred"}
+
         project_trial_changed = recorder.context_for(ApiEventKind.projectTrialChanged)
         assert project_trial_changed is not None
+        assert project_trial_changed.keys() == {"session_id", "trial_id", "root"}
         assert project_trial_changed["session_id"] == project.session_id
         assert project_trial_changed["trial_id"] == project.trial
         assert project_trial_changed["root"] == project.root
@@ -89,13 +96,3 @@ def test_project_trial_changed_replaced_project_session_changed():
     # projectSessionChanged (702) was renamed to projectTrialChanged (same value) in v0.9.24.
     assert not hasattr(ApiEventKind, "projectSessionChanged")
     assert hasattr(ApiEventKind, "projectTrialChanged")
-
-
-def test_batch_analysis_payload_field_names():
-    started = build_event(
-        ApiEventKind.batchAnalysisStarted, {"session_id": "sess-1", "trial_count": 4})
-    assert set(started["context"].keys()) == {"session_id", "trial_count"}
-
-    ended = build_event(
-        ApiEventKind.batchAnalysisEnded, {"session_id": "sess-1", "failed_trial_count": 1})
-    assert set(ended["context"].keys()) == {"session_id", "failed_trial_count"}

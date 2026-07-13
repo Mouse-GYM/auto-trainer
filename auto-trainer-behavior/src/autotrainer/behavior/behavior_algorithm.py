@@ -17,6 +17,8 @@ from typing import Optional, Tuple, ClassVar, Any, Dict, Deque, List
 
 from typing import Callable
 
+from autotrainer.api.event import AnalysisTrialContext, ProjectTrialChangedContext, TrialStartedContext, \
+    TrialEndedContext, TrialReachEventsContext, SessionTrialContext
 from typing_extensions import Self
 
 from autotrainer.api import ApiEventKind, build_event
@@ -1114,7 +1116,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         project.calculate_next_trial_index()
         self._event_manager.post_api_event(build_event(
             ApiEventKind.projectTrialChanged,
-            {"root": project.root, "session_id": project.session_id, "trial_id": project.trial}))
+            ProjectTrialChangedContext(root=project.root, session_id=project.session_id, trial_id=project.trial)))
 
         # ensure we look at their state on start:
         self._trial_mouse_seen = False
@@ -1133,7 +1135,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialStarted,
-            {"session_id": project.session_id, "trial_id": project.trial, "reason": reason}))
+            TrialStartedContext(session_id=project.session_id, trial_id=project.trial, reason=reason)))
 
         return True
 
@@ -1165,7 +1167,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         post_trigger_enable(self, False)  # tells cameras processes to stop recording - ASYNC
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialCaptureEnded,
-            {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
+            SessionTrialContext(session_id=self._project_info.session_id, trial_id=self._project_info.trial)))
         with self.set_allow_reentrant(True):
             self.trial_capture_ending(reason)
         self.get_diamond_triangle_drifts(show_log=True)  # convenience to log current values
@@ -1178,7 +1180,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         logger.notice("trial processing end: %s ; project=%s", result, project)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialEnded,
-            {"session_id": project.session_id, "trial_id": project.trial, "result": result}))
+            TrialEndedContext(session_id=project.session_id, trial_id=project.trial, result=result)))
         self.trial_ending(project, result)
 
     def reset_trial_pellet_count(self):
@@ -1368,14 +1370,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         # little special case for mouse:
         self.update_mouse_seen(pose_rsp.mouse_seen, perf_now=pose_rsp.perf_c)
         #
+        prj = self._project_info
         if prev_right_hand_seen != get_seen(SceneElement.R_Hand):
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.trialRightHandSeen,
-                {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
+                AnalysisTrialContext(session_id=prj.session_id, trial_id=prj.trial, batch_id=prj.batch_id)))
         if prev_pellet_seen != get_seen(SceneElement.Pellet):
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.trialPelletSeen,
-                {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
+                AnalysisTrialContext(session_id=prj.session_id, trial_id=prj.trial, batch_id=prj.batch_id)))
 
     def update_pellet_seen(self, seen: bool = True):
         self.update_part_seen(SceneElement.Pellet, seen, perf_now=get_perf_now())
@@ -1404,11 +1407,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             prev_seen, self._trial_mouse_seen = self._trial_mouse_seen, True
             if not prev_seen:
                 logger.verbose("Session mouse seen")
+                prj = self._project_info
                 # property currently unused:
                 self._on_property_changed(BehaviorAlgoProps.TRIAL_MOUSE_SEEN, True, False)
                 self._event_manager.post_api_event(build_event(
                     ApiEventKind.trialAnimalSeen,
-                    {"session_id": self._project_info.session_id, "trial_id": self._project_info.trial}))
+                    AnalysisTrialContext(session_id=prj.session_id, trial_id=prj.trial, batch_id=prj.batch_id)))
 
     @property
     def mouse_last_seen_age(self) -> float:
@@ -1573,8 +1577,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._previous_intertrial_analysis_rsp = (project, res)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trialReachEvents,
-            {"session_id": project.session_id, "trial_id": project.trial,
-             "trial_reach_events": res.reach_events}))
+            TrialReachEventsContext(session_id=project.session_id, trial_id=project.trial, batch_id=project.batch_id,
+                                    trial_reach_events=res.reach_events)))
 
     def reset_selected_animal_counts(self, animal: Optional[AnimalSubject]):
         logger.verbose("Resetting counts for animal change to %s", animal)

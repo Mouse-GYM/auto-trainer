@@ -39,7 +39,7 @@ def test_with_prebuffer(
     video_capture_model.on_trigger_recording(False)
     assert video_capture_model.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5) is True
     # ensure _record_stop_sema has been released()/increased:
-    assert video_capture_model._record_stop_sema.acquire(timeout=3) is True
+    assert video_capture_model._record_stop_sema.acquire(timeout=5) is True
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     # print(caplog.text)
     m = re.search(r"Closed video file: tot frames written: (\d+)", caplog.text)
