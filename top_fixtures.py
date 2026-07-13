@@ -24,7 +24,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
-from autotrainer.device import MotorConfigurationFile, CompoundMovements
+from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
 
 from autotrainer.core.capture import CaptureProcessStatus
@@ -105,6 +105,15 @@ def motor_config(monkeypatch):
 
 
 @pytest.fixture
+def set_emulation_iface(monkeypatch):
+    # for current process:
+    assert hasattr(can_device, "HAVE_CAN_DEVICE")
+    monkeypatch.setattr(can_device, "HAVE_CAN_DEVICE", False)
+    # for subprocesses:
+    monkeypatch.setenv('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE', "1")
+
+
+@pytest.fixture
 def mp_manager():
     mgr = multiprocessing.Manager()
     try:
@@ -137,7 +146,6 @@ def diamond_config_path(monkeypatch):
 @pytest.fixture
 def diamond_triangle_config(diamond_config_path) -> DiamondTriangleOffsetConfig:
     return DiamondTriangleOffsetConfig.load_config(diamond_config_path)
-
 
 
 @pytest.fixture

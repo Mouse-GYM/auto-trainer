@@ -22,13 +22,15 @@ from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-import top_fixtures
-
-
 def remove_ansi_escape_sequences(s):
     # Regex for common ANSI escape codes
     ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
     return ansi_escape.sub('', s)
+
+
+@pytest.fixture(autouse=True)
+def force_emulation_iface(set_emulation_iface):
+    pass
 
 
 @pytest.fixture
@@ -132,7 +134,6 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
     system_config.save_file(config_file_path, as_yaml=True)
     env = os.environ.copy()
     env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
-    env['AUTOTRAINER_FORCE_CAN_EMULATION_IFACE'] = "1"
     proc = subprocess.Popen([
         sys.executable,
         "-m", "tools.acquisition.headless",
