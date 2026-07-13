@@ -73,7 +73,7 @@ def video_capture_model(project_info, user_pref) -> VideoCaptureModel:  # noqa
 @pytest.fixture
 def video_capture_model2(video_capture_model, user_pref) -> VideoCaptureModel:  # noqa
     model = VideoCaptureModel(
-        name="test_cam1",
+        name="test_cam2",
         preferences=user_pref,
         camera_index=1,
         msg_queue=video_capture_model._msg_queue,
