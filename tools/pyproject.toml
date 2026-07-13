@@ -12,9 +12,7 @@ license = { text = "MIT" }
 requires-python = ">= 3.8"
 dynamic = ["version"]
 dependencies = [
-    # requesting exact version for auto-trainer standalone projects,
-    # given API can be still unstable.
-    'auto-trainer-training == 0.10.0',
+    'auto-trainer-training >= 0.10.0, < 0.11',
     # NB: auto-trainer-api is coming via auto-trainer-core
 
     # but not already for these, still parts of this repo:
