@@ -1177,11 +1177,12 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         """called on end of a full trial handling, analysis on it possibly included, if not delayed.
         But this is still called from system machine when analysis is delayed.
         """
-        logger.notice("trial processing end: %s ; project=%s", result, project)
-        self._event_manager.post_api_event(build_event(
-            ApiEventKind.trialEnded,
-            TrialEndedContext(session_id=project.session_id, trial_id=project.trial, result=result)))
-        self.trial_ending(project, result)
+        logger.notice("trial ending: %s ; project=%s", result, project)
+        if result != CaptureAnalysisResult.ANALYSIS_DELAYED:
+            self._event_manager.post_api_event(build_event(
+                ApiEventKind.trialEnded,
+                TrialEndedContext(session_id=project.session_id, trial_id=project.trial, result=result)))
+            self.trial_ending(project, result)
 
     def reset_trial_pellet_count(self):
         self.trial_pellet_loaded_count = 0
