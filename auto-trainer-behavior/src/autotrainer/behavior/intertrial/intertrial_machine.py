@@ -130,8 +130,8 @@ class IntertrialMachine(StateMachine):
             # prefer not continue/move forward into invalid condition(s)
             return
         result = CaptureAnalysisResult.ANALYSIS_SUCCEEDED if success else CaptureAnalysisResult.ANALYSIS_FAILED
-        self._algorithm.end_trial(project, result)
-        self.events.on_analysis_ended(project, result)
+        with self._algorithm.set_allow_reentrant(True):
+            self.events.on_analysis_ended(project, result)
 
     def can_perform_segmentation(self, project_info: ProjectInfo):
         p = project_info is not None

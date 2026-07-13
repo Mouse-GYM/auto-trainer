@@ -569,6 +569,7 @@ class SystemMachine(StateMachine):
             self._batch_failed_count += 1
             self._tot_trials_failed_analysed += 1
         algo = self._algorithm
+        algo.end_trial(project, result)
         if len(cur_batch) > 0:
             self._batch_project_trials_finished += 1
             del cur_batch[0]
