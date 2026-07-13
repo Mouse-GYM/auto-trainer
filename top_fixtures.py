@@ -104,8 +104,8 @@ def motor_config(monkeypatch):
                         repo_root_tests_subdir.joinpath(CompoundMovements.DEFAULT_LOCATION.name))
 
 
-@pytest.fixture
-def set_emulation_iface(monkeypatch):
+@pytest.fixture(autouse=True)
+def force_use_emulation_iface(monkeypatch):
     # for current process:
     assert hasattr(can_device, "HAVE_CAN_DEVICE")
     monkeypatch.setattr(can_device, "HAVE_CAN_DEVICE", False)

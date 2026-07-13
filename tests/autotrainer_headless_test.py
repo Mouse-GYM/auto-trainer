@@ -28,11 +28,6 @@ def remove_ansi_escape_sequences(s):
     return ansi_escape.sub('', s)
 
 
-@pytest.fixture(autouse=True)
-def force_emulation_iface(set_emulation_iface):
-    pass
-
-
 @pytest.fixture
 def system_config(trainer_config_dir, tmp_path):
     config = SystemConfiguration()
