@@ -22,9 +22,6 @@ from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.user_preferences import UserPreferences
 
 
-import top_fixtures
-
-
 def remove_ansi_escape_sequences(s):
     # Regex for common ANSI escape codes
     ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
@@ -131,8 +128,8 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
         cam.record_mode = record_mode.value
     system_config.save_file(config_file_path, as_yaml=True)
     env = os.environ.copy()
-    env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()  # same for this !
-    env['AUTOTRAINER_FORCE_CAN_EMULATION_IFACE'] = "1"
+    env['AUTOTRAINER_DIAMOND_TRIANGLE_CONFIG'] = diamond_config_path.as_posix()
+    # NB: AUTOTRAINER_FORCE_CAN_EMULATION_IFACE is injected by the autouse force_use_emulation_iface fixture
     proc = subprocess.Popen([
         sys.executable,
         "-m", "tools.acquisition.headless",

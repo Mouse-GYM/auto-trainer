@@ -1,3 +1,4 @@
+import os
 import collections
 import copy
 import contextlib
@@ -24,7 +25,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
-from autotrainer.device import MotorConfigurationFile, CompoundMovements
+from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
 
 from autotrainer.core.capture import CaptureProcessStatus
@@ -46,6 +47,9 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 
 
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
+
+
+import pytest
 
 
 def simulate_get_perf_now():
@@ -74,6 +78,16 @@ def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callabl
 class AlmostEqualFloat(float):
     def __eq__(self, other):
         return abs(self - other) < 0.01
+
+
+@pytest.fixture(autouse=True)
+def force_use_emulation_iface(monkeypatch):
+    # NB: this is used in conjunction of conftest:os.environ.setdefault('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE' ..)
+    # for current process:
+    assert hasattr(can_device, "HAVE_CAN_DEVICE")
+    monkeypatch.setattr(can_device, "HAVE_CAN_DEVICE", False)
+    # for subprocesses:
+    monkeypatch.setenv('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE', "1")
 
 
 @pytest.fixture
@@ -137,7 +151,6 @@ def diamond_config_path(monkeypatch):
 @pytest.fixture
 def diamond_triangle_config(diamond_config_path) -> DiamondTriangleOffsetConfig:
     return DiamondTriangleOffsetConfig.load_config(diamond_config_path)
-
 
 
 @pytest.fixture
