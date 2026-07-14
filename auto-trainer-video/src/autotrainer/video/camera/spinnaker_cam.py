@@ -18,8 +18,19 @@ from .camera_base import CameraBase
 
 logger = get_verbose_logger(__name__)
 
+
 def is_truthy_str_value(value: str):
     return value.lower() in {"true", "yes", "on", "1"}
+
+
+def is_truthy(value):
+    if isinstance(value, str):
+        return is_truthy_str_value(value)
+    return bool(value)
+
+
+def literal_eval_if_str(value):
+    return ast.literal_eval(value) if isinstance(value, str) else value
 
 
 sSystem = None
@@ -149,11 +160,11 @@ class SpinCam(CameraBase):
         self.end_capture()
 
     @property
-    def fps(self) -> int:
+    def fps(self) -> float:
         return self._fps
 
     @fps.setter
-    def fps(self, value: int) -> None:
+    def fps(self, value: float) -> None:
         self._fps = value
 
     @property
@@ -211,6 +222,9 @@ class SpinCam(CameraBase):
     @exposure.setter
     def exposure(self, value: float) -> None:
         self._exposure = value
+        cam = self._camera
+        if self._acquisition_started and cam is not None:
+            self._apply_exposure(cam, value)
 
     def _reinit_cam(self):
         spincam = self._camera
@@ -272,9 +286,18 @@ class SpinCam(CameraBase):
 
         self._apply_settings(spincam)
 
+    def _apply_exposure(self, cam, value):
+        self._set_bounded_float_property_node(cam.ExposureTime, value)
+
+    def _apply_gain(self, cam, value):
+        self._set_bounded_float_property_node(cam.Gain, value)
+
+    def _apply_gamma(self, cam, value):
+        self._set_bounded_float_property_node(cam.Gamma, value)
+
     def _apply_settings(self, cam: PySpin.Camera):
         # exposure first:
-        self._set_bounded_float_property_node(cam.ExposureTime, self._exposure)
+        self._apply_exposure(cam, self._exposure)
         # then FPS:
         self._set_bounded_bool_property_node(cam.AcquisitionFrameRateEnable, True)
         self._set_bounded_float_property_node(cam.AcquisitionFrameRate, self._fps)
@@ -291,13 +314,14 @@ class SpinCam(CameraBase):
         self._set_bounded_int_property_node(cam.OffsetX, self._offset_x)
         self._set_bounded_int_property_node(cam.OffsetY, self._offset_y)
 
-        if self._gain is not None:
-            self._set_bounded_float_property_node(cam.Gain, self._gain)
+        gain = self._gain
+        if gain is not None:
+            self._apply_gain(cam, gain)
 
         gamma = self._gamma
         if gamma is not None:
             self._set_bounded_bool_property_node(cam.GammaEnable, True)
-            self._set_bounded_float_property_node(cam.Gamma, gamma)
+            self._apply_gamma(cam, gamma)
         else:
             self._set_bounded_bool_property_node(cam.GammaEnable, False)
 
@@ -320,6 +344,8 @@ class SpinCam(CameraBase):
         spincam = self._camera
         if spincam is None:
             return
+        self._camera = None
+        self._acquisition_started = False
         spincam.EndAcquisition()
         if self._is_primary:
             spincam.LineSelector.SetValue(PySpin.LineSelector_Line1)
@@ -330,7 +356,6 @@ class SpinCam(CameraBase):
         spincam.DeInit()
         self._cameras.pop(self._serial_number, None)
         logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
-        self._camera = None
 
     def _capture(self):
         p_timeout = time.perf_counter() + 15  # eventual todo: allow config
@@ -447,12 +472,13 @@ class SpinCam(CameraBase):
 
         return frame, self._last_when
 
-    def set_property(self, name: str, value: str) -> bool:
+    def set_property(self, name: str, value) -> bool:
+        cam = self._camera
         if name == "primary":
-            self._is_primary = is_truthy_str_value(value)
+            self._is_primary = is_truthy(value)
             self._is_secondary = not self._is_primary
         elif name == "secondary":
-            self._is_secondary = is_truthy_str_value(value)
+            self._is_secondary = is_truthy(value)
             self._is_primary = not self._is_secondary
         elif name in {"offsetx", "offset_x"}:
             self.offset_x = int(value)
@@ -463,13 +489,17 @@ class SpinCam(CameraBase):
         elif name == "vbin":
             self.vertical_binning = int(value)
         elif name == "exposure":
-            self.exposure = int(value)
+            self.exposure = literal_eval_if_str(value)
         elif name == "gain":
-            self._gain = ast.literal_eval(value)  # allows None or float (or actually any literal)
+            self._gain = literal_eval_if_str(value)
+            if self._acquisition_started and cam is not None:
+                self._apply_gain(cam, self._gain)
         elif name == "gamma":
-            self._gamma = ast.literal_eval(value)  # allows None or float (or actually any literal)
+            self._gamma = literal_eval_if_str(value)
+            if self._acquisition_started and cam is not None:
+                self._apply_gamma(cam, self._gamma)
         elif name == "skip_duplicate_frame_copy":
-            self._skip_duplicate_frame_copy = is_truthy_str_value(value)
+            self._skip_duplicate_frame_copy = is_truthy(value)
         else:
             return super().set_property(name, value)
 
