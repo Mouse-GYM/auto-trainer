@@ -1,4 +1,17 @@
+
+import os
+import sys
 import pytest
+
+
+if "autotrainer" in sys.modules:
+    raise RuntimeError(f"Unexpected presence of autotrainer already in sys.modules")
+
+# Physical safety: this must run before pytest_plugins imports autotrainer.device, so that every
+# module's import-time copy of HAVE_CAN_DEVICE is False. A plain `pytest` on the rig otherwise
+# binds the live CAN bus and drives motors. setdefault leaves an escape hatch for hardware runs.
+os.environ.setdefault("AUTOTRAINER_FORCE_CAN_EMULATION_IFACE", "1")
+# safer to keep before autotrainer imports:
 
 
 pytest_plugins = [

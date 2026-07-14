@@ -14,32 +14,33 @@ from autotrainer.device import (CanInterface, Target, Motor, Heartbeat, ServoCon
                                 SensorStatus, target_of_motor, is_servo)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def interface():
     print(f"DEBUG: Loading Interface")
+
     interface = CanInterface()
+    try:
+        if not interface.open():
+            pytest.fail("Failed to open CAN interface")
+        else:
+            print(f"DEBUG: Interface Opened")
 
-    if not interface.open():
-        pytest.fail("Failed to open CAN interface")
-    else:
-        print(f"DEBUG: Interface Opened")
+        time.sleep(1)
 
-    time.sleep(1)
+        tries = 0
+        while not interface.are_addresses_valid() and tries < 100:
+            print(f"DEBUG: Reading Incoming Messages #{tries + 1}")
+            interface.read(20)
+            tries += 1
 
-    tries = 0
-    while not interface.are_addresses_valid() and tries < 100:
-        print(f"DEBUG: Reading Incoming Messages #{tries + 1}")
-        interface.read(20)
-        tries += 1
+        if not interface.are_addresses_valid():
+            pytest.fail("CAN addresses never became valid after 100 tries")
+        else:
+            print(f"DEBUG: Interface Addresses are Valid")
 
-    if not interface.are_addresses_valid():
-        pytest.fail("CAN addresses never became valid after 100 tries")
-    else:
-        print(f"DEBUG: Interface Addresses are Valid")
-
-    yield interface
-
-    interface.close()
+        yield interface
+    finally:
+        interface.close()
 
 
 def test_simple_fixture(interface):
@@ -201,7 +202,7 @@ def test_analog_out(interface: CanInterface, value_mv: int):
 
 
 def test_tare_load_cell(interface: CanInterface):
-    assert interface.tare_load_cell();
+    assert interface.tare_load_cell()
 
     loadcell = _get_response(interface, LoadCellReading, Target.MAGNET_DEVICE, sleep=2.0)
     assert abs(loadcell.load) <= 0.1, f"Failed to tare load cell"

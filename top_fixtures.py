@@ -1,3 +1,4 @@
+import os
 import collections
 import copy
 import contextlib
@@ -48,6 +49,9 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
 
 
+import pytest
+
+
 def simulate_get_perf_now():
     global fake_perf_now
     fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
@@ -76,6 +80,16 @@ class AlmostEqualFloat(float):
         return abs(self - other) < 0.01
 
 
+@pytest.fixture(autouse=True)
+def force_use_emulation_iface(monkeypatch):
+    # NB: this is used in conjunction of conftest:os.environ.setdefault('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE' ..)
+    # for current process:
+    assert hasattr(can_device, "HAVE_CAN_DEVICE")
+    monkeypatch.setattr(can_device, "HAVE_CAN_DEVICE", False)
+    # for subprocesses:
+    monkeypatch.setenv('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE', "1")
+
+
 @pytest.fixture
 def mock_get_perf_now(monkeypatch):
     global fake_perf_now
@@ -102,15 +116,6 @@ def motor_config(monkeypatch):
                         repo_root_tests_subdir.joinpath(MotorConfigurationFile.DEFAULT_LOCATION.name))
     monkeypatch.setattr(CompoundMovements, "DEFAULT_LOCATION",
                         repo_root_tests_subdir.joinpath(CompoundMovements.DEFAULT_LOCATION.name))
-
-
-@pytest.fixture(autouse=True)
-def force_use_emulation_iface(monkeypatch):
-    # for current process:
-    assert hasattr(can_device, "HAVE_CAN_DEVICE")
-    monkeypatch.setattr(can_device, "HAVE_CAN_DEVICE", False)
-    # for subprocesses:
-    monkeypatch.setenv('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE', "1")
 
 
 @pytest.fixture
