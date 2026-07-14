@@ -44,23 +44,30 @@ def test_enter_exit_transitions(machine: SystemMachine, mock_system):
 
     algo.update_mouse_seen(True)  # required for intertrial analysis !!
 
-    with mock_system.mock_perform_segmentation() as m_perf_segm:
-        assert m_perf_segm.call_args_list == []
+    seg_cfg = None
+    def perf_seg(cfg):
+        nonlocal seg_cfg
+        seg_cfg = cfg
+        return cfg
+
+    mock_system.m_perf_seg.side_effect = perf_seg
+
+    def conc_det():
+        # Test with intertrial enabled.
+        assert machine.state == SystemState.intertrial
+
+        with pytest.raises(MachineError):
+            machine.enter_tunnel()
+
+        with pytest.raises(MachineError):
+            machine.exit_tunnel()
+
+    with mock_system.mock_analysis(det_conc_func=conc_det):
+        assert mock_system.m_perf_seg.call_args_list == []
         machine.exit_tunnel()
 
-    assert m_perf_segm.call_args_list == [
-        mock.call(machine.intertrial._segmentation_configuration)
-    ]
+        assert mock_system.m_perf_seg.call_args_list == [mock.call(seg_cfg)]
 
-    # Test with intertrial enabled.
-    assert machine.state == SystemState.intertrial
-
-    with pytest.raises(MachineError):
-        machine.enter_tunnel()
-
-    with pytest.raises(MachineError):
-        machine.exit_tunnel()
-
-    machine.exit_intertrial_to_cage(algo.project)
+    machine.exit_tunnel()
 
     assert machine.state == SystemState.cage

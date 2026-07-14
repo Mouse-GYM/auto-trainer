@@ -15,12 +15,6 @@ class TestBatchAnalysis(MockSystemMachine):
     batch_start_count = 0
     batch_len_processed = None
 
-    def _init(self, machine: SystemMachine):
-        super()._init(machine)
-        def perf_seg(cfg):
-            return cfg
-        self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
-
     def batch_starting(self, batch_len):
         self.batch_start_count += 1
         self.batch_len_processed = batch_len
@@ -58,7 +52,7 @@ class TestBatchAnalysis(MockSystemMachine):
                 stack.enter_context(caplog.at_level(logging.DEBUG))
                 if idx >= max_batch_size:
                     for _ in range(max_batch_size):
-                        stack.enter_context(self.mock_intertrial_analysis(stack=stack))
+                        self.make_analysis(stack)
                 pellet.load_pellet(force=True)
                 if idx >= max_batch_size:
                     assert machine.state == SystemState.intertrial
@@ -79,8 +73,7 @@ class TestBatchAnalysis(MockSystemMachine):
         algo.batch_trial_recording_config.maximum_batch_size = 1
         self.mock_pose_response(pellet_seen=True)
         self.start_trial_in_tunnel(set_recording_status=True)
-
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             algo.update_mouse_seen(True)
             with caplog.at_level(logging.DEBUG):
                 pellet.load_pellet(force=True)
@@ -104,8 +97,10 @@ class TestBatchAnalysis(MockSystemMachine):
         self.start_trial_in_tunnel(set_recording_status=True)
 
         for idx in range(trials_count):
+            assert algo.is_in_trial_capture
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             pellet.load_pellet(force=True)
+            assert not algo.is_in_trial_capture
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
 
@@ -119,10 +114,9 @@ class TestBatchAnalysis(MockSystemMachine):
 
         with FifoExitStack() as stack:
             for _ in range(expected_batch_len):
-                stack.enter_context(self.mock_intertrial_analysis(stack=stack))
+                self.make_analysis(stack)
             stack.enter_context(caplog.at_level(logging.DEBUG))
             self.make_load_cell_inactive()
-            # self.exit_tunnel()
             assert machine.state == SystemState.intertrial
             assert machine.intertrial.state == IntertrialState.segmentation
 
@@ -132,14 +126,13 @@ class TestBatchAnalysis(MockSystemMachine):
         assert self.batch_start_count == self.batch_end_count == 1
 
     def test_exit_tunnel_while_loading(self, machine, caplog):
-        algo = self.algo
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True)
         self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         pellet.load_pellet(force=True)
         # don't ack load-pellet, but make exit tunnel now
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             with caplog.at_level(logging.DEBUG):
                 self.exit_tunnel()
         assert self.batch_start_count == 1
@@ -160,7 +153,7 @@ class TestBatchAnalysis(MockSystemMachine):
                 self.mock_pose_response(pellet_seen=True, mouse_seen=True)
                 self.mock_pellet_ack(until_none=True)
                 assert pellet.state == PelletState.monitoring
-                stack.enter_context(self.mock_intertrial_analysis(stack=stack))
+                self.make_analysis(stack)
                 # trigger load and end-capture-session:
                 self.mock_pellet_missing(mouse_seen=True)
                 if algo.system_state == SystemState.intertrial:

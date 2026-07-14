@@ -16,6 +16,7 @@ from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, D
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine, StateMachineEvents
 
+
 logger = get_verbose_logger(__name__)
 
 
@@ -103,6 +104,9 @@ class IntertrialMachine(StateMachine):
             self.end_analysis(project, False)
         else:
             self._segmentation_configuration = None  # can now unset this one
+            prev_det_cfg = self._detection_configuration
+            if prev_det_cfg is not None:
+                logger.warning("unexpected previous detection config: %s", prev_det_cfg)
             self._detection_configuration = detection_config
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionBegin,

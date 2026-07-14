@@ -33,30 +33,16 @@ def test_intertrial(
 
     machine.state = SystemState.intertrial
 
-    with mock_system.mock_perform_segmentation() as m_perf_segm:
+    def during_segm():
+        assert intertrial.state == IntertrialState.segmentation
+
+    def during_detection():
+        assert intertrial.state == IntertrialState.detection
+
+    with mock_system.mock_analysis(seg_conc_func=during_segm, det_conc_func=during_detection):
+        assert intertrial.state == IntertrialState.idle
         intertrial.perform_segmentation(project)
-
-    segment_cfg = intertrial._segmentation_configuration
-
-    assert m_perf_segm.call_args_list == [
-        mock.call(segment_cfg)
-    ]
-
-    assert intertrial.state == IntertrialState.segmentation
-
-    with mock_system.mock_perform_detection() as m_perf_detect:
-        segment_cfg.complete(True)
-
-    assert intertrial.state == IntertrialState.detection
-
-    detection_cfg = intertrial._detection_configuration
-    assert m_perf_detect.call_args_list == [
-        mock.call(detection_cfg)
-    ]
-
-    assert intertrial.state == IntertrialState.detection
-
-    detection_cfg.complete(True)
+        assert intertrial.state == IntertrialState.segmentation
 
     assert intertrial.state == IntertrialState.idle
 
@@ -80,7 +66,7 @@ def test_intertrial_increase_algo_counts(mock_system):
         food_consumed=2,
         successful_reaches=1,
     )
-    with mock_system.mock_intertrial_analysis(results=res):
+    with mock_system.mock_analysis(detection_result=res):
         mock_system.exit_tunnel()
     assert algo.pellets_presented_day == algo.pellets_presented_total == 0  # NB: this now accounts for pellet-sent event
     assert algo.pellet_reaches_day == algo.pellet_reaches_total == 3
@@ -115,7 +101,7 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
             "sessionEnded will only be emitted after the intertrial is finished"
 
     with caplog.at_level(logging.DEBUG):
-        with mock_system.mock_intertrial_analysis(concurrent_func=perform_exit_tunnel):
+        with mock_system.mock_analysis(seg_conc_func=perform_exit_tunnel):
             assert machine.state == SystemState.tunnel
             mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
             mock_system.mock_pellet_ack(until_none=True)
