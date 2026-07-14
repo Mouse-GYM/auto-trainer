@@ -78,15 +78,19 @@ def time_representer(dumper, data):
     return dumper.represent_scalar(_time_tag, data.isoformat())
 
 
-def time_constructor(loader, node):
-    """Parses a !Time scalar specifically into a datetime.time object."""
-    value = loader.construct_scalar(node)
+def time_from_iso(value: str) -> datetime.time:
+    """Parses an ISO format string into a datetime.time object."""
     # Handle cases where microsecond is or isn't present
     try:
         return datetime.time.fromisoformat(value)
     except ValueError:
         # Fallback for alternative or truncated ISO formats
         return datetime.datetime.strptime(value, "%H:%M:%S").time()
+
+
+def time_constructor(loader, node):
+    """Parses a !Time scalar specifically into a datetime.time object."""
+    return time_from_iso(loader.construct_scalar(node))
 
 
 SystemConfigurationLoader.add_constructor(_time_tag, time_constructor)
