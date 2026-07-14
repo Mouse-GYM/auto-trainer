@@ -1,26 +1,23 @@
 import contextlib
-import logging
-import math
-import time
 from itertools import chain
 from pathlib import Path
 from threading import Timer
 from unittest import mock
 
 import pytest
+from autotrainer.api import ApiEventKind
 
 from autotrainer.core.pose_elements import SceneElement
-from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.inference import PoseResponse, PoseLocation
 
 from top_fixtures import MockSystemMachine
 
 
-from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple
+from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple, EventManager
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from autotrainer.behavior import IntertrialState
-from autotrainer.core.interfaces import CaptureAnalysisResult
+from autotrainer.core.interfaces import CaptureAnalysisResult, RecordingEndingReason
 from autotrainer.behavior import SystemState, SystemMachine
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletMachine
@@ -322,6 +319,10 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         super()._init(machine)
         algo = machine.algorithm
         algo.intertrial_enabled = True
+        machine._delay_timer_consider_end_trial = 0  # simpler test
+        def perf_seg(cfg):
+            return cfg
+        self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
 
     def test_when_intertrial_mouse_not_seen(self, machine):
         processing_ended_count = 0
@@ -339,6 +340,57 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         assert processing_ended_count == 0
         algo.end_capture_trial()
         assert processing_ended_count == 1
+
+    def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
+        algo = self.algo
+        event_mgr = EventManager.default()
+        m_post_event = mock.patch.object(event_mgr, "post_event").start()
+        def has_event(kind: ApiEventKind):
+            return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
+
+        self.mock_pose_response(pellet_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        assert not has_event(ApiEventKind.tunnelEnter)
+        assert not has_event(ApiEventKind.sessionStarted)
+        self.start_trial_in_tunnel(set_recording_status=True)
+        assert has_event(ApiEventKind.tunnelEnter)
+        assert has_event(ApiEventKind.sessionStarted)
+        m_post_event.reset_mock()
+        # ensure well reset:
+        assert not has_event(ApiEventKind.tunnelEnter)
+        assert not has_event(ApiEventKind.sessionStarted)
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        load_cell = self.sensor_analysis.load_cell_monitor
+
+        def exit_reenter_tunnel():
+            """this is executed while intertrial analysis in progress"""
+            assert machine.state == SystemState.intertrial
+            assert load_cell.is_engaged
+            self.exit_tunnel()
+            assert machine.state == SystemState.intertrial  # still
+            assert not load_cell.is_engaged  # but load-cell well disengaged
+            self.make_load_cell_active()
+            assert machine.state == SystemState.intertrial
+            assert load_cell.is_engaged
+            assert not has_event(ApiEventKind.sessionEnded)  # will be emitted after end of analysis
+            assert not has_event(ApiEventKind.tunnelEnter)  # same for tunnelEnter
+            assert not has_event(ApiEventKind.sessionStarted)  # same for sessionStarted
+
+        with self.mock_intertrial_analysis(concurrent_func=exit_reenter_tunnel):
+            self.mock_pose_response(pellet_seen=False)
+            self.increment_perf_now(algo.active_config.pellet_delivery.max_pellet_missing_seconds)
+            self.mock_pose_response(pellet_seen=False)
+            self.mock_pellet_ack()
+            self.mock_pose_response(pellet_seen=True)
+            self.mock_pellet_ack()
+        # analysis finished here.
+        assert machine.state == SystemState.tunnel  # to system machine state back to tunnel
+        assert has_event(ApiEventKind.tunnelExit)
+        assert has_event(ApiEventKind.sessionEnded)
+        assert has_event(ApiEventKind.tunnelEnter)
+        assert has_event(ApiEventKind.sessionStarted)
+        assert algo.is_in_trial_capture
 
     @pytest.mark.parametrize("detection_success", [False, True])
     @pytest.mark.parametrize("system_state", [SystemState.cage, SystemState.tunnel])
@@ -517,3 +569,4 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert pellet_m.can_use_pellet_command()
     pose_changed()
     assert algo.get_diamond_triangle_drifts() == (0.5, -1, 1)  # back
+
