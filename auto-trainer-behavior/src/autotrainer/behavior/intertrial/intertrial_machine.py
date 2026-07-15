@@ -81,7 +81,7 @@ class IntertrialMachine(StateMachine):
         self._segmentation_configuration = segment_config
         res = self._inference.perform_segmentation(segment_config)
         if res is None:
-            logger.error("perform segmentation didn't started")
+            logger.error("perform_segmentation() didn't started")
             with self._algorithm.set_allow_reentrant(True):
                 self.end_analysis(project_info, False)
         else:
@@ -100,13 +100,11 @@ class IntertrialMachine(StateMachine):
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)
         if res is None:
-            logger.warning("inference perform_detection() returned None")
-            self.end_analysis(project, False)
+            logger.warning("perform_detection() didn't started")
+            with self._algorithm.set_allow_reentrant(True):
+                self.end_analysis(project, False)
         else:
             self._segmentation_configuration = None  # can now unset this one
-            prev_det_cfg = self._detection_configuration
-            if prev_det_cfg is not None:
-                logger.warning("unexpected previous detection config: %s", prev_det_cfg)
             self._detection_configuration = detection_config
             self.post_api_event(build_event(
                 ApiEventKind.intertrialDetectionBegin,

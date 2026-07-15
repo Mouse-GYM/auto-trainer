@@ -9,9 +9,11 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import ProjectInfo, EventManager, EventInfo
 from transitions import MachineError
 
-from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState, SystemMachine
 from autotrainer.behavior.intertrial import IntertrialState
+from autotrainer.core.interfaces import CaptureAnalysisResult
 from autotrainer.inference.analysis import IntertrialResponse
+from top_fixtures import MockSystemMachine
 
 
 def test_intertrial(
@@ -110,3 +112,41 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     assert machine.state == SystemState.cage, "Must be back in cage after end intertrial analysis"
     assert after_exit_tunnel_msg in caplog.text
     assert has_event(ApiEventKind.sessionEnded), "Now that intertrial is finished sessionEnded must also be posted"
+
+
+class TestBadIntertrial(MockSystemMachine):
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        machine.intertrial.events.on_analysis_ended += self._on_analysis_ended
+        self._analysed_project = self._analysed_result = None
+
+    def _on_analysis_ended(self, project, result):
+        self._analysed_project = project
+        self._analysed_result = result
+
+    def test_perform_segmentation_fails_end_analysis(self, machine, caplog):
+        self.m_perf_seg.return_value = None
+        machine.state = SystemState.intertrial
+        with caplog.at_level(logging.DEBUG):
+            machine.intertrial.perform_segmentation(machine.project)
+        assert "perform_segmentation() didn't started" in caplog.text
+        assert machine.state == SystemState.cage
+        assert machine.intertrial.state == IntertrialState.idle
+        assert self._analysed_project == machine.project
+        assert self._analysed_result == CaptureAnalysisResult.ANALYSIS_FAILED
+
+    def test_perform_detection_fails_end_analysis(self, machine, caplog):
+        self.m_perf_det.return_value = None
+        machine.state = SystemState.intertrial
+        machine.intertrial.state = IntertrialState.segmentation
+        seg_cfg = SegmentationConfiguration(project=machine.project)
+        # have to set it on intertrial, to make it "valid"/in progress:
+        machine.intertrial._segmentation_configuration = seg_cfg
+        with caplog.at_level(logging.DEBUG):
+            machine.intertrial.perform_detection(seg_cfg)
+        assert "perform_detection() didn't started" in caplog.text
+        assert machine.state == SystemState.cage
+        assert machine.intertrial.state == IntertrialState.idle
+        assert self._analysed_project == machine.project
+        assert self._analysed_result == CaptureAnalysisResult.ANALYSIS_FAILED
