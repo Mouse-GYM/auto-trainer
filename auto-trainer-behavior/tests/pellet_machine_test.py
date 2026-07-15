@@ -405,3 +405,17 @@ def test_manual_send_pellet_when_delivery_not_enabled(machine, mock_system, befo
     assert pellet_m._api_status_token is None
     assert pellet_m.state == before_state
     assert mock_system.pellet_state_trans == []
+
+
+def test_it_accepts_none_ack_token(machine, caplog, monkeypatch):
+    pellet = machine.pellet
+    evt_changed: mock.MagicMock = mock.create_autospec(pellet.environment_changed)
+    monkeypatch.setattr(pellet, "environment_changed", evt_changed)
+    with caplog.at_level(logging.DEBUG):
+        pellet._pellet_device_ack_received(None)
+    assert evt_changed.call_count == 0
+    some_token = object()
+    pellet._api_status_token = some_token
+    with caplog.at_level(logging.DEBUG):
+        pellet._pellet_device_ack_received(some_token)  # noqa
+    assert evt_changed.call_count == 1
