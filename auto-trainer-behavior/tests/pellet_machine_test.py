@@ -419,3 +419,10 @@ def test_it_accepts_none_ack_token(machine, caplog, monkeypatch):
     with caplog.at_level(logging.DEBUG):
         pellet._pellet_device_ack_received(some_token)  # noqa
     assert evt_changed.call_count == 1
+
+
+def test_unknown_state(machine, caplog, monkeypatch):
+    pellet = machine.pellet
+    pellet.state = "some_unknown_state"
+    pellet.environment_changed()
+    assert "unknown state: some_unknown_state" in caplog.text
