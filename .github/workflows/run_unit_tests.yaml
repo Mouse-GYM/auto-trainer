@@ -79,7 +79,7 @@ jobs:
           #
           # extra detail:
           echo
-          for module in tools/acquisition $(find . -type d -name "auto-trainer-*" | sort)
+          for module in tools/acquisition tools/acquisition/model $(find . -type d -name "auto-trainer-*" | sort)
           do
             # need relative to ./ (strip front ./) :
             module=$(realpath -s --relative-to ./ "${module}")
