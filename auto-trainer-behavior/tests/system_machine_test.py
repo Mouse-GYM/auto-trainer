@@ -342,11 +342,8 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
 
     def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
         algo = self.algo
-        event_mgr = EventManager.default()
-        m_post_event = mock.patch.object(event_mgr, "post_event").start()
-        def has_event(kind: ApiEventKind):
-            return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
-
+        self.mock_event_manager()
+        has_event = self.has_event
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
         assert not has_event(ApiEventKind.tunnelEnter)
@@ -354,7 +351,7 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         self.start_trial_in_tunnel(set_recording_status=True)
         assert has_event(ApiEventKind.tunnelEnter)
         assert has_event(ApiEventKind.sessionStarted)
-        m_post_event.reset_mock()
+        self.m_post_event.reset_mock()
         # ensure well reset:
         assert not has_event(ApiEventKind.tunnelEnter)
         assert not has_event(ApiEventKind.sessionStarted)

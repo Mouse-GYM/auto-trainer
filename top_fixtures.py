@@ -672,6 +672,26 @@ class MockSystemMachine:
             self._load_cell.update(
                 self._load_cell.config.weight_inactive_threshold - 0.001, time.time(), int(p_now * 1e9))
 
+    def has_event(self, kind):
+        return any(call.args[0].kind == kind for call in self._m_post_event.call_args_list)  # noqa
+
+    def get_event_context(self, kind):
+        for call in self._m_post_event.call_args_list:
+            info = call.args[0]
+            if info.kind == kind:
+                return info.context
+        return None
+
+    def mock_event_manager(self):
+        event_mgr = self._machine._event_manager
+        mock_post_event = mock.patch.object(event_mgr, "post_event")
+        self._m_post_event = mock_post_event.start()
+        return self._m_post_event
+
+    @property
+    def m_post_event(self) -> mock.MagicMock:
+        return self._m_post_event
+
 
 @pytest.fixture
 def mock_system(machine) -> MockSystemMachine:

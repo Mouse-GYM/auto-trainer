@@ -45,10 +45,8 @@ def inference_model(pose_algo):
 class BaseTrainingPlan(MockSystemMachine):
 
     @pytest.fixture(autouse=True)
-    def _event_manager(self, monkeypatch):
-        m_event_mgr = mock.create_autospec(EventManager)
-        monkeypatch.setattr(f"{EventManager.__module__}.{EventManager.__qualname__}", m_event_mgr)
-        monkeypatch.setattr(EventManager, "default", m_event_mgr.default)
+    def _event_manager(self, machine, monkeypatch):
+        self.mock_event_manager()
 
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
@@ -363,12 +361,8 @@ class TestWithBatch(BaseTrainingPlan):
             caplog.set_level(logging.DEBUG)
             self.exit_tunnel()
         logger.info("all done")
-        def has_event(kind):
-            return any(
-                kind == call.args[0]
-                for call in self.system_machine._event_manager.post_event_content.call_args_list
-            )
 
+        has_event = self.has_event
         # assert has_event(ApiEventKind.protocolPhaseEvent)
         assert has_event(ApiEventKind.trainingPlanLoad)
         assert has_event(ApiEventKind.trainingPhaseEnter)

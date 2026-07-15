@@ -84,11 +84,8 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     mock_system.start_trial_in_tunnel()
     mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
 
-    event_mgr = EventManager.default()
-    m_post_event = mock.patch.object(event_mgr, "post_event").start()
-
-    def has_event(kind: ApiEventKind):
-        return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
+    mock_system.mock_event_manager()
+    has_event = mock_system.has_event
 
     def perform_exit_tunnel():
         assert machine.state == SystemState.intertrial
