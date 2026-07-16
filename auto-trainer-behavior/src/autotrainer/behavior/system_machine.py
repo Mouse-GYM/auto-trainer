@@ -400,7 +400,8 @@ class SystemMachine(StateMachine):
         load_cell_tare = analysis.load_cell_tare_monitor
         algo = self._algorithm
         cfg = algo.auto_end_trial_config
-        if not algo.is_in_trial_capture or cfg is None:
+        if not algo.is_in_trial_capture:
+            logger.debug("skipping consider_auto_end_trial given not in capture")
             return
         perf_now = get_perf_now()
         in_trial_age = algo.is_in_trial_age
@@ -421,6 +422,7 @@ class SystemMachine(StateMachine):
                 last_activity_age2 = min(min_age, in_trial_age)
                 remains2 = cfg.animal_tunnel_no_activity_delay - last_activity_age2
                 if math.isinf(remains2):
+                    # is actually only possible if cfg.animal_tunnel_no_activity_delay is math.inf
                     remains2 = cfg.animal_tunnel_no_activity_delay
             else:
                 remains2 = cfg.animal_tunnel_no_activity_delay
@@ -432,6 +434,7 @@ class SystemMachine(StateMachine):
             algo.end_capture_trial(reason=RecordingEndingReason.MISSING_ANIMAL_ACTIVITY_TIMEOUT)
             return
         if math.isinf(min_remain):  # both disabled
+            logger.info("Stopping consider auto_end_trial given all conditions disabled")
             return
         logger.info("started new timer for consider_auto_end_trial in %.1fs ; variance=%s age=%s ; missing_age=%s "
                     "r1=%s r2=%s",
