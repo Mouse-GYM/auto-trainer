@@ -17,6 +17,7 @@ from .alarm_detector import AlarmDetector
 from .animal_evasion_alarm import AnimalEvasionAlarm
 from .animal_thrash_alarm import AnimalThrashAlarm
 from .autoclamp_evasion_detector import AutoClampEvasionDetector
+from .boards_hardware_reset_detector import BoardsHardwareResetDetector
 from .device_comm_alarm import DeviceCommAlarm
 from .presence_in_cage_alarm import PresenceInCageAlarm
 from .watchdog_monitor import WatchdogMonitor
@@ -30,11 +31,10 @@ from .alarm_monitor import EmergencyAlarmMonitor, EmergencyReason
 from .global_animal_presence_monitor import GlobalAnimalPresenceAlarm
 from .external_doors_monitor import ExternalDoorsAlarm
 from .pellet_position_monitor import PelletMisplacedDetector
-from ..configuration.pellet_misplaced_config import PelletMisplacedDetectorConfiguration
 from .auto_tunnel_fan_monitor import AutoTunnelSweepMonitor
-from ..configuration.tunnel_sweep_config import AutoTunnelSweepConfiguration
 from .system_maintenance_alarm import SystemMaintenanceAlarm
-from .system_fault_monitor import SystemFaultAlarm
+from .system_fault_monitor import SystemFaultAlarm, SystemFaultReason
+from .free_disk_space_detector import FreeDiskSpaceDetector
 
 logger = get_verbose_logger(__name__)
 
@@ -94,7 +94,15 @@ class SensorAnalysis(ObservableObject):
         self._watchdog_monitor = WatchdogMonitor()
 
         self._system_maintenance_alarm = SystemMaintenanceAlarm()
-        self._system_fault_alarm = SystemFaultAlarm(watchdog_monitor=self._watchdog_monitor)
+
+        self._free_disk_space_detector = FreeDiskSpaceDetector()
+        self._boards_hardware_reset_detector = BoardsHardwareResetDetector()
+
+        fault_alarm = self._system_fault_alarm = SystemFaultAlarm()
+        fault_reg = fault_alarm.register_sub_detector
+        fault_reg(SystemFaultReason.WATCHDOG, self._watchdog_monitor)
+        fault_reg(SystemFaultReason.FREE_DISK_SPACE, self._free_disk_space_detector)
+        fault_reg(SystemFaultReason.BOARDS_HARDWARE_RESET, self._boards_hardware_reset_detector)
 
         self._animal_thrash_alarm = AnimalThrashAlarm(
             load_cell_detector=self._load_cell_monitor,
@@ -106,8 +114,6 @@ class SensorAnalysis(ObservableObject):
             topcam_presence_attrs=topcam_presence,
         )
 
-        alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor()
-
         self._autoclamp_evasion_detector = AutoClampEvasionDetector(
             loadcell_detector=self._load_cell_monitor,
             headbar_detector=self._headbar_pressure_monitor,
@@ -115,6 +121,7 @@ class SensorAnalysis(ObservableObject):
         self._animal_evasion_alarm = AnimalEvasionAlarm()
         self._animal_evasion_alarm.register_sub_detector("autoclamp_evasion", self._autoclamp_evasion_detector)
 
+        alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor()
         #  dynamically handled alarm sub-monitors:
         reg_alarm_cond = alarm_mon.register_detector
         reg_alarm_cond(EmergencyReason.ANIMAL_EVASION, self._animal_evasion_alarm)
@@ -263,6 +270,14 @@ class SensorAnalysis(ObservableObject):
     @property
     def system_fault_alarm(self) -> SystemFaultAlarm:
         return self._system_fault_alarm
+
+    @property
+    def free_disk_space_detector(self) -> FreeDiskSpaceDetector:
+        return self._free_disk_space_detector
+
+    @property
+    def boards_hardware_reset_detector(self) -> BoardsHardwareResetDetector:
+        return self._boards_hardware_reset_detector
 
     @property
     def watchdog_monitor(self) -> WatchdogMonitor:

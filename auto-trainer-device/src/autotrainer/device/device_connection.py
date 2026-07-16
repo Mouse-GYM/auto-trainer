@@ -80,6 +80,12 @@ class DeviceConnection(DeviceConnectionProtocol):
         # NB: this is simply the dedicated CAN bus reader thread
 
     @property
+    def connected(self) -> bool:
+        reader_thread = self._current_thread
+        dev = self._device
+        return reader_thread is not None and reader_thread.is_alive() and dev is not None and dev.connected
+
+    @property
     def watchdog_reader_perf_c(self) -> float:
         thread = self._current_thread
         return math.nan if (thread is None or not thread.is_alive()) else self._current_thread_watchdog_perf_c

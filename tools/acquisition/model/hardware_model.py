@@ -3,6 +3,7 @@ import re
 import threading
 import time
 import uuid
+import warnings
 from functools import partial
 from queue import Queue
 from uuid import UUID, uuid4
@@ -49,16 +50,19 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     # POS_X = "pos_x"
     # POS_Y = "pos_y"
     # POS_Z = "pos_z"
-    POS_XYZ = "pos_xyz"
+    POS_XYZ = "pos_xyz"  # is the motor/hardware reported position
 
+    # SEND_... are the motor/harware reported SEND position(s):
     SEND_X = "send_x"
     SEND_Y = "send_y"
     SEND_Z = "send_z"
     SEND_XYZ = "send_xyz"
 
+    # SET_X/Y/Z are the values which we are requesting to hardware
     SET_X = "set_x"
     SET_Y = "set_y"
     SET_Z = "set_z"
+    SET_XYZ = "set_xyz"
 
     HEAD_MAGNET_INTENSITY = "head_magnet_intensity"
     TUNNEL_GATE_POSITION = "tunnel_gate_position"
@@ -196,16 +200,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return cfg.motor_to_diamond(self._last_motor_coordinates)
 
     @property
-    def last_set_position(self) -> Optional[Offset3DTuple]:
-        value = self._last_requested_set_coordinates
-        if any(map(math.isnan, value)):
-            return None
-        return value
+    def last_set_position(self) -> Offset3DTuple:
+        return self._last_requested_set_coordinates
 
     @property
     def last_dcs_set_position(self) -> Optional[Offset3DTuple]:
         value = self._last_requested_set_coordinates
-        if any(map(math.isnan, value)):
+        if any(not math.isfinite(v) for v in  value):
             return None
         cfg = self._check_dcs_cfg(return_none=True)
         if cfg is None:
@@ -294,17 +295,17 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """
         return self._head_magnet_position
 
-    def update_head_magnet_intensity(self, value: Optional[float]) -> Optional[UUID]:
-        if value is None:  # caller should not call instead eventually
-            return
-        if isinstance(value, str):
-            value = float(value)
-        if value != self._head_magnet_position:
-            logger.verbose("sending move magnet to %.3f", value)
+    def update_head_magnet_intensity(self, position: Optional[float]) -> Optional[UUID]:
+        if position is None:  # caller should not call instead eventually
+            return None
+        if isinstance(position, str):
+            warnings.warn("Received str for update_head_magnet_intensity, please update your code", UserWarning)
+            position = float(position)
+        if position != self._head_magnet_position:
+            logger.verbose("sending move magnet to %.3f", position)
             # self._head_magnet_position = value  # this is set from reading the hardware status
-            return self._send_with_token(self._device_conn, SystemCommandKind.MOVE_MAGNET_SERVO,
-                                         value)
-        logger.debug("head magnet currently already at pos %.3f", value)
+            return self._send_with_token(self._device_conn, SystemCommandKind.MOVE_MAGNET_SERVO, position)
+        logger.debug("head magnet currently already at pos %.3f", position)
         return None
 
     @property
@@ -343,8 +344,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         res = self._send_with_token(self._device_conn, system_set_cmd,
                                     SystemDataArgsKwargs(value, relative=not absolute))
         if res is not None:
-            self._last_requested_set_coordinates = self._last_requested_set_coordinates.replace(**{coord: new_value})
-            self._on_property_changed(f"set_{coord}", new_value, prev_value)
+            prev_set_xyz, self._last_requested_set_coordinates = self._last_requested_set_coordinates, self._last_requested_set_coordinates.replace(**{coord: new_value})
+            prop_name = (self.SET_X, self.SET_Y, self.SET_Z)[coord_idx]
+            self._on_property_changed(prop_name, new_value, prev_value)
+            self._on_property_changed(self.SET_XYZ, self._last_requested_set_coordinates, prev_set_xyz)
         return res
 
     def set_x(self, value: float, *, absolute: bool = True, sender: str="NA") -> Optional[UUID]:
@@ -470,10 +473,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     @property
     def connected(self) -> bool:
         dev = self._device_conn
-        dev_dev = None if dev is None else dev.device
-        return dev_dev is not None and dev_dev.connected
+        return dev is not None and dev.connected
 
-    def connect(self, cmd_queue: Queue):
+    def connect(self, cmd_queue: Queue, *, force_first_connect: bool=False):
         logger.notice("%s: connect with %s", self, cmd_queue)
         self._disconnect_event.clear()
 
@@ -483,8 +485,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self.disconnect()
 
         self._connect_count += 1
-        self._last_motor_coordinates = \
-        self._last_requested_set_coordinates = \
+        self._last_motor_coordinates = _nans_offset3dTuple
+        self._last_requested_set_coordinates = _nans_offset3dTuple
         self._last_motor_send_coordinates = _nans_offset3dTuple
 
         # This is specific to wanting to be able to test UI changes w/the emulation interface, which is not
@@ -514,7 +516,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # 2)
         device_conn.load_default_move_config()
         # 3)
-        if self._connect_count == 1:
+        if self._connect_count == 1 or force_first_connect:
             logger.notice("Doing cover attach-release-detach on first connect")
             send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
             send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
@@ -556,6 +558,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.debug("joining checktimedout commands thread")
             prev_thread.join()
         self._device_stream_started = False
+        self._color_led = None
 
     def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
@@ -610,24 +613,30 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         elif name == props.STEPPER_X_PROPERTY:
             prev = self._last_motor_coordinates
+            prev_send = self._last_motor_send_coordinates
             new = prev.replace(x=value.position)
             self._last_motor_coordinates = new
             self.send_x = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
+            self._on_property_changed(self.SEND_XYZ, self._last_motor_send_coordinates, prev_send)
 
         elif name == props.STEPPER_Y_PROPERTY:
             prev = self._last_motor_coordinates
+            prev_send = self._last_motor_send_coordinates
             new = prev.replace(y=value.position)
             self._last_motor_coordinates = new
             self.send_y = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
+            self._on_property_changed(self.SEND_XYZ, self._last_motor_send_coordinates, prev_send)
 
         elif name == props.STEPPER_Z_PROPERTY:
             prev = self._last_motor_coordinates
+            prev_send = self._last_motor_send_coordinates
             new = prev.replace(z=value.position)
             self._last_motor_coordinates = new
             self.send_z = value.send_position
             self._on_property_changed(self.POS_XYZ, new, prev)
+            self._on_property_changed(self.SEND_XYZ, self._last_motor_send_coordinates, prev_send)
 
         elif name == props.FRONT_DOOR_PROPERTY:
             self.front_door_open = value
@@ -659,6 +668,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             self._color_led = value
 
     def _send_with_token(self, device: Optional[DeviceConnectionProtocol], cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+        if device is None:
+            return None
         with self._lock:
             # ensure only 1 command can be sent at the same time
             # NB: there are multiple threads which can act on this instance,
@@ -683,7 +694,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     # noinspection PyMethodMayBeStatic
     def _send_command(self,
-                      device: DeviceConnectionProtocol,
+                      device: Optional[DeviceConnectionProtocol],
                       cmd: SystemCommandKind,
                       data=None,
                       context=None) -> bool:
@@ -698,7 +709,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if dev is None:
             return
         dev.send_message(SystemCommandKind.SET_MOTOR_DRIFT, drift)
-        # this ensure the next send_to_fixed_pos command will get the corrected position:
+        # this ensures the next send_to_fixed_pos command will get the corrected position:
         for cmd_kind in (SystemCommandKind.SET_X, SystemCommandKind.SET_Y, SystemCommandKind.SET_Z):
             dev.send_message(cmd_kind, SystemDataArgsKwargs(0, relative=True))
 

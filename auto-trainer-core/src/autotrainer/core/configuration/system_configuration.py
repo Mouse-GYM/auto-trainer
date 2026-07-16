@@ -20,6 +20,8 @@ from . import GenericSafeLoader, SystemConfigurationLoader, SystemConfigurationD
     time_from_iso
 from .alarm_detector import AlarmDetectorConfig
 from .autoclamp_evasion_config import AnimalEvasionAlarmConfig, AutoClampEvasionDetectorConfig
+from .boards_hardware_reset_detector_config import BoardsHardwareResetDetectorConfig
+from .free_disk_space_config import FreeDiskSpaceConfig
 from .watchdog_config import WatchdogConfig
 from .. import Offset3DTuple, make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
@@ -111,7 +113,7 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 52
+    version: int = 53
 
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
@@ -278,6 +280,7 @@ class SystemConfiguration:
 
 system_configuration_representer = make_camelize_representer("!SystemConfiguration")
 
+
 _tag_2_cls = dict(
     SystemConfiguration=SystemConfiguration,
     HardwareConfiguration=HardwareConfiguration,
@@ -288,7 +291,11 @@ _tag_2_cls = dict(
     AnimalEvasionAlarmConfig=AnimalEvasionAlarmConfig,
     AutoClampEvasionDetectorConfig=AutoClampEvasionDetectorConfig,
     PersistenceConfiguration=PersistenceConfiguration,
+    FreeDiskSpaceConfig=FreeDiskSpaceConfig,
+    WatchDogConfig=WatchdogConfig,
+    BoardsHardwareResetConfig=BoardsHardwareResetDetectorConfig,
 )
+
 
 def add_repr(_tag, _cls):
     SystemConfigurationDumper.add_representer(_cls, make_camelize_representer(f"!{_tag}"))

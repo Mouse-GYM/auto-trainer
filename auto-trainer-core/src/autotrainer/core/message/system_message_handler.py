@@ -1,6 +1,4 @@
-import functools
 import logging
-import threading
 from queue import Queue
 from typing import Callable, List, Tuple, Optional
 
@@ -17,8 +15,8 @@ class SystemMessageHandler(MessageHandler):
     def __init__(self, input_queue: Queue, *, sensor_analysis: Optional[SensorAnalysis] = None):
         super().__init__(input_queue, name="system-message-handler")
 
-        self._measurement_callback = None
-        self._audio_callback = None
+        self._measurement_callback: Optional[Callable[[List], None]] = None
+        self._audio_callback: Optional[Callable[[List], None]] = None
 
         self._analysis = SensorAnalysis() if sensor_analysis is None else sensor_analysis
 
@@ -52,22 +50,25 @@ class SystemMessageHandler(MessageHandler):
         #  implementation.  Keeping things simple for the time being.
         if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
             measures = self._analysis.measurements_received(data)
-            if self._measurement_callback is not None and len(measures) > 0:
-                self._measurement_callback(measures)
+            mcb = self._measurement_callback
+            if mcb is not None and len(measures) > 0:
+                mcb(measures)
 
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)
-            if self._audio_callback is not None:
-                self._audio_callback(data.magnitudes)
+            acb = self._audio_callback
+            if acb is not None:
+                acb(data.magnitudes)
 
-        elif msg == SystemStatusMessageKind.PELLET_X:
-            self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data, None)
-
-        elif msg == SystemStatusMessageKind.PELLET_Y:
-            self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data, None)
-
-        elif msg == SystemStatusMessageKind.PELLET_Z:
-            self.property_changed(MessageHandler.DEVICE_Z_PROPERTY, data, None)
+        # NB: PELLET_MOTOR_X/Y/Z are used instead
+        # elif msg == SystemStatusMessageKind.PELLET_X:
+        #     self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data, None)
+        #
+        # elif msg == SystemStatusMessageKind.PELLET_Y:
+        #     self.property_changed(MessageHandler.DEVICE_Y_PROPERTY, data, None)
+        #
+        # elif msg == SystemStatusMessageKind.PELLET_Z:
+        #     self.property_changed(MessageHandler.DEVICE_Z_PROPERTY, data, None)
 
         elif msg == SystemStatusMessageKind.PELLET_MOTOR_X:
             self.property_changed(MessageHandler.DEVICE_X_PROPERTY, data.position, None)

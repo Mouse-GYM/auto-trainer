@@ -148,12 +148,17 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         # also need to set explicitly the different alarm configs on their alarm instance:
         analysis.animal_evasion_alarm.config = alarm_cfg.animal_evasion
         analysis.animal_thrashing_alarm.config = alarm_cfg.animal_thrashing
-        analysis.system_fault_alarm.config = alarm_cfg.system_fault
         analysis.system_maintenance_alarm.config = alarm_cfg.system_maintenance
         analysis.presence_in_cage_alarm.config = alarm_cfg.presence_in_cage
         analysis.global_animal_presence_alarm.config = alarm_cfg.global_animal_presence
         analysis.device_comm_alarm.config = alarm_cfg.device_comm_error
         analysis.external_doors_alarm.config = alarm_cfg.external_doors
+        # same with fault config sub-elements:
+        fault_cfg = alarm_cfg.system_fault
+        analysis.system_fault_alarm.config = fault_cfg
+        analysis.free_disk_space_detector.config = fault_cfg.free_disk_space
+        analysis.boards_hardware_reset_detector.config = fault_cfg.boards_hardware_reset
+        # NB: watchdog config is currently at system-config top level.
         # so that they emit the CONFIG changed event.
 
     def save_configuration(self) -> BehaviorConfiguration:
@@ -183,7 +188,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         alarm_cfg.device_comm_error = analysis.device_comm_alarm.config
         alarm_cfg.presence_in_cage = analysis.presence_in_cage_alarm.config
         alarm_cfg.animal_thrashing = analysis.animal_thrashing_alarm.config
-        alarm_cfg.system_fault = analysis.system_fault_alarm.config
+        #
+        fault_cfg = alarm_cfg.system_fault = analysis.system_fault_alarm.config
+        fault_cfg.free_disk_space = analysis.free_disk_space_detector.config
+        fault_cfg.boards_hardware_reset = analysis.boards_hardware_reset_detector.config
+        #
         alarm_cfg.system_maintenance = analysis.system_maintenance_alarm.config
         alarm_cfg.animal_evasion = analysis.animal_evasion_alarm.config
 

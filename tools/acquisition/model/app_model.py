@@ -45,6 +45,8 @@ from autotrainer.core import (
     get_perf_now,
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
+from autotrainer.core.analysis.alarm_monitor import EmergencyReason
+from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
@@ -97,8 +99,9 @@ from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
 
-# allow be patched from tests
+# allow to be patched from tests:
 _daily_timer = make_daemon_timer
+_make_emergency_proc_thread = threading.Thread
 
 
 def _failed_camera_template(name: str, error: str):
@@ -422,6 +425,7 @@ class AppModel(ObservableObject):
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
+        self._emergency_source: Optional[str] = None  # if None: not engaged
 
         intertrial = system_machine.intertrial
         intertrial.events.property_changed += self._on_intertrial_property_changed
@@ -1334,7 +1338,7 @@ class AppModel(ObservableObject):
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
             timeout = 3
-            # full establishement of connection to/from device should be very fast actually, but not immediate,
+            # full establishment of connection to/from device should be very fast actually, but not immediate,
             # so this timeout.
             p_end = time.perf_counter() + timeout
             while True:
@@ -1399,6 +1403,11 @@ class AppModel(ObservableObject):
         else:
             self.training_plan = plan
 
+        boards_reset_mon = self._analysis.boards_hardware_reset_detector
+        boards_reset_mon.restart()  # better be started after hardware connect
+        # boards_reset_mon.set_hardware_send_position(Offset3DTuple.get_nan())  # already set by restart()
+        boards_reset_mon.set_send_position(hard.last_set_position)
+
         if animal is not None:
             self._set_animal_base_positions(animal)
 
@@ -1414,7 +1423,7 @@ class AppModel(ObservableObject):
 
         return True
 
-    def capture_stop(self, force: bool = False):
+    def capture_stop(self, force: bool = False, *, update_led: bool = True):
         logger.debug("AppModel.capture_stop")
         with self.app_lock:
             if not self._acquisition_started and not force:
@@ -1429,7 +1438,7 @@ class AppModel(ObservableObject):
         status_file_path = self.status_file_path.expanduser()
         status_file_path.unlink(missing_ok=True)
         try:
-            self._capture_stop()
+            self._capture_stop(update_led=update_led)
         finally:
             # always:
             # must be set before try reload training plans, given checked in it
@@ -1451,10 +1460,11 @@ class AppModel(ObservableObject):
             )
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
-    def _capture_stop(self):
+    def _capture_stop(self, *, update_led: bool=True):
 
-        tok = self._hardware.set_color_led(0, 0, 0)
-        self._hardware.wait_pending_command_acked(tok, timeout=2, raise_on_timeout=False)
+        if update_led:
+            tok = self._hardware.set_color_led(0, 0, 0)
+            self._hardware.wait_pending_command_acked(tok, timeout=1, raise_on_timeout=False)
 
         self._detach_training_plan()  # always
 
@@ -1568,7 +1578,8 @@ class AppModel(ObservableObject):
         self.inference.load_configuration(configuration.inference)
         self.behavior.load_configuration(configuration.behavior)
 
-        self._analysis.watchdog_monitor.config = configuration.watchdog
+        analysis = self._analysis
+        analysis.watchdog_monitor.config = configuration.watchdog
 
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
@@ -1582,7 +1593,7 @@ class AppModel(ObservableObject):
         self._load_animals()
 
         analysis = self._analysis
-        analysis.system_fault_alarm.set_persistence_config(configuration.persistence)
+        analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
 
         self._hardware.load_config(configuration.hardware)
@@ -1802,8 +1813,8 @@ class AppModel(ObservableObject):
         elif name == prefs.CAGE_CLEAN_PREVIOUS_DAY:
             self._refresh_cage_clean_data()
 
-    def _update_led_color(self):
-        color = self._behavior.get_led_color()
+    def _update_led_color(self, *, force_color: Optional[Tuple[int, int, int]] = None):
+        color = self._behavior.get_led_color() if force_color is None else force_color
         cur_led = self._hardware.color_led
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
             self._hardware.set_color_led(*color)
@@ -1897,23 +1908,24 @@ class AppModel(ObservableObject):
             det.autoclamp_enabled = value
 
     def _on_hardware_property_changed(self, name: str, value, _):
-        animal = self._selected_animal
+        # NB: SEND_XYZ is the motor/hardware reported value
         hard = self._hardware
-        if animal is not None and name in {hard.SET_X, hard.SET_Y, hard.SET_Z}:
-            # only when manual:
-            if self._training_mode != TrainingMode.MANUAL:
+        if name == hard.SEND_XYZ:
+            self._analysis.boards_hardware_reset_detector.set_hardware_send_position(value)
+        # while SET_X/Y/Z is the application requested value
+        elif name == hard.SET_XYZ:
+            xyz: Offset3DTuple = value
+            self._analysis.boards_hardware_reset_detector.set_send_position(xyz)
+            animal = self._selected_animal
+            if animal is None:
                 return
-            coord = name[-1]
-            coord_idx = "xyz".index(coord)
-            # prevent NaN if hardware has not yet reported any send_x :
-            pos = hard.last_set_position or Offset3DTuple.get_nan()
-            t = list(pos)
-            t[coord_idx] = value
-            if any((math.isnan(v) or v is None) for v in t):
-                logger.verbose("hardware set_xyz has NaN/None still: %s", t)
+            if xyz is None or any((v is None or not math.isfinite(v)) for v in xyz):
+                logger.verbose("hardware set_xyz has NaN/None still: %s", xyz)
                 return
             changed = False
-            xyz = Offset3DTuple(*t)
+            # only when manual for sync with animal:
+            if self._training_mode != TrainingMode.MANUAL:
+                return
             cfg = self._behavior.algorithm.diamond_triangle_config
             if cfg is None:
                 changed |= animal.is_pellet_dcs
@@ -1923,19 +1935,9 @@ class AppModel(ObservableObject):
                 animal.is_pellet_dcs = True
                 xyz = cfg.motor_to_diamond(xyz)
             pellet_dcs_changed = changed
-            # only update same animal coordinate,
-            # we are supposing the all same axis in the 2 coordinate system are parallel :
-            if coord == 'x':
-                prev, animal.pellet_x = animal.pellet_x, xyz.x
-                new = xyz.x
-            elif coord == 'y':
-                prev, animal.pellet_y = animal.pellet_y, xyz.y
-                new = xyz.y
-            else:
-                assert coord == 'z'
-                prev, animal.pellet_z = animal.pellet_z, xyz.z
-                new = xyz.z
-            changed |= new != prev
+            prev = (animal.pellet_x, animal.pellet_y, animal.pellet_z)
+            animal.pellet_x, animal.pellet_y, animal.pellet_z = xyz
+            changed |= xyz != prev
             if changed:
                 self._save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
 
@@ -2081,11 +2083,14 @@ class AppModel(ObservableObject):
         for camera in self._cameras:
             cameras.append(camera.save_configuration())
 
-        configuration = SystemConfiguration(cameras=cameras,
-                                            hardware=hardware_configuration,
-                                            inference=self._inference.save_configuration(),
-                                            behavior=self._behavior.save_configuration(),
-                                            persistence=PersistenceConfiguration(output_location=self.output_location))
+        configuration = SystemConfiguration(
+            cameras=cameras,
+            hardware=hardware_configuration,
+            inference=self._inference.save_configuration(),
+            behavior=self._behavior.save_configuration(),
+            persistence=PersistenceConfiguration(output_location=self.output_location),
+            watchdog=self._analysis.watchdog_monitor.config,
+        )
 
         return configuration
 
@@ -2392,13 +2397,73 @@ class AppModel(ObservableObject):
     #
 
     def _on_emergency_stopped(self, source: str):
+        prev_source, self._emergency_source = self._emergency_source, source
         s = "\n".join(source.split(" "))
         self._right_camera.set_text_overlay(f"Emergency: {s}", color="red")
-        self._update_led_color()
+        if prev_source is not None:
+            # already engaged.
+            return
+        # emergency engaged procedure:
+        behavior = self._behavior
+        algo = behavior.algorithm
+        if algo.is_in_trial_capture:
+            algo.end_capture_trial(reason=RecordingEndingReason.ALGO_PAUSED)
+        analysis = self._analysis
+        emergency_mon = analysis.emergency_alarm_monitor
+        is_dev_comm_error = EmergencyReason.DEVICE_COMM_ERROR in emergency_mon.engaged_reasons
+        is_watchdog = analysis.watchdog_monitor.is_engaged
+        is_board_reset = (
+            # can check both:
+            SystemFaultReason.BOARDS_HARDWARE_RESET in self._analysis.system_fault_alarm.engaged_reasons
+            or self._analysis.boards_hardware_reset_detector.is_engaged
+        )
+        do_reconnect_hardware = is_dev_comm_error or is_watchdog or is_board_reset
+
+        # @algo.relay_func
+        # NB: not using behavior algo thread, which could be dead eventually.
+        # although we do not have it as watchdog item.
+        def execute_emergency_proc():
+            hardware = self._hardware
+            system_m = self._behavior.system_machine
+            self._analysis.boards_hardware_reset_detector.stop()  # always
+            self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
+            if do_reconnect_hardware:
+                hardware.disconnect()
+                try:
+                    hardware.connect(self._system_message_handler.input_queue, force_first_connect=True)
+                except BaseException as err:
+                    logger.critical("Could not reconnect to hardware: %s", err)
+                    self.capture_stop(force=True, update_led=False)
+                    return
+                # in case of it was not good with previous:
+                self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
+            tunnel_dev = system_m.tunnel_device
+            with algo.set_allow_reentrant(True):
+                system_m.execute_disengage_auto_clamp_if_in_progress()
+            if algo.status != BehaviorAlgoStatus.IDLE:
+                with algo.set_allow_reentrant(True):
+                    for action_func in (
+                        tunnel_dev.open_tunnel_gate,
+                        lambda: tunnel_dev.update_head_magnet_intensity(0),
+                        lambda: system_m.pellet.move_home(force=True),
+                    ):
+                        try:
+                            action_func()
+                        except Exception as err:
+                            logger.warning("execute_emergency_proc: %s failed: %s, but continuing",
+                                           action_func, err)
+        if is_board_reset:
+            # could decide to execute in current thread, but choosing safety atm
+            thread = _make_emergency_proc_thread(target=execute_emergency_proc, daemon=True, name="execute_emergency_proc")
+            thread.start()
+        else:
+            execute_emergency_proc()
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
+        self._emergency_source = None
+        self._analysis.boards_hardware_reset_detector.restart()
 
     # pellet machine events
 

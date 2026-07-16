@@ -88,9 +88,21 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
                 self.check_state()
 
     def _check_state(self) -> Optional[float]:
-        engaged = False
+        prev_engaged = self._engaged_reasons.copy()
+        new_engaged = set()
         for sub_name, sub_ctx in self._sub_detectors.items():
-            if sub_ctx.detector.is_engaged:
-                engaged = True
-                break  # no need look others
-        self.is_engaged = engaged
+            detector = sub_ctx.detector
+            cfg = detector.config
+            if detector.is_engaged:
+                if isinstance(cfg, AlarmDetectorConfig):
+                    keep = cfg.use
+                else:
+                    keep = True
+                if keep:
+                    new_engaged.add(sub_name)
+            elif isinstance(cfg, AlarmDetectorConfig):
+                if sub_name in prev_engaged:
+                    if not cfg.allow_autoresume_on_cleared:
+                        new_engaged.add(sub_name)
+        self._engaged_reasons = new_engaged
+        self.is_engaged = len(new_engaged) != 0

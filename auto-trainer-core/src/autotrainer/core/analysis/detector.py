@@ -103,14 +103,17 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     def set_is_engaged(self, engaged: bool):
         engaged |= self._force_engaged
-        prev, self._is_engaged = self._is_engaged, engaged
-        if prev == engaged:
-            return
-        perf_now = get_perf_now()
-        if engaged:
-            self._engaged_perf_c = perf_now
-        else:
-            self._disengaged_perf_c = perf_now
+        with self._lock:
+            # safer,
+            # ensure transition won't be lost if 2 threads modify/calls at same time
+            prev, self._is_engaged = self._is_engaged, engaged
+            if prev == engaged:
+                return
+            perf_now = get_perf_now()
+            if engaged:
+                self._engaged_perf_c = perf_now
+            else:
+                self._disengaged_perf_c = perf_now
         self._logger.notice("is_engaged -> %s (age previous = %.1f)",
                             engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
         kind = self.detector_api_kind
