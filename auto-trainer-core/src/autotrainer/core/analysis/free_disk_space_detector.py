@@ -26,7 +26,7 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
         cfg = self._config
         usage = psutil.disk_usage(self._persistence_cfg.output_location)
         # usage free is in bytes:
-        engaged = usage.free / 2 ** 20 < cfg.free_disk_space_min_limit_mb
+        engaged = usage.free / 2 ** 20 < cfg.min_limit_mb
         prev_engaged = self._is_engaged
         if engaged != prev_engaged:
             post_api_detector_event_content(self._event_manager, ApiDetectorKind.lowFreeDiskSpace,
