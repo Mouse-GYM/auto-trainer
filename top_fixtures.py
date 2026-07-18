@@ -699,10 +699,11 @@ class MockSystemMachine:
 
 
 @pytest.fixture
-def mock_system(machine) -> MockSystemMachine:
+def mock_system(machine, request) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()
+    instance._pytest_request = request
     # instance.machine_(machine)  # pytest fixture refuse direct call, so:
     instance._init(machine)
     return instance
