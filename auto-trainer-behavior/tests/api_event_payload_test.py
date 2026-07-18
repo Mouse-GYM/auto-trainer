@@ -1,6 +1,6 @@
 """Assert the on-the-wire shape of the trial-scoped API events that gained ``session_id`` /
 ``trial_id`` in auto-trainer-api v0.9.24, so a future field drift is caught."""
-
+import pytest
 from autotrainer.api import ApiEventKind, build_event
 
 from autotrainer.behavior import SystemMachine

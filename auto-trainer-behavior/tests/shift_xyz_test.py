@@ -195,7 +195,9 @@ class TestShiftXYZ(MockSystemMachine):
             assert algo.pellet_shift_y_limit == pellet_shift_y_limit
             self.exit_tunnel()  # the batch will be started processing with the exit tunnel
         #
-        assert algo.pellet_shift_y_limit == 25.5 if pellet_shift_y_limit is None else 25
+        assert algo.pellet_shift_y_limit == (
+            25.5 if pellet_shift_y_limit is None
+            else 25 if pellet_shift_y_limit == 10 else 30)
         assert system.state == SystemState.cage
         assert system.intertrial.state == IntertrialState.idle
         assert (

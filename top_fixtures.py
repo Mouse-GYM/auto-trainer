@@ -462,7 +462,11 @@ class MockSystemMachine:
         return self._perf_det_m
 
     @pytest.fixture(autouse=True)
-    def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
+    def _attach_request(self, request):
+        self._pytest_request = request
+
+    @pytest.fixture(autouse=True)
+    def machine(self, machine: SystemMachine, _attach_request) -> SystemMachine:  # noqa
         self._init(machine)
         yield machine  # noqa
 
@@ -686,6 +690,7 @@ class MockSystemMachine:
         event_mgr = self._machine._event_manager
         mock_post_event = mock.patch.object(event_mgr, "post_event")
         self._m_post_event = mock_post_event.start()
+        self._pytest_request.addfinalizer(mock_post_event.stop)
         return self._m_post_event
 
     @property
