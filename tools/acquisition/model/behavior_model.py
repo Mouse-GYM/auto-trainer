@@ -7,6 +7,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorA
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
+from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -271,8 +272,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             color = (100, 0, 0)  # red
         else:
             is_warn = any(
-                det.is_engaged and det.config.use and not det.config.is_emergency_condition
-                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
+                det.is_engaged and det.config.use
+                    and (not isinstance(det.config, AlarmDetectorConfig) or not det.config.is_emergency_condition)
+                for det in alarm_mon.sub_detectors
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green

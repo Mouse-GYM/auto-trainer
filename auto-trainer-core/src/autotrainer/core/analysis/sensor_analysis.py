@@ -123,7 +123,7 @@ class SensorAnalysis(ObservableObject):
 
         alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor()
         #  dynamically handled alarm sub-monitors:
-        reg_alarm_cond = alarm_mon.register_detector
+        reg_alarm_cond = alarm_mon.register_sub_detector
         reg_alarm_cond(EmergencyReason.ANIMAL_EVASION, self._animal_evasion_alarm)
         reg_alarm_cond(EmergencyReason.MOUSE_THRASHING, self._animal_thrash_alarm)
         reg_alarm_cond(EmergencyReason.SYSTEM_MAINTENANCE, self._system_maintenance_alarm)

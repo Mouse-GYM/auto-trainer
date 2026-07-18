@@ -62,10 +62,10 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
     analysis = app.analysis
     analysis.emergency_alarm_monitor.default_timer_delay = None
     analysis.emergency_alarm_monitor.use_daemon = False
-    for alrm in analysis.alarms:
-        alrm.use_daemon = False
-        alrm.default_timer_delay = None
-        alrm.restart()
+    for alarm_det in analysis.alarms:
+        alarm_det.use_daemon = False
+        alarm_det.default_timer_delay = None
+        alarm_det.restart()
     for det in analysis._detectors:
         det.use_daemon = False
         det.default_timer_delay = None

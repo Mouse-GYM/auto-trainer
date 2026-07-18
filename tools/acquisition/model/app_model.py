@@ -1823,7 +1823,7 @@ class AppModel(ObservableObject):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:
             self._update_led_color()
-        elif name == alarm_mon.ALARM_DETECTOR_PROPERTY_CHANGED:
+        elif name == alarm_mon.DETECTOR_PROPERTY_CHANGED:
             detector = value[0]
             detector: AlarmDetector
             sub_name = value[1]

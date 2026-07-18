@@ -1,11 +1,11 @@
 
 from dataclasses import dataclass
 
-from autotrainer.core.configuration.detector import DetectorConfig
+from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
 
 
 @dataclass
-class AlarmDetectorConfig(DetectorConfig):
+class AlarmDetectorConfig(GroupSubDetectorConfig):
 
     use: bool = True  # decide if "used by/enabled with" the alarm monitor, or not
     is_emergency_condition: bool = False  # decide if trigger emergency_stop()/_resume(), or not.
