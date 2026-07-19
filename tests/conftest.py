@@ -66,10 +66,13 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         alarm_det.use_daemon = False
         alarm_det.default_timer_delay = None
         alarm_det.restart()
-    for det in analysis._detectors:
+    for det in analysis.detectors:
         det.use_daemon = False
         det.default_timer_delay = None
         det.restart()
+    # also ensure watchdogs are disabled:
+    for watch_det in analysis.watchdog_monitor.watchdog_items:
+        watch_det.config.use = True
     try:
         yield app
     finally:

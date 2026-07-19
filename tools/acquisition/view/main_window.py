@@ -187,15 +187,16 @@ class MainWindow(QMainWindow):
         self._set_reset_cage_clean_text()
         self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
 
-        self._watchdog_perf_c = time.perf_counter()
+        self._watchdog_perf_c = get_perf_now()
         watchdog_timer = self._watchdog_timer = QTimer(self)
         watchdog_timer.timeout.connect(self._update_watchdog_perf_c)
         watchdog_timer.start(1000)  # every 1s
-        app_model.analysis.watchdog_monitor.register_watchdog(WatchdogItems.MAIN_UI_THREAD, lambda: self._watchdog_perf_c)
+        app_model.analysis.watchdog_monitor.register_watchdog(
+            WatchdogItems.MAIN_UI_THREAD, lambda: self._watchdog_perf_c)
 
     def _update_watchdog_perf_c(self):
         # logger.spam("updating watchog")
-        self._watchdog_perf_c = time.perf_counter()
+        self._watchdog_perf_c = get_perf_now()
 
     @property
     def app_model(self) -> AppModel:

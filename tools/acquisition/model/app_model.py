@@ -1468,7 +1468,7 @@ class AppModel(ObservableObject):
 
         self._detach_training_plan()  # always
 
-        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
+        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_sub_detector
         for item in WatchdogItems:
             if item is not WatchdogItems.MAIN_UI_THREAD:
                 watchdog_mon_unregister(item)

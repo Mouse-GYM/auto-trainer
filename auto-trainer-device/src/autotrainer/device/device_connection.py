@@ -251,7 +251,7 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _start(self):
         if self._current_thread is None or not self._current_thread.is_alive():
             logger.verbose("Starting new reader thread for %s", self._name)
-            self._current_thread_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+            self._current_thread_watchdog_perf_c = get_perf_now()
             thread = Thread(target=self._run, name=self._name)
             thread.start()
             self._current_thread = thread
@@ -271,7 +271,7 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _run_unconnected(self) -> bool:
         logger.info("running unconnected")
         while True:
-            self._current_thread_watchdog_perf_c = time.perf_counter()
+            self._current_thread_watchdog_perf_c = get_perf_now()
             try:
                 cmd, data, context = self._cmd_queue.get(timeout=0.25)
                 self._cmd_queue.task_done()
@@ -309,7 +309,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         logger.info("running connected")
         t_next_cmd_queue_read = time.perf_counter()
         while True:
-            self._current_thread_watchdog_perf_c = time.perf_counter()
+            self._current_thread_watchdog_perf_c = get_perf_now()
 
             # Data from the device for the device listener to process.
             if self._interface.can_read():

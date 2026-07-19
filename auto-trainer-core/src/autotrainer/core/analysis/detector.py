@@ -1,4 +1,5 @@
 import dataclasses
+import inspect
 import math
 import queue
 import threading
@@ -25,6 +26,20 @@ DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
 
 
 registered_detector_classes: List["BaseDetector"] = []
+
+
+def has_kwarg(func, kwarg_name):
+    # Get the function's signature
+    sig = inspect.signature(func)
+
+    # 1. Check if the specific keyword argument name exists
+    if kwarg_name in sig.parameters:
+        param = sig.parameters[kwarg_name]
+        # Ensure it's not a positional-only argument
+        return param.kind != inspect.Parameter.POSITIONAL_ONLY
+
+    # 2. Check if the function accepts arbitrary keyword arguments (**kwargs)
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
 
 class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
@@ -60,6 +75,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
+        if not has_kwarg(self._check_state, "force"):
+            def _check_state(*, force: bool = False, orig_check_state=self._check_state):
+                del force  # unused
+                return orig_check_state()
+            self._check_state = _check_state
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -164,7 +184,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 return None
             self._checking_state = True
             try:
-                next_delay = self._check_state()
+                next_delay = self._check_state(force=force)
             except Exception as err:
                 self._logger.exception("_check_state() failed: %s", err)
                 next_delay = 1
@@ -281,7 +301,11 @@ class GroupSubDetectorContext:
     property_changed_callback: Callable
 
 
-class GroupBaseDetector(BaseDetector[DetectorConfigT]):
+
+GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[GroupSubDetectorConfig])
+
+
+class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
     """Group Detector base class, is ORing of the sub-detectors"""
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
@@ -295,7 +319,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT]):
     def engaged_reasons(self) -> List[str]:
         """Gives list of name/key of the engaged detectors"""
         with self._lock:
-            return list(self._engaged_reasons)
+            return sorted(self._engaged_reasons)
 
     def _start(self):
         super()._start()
@@ -309,29 +333,29 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT]):
             sub.detector.stop()
 
     @property
-    def sub_detectors(self) -> List[BaseDetector]:
+    def sub_detectors(self) -> List[GroupSubDetectorT]:
         with self._lock:
             return [
                 ctx.detector
                 for ctx in self._sub_detectors.values()
             ]
 
-    def get_sub_detector(self, name: str) -> Optional[BaseDetector]:
+    def get_sub_detector(self, name: str) -> Optional[GroupSubDetectorT]:
         with self._lock:
             ctx = self._sub_detectors.get(name, None)
         return None if ctx is None else ctx.detector
 
-    def register_sub_detector(self, name: str, detector: BaseDetector):
+    def register_sub_detector(self, name: str, detector: GroupSubDetectorT):
+        ctx = GroupSubDetectorContext(
+            detector=detector,
+            property_changed_callback=partial(self._on_sub_detector_property_changed, detector),
+        )
         with self._lock:
             self.unregister_sub_detector(name)
-            ctx = GroupSubDetectorContext(
-                detector=detector,
-                property_changed_callback=partial(self._on_sub_detector_property_changed, detector),
-            )
             detector.property_changed += ctx.property_changed_callback
             self._sub_detectors[name] = ctx
 
-    def unregister_sub_detector(self, name: str) -> Optional[BaseDetector]:
+    def unregister_sub_detector(self, name: str) -> Optional[GroupSubDetectorT]:
         with self._lock:
             ctx = self._sub_detectors.pop(name, None)
             if ctx is None:
@@ -339,18 +363,18 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT]):
             ctx.detector.property_changed -= ctx.property_changed_callback
         return ctx.detector
 
-    def _on_sub_detector_property_changed(self, detector: BaseDetector, name: str, value, old_value):
+    def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
         if name in (detector.IS_ENGAGED, detector.CONFIG):
             self.check_state()
         self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
 
-    def _check_state(self) -> Optional[float]:
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
         for sub_name, sub_ctx in self._sub_detectors.items():
             det = sub_ctx.detector
             if not det.use_daemon and not det.default_timer_delay:
-                det.check_state()
+                det.check_state(force=force)
             cfg = det.config
             det_engaged = det.is_engaged
             if det_engaged:

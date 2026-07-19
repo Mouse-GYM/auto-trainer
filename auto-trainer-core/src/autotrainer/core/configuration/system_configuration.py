@@ -22,7 +22,7 @@ from .alarm_detector import AlarmDetectorConfig
 from .autoclamp_evasion_config import AnimalEvasionAlarmConfig, AutoClampEvasionDetectorConfig
 from .boards_hardware_reset_detector_config import BoardsHardwareResetDetectorConfig
 from .free_disk_space_config import FreeDiskSpaceConfig
-from .watchdog_config import WatchdogConfig
+from .watchdog_config import WatchdogConfig, WatchdogItemDetectorConfig
 from .. import Offset3DTuple, make_camelize_representer, make_decamelize_constructor
 from .behavior_configuration import BehaviorConfiguration, add_behavior_configuration_representers, \
     add_behavior_configuration_constructors
@@ -162,8 +162,8 @@ class SystemConfiguration:
                 configuration._deserialize_version_one(content)
             else:
                 # dataclass recursive construct from nested dicts:
-                configuration: Self = from_dict(data_class=SystemConfiguration, data=content,
-                                                config=_MIGRATE_DACITE_CONFIG)  # noqa
+                configuration: Self = from_dict(data_class=SystemConfiguration, data=content,  # noqa
+                                                config=_MIGRATE_DACITE_CONFIG)
         else:
             assert version > SystemConfiguration.version
             logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "
@@ -286,13 +286,13 @@ _tag_2_cls = dict(
     HardwareConfiguration=HardwareConfiguration,
     CameraConfiguration=CameraConfiguration,
     InferenceConfiguration=InferenceConfiguration,
-    WatchdogConfig=WatchdogConfig,
     AlarmDetectorConfig=AlarmDetectorConfig,
     AnimalEvasionAlarmConfig=AnimalEvasionAlarmConfig,
     AutoClampEvasionDetectorConfig=AutoClampEvasionDetectorConfig,
     PersistenceConfiguration=PersistenceConfiguration,
     FreeDiskSpaceConfig=FreeDiskSpaceConfig,
     WatchDogConfig=WatchdogConfig,
+    WatchdogItemDetectorConfig=WatchdogItemDetectorConfig,
     BoardsHardwareResetConfig=BoardsHardwareResetDetectorConfig,
 )
 

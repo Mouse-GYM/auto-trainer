@@ -378,7 +378,16 @@ def fake_system_msg_handler(fake_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch, mock_get_perf_now, fake_system_msg_handler) -> SystemMachine:
+def machine(
+    project_info,
+    tunnel_device,
+    pellet_device,
+    inference,
+    sensor_analysis,
+    monkeypatch,
+    mock_get_perf_now,
+    fake_system_msg_handler,
+) -> SystemMachine:
     # Disable algo handler thread
     assert BehaviorAlgorithm._no_handler_thread is False
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)

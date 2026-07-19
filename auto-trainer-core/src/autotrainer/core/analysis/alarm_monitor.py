@@ -54,7 +54,7 @@ class AlarmDetectorContext:
     property_changed_callback: Callable
 
 
-class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration]):
+class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, AlarmDetector]):
 
     use_daemon = True
     config_cls = EmergencyAlarmConfiguration
