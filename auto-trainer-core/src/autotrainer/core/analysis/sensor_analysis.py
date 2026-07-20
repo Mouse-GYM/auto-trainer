@@ -142,7 +142,6 @@ class SensorAnalysis(ObservableObject):
             self._audio_thrashing_monitor,
             self._pellet_misplaced_monitor,
             self._auto_tunnel_sweep_monitor,
-            self._watchdog_monitor,
             self._system_maintenance_alarm,
             self._system_fault_alarm,
             self._global_animal_presence_alarm,
@@ -152,6 +151,10 @@ class SensorAnalysis(ObservableObject):
             self._animal_thrash_alarm,
             self._autoclamp_evasion_detector,
             self._animal_evasion_alarm,
+            # system-fault detectors:
+            self._watchdog_monitor,
+            self._free_disk_space_detector,
+            self._boards_hardware_reset_detector,
         ]
 
         self._alarms = [
