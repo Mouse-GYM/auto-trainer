@@ -88,7 +88,7 @@ def test_intertrial_increase_algo_counts(mock_system):
     assert algo.successful_reaches_day == algo.successful_reaches_total == 1
 
 
-def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
+def test_exit_tunnel_when_analysis_ongoing(request, mock_system, machine, caplog):
     algo = mock_system.algo
     algo.intertrial_enabled = True
     machine._delay_timer_consider_end_trial = 0  # simpler test
@@ -99,7 +99,9 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
 
     event_mgr = EventManager.default()
-    m_post_event = mock.patch.object(event_mgr, "post_event").start()
+    m = mock.patch.object(event_mgr, "post_event")
+    m_post_event = m.start()
+    request.addfinalizer(m.stop)
 
     def has_event(kind: ApiEventKind):
         return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa

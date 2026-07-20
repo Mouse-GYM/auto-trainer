@@ -341,10 +341,12 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.end_capture_trial()
         assert processing_ended_count == 1
 
-    def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
+    def test_exit_reenter_tunnel_while_analysis_in_progress(self, request, machine, caplog):
         algo = self.algo
         event_mgr = EventManager.default()
-        m_post_event = mock.patch.object(event_mgr, "post_event").start()
+        m = mock.patch.object(event_mgr, "post_event")
+        m_post_event = m.start()
+        request.addfinalizer(m.stop)
         def has_event(kind: ApiEventKind):
             return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
 
