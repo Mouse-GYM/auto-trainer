@@ -13,16 +13,21 @@ from mocks import MockEventPlugin
 
 @pytest.fixture
 def default_manager():
-    yield EventManager.default()
-    # Required to close the process_events thread and exit cleanly.
-    EventManager.default().close()
+    mgr = EventManager.default()
+    try:
+        yield mgr
+    finally:
+        # Required to close the process_events thread and exit cleanly.
+        mgr.close()
 
 
 @pytest.fixture
 def event_manager():
     manager = EventManager("EventManagerInstance")
-    yield manager
-    manager.close()
+    try:
+        yield manager
+    finally:
+        manager.close()
 
 
 @pytest.fixture

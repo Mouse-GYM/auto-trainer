@@ -100,8 +100,10 @@ def mock_get_perf_now(monkeypatch):
 @pytest.fixture(autouse=True)
 def auto_close_event_manager():
     # allow to close the EventManager and have its worker thread exits gracefully (on each end of test case)
-    yield
-    EventManager.try_close_default()
+    try:
+        yield
+    finally:
+        EventManager.try_close_default()
 
 
 @pytest.fixture(autouse=True, scope="session")
