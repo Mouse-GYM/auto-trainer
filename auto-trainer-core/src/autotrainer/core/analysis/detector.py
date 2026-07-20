@@ -252,7 +252,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 break
             log.warning("unhandled command object: %r", r)
         # end while True
-        logger.verbose("%s: exiting main loop", self._name)
+        log.verbose("%s: exiting main loop", self._name)
 
     def _stop(self):
         pass
