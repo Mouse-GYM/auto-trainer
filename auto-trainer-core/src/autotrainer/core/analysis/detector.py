@@ -8,6 +8,7 @@ import typing
 from functools import partial
 from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List, Set, Callable, Any
 
+import typing_extensions
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
@@ -161,11 +162,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         timer.start()
         self._logger.verbose("created timer to check_state within %.1fs", delay)
 
-    @typing.override
+    @typing_extensions.override
     def _check_state(self) -> Optional[float]:
         raise NotImplementedError
 
-    @typing.override
+    @typing_extensions.override
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         raise NotImplementedError
 

@@ -16,8 +16,8 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
     config_cls: Type[AlarmDetectorConfigT] = AlarmDetectorConfig
     alarm_api_kind: ClassVar[ApiAlarmKind]
 
-    def __init__(self, *, config: Optional[AlarmDetectorConfigT] = None):
-        super().__init__(config=config)
+    def __init__(self, *, name: Optional[str]=None, config: Optional[AlarmDetectorConfigT] = None):
+        super().__init__(name=name, config=config)
         self.property_changed += self._on_property_changed_cb
 
     def _on_property_changed_cb(self, name, value, _):

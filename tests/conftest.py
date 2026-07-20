@@ -70,9 +70,10 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         det.use_daemon = False
         det.default_timer_delay = None
         det.restart()
-    # also ensure watchdogs are disabled:
+    # also ensure watchdogs is/are disabled:
+    analysis.watchdog_monitor.config.use = False
     for watch_det in analysis.watchdog_monitor.watchdog_items:
-        watch_det.config.use = True
+        watch_det.config.use = False
     try:
         yield app
     finally:
