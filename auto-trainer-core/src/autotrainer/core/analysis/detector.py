@@ -189,14 +189,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             if self._running:
                 self._logger.debug("requested start but already running")
                 return
-            self._logger.verbose("%s: starting monitor", self.__class__.__name__)
+            self._logger.verbose("%s: starting monitor", self._name)
             self._running = True
             self.is_engaged = False  # force reset "engaged" to False
             self._p_started = get_perf_now()
             self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue(maxsize=32)
-                thread = threading.Thread(name=self.__class__.__name__, target=self._daemon_run, daemon=True,
+                thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
                 thread.start()
@@ -204,7 +204,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
-        self._logger.info("%s running", self.__class__.__name__)
+        self._logger.info("%s running", self._name)
         while self._running:
             delay = self.check_state()  # always check immediately
             if delay is None:
@@ -229,7 +229,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 break
             logger.warning("unhandled command object: %r", r)
         # end while True
-        self._logger.verbose("%s: exiting main loop", self.__class__.__name__)
+        self._logger.verbose("%s: exiting main loop", self._name)
 
     def _stop(self):
         pass
@@ -240,7 +240,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._cur_timer.cancel()
             if not self._running:
                 return
-            log.verbose("%s: stopping monitor", self.__class__.__name__)
+            log.verbose("%s: stopping monitor", self._name)
             self._running = False
             thread_queue = self._thread_queue
             self._thread_queue = None
@@ -260,7 +260,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                     log.verbose("joined check thread %s", thread)
 
     def restart(self):
-        self._logger.notice("Restarting %s", self.__class__.__name__)
+        self._logger.notice("Restarting %s", self._name)
         self.stop()
         self.start()
 
