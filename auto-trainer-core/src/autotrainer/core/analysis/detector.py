@@ -316,8 +316,8 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
 
-    def __init__(self, *, config: Optional[DetectorConfigT] = None):
-        super().__init__(config=config)
+    def __init__(self, *, name: Optional[str] = None, config: Optional[DetectorConfigT] = None):
+        super().__init__(name=name, config=config)
         self._engaged_reasons: Set[str] = set()
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
 

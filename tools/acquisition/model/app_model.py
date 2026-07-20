@@ -2438,11 +2438,10 @@ class AppModel(ObservableObject):
                 # in case of it was not good with previous:
                 self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             tunnel_dev = system_m.tunnel_device
-            with algo.set_allow_reentrant(True):
-                system_m.execute_disengage_auto_clamp_if_in_progress()
             if algo.status != BehaviorAlgoStatus.IDLE:
                 with algo.set_allow_reentrant(True):
                     for action_func in (
+                        system_m.execute_disengage_auto_clamp_if_in_progress,
                         tunnel_dev.open_tunnel_gate,
                         lambda: tunnel_dev.update_head_magnet_intensity(0),
                         lambda: system_m.pellet.move_home(force=True),
