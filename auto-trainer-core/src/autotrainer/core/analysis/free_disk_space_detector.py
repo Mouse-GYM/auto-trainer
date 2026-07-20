@@ -24,7 +24,12 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
 
     def _check_state(self) -> Optional[float]:
         cfg = self._config
-        usage = psutil.disk_usage(self._persistence_cfg.output_location)
+        loc = self._persistence_cfg.output_location
+        try:
+            usage = psutil.disk_usage(loc)
+        except (IOError, PermissionError) as err:
+            self._logger.warning("Cannot check disk usage on %r: %s", loc, err)
+            return None
         # usage free is in bytes:
         engaged = usage.free / 2 ** 20 < cfg.min_limit_mb
         prev_engaged = self._is_engaged
@@ -32,6 +37,7 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
             post_api_detector_event_content(self._event_manager, ApiDetectorKind.lowFreeDiskSpace,
                                             engaged, self._config.use)
             self.is_engaged = engaged
+        return None
 
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
