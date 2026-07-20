@@ -92,7 +92,6 @@ class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
         self.cage_need_clean_engaged = engaged
 
     def _check_state(self) -> Optional[float]:
-        logger.spam("checking state")
         cfg = self._config
         reasons = set()
         #

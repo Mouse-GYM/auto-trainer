@@ -4,6 +4,7 @@ import math
 import queue
 import threading
 import time
+import typing
 from functools import partial
 from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List, Set, Callable, Any
 
@@ -160,7 +161,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         timer.start()
         self._logger.verbose("created timer to check_state within %.1fs", delay)
 
+    @typing.override
     def _check_state(self) -> Optional[float]:
+        raise NotImplementedError
+
+    @typing.override
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         raise NotImplementedError
 
     def check_state_if_not_detector_thread(self):
