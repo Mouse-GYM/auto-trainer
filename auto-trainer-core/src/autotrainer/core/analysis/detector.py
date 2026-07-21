@@ -162,11 +162,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         timer.start()
         self._logger.verbose("created timer to check_state within %.1fs", delay)
 
-    @typing_extensions.override
-    def _check_state(self) -> Optional[float]:
-        raise NotImplementedError
+    @typing_extensions.overload
+    def _check_state(self) -> Optional[float]: ...
 
-    @typing_extensions.override
+    @typing_extensions.overload
+    def _check_state(self, *, force: bool) -> Optional[float]: ...
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         raise NotImplementedError
 
