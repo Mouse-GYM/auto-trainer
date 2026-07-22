@@ -9,6 +9,7 @@ from autotrainer.behavior import SystemState, PelletDeviceProtocol, BehaviorAlgo
     SystemMachine
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
+from autotrainer.core.capture import CaptureProcessStatus
 
 from top_fixtures import MockSystemMachine, mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
 
@@ -153,7 +154,7 @@ def test_uncover_when_record_aged_enough_with_no_pellet_hand_uncover_distance(mo
     assert algo.is_in_trial_capture
     assert mock_system.pellet_state_trans == []
 
-    mock_system.make_recording_aged_enough()
+    algo.set_capture_status(CaptureProcessStatus.RECORDING)
     algo.project.t_pellet_delivered = 0
 
     uncov_ctx = algo.uncover_context
@@ -187,7 +188,7 @@ def test_uncover_when_hands_near_pellet_after_recording_aged_enough(mock_system,
     load_cell.is_engaged = True
     assert algo.is_in_trial_capture
     #
-    mock_system.make_recording_aged_enough()
+    algo.set_capture_status(CaptureProcessStatus.RECORDING)
     pellet_m.environment_changed()
     assert pellet_m.state == PelletState.monitoring
     assert mock_system.pellet_state_trans == [], "contrary to test_uncover_when_record_aged_enough"
@@ -404,3 +405,24 @@ def test_manual_send_pellet_when_delivery_not_enabled(machine, mock_system, befo
     assert pellet_m._api_status_token is None
     assert pellet_m.state == before_state
     assert mock_system.pellet_state_trans == []
+
+
+def test_it_accepts_none_ack_token(machine, caplog, monkeypatch):
+    pellet = machine.pellet
+    evt_changed: mock.MagicMock = mock.create_autospec(pellet.environment_changed)
+    monkeypatch.setattr(pellet, "environment_changed", evt_changed)
+    with caplog.at_level(logging.DEBUG):
+        pellet._pellet_device_ack_received(None)
+    assert evt_changed.call_count == 0
+    some_token = object()
+    pellet._api_status_token = some_token
+    with caplog.at_level(logging.DEBUG):
+        pellet._pellet_device_ack_received(some_token)  # noqa
+    assert evt_changed.call_count == 1
+
+
+def test_unknown_state(machine, caplog, monkeypatch):
+    pellet = machine.pellet
+    pellet.state = "some_unknown_state"
+    pellet.environment_changed()
+    assert "unknown state: some_unknown_state" in caplog.text

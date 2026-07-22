@@ -30,6 +30,8 @@ def make_reach_events(tuples):
 
 class TestShiftXYZ(MockSystemMachine):
 
+    cams_fps = 150
+
     @pytest.fixture(autouse=True)
     def _load_diamond_config(self, machine, diamond_triangle_config):
         machine.algorithm.diamond_triangle_config = diamond_triangle_config
@@ -43,18 +45,18 @@ class TestShiftXYZ(MockSystemMachine):
         cfg.batch_trial_recording.maximum_batch_size = 6 * min_reach_fail  # big enough to hold 2+ * minimum_reach_fail
         cfg.pellet_delivery.is_intertrial_analysis_enabled = True
         machine._delay_timer_consider_end_trial = 0
+        prj = self.system_machine.project
+        self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
+        prj.dcs_send_position = Offset3DTuple(-5, 25, -6)
+        self.system_machine.project = prj  # ensure all sub-machines/components receive it
         assert self.algo.intertrial_enabled is True
-        def perf_seg(cfg):
-            return cfg
-        self.inference.perform_segmentation = mock.MagicMock(side_effect=perf_seg)
 
-    def make_trial(self, stack: contextlib.ExitStack, reach_events, rh_max_vp_list):
+    def make_trial(self, stack: FifoExitStack, reach_events, rh_max_vp_list):
         algo = self.algo
         self.mock_pellet_ack(until_none=True)
         assert algo.is_in_trial_capture
         pellet = self.pellet
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
-        cfg = algo.active_config
         other_events = list(filter(
             lambda r: r.method not in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}, reach_events))
         rsp = IntertrialResponse(
@@ -63,14 +65,14 @@ class TestShiftXYZ(MockSystemMachine):
             other_events=other_events,
         )
         project = self._machine.project.to_local_value()
+
         stack.enter_context(
-            self.mock_intertrial_analysis(results=rsp, project=project, stack=stack)
+            self.mock_analysis(stack=stack, detection_result=rsp, project=project)
         )
-        self.mock_pose_response(pellet_seen=False)
         self.mock_pellet_ack(until_none=True)
-        self.increment_perf_now(cfg.pellet_delivery.max_pellet_missing_seconds)
-        self.mock_pose_response(pellet_seen=False, mouse_seen=True)
-        
+
+        self.mock_pellet_missing(mouse_seen=True)
+
         # pellet not seen for missing delay
         #   -> load pellet triggered -> stop-session-recording -> not algo.is_in_session
         assert not algo.is_in_trial_capture
@@ -84,7 +86,7 @@ class TestShiftXYZ(MockSystemMachine):
         """Assert that the failed RH max vp buffer is only applied once in a batch of trials,
         if that batch contains more than 2 times the nbr of "failed RH max vp".
         """
-        fps = 150  # currently hardcoded in intersession_process
+        fps = self.cams_fps  # currently hardcoded in intertrial_process
         system = self.system_machine
         algo = self.algo
         self.mock_pose_response(pellet_seen=True)
@@ -112,7 +114,7 @@ class TestShiftXYZ(MockSystemMachine):
             (65, 75, 80, "right_hand", "stalled", 65 / fps),
             (85, 105, 110, "left_hand", "dropped", 85 / fps),
         ))
-        with contextlib.ExitStack() as stack:
+        with FifoExitStack() as stack:
             for rh_max_vp_list in rh_max_vp_lists:
                 #with caplog.at_level(logging.DEBUG):
                 self.make_trial(stack, reach_events, rh_max_vp_list)
@@ -139,7 +141,8 @@ class TestShiftXYZ(MockSystemMachine):
         # there are still remaining entries at the end,
         # because there was other trial(s) after the one which triggered the last clear of the buffer.
 
-    def test_with_tongue_eaten(self, caplog):
+    @pytest.mark.parametrize("pellet_shift_y_limit", (None, 10, 30))
+    def test_with_tongue_eaten(self, caplog, pellet_shift_y_limit):
         fps = 150
         reaches_list = (
             make_reach_events(
@@ -160,7 +163,7 @@ class TestShiftXYZ(MockSystemMachine):
         )
         system = self.system_machine
         algo = self.algo
-        cfg = algo.active_config
+        algo.pellet_shift_y_limit = pellet_shift_y_limit
         pellet_dev = self.pellet_dev
         #
         O = Offset3DTuple  # noqa
@@ -189,10 +192,12 @@ class TestShiftXYZ(MockSystemMachine):
             assert pellet_dev.set_y.call_args_list == []
             assert pellet_dev.set_z.call_args_list == []
             assert system.state == SystemState.tunnel
-            assert algo.pellet_shift_y_limit is None
+            assert algo.pellet_shift_y_limit == pellet_shift_y_limit
             self.exit_tunnel()  # the batch will be started processing with the exit tunnel
         #
-        assert algo.pellet_shift_y_limit == 25.5
+        assert algo.pellet_shift_y_limit == (
+            25.5 if pellet_shift_y_limit is None
+            else 25 if pellet_shift_y_limit == 10 else 30)
         assert system.state == SystemState.cage
         assert system.intertrial.state == IntertrialState.idle
         assert (
@@ -200,25 +205,83 @@ class TestShiftXYZ(MockSystemMachine):
             in caplog.text
         )
         # NB: applied shift are in motor coordinate:
-        f_m_d = algo.diamond_triangle_config.flips_motor_diamond
+        motor_shift = expected_shift * algo.diamond_triangle_config.flips_motor_diamond
         #
-        assert pellet_dev.set_x.call_args_list == ([
-            mock.call(
-                expected_shift.x * f_m_d.x, absolute=False, sender="processed_shift_xyz"
-            )
-        ] if expected_shift.x != 0 else [])
-        assert pellet_dev.set_y.call_args_list == ([
-            mock.call(
-                expected_shift.y * f_m_d.y, absolute=False, sender="processed_shift_xyz"
-            )
-        ] if expected_shift.y != 0 else [])
-        assert pellet_dev.set_z.call_args_list == ([
-            mock.call(
-                expected_shift.z * f_m_d.z, absolute=False, sender="processed_shift_xyz"
-            )
-        ] if expected_shift.z != 0 else [])
+        assert pellet_dev.set_x.call_args == (
+            mock.call(motor_shift.x, absolute=False, sender="processed_shift_xyz")
+            if motor_shift.x != 0 else None
+        )
+        #
+        assert pellet_dev.set_y.call_args == (
+            mock.call(motor_shift.y, absolute=False, sender="processed_shift_xyz")
+            if motor_shift.y != 0 else None
+        )
+        #
+        assert pellet_dev.set_z.call_args == (
+            mock.call(motor_shift.z, absolute=False, sender="processed_shift_xyz")
+            if motor_shift.z != 0 else None
+        )
         #
         shift_handler_ctx = system.shift_xyz_handler.handler.get_context()
         assert shift_handler_ctx["failed_reaches_buffer"] == [], "with tongue-eaten the failed_reaches_buffer is cleared"
         # there are still remaining entries at the end,
         # because there was other trial(s) after the one which triggered the last clear of the buffer.
+
+    @pytest.mark.parametrize("pellet_shift_y_limit", (None, 15, 35))
+    def test_without_tongue_eaten_with_processed_shift(self, machine, caplog, pellet_shift_y_limit):
+        algo = self.algo
+        algo.pellet_shift_y_limit = pellet_shift_y_limit
+        pellet_dev = self.pellet_dev
+        system = machine
+        fps = self.cams_fps
+        shift_cfg = algo.active_config.shift_xyz_handler
+        shift_cfg.use_tongue_eaten = False
+        shift_cfg.buffer.minimum_reach_fail = 1
+        O = Offset3DTuple  # noqa
+        reaches_rh_list = [
+            (make_reach_events(
+                (
+                    (0, 60, 65, "right_hand", "reached", 0),
+                    (65, 75, 80, "right_hand", "missed", 65 / fps),
+                    (85, 105, 110, "right_hand", "reached", 85 / fps),
+                    (115, 125, 130, "right_hand", "dropped", 115 / fps),
+                )
+            ), [O(0, 1, 2), O(-1, 0.2, -0.5)],)
+        ] * 5
+        caplog.clear()
+        caplog.set_level(logging.INFO)
+        self.mock_pose_response(pellet_seen=True)
+        self.start_trial_in_tunnel(set_recording_status=True)
+        self.mock_pellet_ack(until_none=True)
+        caplog.clear()
+        with FifoExitStack() as stack:
+            for reach_events, rh_max_vp_list in reaches_rh_list:
+                # with caplog.at_level(logging.DEBUG):
+                self.make_trial(stack, reach_events, rh_max_vp_list)
+                self.increment_perf_now(3)
+                # ensure the shift is only applied after the batch finishes:
+                assert pellet_dev.set_x.call_args_list == []
+                assert pellet_dev.set_y.call_args_list == []
+                assert pellet_dev.set_z.call_args_list == []
+                assert system.state == SystemState.tunnel
+                assert algo.pellet_shift_y_limit == pellet_shift_y_limit
+            self.exit_tunnel()  # the batch will be started processing with the exit tunnel
+        #
+        assert system.state == SystemState.cage
+        assert system.intertrial.state == IntertrialState.idle
+
+        assert algo.pellet_shift_y_limit == pellet_shift_y_limit
+        if pellet_shift_y_limit is None or pellet_shift_y_limit == 15:
+            expected_shift = Offset3DTuple(-2.0, 3.6, 0)
+        else:
+            expected_shift = Offset3DTuple(-2.0, 10, 0)
+        # assert (
+        #     f"applying pellet send_position shift: {expected_shift.round(1)}"
+        #     in caplog.text
+        # )  sensible to int vs float repr
+        motor_shift = algo.diamond_triangle_config.flips_motor_diamond * expected_shift
+        pellet_dev.assert_has_calls([
+            mock.call.set_x(motor_shift.x, absolute=False, sender='processed_shift_xyz'),
+            mock.call.set_y(motor_shift.y, absolute=False, sender='processed_shift_xyz')
+        ])
+        assert not pellet_dev.set_z.called

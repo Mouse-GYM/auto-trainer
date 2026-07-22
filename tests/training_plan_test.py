@@ -9,6 +9,7 @@ from typing import Optional
 from unittest import mock
 
 import pytest
+from autotrainer.api import ApiEventKind
 
 from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, TrainingMode, SystemState, \
     IntertrialState
@@ -44,10 +45,8 @@ def inference_model(pose_algo):
 class BaseTrainingPlan(MockSystemMachine):
 
     @pytest.fixture(autouse=True)
-    def _event_manager(self, monkeypatch):
-        m_event_mgr = mock.create_autospec(EventManager)
-        monkeypatch.setattr(f"{EventManager.__module__}.{EventManager.__qualname__}", m_event_mgr)
-        monkeypatch.setattr(EventManager, "default", m_event_mgr.default)
+    def _event_manager(self, machine, monkeypatch):
+        self.mock_event_manager()
 
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
@@ -82,17 +81,13 @@ class BaseTrainingPlan(MockSystemMachine):
         user_pref.save()
         msg_handler = machine._msg_handler
 
+        machine._delay_timer_consider_end_trial = 0  # simpler tests
+
         # set and save some specific config we want to ease the below sessions test:
         algo_cfg = system_config.behavior
         algo_cfg.head_clamp.before_reengage_delay = 0
-        # alarm_cfg = algo_cfg.emergency_alarm
-        # for sub_cfg in (
-        #     alarm_cfg.global_animal_presence,
-        #     alarm_cfg.system_fault,
-        #     alarm_cfg.system_maintenance,
-        #     alarm_cfg.device_comm_error,
-        # ):
-        #     sub_cfg.is_emergency_condition = False  # in case of.
+        algo_cfg.pellet_delivery.pellet_send_wait_delay = 0
+        algo_cfg.pellet_delivery.retract_enabled = True
         system_config.save_default(trainer_config_dir)
 
         # prevent slow exit when issue:
@@ -295,27 +290,20 @@ class TestTrainingPlan(BaseTrainingPlan):
         )
         # assert algo.can_release_pellet()  some training phase sets cover-pellet-enabled to True..
         #   .. making can_release_pellet() False.
-        with contextlib.ExitStack() as stack:
+        with self.mock_analysis(detection_result=analysis_result):
             # to be sure:
             algo.update_triangle_seen(True)
             algo.update_mouse_seen(True)
             algo.update_pellet_seen(True)
-            stack.enter_context(self.mock_perform_segmentation())
-            stack.enter_context(self.mock_perform_detection())
             assert pellet_m.state == PelletState.monitoring  # still
             self._load_cell.is_engaged = False  # exit tunnel
             assert not algo.is_in_trial_capture
             assert algo.system_state == SystemState.intertrial
             assert algo.intertrial_state == IntertrialState.segmentation
             assert pellet_m.state == PelletState.retract  # Retract !!
-            self.mock_complete_segmentation(True)
-            assert algo.system_state == SystemState.intertrial
-            assert algo.intertrial_state == IntertrialState.detection
-            machine._inference.detection_result_ready(machine.project, analysis_result)
-            self.mock_complete_detection(True)
-            assert algo.intertrial_state == IntertrialState.idle
-            assert algo.system_state == SystemState.cage
-            assert pellet_m.state == PelletState.retract  # still
+        assert algo.intertrial_state == IntertrialState.idle
+        assert algo.system_state == SystemState.cage
+        assert pellet_m.state == PelletState.retract  # still
 
         assert not algo.is_in_trial_capture
 
@@ -333,7 +321,6 @@ class TestTrainingPlan(BaseTrainingPlan):
         self.increment_perf_now(1)
 
 
-@pytest.mark.xfail(True, reason="todo: smth blocking..")  # TODO
 class TestWithBatch(BaseTrainingPlan):
 
     def test_plan_gets_batch_events(self, app_model, user_pref, machine, caplog):
@@ -344,34 +331,40 @@ class TestWithBatch(BaseTrainingPlan):
 
         self.ack_pending_tokens()
 
-        self.start_trial_in_tunnel()
+        self.start_trial_in_tunnel(set_recording_status=True)
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        self.mock_pellet_ack(until_none=True)
 
         assert algo.is_in_trial_capture
+        assert machine.pellet.state == PelletState.monitoring
 
         def fake_mouse_eat_pellet():
             logger.info("before pellet_seen=False")
-            self.mock_pose_response(pellet_seen=False, mouse_seen=True)
-            self.increment_perf_now(algo.pellet_missing_time)
-            self.mock_pose_response(pellet_seen=False, mouse_seen=True)
-            assert self.pellet.state == PelletState.loading
-            # self.mock_pellet_ack(until_none=True)
+            self.mock_pellet_missing(mouse_seen=True)
+            assert not algo.is_in_trial_capture
             logger.info("acked pellet_seen=False")
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
             self.ack_pending_tokens()
             logger.info("after pellet_seen=True")
 
-        def conc(ix):
-            logger.info("concurrent %s", ix)
-
         with FifoExitStack() as stack:
             for idx in range(max_batch_size):
                 assert machine.state == SystemState.tunnel
                 self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+                self.mock_pellet_ack(until_none=True)
                 assert algo.is_in_trial_capture
-                stack.enter_context(self.mock_intertrial_analysis(
-                    concurrent_func=lambda i=idx: conc(i)
-                ))
+                self.make_analysis(stack)
                 fake_mouse_eat_pellet()
+                algo.set_capture_status(CaptureProcessStatus.RECORDING)
+            caplog.clear()
+            caplog.set_level(logging.DEBUG)
             self.exit_tunnel()
         logger.info("all done")
+
+        has_event = self.has_event
+        # assert has_event(ApiEventKind.protocolPhaseEvent)
+        assert has_event(ApiEventKind.trainingPlanLoad)
+        assert has_event(ApiEventKind.trainingPhaseEnter)
+        assert has_event(ApiEventKind.trainingPhaseExit)
+        assert has_event(ApiEventKind.trainingProgressUpdate)

@@ -9,12 +9,13 @@ from autotrainer.api import ApiEventKind, build_event
 from autotrainer.core import ProjectInfo, transitions_allow_functions
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.interfaces import CaptureAnalysisResult
+from autotrainer.core.observable_object import EventHandler
 
 from .intertrial_state import IntertrialState
 from ..inference_protocol import InferenceProtocol, SegmentationConfiguration, DetectionConfiguration
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..state_machine import StateMachine, StateMachineEvents
-from ...core.observable_object import EventHandler
+
 
 logger = get_verbose_logger(__name__)
 
@@ -80,7 +81,7 @@ class IntertrialMachine(StateMachine):
         self._segmentation_configuration = segment_config
         res = self._inference.perform_segmentation(segment_config)
         if res is None:
-            logger.error("perform segmentation didn't started")
+            logger.error("perform_segmentation() didn't started")
             with self._algorithm.set_allow_reentrant(True):
                 self.end_analysis(project_info, False)
         else:
@@ -99,8 +100,9 @@ class IntertrialMachine(StateMachine):
         detection_config.complete = partial(self._detection_complete, detection_config=detection_config)
         res = self._inference.perform_detection(detection_config)
         if res is None:
-            logger.warning("inference perform_detection() returned None")
-            self.end_analysis(project, False)
+            logger.warning("perform_detection() didn't started")
+            with self._algorithm.set_allow_reentrant(True):
+                self.end_analysis(project, False)
         else:
             self._segmentation_configuration = None  # can now unset this one
             self._detection_configuration = detection_config

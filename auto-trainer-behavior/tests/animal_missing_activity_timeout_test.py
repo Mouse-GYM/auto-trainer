@@ -1,4 +1,5 @@
-
+import logging
+import math
 from unittest import mock
 
 import pytest
@@ -103,7 +104,7 @@ class TestWithAnimalTunnelMissingActivity(BaseAutoEndSession):
         cfg.animal_tunnel_no_activity_delay = 30
         cfg.no_activity_delay_minutes = 0  # disable this one
 
-    def test_it_triggers(self, machine):
+    def test_it_triggers_normally(self, machine):
         algo = self.algo
         cfg = algo.active_config.auto_end_trial
         self.mock_pose_response(pellet_seen=True)
@@ -113,3 +114,38 @@ class TestWithAnimalTunnelMissingActivity(BaseAutoEndSession):
         assert m_timer.call_args_list == [
             mock.call(delay, machine._consider_auto_end_trial_capture)
         ]
+        # also ensure it updates correctly if re-called halfway to delay:
+        self.increment_perf_now(delay / 2)
+        with self.patch_timer() as m_timer2:
+            machine._consider_auto_end_trial_capture()
+        assert m_timer2.call_args_list == [
+            mock.call(AlmostEqualFloat(delay / 2), machine._consider_auto_end_trial_capture)
+        ]
+        assert m_timer.return_value.cancel.call_args_list == [mock.call()], "previous timer must have been cancelled"
+
+    def test_it_triggers_with_inf_tunnel_missing_activity_but_then_disable(self, machine, caplog):
+        algo = self.algo
+        cfg = algo.active_config.auto_end_trial
+        cfg.animal_tunnel_no_activity_delay = math.inf
+        algo.update_pellet_seen(True)
+        with self.patch_timer() as m_timer:
+            self.start_trial_in_tunnel(set_recording_status=True)
+        assert m_timer.call_args_list == []
+        assert "Stopping consider auto_end_trial given all conditions disabled" in caplog.text
+
+    def test_without_low_variance(self, machine, caplog):
+        self.sensor_analysis.load_cell_tare_monitor.context.low_variance_engaged = False
+        algo = self.algo
+        cfg = algo.active_config.auto_end_trial
+        algo.update_pellet_seen(True)
+        with self.patch_timer() as m_timer:
+            self.start_trial_in_tunnel(set_recording_status=True)
+        delay = cfg.animal_tunnel_no_activity_delay
+        assert m_timer.call_args_list == [
+            mock.call(delay, machine._consider_auto_end_trial_capture)
+        ]
+
+    def test_if_called_when_no_intertrial_is_skipped(self, machine, caplog):
+        with caplog.at_level(logging.DEBUG):
+            machine._consider_auto_end_trial_capture()
+        assert "skipping consider_auto_end_trial given not in capture" in caplog.text
