@@ -1,9 +1,9 @@
 import dataclasses
 
-from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 
 
 @dataclasses.dataclass
-class FreeDiskSpaceConfig(AlarmDetectorConfig):
+class FreeDiskSpaceConfig(GroupSubDetectorConfig):
 
     min_limit_mb: int = 500  # minimum free space. if below: engage
