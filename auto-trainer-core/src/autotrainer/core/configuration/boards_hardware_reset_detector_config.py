@@ -2,11 +2,11 @@
 
 import dataclasses
 
-from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 
 
 @dataclasses.dataclass
-class BoardsHardwareResetDetectorConfig(AlarmDetectorConfig):
+class BoardsHardwareResetDetectorConfig(GroupSubDetectorConfig):
 
-    is_emergency_condition: bool = True
     allow_autoresume_on_cleared: bool = False
+    # will require manual emergency resume, or restart (of monitor or of application)

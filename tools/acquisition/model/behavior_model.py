@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 from datetime import datetime
 from typing import Optional, Callable
 
@@ -102,7 +103,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 logger.verbose("filtered_reasons=%s", filtered_valid_reasons)
                 if len(filtered_valid_reasons) > 0:
                     # at least one possible valid reason engaged
-                    reasons = " ".join(reason.name for reason in engaged_reasons)
+                    reasons = " ".join(
+                        reason.name if isinstance(reason, enum.Enum) else reason
+                        for reason in engaged_reasons)
                     self.emergency_stop(f"alarm-monitor: {reasons}")
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
