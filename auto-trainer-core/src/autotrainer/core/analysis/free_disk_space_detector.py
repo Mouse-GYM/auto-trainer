@@ -29,9 +29,10 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
             usage = psutil.disk_usage(loc)
         except (IOError, PermissionError) as err:
             self._logger.warning("Cannot check disk usage on %r: %s", loc, err)
-            return None
-        # usage free is in bytes:
-        engaged = usage.free / 2 ** 20 < cfg.min_limit_mb
+            engaged = True
+        else:
+            # usage free is in bytes:
+            engaged = usage.free / 2 ** 20 < cfg.min_limit_mb
         prev_engaged = self._is_engaged
         if engaged != prev_engaged:
             post_api_detector_event_content(self._event_manager, ApiDetectorKind.lowFreeDiskSpace,
