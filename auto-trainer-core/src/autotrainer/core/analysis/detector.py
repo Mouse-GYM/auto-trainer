@@ -162,10 +162,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         timer.start()
         self._logger.verbose("created timer to check_state within %.1fs", delay)
 
-    @typing_extensions.overload
+    @typing_extensions.override
     def _check_state(self) -> Optional[float]: ...
 
-    @typing_extensions.overload
+    @typing_extensions.override
     def _check_state(self, *, force: bool) -> Optional[float]: ...
 
     def _check_state(self, *, force: bool=False) -> Optional[float]:
@@ -385,17 +385,22 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                 det.check_state(force=force)
             cfg = det.config
             det_engaged = det.is_engaged
+            is_group_sub_det_cfg = isinstance(cfg, GroupSubDetectorConfig)  # allow be flexible.
             if det_engaged:
-                if isinstance(cfg, GroupSubDetectorConfig):
+                if is_group_sub_det_cfg:
                     keep = cfg.use
                 else:
                     keep = True
                 if keep:
                     new_engaged.add(sub_name)
-            elif isinstance(cfg, GroupSubDetectorConfig):
+            elif is_group_sub_det_cfg:
                 assert not det_engaged  # per the previous if.
                 if sub_name in prev_engaged:
                     if not cfg.allow_autoresume_on_cleared:
                         new_engaged.add(sub_name)  # keep it
+        if new_engaged != prev_engaged:
+            # ensure IS_ENGAGED property changed event still always relayed,
+            # even if same is_engaged, so that listeners will get/see the new_engaged reasons/sub-detectors.
+            self._is_engaged = None
         self._engaged_reasons = new_engaged
-        self.is_engaged = len(new_engaged) != 0
+        self.is_engaged = len(new_engaged) > 0

@@ -31,8 +31,6 @@ class WatchdogItemDetector(BaseDetector[WatchdogItemDetectorConfig]):
 
     def _check_state(self) -> Optional[float]:
         watch_perf_c = self._perf_c_getter()
-        if watch_perf_c is None:
-            self._logger.warning("watchdog %s None", self._name)
         if watch_perf_c is None or math.isnan(watch_perf_c):
             engaged = False
         else:

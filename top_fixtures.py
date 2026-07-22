@@ -495,7 +495,7 @@ class MockSystemMachine:
 
     @property
     def inference(self) -> InferenceProtocol:
-        return self._machine._inference
+        return self._machine._inference  # noqa
 
     @property
     def pellet(self):

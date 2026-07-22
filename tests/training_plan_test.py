@@ -45,7 +45,7 @@ def inference_model(pose_algo):
 class BaseTrainingPlan(MockSystemMachine):
 
     @pytest.fixture(autouse=True)
-    def _event_manager(self, machine, monkeypatch):
+    def _event_manager(self, machine, monkeypatch, _attach_request):
         self.mock_event_manager()
 
     @pytest.fixture(autouse=True)
@@ -296,7 +296,8 @@ class TestTrainingPlan(BaseTrainingPlan):
             algo.update_mouse_seen(True)
             algo.update_pellet_seen(True)
             assert pellet_m.state == PelletState.monitoring  # still
-            self._load_cell.is_engaged = False  # exit tunnel
+            # self._load_cell.is_engaged = False  # exit tunnel
+            self.make_load_cell_inactive()
             assert not algo.is_in_trial_capture
             assert algo.system_state == SystemState.intertrial
             assert algo.intertrial_state == IntertrialState.segmentation
