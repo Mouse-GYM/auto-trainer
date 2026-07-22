@@ -1468,7 +1468,7 @@ class AppModel(ObservableObject):
 
         self._detach_training_plan()  # always
 
-        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
+        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_sub_detector
         for item in WatchdogItems:
             if item is not WatchdogItems.MAIN_UI_THREAD:
                 watchdog_mon_unregister(item)
@@ -1823,7 +1823,7 @@ class AppModel(ObservableObject):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:
             self._update_led_color()
-        elif name == alarm_mon.ALARM_DETECTOR_PROPERTY_CHANGED:
+        elif name == alarm_mon.DETECTOR_PROPERTY_CHANGED:
             detector = value[0]
             detector: AlarmDetector
             sub_name = value[1]
@@ -2438,11 +2438,10 @@ class AppModel(ObservableObject):
                 # in case of it was not good with previous:
                 self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             tunnel_dev = system_m.tunnel_device
-            with algo.set_allow_reentrant(True):
-                system_m.execute_disengage_auto_clamp_if_in_progress()
             if algo.status != BehaviorAlgoStatus.IDLE:
                 with algo.set_allow_reentrant(True):
                     for action_func in (
+                        system_m.execute_disengage_auto_clamp_if_in_progress,
                         tunnel_dev.open_tunnel_gate,
                         lambda: tunnel_dev.update_head_magnet_intensity(0),
                         lambda: system_m.pellet.move_home(force=True),

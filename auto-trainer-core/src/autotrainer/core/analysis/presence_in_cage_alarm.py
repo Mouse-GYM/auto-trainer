@@ -31,13 +31,10 @@ class PresenceInCageAlarm(AlarmDetector[PresenceInCageAlarmConfig]):
         load_cell_monitor.property_changed += self._on_load_cell_monitor_prop_changed
 
     def _check_state(self) -> Optional[float]:
-        self.is_engaged = self._check_is_engaged()
-
-    def _check_is_engaged(self):
         perf_now = get_perf_now()
         topcam = self._topcam_presence_attrs
         if topcam is None:
-            return False
+            return None
         topcam = topcam.to_local_value()  # to ensure consistent lookups
         load_cell = self._load_cell_monitor.context
         cfg = self._config
@@ -82,7 +79,8 @@ class PresenceInCageAlarm(AlarmDetector[PresenceInCageAlarmConfig]):
                 load_cell.is_engaged, load_cell.last_engaged_perf_c, load_cell.last_disengaged_perf_c,
                 tun_pres_age, tun_miss_age,
                 topcam.last_presence_start_perf_c, topcam.last_absence_start_perf_c)
-        return engaged
+        self.is_engaged = engaged
+        return None
 
     def update_parts_context(self, context: ScenePartsPresenceContext):
         self._all_scene_parts_ctx = context

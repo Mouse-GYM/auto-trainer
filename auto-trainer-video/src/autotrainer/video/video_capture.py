@@ -540,7 +540,7 @@ class VideoCapture(Process):
                 is_record_active = self._is_record_active
                 # secondary cam reads this value from the primary cam shared flag below.
 
-            perf_now = time.perf_counter()
+            perf_now = get_perf_now()
             set_watchdog(perf_now)
 
             if not self._is_capturing:
@@ -570,7 +570,7 @@ class VideoCapture(Process):
                     fault_count += 1
                     continue
 
-                perf_now = time.perf_counter()
+                perf_now = get_perf_now()
 
                 cam_frame_id = camera.frame_id
                 # NB: the frame 'when' can be in different clock than what we can assume,
