@@ -2419,9 +2419,9 @@ class AppModel(ObservableObject):
         )
         do_reconnect_hardware = is_dev_comm_error or is_watchdog or is_board_reset
 
-        # @algo.relay_func
-        # NB: not using behavior algo thread, which could be dead eventually.
-        # although we do not have it as watchdog item.
+        # behavior algo thread is supposed always alive,
+        # it has protection against exception in the relayed functions which are executed by it.
+        @algo.relay_func
         def execute_emergency_proc():
             hardware = self._hardware
             system_m = self._behavior.system_machine
@@ -2451,12 +2451,7 @@ class AppModel(ObservableObject):
                         except Exception as err:
                             logger.warning("execute_emergency_proc: %s failed: %s, but continuing",
                                            action_func, err)
-        if is_board_reset:
-            # could decide to execute in current thread, but choosing safety atm
-            thread = _make_emergency_proc_thread(target=execute_emergency_proc, daemon=True, name="execute_emergency_proc")
-            thread.start()
-        else:
-            execute_emergency_proc()
+        execute_emergency_proc()
 
     def _on_emergency_resumed(self, source):
         self._right_camera.set_text_overlay(None)
