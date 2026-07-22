@@ -11,7 +11,7 @@ from unittest import mock
 import pytest
 
 
-from top_fixtures import MockSystemMachine
+from top_fixtures import MockSystemMachine, FifoExitStack
 
 from autotrainer.behavior import IntertrialState
 from autotrainer.core.interfaces import CaptureAnalysisResult
@@ -44,7 +44,7 @@ class _AutoClampTestCase(MockSystemMachine):
         self.start_trial_in_tunnel(engage_headbar=False)
         assert self.update_magnet_mock.call_args_list == []
         algo.update_mouse_seen(True)  # to have intertrial started
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():  # stack:
             assert self.update_magnet_mock.call_args_list == []
             assert machine.state == SystemState.tunnel
             assert machine.intertrial.state == IntertrialState.idle
@@ -284,8 +284,7 @@ class TestEnabled(_AutoClampTestCase):
         algo.batch_trial_recording_config.maximum_batch_size = 1
         algo.head_fixation_enabled = False
         self.start_trial_in_tunnel(engage_headbar=False)
-        with self.mock_intertrial_analysis():
-            # algo.update_mouse_seen(True)  # ensure analysis will run
+        with self.mock_analysis():
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.pellet.load_pellet(force=True)  # force load-pellet to trigger end-capture -> intertrial
             self.mock_pellet_ack(until_none=True)

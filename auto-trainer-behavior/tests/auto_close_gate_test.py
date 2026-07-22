@@ -16,7 +16,7 @@ from top_fixtures import MockSystemMachine
 
 class TestAutoCloseGate(MockSystemMachine):
 
-    def start_trial_in_tunnel(self):
+    def start_trial_in_tunnel(self):  # noqa
         self.mock_pose_response(pellet_seen=True)
         super().start_trial_in_tunnel(set_recording_status=True)
 
@@ -58,7 +58,7 @@ class TestAutoCloseGate(MockSystemMachine):
         algo.update_mouse_seen(True)
 
         caplog.set_level(logging.DEBUG)
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             self.increment_perf_now(sess_duration)
             self.exit_tunnel()
 
@@ -82,7 +82,7 @@ class TestAutoCloseGate(MockSystemMachine):
         self.start_trial_in_tunnel()
         algo.update_mouse_seen(True)
         caplog.set_level(logging.DEBUG)
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             self.exit_tunnel()
         assert "algo disabled, skipping auto-close-gate" in caplog.text
 
@@ -105,7 +105,7 @@ class TestAutoCloseGate(MockSystemMachine):
                 machine._consider_close_gate_during_intertrial()
             assert m_timer.return_value.cancel.call_args_list == [mock.call()]  # ensure prev timer is canceled
 
-        with self.mock_intertrial_analysis(concurrent_func=consider_again):
+        with self.mock_analysis(det_conc_func=consider_again):
             with self.patch_timer(f"{machine.__class__.__module__}._consider_close_gate_timer") as m_timer:
                 self.exit_tunnel()
         assert m_timer2.call_args_list == [mock.call(0.1, machine._consider_close_gate_during_intertrial)]
@@ -118,7 +118,7 @@ class TestAutoCloseGate(MockSystemMachine):
         self.start_trial_in_tunnel()
         algo.update_mouse_seen(True)
         caplog.set_level(logging.DEBUG)
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             with self.patch_timer(f"{machine.__class__.__module__}._consider_close_gate_timer") as m_timer:
                 self.exit_tunnel()
         assert m_timer.call_args_list == [mock.call(0.1, machine._consider_close_gate_during_intertrial)]
@@ -131,6 +131,6 @@ class TestAutoCloseGate(MockSystemMachine):
         self.start_trial_in_tunnel()
         algo.update_mouse_seen(True)
         caplog.set_level(logging.WARNING)
-        with self.mock_intertrial_analysis():
+        with self.mock_analysis():
             self.exit_tunnel()
         assert "topcam presence not enabled, forced skipping auto-close-gate" in caplog.text

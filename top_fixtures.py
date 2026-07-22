@@ -32,7 +32,7 @@ from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
-    InferenceProtocol, SystemState
+    InferenceProtocol, SystemState, SegmentationConfiguration, DetectionConfiguration
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -435,6 +435,7 @@ class MockSystemMachine:
 
     def _init(self, machine: SystemMachine):
         self._machine: SystemMachine = machine
+        self._do_init_mock_analysis(machine)
         self.project = machine.project
         self._load_cell = machine._analysis.load_cell_monitor  # noqa
         # register state_changed (and system_state_changed for algo at end) transition recorder,
@@ -455,8 +456,28 @@ class MockSystemMachine:
 
     get_current_perf_now = staticmethod(get_current_simulate_perf_now)
 
+    def _do_init_mock_analysis(self, machine):
+        del machine  # depends on it for self.inference:
+        m_perf_seg = mock.patch.object(self.inference, 'perform_segmentation')
+        self._perf_seg_m = m_perf_seg.start()
+        m_perf_det = mock.patch.object(self.inference, 'perform_detection')
+        perf_det = m_perf_det.start()
+        self._perf_det_m = perf_det
+
+    @property
+    def m_perf_seg(self) -> mock.MagicMock:
+        return self._perf_seg_m
+
+    @property
+    def m_perf_det(self) -> mock.MagicMock:
+        return self._perf_det_m
+
     @pytest.fixture(autouse=True)
-    def machine(self, machine: SystemMachine) -> SystemMachine:  # noqa
+    def _attach_request(self, request):
+        self._pytest_request = request
+
+    @pytest.fixture(autouse=True)
+    def machine(self, machine: SystemMachine, _attach_request) -> SystemMachine:  # noqa
         self._init(machine)
         yield machine  # noqa
 
@@ -496,11 +517,7 @@ class MockSystemMachine:
 
     def start_trial_in_tunnel(self, set_recording_status: bool = False):
         algo = self.algo
-        assert not algo.is_in_trial_capture
-        assert self._machine.state == SystemState.cage
         self.make_load_cell_active()
-        self.sensor_analysis.load_cell_monitor.is_engaged = True
-        self._machine.enter_tunnel(reason="manual")
         if set_recording_status:
             algo.set_capture_status(CaptureProcessStatus.RECORDING)
         assert self._machine.state == SystemState.tunnel
@@ -525,49 +542,64 @@ class MockSystemMachine:
             yield mock_t  # noqa
 
     @contextlib.contextmanager
-    def mock_intertrial_analysis(
-        self,
-        results: Optional[IntertrialResponse] = None,
-        *,
+    def mock_analysis(
+        self, *,
+        stack: Optional[FifoExitStack]=None,
+        project: Optional[ProjectInfo] = None,
         segmentation_ok: bool = True,
         detection_ok: bool = True,
-        concurrent_func: Optional[Callable] = None,
-        project: Optional[ProjectInfo] = None,
-        stack: Optional["FifoExitStack"] = None,
+        detection_result: Optional[IntertrialResponse] = None,
+        seg_conc_func: Callable = lambda: None,
+        det_conc_func: Callable = lambda: None,
     ):
-        """Allow fake fully 1 trial analysis (segmentation+detection)"""
-        if results is None:
-            results = IntertrialResponse()
-        results: IntertrialResponse
+        def wrapped(used_stack):
+            self.make_analysis(
+                used_stack,
+                project=project,
+                segmentation_ok=segmentation_ok, detection_ok=detection_ok, detection_result=detection_result,
+                seg_conc_func=seg_conc_func, det_conc_func=det_conc_func,
+            )
+        if stack is None:
+            with FifoExitStack() as stack:
+                wrapped(stack)
+                yield
+        else:
+            wrapped(stack)
+            yield
+
+    def make_analysis(
+        self,
+        stack: FifoExitStack, *,
+        project: Optional[ProjectInfo] = None,
+        segmentation_ok: bool = True,
+        detection_ok: bool = True,
+        detection_result: Optional[IntertrialResponse] = None,
+        seg_conc_func: Callable = lambda: None,
+        det_conc_func: Callable = lambda: None,
+    ):
         if project is None:
             project = self._machine.project.to_local_value()
-        if stack is None:
-            r_stack = FifoExitStack()
-        else:
-            r_stack = stack
+        if detection_result is None:
+            detection_result = IntertrialResponse()
+        detection_result: IntertrialResponse
 
         @contextlib.contextmanager
-        def doit(stack):
-            stack.enter_context(self.mock_perform_segmentation())
-            logger.info("prepared stack for mock_perform_segmentation")
+        def s1():
             yield
-            if segmentation_ok:
-                stack.enter_context(self.mock_perform_detection())
-                logger.info("prepared stack for mock_perform_detection")
-            if concurrent_func is not None:
-                concurrent_func()
+            seg_conc_func()
             self.mock_complete_segmentation(segmentation_ok)
-            if detection_ok:
-                logger.info("sending detection_result_ready")
-                self.inference.detection_result_ready(project, results)
-            self.mock_complete_detection(detection_ok)
-        if r_stack is stack:
-            r_stack.enter_context(doit(r_stack))
-            yield
-        else:
-            with r_stack:
-                r_stack.enter_context(doit(r_stack))
+        stack.enter_context(s1())
+
+        if segmentation_ok:
+            @contextlib.contextmanager
+            def s2():
                 yield
+                det_conc_func()
+                if detection_ok:
+                    logger.info("sending detection_result_ready")
+                    self.inference.detection_result_ready(project, detection_result)
+                self.mock_complete_detection(detection_ok)
+            stack.enter_context(s2())
 
     @contextlib.contextmanager
     def mock_perform_segmentation(self):
@@ -580,12 +612,6 @@ class MockSystemMachine:
         logger.info("calling segmentation complete")
         assert seg_cfg is not None
         seg_cfg.complete(success)
-
-    @contextlib.contextmanager
-    def mock_perform_detection(self):
-        """Mock the inference.perform_detection() method"""
-        with mock.patch.object(self.inference, 'perform_detection') as m_det:
-            yield m_det
 
     def mock_complete_detection(self, success: bool):
         det_cfg = self._machine.intertrial._detection_configuration
@@ -661,18 +687,34 @@ class MockSystemMachine:
             self._load_cell.update(
                 self._load_cell.config.weight_inactive_threshold - 0.001, time.time(), int(p_now * 1e9))
 
-    def make_recording_aged_enough(self):
-        algo = self._machine.algorithm
-        algo.capture_status = CaptureProcessStatus.RECORDING
-        p_now = get_current_simulate_perf_now()
-        algo.project.start_record_timestamp = p_now
+    def has_event(self, kind):
+        return any(call.args[0].kind == kind for call in self._m_post_event.call_args_list)  # noqa
+
+    def get_event_context(self, kind):
+        for call in self._m_post_event.call_args_list:
+            info = call.args[0]
+            if info.kind == kind:
+                return info.context
+        return None
+
+    def mock_event_manager(self):
+        event_mgr = self._machine._event_manager
+        mock_post_event = mock.patch.object(event_mgr, "post_event")
+        self._m_post_event = mock_post_event.start()
+        self._pytest_request.addfinalizer(mock_post_event.stop)
+        return self._m_post_event
+
+    @property
+    def m_post_event(self) -> mock.MagicMock:
+        return self._m_post_event
 
 
 @pytest.fixture
-def mock_system(machine) -> MockSystemMachine:
+def mock_system(machine, request) -> MockSystemMachine:
     """Allow use BaseSystemMachineTest instance helper methods in a simple function test, without having to subclass,
     just use the 'mock_system' fixture"""
     instance = MockSystemMachine()
+    instance._pytest_request = request
     # instance.machine_(machine)  # pytest fixture refuse direct call, so:
     instance._init(machine)
     return instance
