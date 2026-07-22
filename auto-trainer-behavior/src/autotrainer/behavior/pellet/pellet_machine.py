@@ -69,10 +69,6 @@ class PelletMachine(StateMachine):
 
         super().__init__(initial_state=initial_state)
 
-        # This is primarily for unit testing.  In general, algorithm should always be passed in from the parent
-        # SystemMachine.
-        if algorithm is None:
-            algorithm = BehaviorAlgorithm()
         self._algorithm = algorithm
 
         self._message_handler = msg_handler
@@ -258,9 +254,9 @@ class PelletMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _pellet_device_ack_received(self, token: Optional[str], *, perf_c: Optional[float]=None):
+        logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
         if token is None:
             return
-        logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
 
         perf_now = get_perf_now() if perf_c is None else perf_c
         api_evt = None

@@ -9,9 +9,11 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import ProjectInfo, EventManager, EventInfo
 from transitions import MachineError
 
-from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState
+from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState, SystemMachine
 from autotrainer.behavior.intertrial import IntertrialState
+from autotrainer.core.interfaces import CaptureAnalysisResult
 from autotrainer.inference.analysis import IntertrialResponse
+from top_fixtures import MockSystemMachine
 
 
 def test_intertrial(
@@ -33,30 +35,16 @@ def test_intertrial(
 
     machine.state = SystemState.intertrial
 
-    with mock_system.mock_perform_segmentation() as m_perf_segm:
+    def during_segm():
+        assert intertrial.state == IntertrialState.segmentation
+
+    def during_detection():
+        assert intertrial.state == IntertrialState.detection
+
+    with mock_system.mock_analysis(seg_conc_func=during_segm, det_conc_func=during_detection):
+        assert intertrial.state == IntertrialState.idle
         intertrial.perform_segmentation(project)
-
-    segment_cfg = intertrial._segmentation_configuration
-
-    assert m_perf_segm.call_args_list == [
-        mock.call(segment_cfg)
-    ]
-
-    assert intertrial.state == IntertrialState.segmentation
-
-    with mock_system.mock_perform_detection() as m_perf_detect:
-        segment_cfg.complete(True)
-
-    assert intertrial.state == IntertrialState.detection
-
-    detection_cfg = intertrial._detection_configuration
-    assert m_perf_detect.call_args_list == [
-        mock.call(detection_cfg)
-    ]
-
-    assert intertrial.state == IntertrialState.detection
-
-    detection_cfg.complete(True)
+        assert intertrial.state == IntertrialState.segmentation
 
     assert intertrial.state == IntertrialState.idle
 
@@ -80,7 +68,7 @@ def test_intertrial_increase_algo_counts(mock_system):
         food_consumed=2,
         successful_reaches=1,
     )
-    with mock_system.mock_intertrial_analysis(results=res):
+    with mock_system.mock_analysis(detection_result=res):
         mock_system.exit_tunnel()
     assert algo.pellets_presented_day == algo.pellets_presented_total == 0  # NB: this now accounts for pellet-sent event
     assert algo.pellet_reaches_day == algo.pellet_reaches_total == 3
@@ -98,11 +86,8 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     mock_system.start_trial_in_tunnel()
     mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
 
-    event_mgr = EventManager.default()
-    m_post_event = mock.patch.object(event_mgr, "post_event").start()
-
-    def has_event(kind: ApiEventKind):
-        return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
+    mock_system.mock_event_manager()
+    has_event = mock_system.has_event
 
     def perform_exit_tunnel():
         assert machine.state == SystemState.intertrial
@@ -115,7 +100,7 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
             "sessionEnded will only be emitted after the intertrial is finished"
 
     with caplog.at_level(logging.DEBUG):
-        with mock_system.mock_intertrial_analysis(concurrent_func=perform_exit_tunnel):
+        with mock_system.mock_analysis(seg_conc_func=perform_exit_tunnel):
             assert machine.state == SystemState.tunnel
             mock_system.mock_pose_response(pellet_seen=False, mouse_seen=True, triangle_seen=True)
             mock_system.mock_pellet_ack(until_none=True)
@@ -127,3 +112,41 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     assert machine.state == SystemState.cage, "Must be back in cage after end intertrial analysis"
     assert after_exit_tunnel_msg in caplog.text
     assert has_event(ApiEventKind.sessionEnded), "Now that intertrial is finished sessionEnded must also be posted"
+
+
+class TestBadIntertrial(MockSystemMachine):
+
+    def _init(self, machine: SystemMachine):
+        super()._init(machine)
+        machine.intertrial.events.on_analysis_ended += self._on_analysis_ended
+        self._analysed_project = self._analysed_result = None
+
+    def _on_analysis_ended(self, project, result):
+        self._analysed_project = project
+        self._analysed_result = result
+
+    def test_perform_segmentation_fails_end_analysis(self, machine, caplog):
+        self.m_perf_seg.return_value = None
+        machine.state = SystemState.intertrial
+        with caplog.at_level(logging.DEBUG):
+            machine.intertrial.perform_segmentation(machine.project)
+        assert "perform_segmentation() didn't started" in caplog.text
+        assert machine.state == SystemState.cage
+        assert machine.intertrial.state == IntertrialState.idle
+        assert self._analysed_project == machine.project
+        assert self._analysed_result == CaptureAnalysisResult.ANALYSIS_FAILED
+
+    def test_perform_detection_fails_end_analysis(self, machine, caplog):
+        self.m_perf_det.return_value = None
+        machine.state = SystemState.intertrial
+        machine.intertrial.state = IntertrialState.segmentation
+        seg_cfg = SegmentationConfiguration(project=machine.project)
+        # have to set it on intertrial, to make it "valid"/in progress:
+        machine.intertrial._segmentation_configuration = seg_cfg
+        with caplog.at_level(logging.DEBUG):
+            machine.intertrial.perform_detection(seg_cfg)
+        assert "perform_detection() didn't started" in caplog.text
+        assert machine.state == SystemState.cage
+        assert machine.intertrial.state == IntertrialState.idle
+        assert self._analysed_project == machine.project
+        assert self._analysed_result == CaptureAnalysisResult.ANALYSIS_FAILED

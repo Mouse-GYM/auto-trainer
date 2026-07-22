@@ -213,9 +213,8 @@ def test_intertrial_enabled(mock_system, machine):
 
     assert pellet_m.state == PelletState.monitoring
 
-    with mock_system.mock_perform_segmentation():
-        mock_system.make_load_cell_inactive()
-        assert not machine._analysis.load_cell_monitor.is_engaged
+    mock_system.make_load_cell_inactive()
+    assert not machine._analysis.load_cell_monitor.is_engaged
 
     assert algo.intertrial_state == IntertrialState.segmentation
     assert machine.state == SystemState.intertrial
@@ -343,11 +342,8 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
 
     def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
         algo = self.algo
-        event_mgr = EventManager.default()
-        m_post_event = mock.patch.object(event_mgr, "post_event").start()
-        def has_event(kind: ApiEventKind):
-            return any(call.args[0].kind == kind for call in m_post_event.call_args_list)  # noqa
-
+        self.mock_event_manager()
+        has_event = self.has_event
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
         assert not has_event(ApiEventKind.tunnelEnter)
@@ -355,7 +351,7 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         self.start_trial_in_tunnel(set_recording_status=True)
         assert has_event(ApiEventKind.tunnelEnter)
         assert has_event(ApiEventKind.sessionStarted)
-        m_post_event.reset_mock()
+        self.m_post_event.reset_mock()
         # ensure well reset:
         assert not has_event(ApiEventKind.tunnelEnter)
         assert not has_event(ApiEventKind.sessionStarted)
@@ -377,7 +373,7 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
             assert not has_event(ApiEventKind.tunnelEnter)  # same for tunnelEnter
             assert not has_event(ApiEventKind.sessionStarted)  # same for sessionStarted
 
-        with self.mock_intertrial_analysis(concurrent_func=exit_reenter_tunnel):
+        with self.mock_analysis(det_conc_func=exit_reenter_tunnel):
             self.mock_pose_response(pellet_seen=False)
             self.increment_perf_now(algo.active_config.pellet_delivery.max_pellet_missing_seconds)
             self.mock_pose_response(pellet_seen=False)
@@ -410,19 +406,12 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.start_trial_capture()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
-#         with self.mock_analysis(detection_ok=detection_success):
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mock_perform_segmentation())
-            assert processing_ended_count == 0
-            stack.enter_context(self.mock_perform_detection())
-            assert processing_ended_count == 0
-            machine.state = system_state
-            algo.end_capture_trial()
-            assert processing_ended_count == 0
-            self.mock_complete_segmentation(True)
-            assert processing_ended_count == 0
-            self.mock_complete_detection(detection_success)
-            assert processing_ended_count == 1
+        machine.state = system_state
+        algo.end_capture_trial()
+        assert processing_ended_count == 0
+        self.mock_complete_segmentation(True)
+        assert processing_ended_count == 0
+        self.mock_complete_detection(detection_success)
         assert processing_ended_count == 1
 
     def test_when_intertrial_mouse_seen_segmentation_fails(self, machine, caplog):
@@ -437,33 +426,27 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.start_trial_capture()
         algo.update_mouse_seen(True)
         assert processing_ended_count == 0
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mock_perform_segmentation())
-            assert processing_ended_count == 0
-            algo.end_capture_trial()
-            assert processing_ended_count == 0
-            self.mock_complete_segmentation(False)
-            assert "Unexpected end_analysis while no segmentation or detection configuration" not in caplog.text
-            assert "Unexpected segment" not in caplog.text
-            assert "Unexpected detection" not in caplog.text
-            assert processing_ended_count == 1
+        algo.end_capture_trial()
+        assert processing_ended_count == 0
+        self.mock_complete_segmentation(False)
+        assert "Unexpected end_analysis while no segmentation or detection configuration" not in caplog.text
+        assert "Unexpected segment" not in caplog.text
+        assert "Unexpected detection" not in caplog.text
         assert processing_ended_count == 1
 
     def test_invalid_end_segmentation(self, machine, caplog):
         algo = machine.algorithm
         algo.start_trial_capture()
         algo.update_mouse_seen(True)
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mock_perform_segmentation())
-            # intertrial state must be segmentation for end_analysis() .. (or detection).
-            machine.intertrial.state = IntertrialState.segmentation  # so set it manually.
-            # algo.end_capture_session()    # don't end_capture_session so.
-            # otherwise it would set the segmentation config.
-            assert "Unexpected end_analysis" not in caplog.text
-            machine.intertrial.end_analysis(algo.project, True)
-            assert "Unexpected end_analysis" in caplog.text
-            assert "Unexpected segment" not in caplog.text
-            assert "Unexpected detection" not in caplog.text
+        # intertrial state must be segmentation for end_analysis() .. (or detection).
+        machine.intertrial.state = IntertrialState.segmentation  # so set it manually.
+        # algo.end_capture_session()    # don't end_capture_session so.
+        # otherwise it would set the segmentation config.
+        assert "Unexpected end_analysis" not in caplog.text
+        machine.intertrial.end_analysis(algo.project, True)
+        assert "Unexpected end_analysis" in caplog.text
+        assert "Unexpected segment" not in caplog.text
+        assert "Unexpected detection" not in caplog.text
 
     def test_unexpected_segmentation(self, machine, caplog):
         algo = machine.algorithm
@@ -471,12 +454,10 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.update_mouse_seen(True)
         bad_project = algo.project.to_local_value()
         bad_project.trial += 1
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mock_perform_segmentation())
-            algo.end_capture_trial()
-            assert "Unexpected segment" not in caplog.text
-            machine.intertrial.end_analysis(bad_project, False)
-            assert "Unexpected segment" in caplog.text
+        algo.end_capture_trial()
+        assert "Unexpected segment" not in caplog.text
+        machine.intertrial.end_analysis(bad_project, False)
+        assert "Unexpected segment" in caplog.text
 
     def test_unexpected_detection(self, machine, caplog):
         algo = machine.algorithm
@@ -484,14 +465,11 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.update_mouse_seen(True)
         bad_project = algo.project.to_local_value()
         bad_project.trial += 1
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(self.mock_perform_segmentation())
-            algo.end_capture_trial()
-            stack.enter_context(self.mock_perform_detection())
-            self.mock_complete_segmentation(True)
-            assert "Unexpected detection" not in caplog.text
-            machine.intertrial.end_analysis(bad_project, True)
-            assert "Unexpected detection" in caplog.text
+        algo.end_capture_trial()
+        self.mock_complete_segmentation(True)
+        assert "Unexpected detection" not in caplog.text
+        machine.intertrial.end_analysis(bad_project, True)
+        assert "Unexpected detection" in caplog.text
 
 
 def test_handle_diamond_triangle_offset_full(mock_system, machine):
