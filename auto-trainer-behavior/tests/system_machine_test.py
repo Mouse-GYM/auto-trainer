@@ -340,7 +340,7 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
         algo.end_capture_trial()
         assert processing_ended_count == 1
 
-    def test_exit_reenter_tunnel_while_analysis_in_progress(self, request, machine, caplog):
+    def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
         algo = self.algo
         self.mock_event_manager()
         has_event = self.has_event

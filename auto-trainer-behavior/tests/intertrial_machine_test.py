@@ -76,7 +76,7 @@ def test_intertrial_increase_algo_counts(mock_system):
     assert algo.successful_reaches_day == algo.successful_reaches_total == 1
 
 
-def test_exit_tunnel_when_analysis_ongoing(request, mock_system, machine, caplog):
+def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     algo = mock_system.algo
     algo.intertrial_enabled = True
     machine._delay_timer_consider_end_trial = 0  # simpler test
