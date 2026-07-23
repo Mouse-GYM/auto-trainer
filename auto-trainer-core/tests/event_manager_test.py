@@ -8,7 +8,7 @@ from autotrainer.core import EventManager, ProjectInfo, EventInfo
 from autotrainer.core.event.file_event_plugin import FileEventPlugin
 from autotrainer.core.event.logger_event_plugin import LoggerEventPlugin
 
-from mocks import MockEventPlugin
+from .mocks import MockEventPlugin
 
 
 @pytest.fixture
@@ -95,8 +95,11 @@ def test_post_none_event_refused(event_manager):
         event_manager.post_event(None)  # noqa
 
 
-def _wait_processed(event_manager):
+def _wait_processed(event_manager, *, timeout: float=5):
+    p_end = time.perf_counter() + timeout
     while event_manager.has_pending():
+        if time.perf_counter() > p_end:
+            raise RuntimeError("timeout waiting event_manager")
         time.sleep(0.001)
     # NB: event manager can have already read/removed an item from its input queue,
     # but not yet posted/pushed it to the plugin(s),
