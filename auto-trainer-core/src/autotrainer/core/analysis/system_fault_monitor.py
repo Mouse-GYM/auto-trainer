@@ -1,8 +1,9 @@
 import enum
+from typing import Optional
 
 from autotrainer.api import ApiAlarmKind
 from .alarm_detector import AlarmDetector
-from .detector import GroupBaseDetector, BaseDetector
+from .detector import GroupBaseDetector, BaseDetector, DetectorConfigT
 
 from ..configuration.system_fault_config import SystemFaultConfig
 
