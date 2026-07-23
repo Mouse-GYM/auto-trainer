@@ -72,8 +72,7 @@ def test_plugin_interface(event_manager, mock_plugin):
 
     # So long as this method provides an accurate response (see docstring for this method), use it instead of some
     # arbitrary sleep() duration to allow the event to be processed.
-    while event_manager.has_pending():
-        time.sleep(0.001)
+    _wait_processed(event_manager)
 
     assert mock_plugin.last_event == next_event
     assert mock_plugin.event_count == 1
@@ -99,6 +98,10 @@ def test_post_none_event_refused(event_manager):
 def _wait_processed(event_manager):
     while event_manager.has_pending():
         time.sleep(0.001)
+    # NB: event manager can have already read/removed an item from its input queue,
+    # but not yet posted/pushed it to the plugin(s),
+    # so this extra sleep after the previous loop one:
+    time.sleep(0.25)  # which should be quite enough for that to happen.
 
 
 def test_post_api_event_restamps_and_posts_context(event_manager, mock_plugin):
