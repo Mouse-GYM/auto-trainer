@@ -60,18 +60,6 @@ class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, Alarm
     config_cls = EmergencyAlarmConfiguration
     default_timer_delay = 1
 
-    def post_alarm_event(self, alarm_id: ApiAlarmKind, active: bool, enabled: bool, auto_resume: bool,
-                         is_stop_cond: bool):
-        self._event_manager.post_api_event(build_event(
-            ApiEventKind.alarmChanged,
-            ApiAlarmStatus(
-                alarm_id=alarm_id,
-                is_active=active,
-                is_enabled=enabled,
-                is_auto_resume_enabled=auto_resume,
-                is_stop_condition=is_stop_cond,
-            )))
-
     def _check_state(self, *, force: bool=False):
         # overloaded _check_state vs GroupBaseDetector, to take into account is_emergency_condition.
         reasons = set()
