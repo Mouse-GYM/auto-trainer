@@ -1,14 +1,42 @@
 import time
 import datetime as dt
+from typing import Optional, List
 
 import pytest
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind, ApiDetectorStatus, build_event
-from autotrainer.core import EventManager, ProjectInfo, EventInfo
+from autotrainer.core import EventManager, ProjectInfo, EventInfo, EventManagerPlugin
 from autotrainer.core.event.file_event_plugin import FileEventPlugin
 from autotrainer.core.event.logger_event_plugin import LoggerEventPlugin
 
-from .mocks import MockEventPlugin
+
+class MockEventPlugin(EventManagerPlugin):
+    def __init__(self):
+        self.project = None
+        self.enabled = True
+        self.last_event: Optional[EventInfo] = None
+        self.events: List[EventInfo] = []
+        self.event_count: int = 0
+        self.flushed = False
+        self.closed = False
+
+    def set_project(self, project: Optional[ProjectInfo]) -> None:
+        self.project = project
+
+    def set_enable(self, enable: bool) -> None:
+        self.enabled = enable
+
+    def process_event(self, info: EventInfo, repeat_count: int) -> None:
+        self.last_event = info
+        self.events.append(info)
+        self.event_count += 1
+
+    def flush(self) -> None:
+        self.flushed = True
+
+    def close(self) -> None:
+        self.closed = True
+
 
 
 @pytest.fixture
