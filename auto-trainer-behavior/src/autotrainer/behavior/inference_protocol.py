@@ -2,13 +2,13 @@ from typing import Protocol, Callable, Tuple, Optional, Any
 
 from autotrainer.core import Offset3DTuple, ObservableObject
 from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
+from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.configuration.inference_configuration import InferenceConfiguration
 
 from autotrainer.inference import InferenceStatus, PoseAlgorithm, PoseResponse, InferenceMonitorDataMsg, InferenceCommandMessageKind
 from autotrainer.inference.analysis import IntertrialResponse
 
 from . import SegmentationConfiguration, DetectionConfiguration
-from ..core.observable_object import EventHandler
 
 
 class SegmentationFinishedEvent(Protocol):
