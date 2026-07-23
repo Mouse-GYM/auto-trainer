@@ -277,7 +277,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             is_warn = any(
                 det.is_engaged and det.config.use
                     and (not isinstance(det.config, AlarmDetectorConfig) or not det.config.is_emergency_condition)
-                for det in alarm_mon.sub_detectors
+                for det in alarm_mon.sub_detectors.values()
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green

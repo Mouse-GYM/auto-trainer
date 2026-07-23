@@ -341,12 +341,12 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             sub.detector.stop()
 
     @property
-    def sub_detectors(self) -> List[GroupSubDetectorT]:
+    def sub_detectors(self) -> Dict[str, GroupSubDetectorT]:
         with self._lock:
-            return [
-                ctx.detector
-                for ctx in self._sub_detectors.values()
-            ]
+            return {
+                name: ctx.detector
+                for name, ctx in self._sub_detectors.items()
+            }
 
     def get_sub_detector(self, name: str) -> Optional[GroupSubDetectorT]:
         with self._lock:
