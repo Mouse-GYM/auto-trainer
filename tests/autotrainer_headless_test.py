@@ -187,10 +187,8 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
     communicate_out_thread.join()
     communicate_err_thread.join()
 
-    output = "\n".join(out_lines)
-
     def assert_is_present(content):
-        assert any(content in line for line in out_lines), output
+        assert any(content in line for line in out_lines), f"content {content!r} not found in:\n{out_lines}"
 
     assert proc.returncode == 0, (out_lines, err_lines)
 
