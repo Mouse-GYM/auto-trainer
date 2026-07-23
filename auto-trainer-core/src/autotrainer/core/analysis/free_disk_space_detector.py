@@ -43,4 +43,4 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
         self._logger.verbose("Received persistence config: %s", config)
-        self.check_state()
+        self.check_state(force=True)
