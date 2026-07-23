@@ -14,6 +14,11 @@ logger = get_verbose_logger(__name__)
 
 
 class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
+    # could be todo: also convert to GroupBaseDetector + AlarmDetector,
+    # with new 3 sub-detectors:
+    # 1) max-pellet-loaded
+    # 2) max-consecutive-failed-load
+    # 3) cage-need-clean
 
     config_cls = SystemMaintenanceConfig
     alarm_api_kind = ApiAlarmKind.systemMaintenance
@@ -29,7 +34,6 @@ class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
         super().__init__()
         self._max_pellet_loaded_engaged = False
         self._max_consecutive_failed_load_engaged = False
-        self._free_disk_space_engaged = False
         self._cage_need_clean_engaged = False
         self._cage_clean_next_day: date = date.today() + timedelta(days=7)
         # NB: default cage_clean_next_day must be at least after tomorrow,
