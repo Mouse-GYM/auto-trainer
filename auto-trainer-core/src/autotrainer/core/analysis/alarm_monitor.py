@@ -72,13 +72,15 @@ class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, Alarm
                 is_stop_condition=is_stop_cond,
             )))
 
-    def _check_state(self):
+    def _check_state(self, *, force: bool=False):
         # overloaded _check_state vs GroupBaseDetector, to take into account is_emergency_condition.
         reasons = set()
         prev_reasons = self._engaged_reasons
         for name, ctx in self._sub_detectors.items():
             det = ctx.detector
             cfg = det.config
+            if not det.use_daemon and not det.default_timer_delay:
+                det.check_state(force=force)
             if (
                 det.is_engaged
                 and cfg.use
