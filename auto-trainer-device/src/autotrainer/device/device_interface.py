@@ -427,8 +427,8 @@ class DeviceInterface:
         self._active_motors_drift = _zero_position
         self._max_motor_drift_error_threshold = 2  # mm
         self._motors_drift_error = [False, False, False]
-        self._tunnel_status_perf_c = -math.inf
-        self._pellet_status_perf_c = -math.inf
+        self._tunnel_status_perf_c = math.nan
+        self._pellet_status_perf_c = math.nan
 
     @classmethod
     def uuid(cls) -> int:

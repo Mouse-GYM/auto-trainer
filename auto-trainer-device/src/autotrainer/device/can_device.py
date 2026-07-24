@@ -947,7 +947,7 @@ class CanDevice(Device):
         self._init_default_move_configs()
 
         logger.info("Starting CanCommandHandler thread handler")
-        self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+        self._commands_handler_watchdog_perf_c = get_perf_now()
         thread = threading.Thread(
             target=self._command_handler, name="CanCommandHandler", daemon=True)
         thread.start()

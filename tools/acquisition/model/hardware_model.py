@@ -595,7 +595,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self._device_tunnel_status_timeout_engaged,
                 self._device_pellet_status_timeout_engaged,
             ))
-            self._sensor_analysis.device_comm_alarm.is_engaged = engaged
+            prev, self._sensor_analysis.device_comm_alarm.is_engaged = self._sensor_analysis.device_comm_alarm.is_engaged, engaged
+            if engaged and prev != engaged:
+                logger.error("Device Comm Alarm engaged: uuid_ack_timeout=%s tunnel_status_timeout=%s pellet_status_timeout=%s",
+                             self._device_uuid_ack_timeout_engaged,
+                             self._device_tunnel_status_timeout_engaged,
+                             self._device_pellet_status_timeout_engaged,
+                             )
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         props = MessageHandler
