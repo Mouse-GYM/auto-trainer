@@ -528,7 +528,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             time.sleep(0.001)
         return True
 
-    def on_trigger_recording(self, record: bool, *, is_triggered: bool=False, is_from_start: bool=False):
+    def on_trigger_recording(self, record: bool, *, is_triggered: Optional[bool]=False, is_from_start: bool=False):
         if record:
             self._send_command(CaptureCommandKind.ENABLE_RECORDING, is_from_start=is_from_start)
         else:

@@ -440,10 +440,10 @@ def test_load_version_51_file(tmp_path):
     assert shift_xyz.buffer.target == Offset3DTuple(1.5, -3, 1)
     assert isinstance(shift_xyz.buffer.target, Offset3DTuple)
 
-    led_alarm = config.behavior.led_alarm
-    assert led_alarm.start_ignore_hour == datetime.time(10, 0)
-    assert isinstance(led_alarm.start_ignore_hour, datetime.time)
-    assert led_alarm.stop_ignore_hour == datetime.time(20, 0)
+    ign_window = config.behavior.animal_sleep_window
+    assert ign_window.start == datetime.time(10, 0)
+    assert isinstance(ign_window.start, datetime.time)
+    assert ign_window.stop == datetime.time(20, 0)
 
     # the v52 renames, as they appear in a real v51 file:
     pellet_delivery = config.behavior.pellet_delivery

@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import inspect
 import math
 import queue
@@ -67,6 +68,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._config = self.config_cls() if config is None else config
         self._running = False
         self._p_started = -math.inf
+        self._started_datetime = datetime.datetime.now()
         self._is_engaged = False
         self._force_engaged = False  # only used for dev/testing
         self._engaged_perf_c = -math.inf
@@ -113,6 +115,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     @property
     def running(self):
         return self._running
+
+    @property
+    def started_at(self) -> datetime.datetime:
+        return self._started_datetime
 
     @property
     def is_engaged(self):
@@ -223,6 +229,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._running = True
             self.is_engaged = False  # force reset "engaged" to False
             self._p_started = get_perf_now()
+            self._started_datetime = datetime.datetime.now()
             self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue(maxsize=32)
