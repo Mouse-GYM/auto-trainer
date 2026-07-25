@@ -29,6 +29,7 @@ class AutoClampEvasionDetector(BaseDetector[AutoClampEvasionDetectorConfig]):
 
     def _check_state(self) -> Optional[float]:
         self.is_engaged = self._pellets_consumed_count >= self._config.pellets_consumed_trigger
+        return None
 
     def increment_pellets_consumed(self, inc: int = 1):
         if (

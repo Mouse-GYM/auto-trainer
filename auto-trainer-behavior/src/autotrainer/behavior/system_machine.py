@@ -38,6 +38,7 @@ from .pellet_shift import ShiftXYZHandler
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
+from ..core.analysis.system_fault_monitor import SystemFaultReason
 
 logger = get_verbose_logger(__name__)
 
@@ -209,6 +210,14 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_disengage = no_op_timer
 
     @property
+    def tunnel_device(self) -> TunnelDeviceProtocol:
+        return self._tunnel_device
+
+    @property
+    def pellet_device(self) -> PelletDeviceProtocol:
+        return self._pellet_device
+
+    @property
     def analysis(self) -> SensorAnalysis:
         return self._analysis
 
@@ -262,7 +271,7 @@ class SystemMachine(StateMachine):
                     is_analysis_deferred=algo.batch_trial_recording_config.enabled)))
             algo.session_starting(project.session_id)
             # always when enter tunnel, but only if was in cage before.
-            self._execute_disengage_auto_clamp_if_in_progress()
+            self.execute_disengage_auto_clamp_if_in_progress()
 
     def after_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         self._consider_start_trial(reason=reason)
@@ -275,7 +284,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_start_trial_capture.cancel()
         self._timer_consider_end_trial_capture.cancel()
         with algo.set_allow_reentrant(True):
-            self._execute_disengage_auto_clamp_if_in_progress()
+            self.execute_disengage_auto_clamp_if_in_progress()
         self._event_manager.post_event_content(ApiEventKind.tunnelExit)
         if algo.is_in_trial_capture:
             algo.end_capture_trial(reason=RecordingEndingReason.EXIT_TUNNEL)
@@ -349,7 +358,7 @@ class SystemMachine(StateMachine):
             # always ensure open gate on intertrial ended (to cage)
             self._timer_consider_close_gate.cancel()
             self._tunnel_device.open_tunnel_gate()
-            self._execute_disengage_auto_clamp_if_in_progress()
+            self.execute_disengage_auto_clamp_if_in_progress()
             with self._algorithm.set_allow_reentrant(True):
                 self.exit_intertrial_to_cage(project)
 
@@ -925,7 +934,7 @@ class SystemMachine(StateMachine):
         det.autoclamp_in_progress = prog
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _execute_disengage_auto_clamp_if_in_progress(self):
+    def execute_disengage_auto_clamp_if_in_progress(self):
         self._timer_auto_clamp_evaluate.cancel()  # in case of
         self._timer_auto_clamp_disengage.cancel()  # better needed
         if not self._auto_clamp_in_progress:
@@ -953,11 +962,11 @@ class SystemMachine(StateMachine):
             self._event_manager.post_event_content(ApiEventKind.autoClampPreDisengage, data=dict(intensity=intensity))
             logger.debug("started timer for really disengage auto-clamp in %.1fs", pre_duration)
             timer = self._timer_auto_clamp_disengage = _auto_clamp_release_timer(
-                pre_duration, self._execute_disengage_auto_clamp_if_in_progress
+                pre_duration, self.execute_disengage_auto_clamp_if_in_progress
             )
             timer.start()
         else:
-            self._execute_disengage_auto_clamp_if_in_progress()
+            self.execute_disengage_auto_clamp_if_in_progress()
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _disengage_auto_clamp(self):
@@ -1078,30 +1087,11 @@ class SystemMachine(StateMachine):
 
         elif name == props.ALGO_PAUSED:
             algo = self._algorithm
-            tunnel_dev = self._tunnel_device
-            self.cancel_timers()
-            # don't leave in-progress:
-            if self._auto_clamp_in_progress:
-                with algo.set_allow_reentrant(True):
-                    self._execute_disengage_auto_clamp_if_in_progress()
             if new_value:
-                if algo.is_in_trial_capture:
-                    if algo.intertrial_state == IntertrialState.idle:
-                        algo.end_capture_trial(reason=RecordingEndingReason.ALGO_PAUSED)
+                self.cancel_timers()
+            else:  # disengaged
                 if algo.status != BehaviorAlgoStatus.IDLE:
-                    with algo.set_allow_reentrant(True):
-                        for action_func in (
-                            tunnel_dev.open_tunnel_gate,
-                            lambda: self._update_magnet_position(0),
-                            lambda: self._pellet_machine.move_home(force=True),
-                        ):
-                            try:
-                                action_func()
-                            except Exception as err:
-                                logger.warning("%s failed: %s, but continuing", action_func, err)
-            else:
-                if algo.status != BehaviorAlgoStatus.IDLE:
-                    tunnel_dev.open_tunnel_gate()
+                    self._tunnel_device.open_tunnel_gate()
                     self._update_magnet_position(algo.baseline_intensity)
                 # No need of pellet_dev.send_pellet() :
                 # pellet-machine will resume whatever operation needs to be, like going from home -> send-pellet,

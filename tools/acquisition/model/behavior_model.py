@@ -1,4 +1,5 @@
 import dataclasses
+import enum
 from datetime import datetime
 from typing import Optional, Callable
 
@@ -7,6 +8,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorA
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler, EventManager, ApiEventKind)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
+from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -101,7 +103,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 logger.verbose("filtered_reasons=%s", filtered_valid_reasons)
                 if len(filtered_valid_reasons) > 0:
                     # at least one possible valid reason engaged
-                    reasons = " ".join(reason.name for reason in engaged_reasons)
+                    reasons = " ".join(
+                        reason.name if isinstance(reason, enum.Enum) else reason
+                        for reason in engaged_reasons)
                     self.emergency_stop(f"alarm-monitor: {reasons}")
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
@@ -148,12 +152,17 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         # also need to set explicitly the different alarm configs on their alarm instance:
         analysis.animal_evasion_alarm.config = alarm_cfg.animal_evasion
         analysis.animal_thrashing_alarm.config = alarm_cfg.animal_thrashing
-        analysis.system_fault_alarm.config = alarm_cfg.system_fault
         analysis.system_maintenance_alarm.config = alarm_cfg.system_maintenance
         analysis.presence_in_cage_alarm.config = alarm_cfg.presence_in_cage
         analysis.global_animal_presence_alarm.config = alarm_cfg.global_animal_presence
         analysis.device_comm_alarm.config = alarm_cfg.device_comm_error
         analysis.external_doors_alarm.config = alarm_cfg.external_doors
+        # same with fault config sub-elements:
+        fault_cfg = alarm_cfg.system_fault
+        analysis.system_fault_alarm.config = fault_cfg
+        analysis.free_disk_space_detector.config = fault_cfg.free_disk_space
+        analysis.boards_hardware_reset_detector.config = fault_cfg.boards_hardware_reset
+        # NB: watchdog config is currently at system-config top level.
         # so that they emit the CONFIG changed event.
 
     def save_configuration(self) -> BehaviorConfiguration:
@@ -183,7 +192,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         alarm_cfg.device_comm_error = analysis.device_comm_alarm.config
         alarm_cfg.presence_in_cage = analysis.presence_in_cage_alarm.config
         alarm_cfg.animal_thrashing = analysis.animal_thrashing_alarm.config
-        alarm_cfg.system_fault = analysis.system_fault_alarm.config
+        #
+        fault_cfg = alarm_cfg.system_fault = analysis.system_fault_alarm.config
+        fault_cfg.free_disk_space = analysis.free_disk_space_detector.config
+        fault_cfg.boards_hardware_reset = analysis.boards_hardware_reset_detector.config
+        #
         alarm_cfg.system_maintenance = analysis.system_maintenance_alarm.config
         alarm_cfg.animal_evasion = analysis.animal_evasion_alarm.config
 
@@ -262,8 +275,9 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             color = (100, 0, 0)  # red
         else:
             is_warn = any(
-                det.is_engaged and det.config.use and not det.config.is_emergency_condition
-                for det in (ctx.detector for ctx in alarm_mon.alarms.values())
+                det.is_engaged and det.config.use
+                    and (not isinstance(det.config, AlarmDetectorConfig) or not det.config.is_emergency_condition)
+                for det in alarm_mon.sub_detectors.values()
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green

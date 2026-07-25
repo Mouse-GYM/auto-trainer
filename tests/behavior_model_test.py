@@ -1,9 +1,11 @@
+import math
 import datetime as dtm
 from unittest import mock
 
 import pytest
 
 from autotrainer.behavior.pellet import PelletState
+from autotrainer.core import PersistenceConfiguration
 from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -166,7 +168,9 @@ class TestColorLed:
         assert get_color(now=mid_day) == (0, 0, 0)
         assert get_color(now=mid_night) == (0, 100, 0)
         #
-        fault_alarm.is_engaged = True
+        app_model.analysis.free_disk_space_detector.config.min_limit_mb = math.inf
+        app_model.analysis.free_disk_space_detector.set_persistence_config(
+            PersistenceConfiguration(output_location="/"))
         assert get_color(now=mid_day) == (100, 0, 0)
         assert get_color(now=mid_night) == (100, 0, 0)
         #
@@ -185,7 +189,9 @@ class TestColorLed:
         assert get_color(now=mid_night) == (0, 0, 0)
         assert get_color(now=mid_day) == (0, 100, 0)
         #
-        fault_alarm.is_engaged = True
+        app_model.analysis.free_disk_space_detector.config.min_limit_mb = math.inf
+        app_model.analysis.free_disk_space_detector.set_persistence_config(
+            PersistenceConfiguration(output_location="/"))
         assert get_color(now=mid_day) == (100, 0, 0)
         assert get_color(now=mid_night) == (100, 0, 0)
         #

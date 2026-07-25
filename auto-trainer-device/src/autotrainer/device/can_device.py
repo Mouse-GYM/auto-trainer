@@ -627,9 +627,7 @@ class CanDevice(Device):
                     1 / 0
 
             # always update watchdog_perf_c:
-            # NB: not using "p_now" but real time.perf_counter on purpose,
-            # otherwise tests can fail because of patched/simulated one which is used.
-            self._commands_handler_watchdog_perf_c = time.perf_counter()
+            self._commands_handler_watchdog_perf_c = get_perf_now()
 
             # don't loop too often, when nothing to do:
             if len(cur_commands) == 0 and all(board.is_available() for board in boards_pending_ctx.values()):
@@ -949,7 +947,7 @@ class CanDevice(Device):
         self._init_default_move_configs()
 
         logger.info("Starting CanCommandHandler thread handler")
-        self._commands_handler_watchdog_perf_c = time.perf_counter()  # get_perf_now()
+        self._commands_handler_watchdog_perf_c = get_perf_now()
         thread = threading.Thread(
             target=self._command_handler, name="CanCommandHandler", daemon=True)
         thread.start()

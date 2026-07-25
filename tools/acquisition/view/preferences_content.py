@@ -1067,9 +1067,9 @@ class PreferencesContent(QWidget):
         spinbox = QSpinBox()
         spinbox.setMinimum(50)
         spinbox.setMaximum(1e9)
-        spinbox.setValue(system_fault_mon.config.free_disk_space_min_limit_mb)
+        spinbox.setValue(system_fault_mon.config.free_disk_space.min_limit_mb)
         def free_disk_space_min_limit_mb_changed(value):
-            system_fault_mon.config.free_disk_space_min_limit_mb = value
+            system_fault_mon.config.free_disk_space.min_limit_mb = value
             system_fault_mon.check_state()
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)

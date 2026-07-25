@@ -1,12 +1,17 @@
+import dataclasses
+import inspect
 import math
 import queue
 import threading
 import time
-from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List
+import typing
+from functools import partial
+from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List, Set, Callable, Any
 
+import typing_extensions
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now
-from autotrainer.core.configuration.detector import DetectorConfig
+from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.event.event_manager import EventManager
 from autotrainer.core.logging import get_verbose_logger
@@ -23,6 +28,20 @@ DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
 
 
 registered_detector_classes: List["BaseDetector"] = []
+
+
+def has_kwarg(func, kwarg_name):
+    # Get the function's signature
+    sig = inspect.signature(func)
+
+    # 1. Check if the specific keyword argument name exists
+    if kwarg_name in sig.parameters:
+        param = sig.parameters[kwarg_name]
+        # Ensure it's not a positional-only argument
+        return param.kind != inspect.Parameter.POSITIONAL_ONLY
+
+    # 2. Check if the function accepts arbitrary keyword arguments (**kwargs)
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
 
 class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
@@ -58,6 +77,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._checking_state = False
         self._logger = get_verbose_logger(self.__class__.__module__)
         self._event_manager = EventManager.default()
+        if not has_kwarg(self._check_state, "force"):
+            def _check_state(*, force: bool = False, orig_check_state=self._check_state):
+                del force  # unused
+                return orig_check_state()
+            self._check_state = _check_state
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -103,14 +127,17 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     def set_is_engaged(self, engaged: bool):
         engaged |= self._force_engaged
-        prev, self._is_engaged = self._is_engaged, engaged
-        if prev == engaged:
-            return
-        perf_now = get_perf_now()
-        if engaged:
-            self._engaged_perf_c = perf_now
-        else:
-            self._disengaged_perf_c = perf_now
+        with self._lock:
+            # safer,
+            # ensure transition won't be lost if 2 threads modify/calls at same time
+            prev, self._is_engaged = self._is_engaged, engaged
+            if prev == engaged:
+                return
+            perf_now = get_perf_now()
+            if engaged:
+                self._engaged_perf_c = perf_now
+            else:
+                self._disengaged_perf_c = perf_now
         self._logger.notice("is_engaged -> %s (age previous = %.1f)",
                             engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
         kind = self.detector_api_kind
@@ -135,7 +162,13 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         timer.start()
         self._logger.verbose("created timer to check_state within %.1fs", delay)
 
-    def _check_state(self) -> Optional[float]:
+    @typing_extensions.override
+    def _check_state(self) -> Optional[float]: ...
+
+    @typing_extensions.override
+    def _check_state(self, *, force: bool) -> Optional[float]: ...
+
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         raise NotImplementedError
 
     def check_state_if_not_detector_thread(self):
@@ -159,7 +192,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 return None
             self._checking_state = True
             try:
-                next_delay = self._check_state()
+                next_delay = self._check_state(force=force)
             except Exception as err:
                 self._logger.exception("_check_state() failed: %s", err)
                 next_delay = 1
@@ -186,14 +219,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             if self._running:
                 self._logger.debug("requested start but already running")
                 return
-            self._logger.verbose("%s: starting monitor", self.__class__.__name__)
+            self._logger.verbose("%s: starting monitor", self._name)
             self._running = True
             self.is_engaged = False  # force reset "engaged" to False
             self._p_started = get_perf_now()
             self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue(maxsize=32)
-                thread = threading.Thread(name=self.__class__.__name__, target=self._daemon_run, daemon=True,
+                thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
                 thread.start()
@@ -201,7 +234,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
-        self._logger.info("%s running", self.__class__.__name__)
+        log = self._logger
+        log.info("%s running", self._name)
         while self._running:
             delay = self.check_state()  # always check immediately
             if delay is None:
@@ -224,9 +258,9 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 continue
             if r is None:
                 break
-            logger.warning("unhandled command object: %r", r)
+            log.warning("unhandled command object: %r", r)
         # end while True
-        self._logger.verbose("%s: exiting main loop", self.__class__.__name__)
+        log.verbose("%s: exiting main loop", self._name)
 
     def _stop(self):
         pass
@@ -237,7 +271,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._cur_timer.cancel()
             if not self._running:
                 return
-            log.verbose("%s: stopping monitor", self.__class__.__name__)
+            log.verbose("%s: stopping monitor", self._name)
             self._running = False
             thread_queue = self._thread_queue
             self._thread_queue = None
@@ -257,7 +291,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                     log.verbose("joined check thread %s", thread)
 
     def restart(self):
-        self._logger.notice("Restarting %s", self.__class__.__name__)
+        self._logger.notice("Restarting %s", self._name)
         self.stop()
         self.start()
 
@@ -267,3 +301,106 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         """
         self._force_engaged = engaged
         self.is_engaged = engaged
+
+
+@dataclasses.dataclass
+class GroupSubDetectorContext:
+    detector: BaseDetector[GroupSubDetectorConfig]
+    property_changed_callback: Callable
+
+
+
+GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[GroupSubDetectorConfig])
+
+
+class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
+    """Group Detector base class, is ORing of the sub-detectors"""
+
+    DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
+
+    def __init__(self, *, name: Optional[str] = None, config: Optional[DetectorConfigT] = None):
+        super().__init__(name=name, config=config)
+        self._engaged_reasons: Set[str] = set()
+        self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
+
+    @property
+    def engaged_reasons(self) -> List[str]:
+        """Gives list of name/key of the engaged detectors"""
+        with self._lock:
+            return sorted(self._engaged_reasons)
+
+    def _start(self):
+        super()._start()
+        self._engaged_reasons.clear()
+        for sub in self._sub_detectors.values():
+            sub.detector.start()
+
+    def _stop(self):
+        super()._stop()
+        for sub in self._sub_detectors.values():
+            sub.detector.stop()
+
+    @property
+    def sub_detectors(self) -> Dict[str, GroupSubDetectorT]:
+        with self._lock:
+            return {
+                name: ctx.detector
+                for name, ctx in self._sub_detectors.items()
+            }
+
+    def get_sub_detector(self, name: str) -> Optional[GroupSubDetectorT]:
+        with self._lock:
+            ctx = self._sub_detectors.get(name, None)
+        return None if ctx is None else ctx.detector
+
+    def register_sub_detector(self, name: str, detector: GroupSubDetectorT):
+        ctx = GroupSubDetectorContext(
+            detector=detector,
+            property_changed_callback=partial(self._on_sub_detector_property_changed, detector),
+        )
+        with self._lock:
+            self.unregister_sub_detector(name)
+            detector.property_changed += ctx.property_changed_callback
+            self._sub_detectors[name] = ctx
+
+    def unregister_sub_detector(self, name: str) -> Optional[GroupSubDetectorT]:
+        with self._lock:
+            ctx = self._sub_detectors.pop(name, None)
+            if ctx is None:
+                return None
+            ctx.detector.property_changed -= ctx.property_changed_callback
+        return ctx.detector
+
+    def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
+        if name in (detector.IS_ENGAGED, detector.CONFIG):
+            self.check_state()
+        self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
+
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
+        prev_engaged = self._engaged_reasons.copy()
+        new_engaged = set()
+        for sub_name, sub_ctx in self._sub_detectors.items():
+            det = sub_ctx.detector
+            if not det.use_daemon and not det.default_timer_delay:
+                det.check_state(force=force)
+            cfg = det.config
+            det_engaged = det.is_engaged
+            is_group_sub_det_cfg = isinstance(cfg, GroupSubDetectorConfig)  # allow be flexible.
+            if det_engaged:
+                if is_group_sub_det_cfg:
+                    keep = cfg.use
+                else:
+                    keep = True
+                if keep:
+                    new_engaged.add(sub_name)
+            elif is_group_sub_det_cfg:
+                assert not det_engaged  # per the previous if.
+                if sub_name in prev_engaged:
+                    if not cfg.allow_autoresume_on_cleared:
+                        new_engaged.add(sub_name)  # keep it
+        if new_engaged != prev_engaged:
+            # ensure IS_ENGAGED property changed event still always relayed,
+            # even if same is_engaged, so that listeners will get/see the new_engaged reasons/sub-detectors.
+            self._is_engaged = None
+        self._engaged_reasons = new_engaged
+        self.is_engaged = len(new_engaged) > 0

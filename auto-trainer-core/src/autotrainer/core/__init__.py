@@ -110,7 +110,7 @@ class Offset3DTuple(_Offset3DTuple):
     y: float
     z: float
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):  # noqa
         if len(args) == 1:
             arg0 = args[0]
             if hasattr(arg0, "__len__") and len(arg0) == 3:
@@ -125,11 +125,11 @@ class Offset3DTuple(_Offset3DTuple):
     __str__ = __repr__
 
     @staticmethod
-    def get_nan() -> Self:
+    def get_nan() -> "Offset3DTuple":
         return _nan_offset3d_tuple
 
     @staticmethod
-    def get_zero() -> Self:
+    def get_zero() -> "Offset3DTuple":
         return _zero_offset3d_tuple
 
     def replace(self, x: Optional[float] = None, y: Optional[float] = None, z: Optional[float] = None) -> Self:

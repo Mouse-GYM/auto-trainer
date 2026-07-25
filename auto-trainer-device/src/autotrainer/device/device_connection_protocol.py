@@ -12,6 +12,10 @@ logger = get_verbose_logger(__name__)
 class DeviceConnectionProtocol(Protocol):
 
     @property
+    def connected(self) -> bool:
+        """Whether fully connected to device or not"""
+
+    @property
     def watchdog_perf_c(self) -> float:
         """The alive/watchdog perf-counter of the related device"""
         return min(self.watchdog_reader_perf_c, self.watchdog_writer_perf_c)

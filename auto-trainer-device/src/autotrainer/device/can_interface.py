@@ -403,12 +403,12 @@ class CanInterface(DeviceInterface):
 
         self._next_status_log_perf_c = -math.inf
         self._magnet_board_last_status_perf_c = {
-            motor: -math.inf
+            motor: math.nan
             for motor in Motor
             if motor in _magnet_board_motors
         }
         self._pellet_board_last_status_perf_c = {
-            motor: -math.inf
+            motor: math.nan
             for motor in Motor
             if motor in _pellet_board_motors
         }
@@ -516,13 +516,13 @@ class CanInterface(DeviceInterface):
             vals = self._pellet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" pellet status perf_c
-            oldest = min(vals.values())
+            oldest = min(v for v in vals.values() if math.isfinite(v))
             self.pellet_status_perf_c = oldest
         elif motor in _magnet_board_motors:
             vals = self._magnet_board_last_status_perf_c
             vals[motor] = motor_p_now
             # use the oldest for the "global" tunnel status perf_c
-            oldest = min(vals.values())
+            oldest = min(v for v in vals.values() if math.isfinite(v))
             self.tunnel_status_perf_c = oldest
         else:
             return
@@ -801,10 +801,10 @@ class CanInterface(DeviceInterface):
 
         self._cnt_none = 0
 
-        p_now = get_perf_now()
+        # init these to NaN, that will be updated by handle_motor_status_age
         for dct in (self._pellet_board_last_status_perf_c, self._magnet_board_last_status_perf_c):
             for m in dct:
-                dct[m] = p_now
+                dct[m] = math.nan
 
         if self._is_open:
             tot_flushed = 0

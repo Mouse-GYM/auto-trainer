@@ -15,7 +15,7 @@ import verboselogs
 
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
-from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
+from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId, get_verbose_logger
 from autotrainer.video import VideoRecordMode
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -120,7 +120,9 @@ def test_cli_help():
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")
 @pytest.mark.parametrize("record_mode", list(VideoRecordMode))
-def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamond_config_path, settings_ini_path, record_mode):
+def test_launch_cli(request, system_config, config_file_path, user_pref, calib_dir, diamond_config_path, settings_ini_path, record_mode):
+    verb_opt = request.config.option.verbose
+    output_to_stdout = isinstance(verb_opt, int) and verb_opt >= 2
     user_pref.save()  # do not forget ! otherwise default home config dirs/files are used
     for cam in system_config.cameras:
         cam.is_enabled = True
@@ -150,18 +152,30 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
             logging.warning("app exited unexpectedly")
     interrupt_proc_when_running = threading.Thread(target=interrupt_proc, daemon=True)
     interrupt_proc_when_running.start()
+    def handle_line(line, dest_fh):
+        line = line.strip()
+        if line and output_to_stdout:
+            print(line, file=dest_fh)
+        # keep coloring for output to stdout (console)
+        line = remove_ansi_escape_sequences(line).strip()
+        return line
+
     def communicate(dest, src_fh, dest_fh):
         while proc.poll() is None:
-            line = src_fh.readline()  # .decode()
+            line = src_fh.readline()
             line = line.strip(b'\n').decode()
+            line = handle_line(line, dest_fh)
             if "App is now running" in line:
                 app_running.set()
-            print(line, file=dest_fh)
-            dest.append(remove_ansi_escape_sequences(line))
+            if line:
+                dest.append(line)
         logging.debug("process terminated, reading remaining data on %s", src_fh.name)
         tail = src_fh.read().strip(b'\n').decode()
-        print(tail, file=dest_fh)
-        dest.extend(tail.split("\n"))
+        lines = tail.split("\n")
+        for line in lines:
+            line = handle_line(line, dest_fh)
+            if line:
+                dest.append(line)
 
     # use communicate threads, using communicate() might block if process is stuck or smth.
     communicate_out_thread = threading.Thread(target=communicate, daemon=True, args=(out_lines, proc.stdout, sys.stdout))
@@ -187,10 +201,8 @@ def test_launch_cli(system_config, config_file_path, user_pref, calib_dir, diamo
     communicate_out_thread.join()
     communicate_err_thread.join()
 
-    output = "\n".join(out_lines)
-
     def assert_is_present(content):
-        assert any(content in line for line in out_lines), output
+        assert any(content in line for line in out_lines), f"content {content!r} not found in:\n{out_lines}"
 
     assert proc.returncode == 0, (out_lines, err_lines)
 

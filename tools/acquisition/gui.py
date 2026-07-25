@@ -19,7 +19,7 @@ def main():
     fork_method = "spawn"  # please check python multiprocessing fork method documentation
     multiprocessing.set_start_method(fork_method)  # MUST BE SET VERY EARLY BEFORE MOST IMPORTS
 
-    from tools.acquisition.args import make_autotrainer_parser, parse_autotrainer_args
+    from tools.acquisition.args import parse_autotrainer_args
 
     args = parse_autotrainer_args(allow_dev_mode=True)
 

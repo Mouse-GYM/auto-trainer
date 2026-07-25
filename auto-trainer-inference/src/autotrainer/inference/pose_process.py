@@ -346,7 +346,7 @@ class PoseProcess(Process):
         while self._is_running:
             p_now = get_perf_now()
 
-            self._watchdog_perf_c.value = time.perf_counter()  # p_now
+            self._watchdog_perf_c.value = p_now
 
             if prev_mode != self._mode:
                 logger.verbose("Detected change of mode: %s", self._mode)

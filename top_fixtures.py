@@ -100,8 +100,10 @@ def mock_get_perf_now(monkeypatch):
 @pytest.fixture(autouse=True)
 def auto_close_event_manager():
     # allow to close the EventManager and have its worker thread exits gracefully (on each end of test case)
-    yield
-    EventManager.try_close_default()
+    try:
+        yield
+    finally:
+        EventManager.try_close_default()
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -376,7 +378,16 @@ def fake_system_msg_handler(fake_msg_queue, sensor_analysis):
 
 
 @pytest.fixture
-def machine(project_info, tunnel_device, pellet_device, inference, sensor_analysis, monkeypatch, mock_get_perf_now, fake_system_msg_handler) -> SystemMachine:
+def machine(
+    project_info,
+    tunnel_device,
+    pellet_device,
+    inference,
+    sensor_analysis,
+    monkeypatch,
+    mock_get_perf_now,
+    fake_system_msg_handler,
+) -> SystemMachine:
     # Disable algo handler thread
     assert BehaviorAlgorithm._no_handler_thread is False
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
@@ -484,7 +495,7 @@ class MockSystemMachine:
 
     @property
     def inference(self) -> InferenceProtocol:
-        return self._machine._inference
+        return self._machine._inference  # noqa
 
     @property
     def pellet(self):

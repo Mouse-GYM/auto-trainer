@@ -93,7 +93,7 @@ class Device(ObservableObject):
     def tunnel_status_timeout_engaged(self, value):
         prev, self._tunnel_status_timeout_engaged = self._tunnel_status_timeout_engaged, value
         if prev != value:
-            logger.verbose("tunnel_status_timeout=%s", value)
+            (logger.notice if prev else logger.error)("tunnel_status_timeout=%s", value)
         self._on_property_changed(self.TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev)
 
     @property
@@ -104,5 +104,5 @@ class Device(ObservableObject):
     def pellet_status_timeout_engaged(self, value):
         prev, self._pellet_status_timeout_engaged = self._pellet_status_timeout_engaged, value
         if prev != value:
-            logger.verbose("pellet_status_timeout=%s", value)
+            (logger.notice if prev else logger.error)("pellet_status_timeout=%s", value)
         self._on_property_changed(self.PELLET_STATUS_TIMEOUT_ENGAGED, value, prev)
