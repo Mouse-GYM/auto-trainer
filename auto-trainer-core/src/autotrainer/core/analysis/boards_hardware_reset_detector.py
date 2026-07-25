@@ -2,6 +2,8 @@ import math
 
 from typing import Optional
 
+from autotrainer.api import ApiDetectorKind
+
 from autotrainer.core import Offset3DTuple
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.boards_hardware_reset_detector_config import BoardsHardwareResetDetectorConfig
@@ -10,6 +12,8 @@ from autotrainer.core.configuration.boards_hardware_reset_detector_config import
 class BoardsHardwareResetDetector(BaseDetector[BoardsHardwareResetDetectorConfig]):
 
     config_cls = BoardsHardwareResetDetectorConfig
+
+    detector_api_kind = ApiDetectorKind.boardUnexpectedReset
 
     def __init__(self):
         super().__init__()

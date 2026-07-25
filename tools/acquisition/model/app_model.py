@@ -21,6 +21,8 @@ from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protoco
 
 import pandas
 import yaml
+from autotrainer.api.event import DayStartedContext
+
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
@@ -479,7 +481,14 @@ class AppModel(ObservableObject):
         timer = self._timer_daily = _daily_timer(delay, self._on_daily_timer)
         timer.start()
         logger.verbose("Created new daily timer in %.1f seconds ; today=%s", delay, new_day)
+        #
         self.current_day_changed(new_day)
+        #
+        day_path = prj.get_day_path(when=today_midnight)[0]
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.dayStarted,
+            DayStartedContext(date=today_midnight.timestamp(), day_path=day_path)))
+
 
     def check_max_pellet_loaded(self):
         mon = self._analysis.system_maintenance_alarm

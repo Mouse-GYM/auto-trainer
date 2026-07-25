@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from autotrainer.api.event import BatchAnalysisStartedContext, BatchAnalysisEndedContext, SessionStartedContext, \
-    SessionEndedContext, SessionTrialContext
+    SessionEndedContext, SessionTrialContext, IntertrialResponseContext
 from transitions import Machine
 
 from autotrainer.api import ApiEventKind, build_event
@@ -1267,6 +1267,14 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_detection_result_ready(self, prj: ProjectInfo, res: IntertrialResponse):
         logger.success("Intertrial analysis result: prj=%s result=%s", prj, res)
+        #
+        api_ctx = IntertrialResponseContext(
+            session_id=prj.session_id,
+            trial_id=prj.trial,
+            batch_id=prj.batch_id,
+            response_data=res,
+        )
+        self._event_manager.post_api_event(build_event(ApiEventKind.intertrialResponse, api_ctx))
         #
         start_list = self._batch_project_trials_start_list
         if len(start_list) > 0:
