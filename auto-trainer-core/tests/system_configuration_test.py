@@ -24,7 +24,8 @@ from autotrainer.core.configuration import (
 )
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration
+    AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration, \
+    AnimalSleepWindow, TimePeriod
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -473,3 +474,18 @@ def test_load_version_51_file_is_migrated_on_disk(tmp_path):
     reloaded = SystemConfiguration.load_yaml_file(path)
     assert reloaded.version == SystemConfiguration.version
     assert dataclasses.asdict(reloaded) == dataclasses.asdict(config)
+
+
+def test_v55_renames_are_respected():
+    config_text = """
+    !SystemConfiguration
+    version: 54
+    behavior: !BehaviorConfiguration
+      ledAlarm: !LEDAlarmConfig
+        startIgnoreHour: !Time '17:33:55'
+        stopIgnoreHour: !Time '05:42:30'
+    """
+    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
+    assert isinstance(cfg, SystemConfiguration)
+    assert cfg.behavior.animal_sleep_window == TimePeriod(
+        start=datetime.time(17, 33, 55), stop=datetime.time(5, 42, 30))

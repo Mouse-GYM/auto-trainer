@@ -53,11 +53,6 @@ class AutoTunnelSweepMonitor(BaseDetector[AutoTunnelSweepConfiguration]):
         super()._stop()
         self.is_engaged = False  # force disengaged on stop
 
-    def _custom_set_is_engaged(self):
-        if not self._is_engaged:
-            self._misplaced_detector.restart()
-        super()._custom_set_is_engaged()
-
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         cfg = self._config
         if not force and not cfg.enabled:
@@ -86,7 +81,7 @@ class AutoTunnelSweepMonitor(BaseDetector[AutoTunnelSweepConfiguration]):
         if not (misplaced_triggered or recurrent_triggered):
             min_d = pellet_miss if misplaced_engaged else math.inf
             min_d = min(recurrent_miss, min_d)
-            return min_d
+            return None if min_d <= 0 else min_d
         rate_remain = cfg.rate_limit_delay + cfg.misplaced_trigger_delay - (p_now - self._disengaged_perf_c)
         if rate_remain > 0:
             logger.verbose("delaying tunnel sweep for %.1fs due to rate limit", rate_remain)

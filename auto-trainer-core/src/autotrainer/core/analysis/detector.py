@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 import typing
+import warnings
 from functools import partial
 from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List, Set, Callable, Any
 
@@ -205,8 +206,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 # if not daemon detector, this will create a timer for another check in 1s
             finally:
                 self._checking_state = False
+
             if next_delay is None:
                 next_delay = self.default_timer_delay
+            elif next_delay < 0:
+                warnings.warn(f"received negative next_delay: {next_delay:.1f}")
+                next_delay = 1
             if next_delay is not None and not self.use_daemon:
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
