@@ -11,6 +11,7 @@ from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_r
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from tools.acquisition.model.hardware_model import HardwareModel
 
@@ -31,8 +32,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     """
 
     # events type hint
-    emergency_stopped: Callable[[str], None]
-    emergency_resumed: Callable[[str], None]
+    emergency_stopped: EventHandler[Callable[[str], None]]
+    emergency_resumed: EventHandler[Callable[[str], None]]
 
     def __init__(
         self,
@@ -145,6 +146,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         analysis.load_cell_tare_monitor.config = config.auto_tare
         analysis.audio_thrashing_monitor.config = config.audio
         analysis.auto_tunnel_sweep_monitor.config = config.auto_tunnel_sweep
+        analysis.auto_tunnel_sweep_monitor.animal_sleep_window = config.animal_sleep_window
         analysis.autoclamp_evasion_detector.config = config.autoclamp_evasion_detector
         #
         alarm_cfg = config.emergency_alarm
@@ -185,6 +187,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         config.auto_tare = analysis.load_cell_tare_monitor.save_configuration()
         config.headbar_pressure = analysis.headbar_pressure_monitor.config
         config.audio = analysis.audio_thrashing_monitor.config
+        config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
+        config.animal_sleep_window = algo.active_config.animal_sleep_window
         #
         alarm_cfg = config.emergency_alarm = analysis.emergency_alarm_monitor.config
         alarm_cfg.external_doors = analysis.external_doors_alarm.config
@@ -269,25 +273,20 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         if now is None:
             now = datetime.now()
         algo = self._system_machine.algorithm
-        cfg_led = algo.active_config.led_alarm
         alarm_mon = self._analysis.emergency_alarm_monitor
         if alarm_mon.is_engaged or algo.algo_paused:
             color = (100, 0, 0)  # red
         else:
             is_warn = any(
                 det.is_engaged and det.config.use
-                    and (not isinstance(det.config, AlarmDetectorConfig) or not det.config.is_emergency_condition)
+                    # only alarm detector config with is_emerg_cond == False:
+                    and (isinstance(det.config, AlarmDetectorConfig) and not det.config.is_emergency_condition)
                 for det in alarm_mon.sub_detectors.values()
             )
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
             cur_time = now.time()
-            start, stop = cfg_led.start_ignore_hour, cfg_led.stop_ignore_hour
-            in_ignore_window = (
-                (start <= cur_time <= stop)
-                if start < stop
-                else (cur_time >= start or cur_time <= stop)
-            )
+            in_ignore_window = algo.active_config.animal_sleep_window.is_time_present(cur_time)
             if in_ignore_window:
                 color = (0, 0, 0)
         return color

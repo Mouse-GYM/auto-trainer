@@ -150,7 +150,7 @@ class TestColorLed:
         # ensure used as emergency condition:
         fault_alarm.config.use = True
         fault_alarm.config.is_emergency_condition = True
-        self.led_alarm_cfg = app_model.behavior.algorithm.active_config.led_alarm
+        self.ignore_window = app_model.behavior.algorithm.active_config.animal_sleep_window
         alarm_mon = app_model.analysis.emergency_alarm_monitor
         # force not use daemon, so that below set of is_engaged are all handled in this thread.
         alarm_mon.use_daemon = False
@@ -183,8 +183,8 @@ class TestColorLed:
         get_color = self.get_color
         fault_alarm = self.fault_alarm
         #
-        self.led_alarm_cfg.start_ignore_hour = dtm.time(22, 0)
-        self.led_alarm_cfg.stop_ignore_hour = dtm.time(10, 0)
+        self.ignore_window.start = dtm.time(22, 0)
+        self.ignore_window.stop = dtm.time(10, 0)
         #
         assert get_color(now=mid_night) == (0, 0, 0)
         assert get_color(now=mid_day) == (0, 100, 0)

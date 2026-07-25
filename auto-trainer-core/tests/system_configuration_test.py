@@ -24,7 +24,8 @@ from autotrainer.core.configuration import (
 )
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
-    AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration
+    AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration, \
+    AnimalSleepWindow, TimePeriod
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -440,10 +441,10 @@ def test_load_version_51_file(tmp_path):
     assert shift_xyz.buffer.target == Offset3DTuple(1.5, -3, 1)
     assert isinstance(shift_xyz.buffer.target, Offset3DTuple)
 
-    led_alarm = config.behavior.led_alarm
-    assert led_alarm.start_ignore_hour == datetime.time(10, 0)
-    assert isinstance(led_alarm.start_ignore_hour, datetime.time)
-    assert led_alarm.stop_ignore_hour == datetime.time(20, 0)
+    ign_window = config.behavior.animal_sleep_window
+    assert ign_window.start == datetime.time(10, 0)
+    assert isinstance(ign_window.start, datetime.time)
+    assert ign_window.stop == datetime.time(20, 0)
 
     # the v52 renames, as they appear in a real v51 file:
     pellet_delivery = config.behavior.pellet_delivery
@@ -473,3 +474,18 @@ def test_load_version_51_file_is_migrated_on_disk(tmp_path):
     reloaded = SystemConfiguration.load_yaml_file(path)
     assert reloaded.version == SystemConfiguration.version
     assert dataclasses.asdict(reloaded) == dataclasses.asdict(config)
+
+
+def test_v55_renames_are_respected():
+    config_text = """
+    !SystemConfiguration
+    version: 54
+    behavior: !BehaviorConfiguration
+      ledAlarm: !LEDAlarmConfig
+        startIgnoreHour: !Time '17:33:55'
+        stopIgnoreHour: !Time '05:42:30'
+    """
+    cfg = SystemConfiguration.load_yaml(io.StringIO(config_text))
+    assert isinstance(cfg, SystemConfiguration)
+    assert cfg.behavior.animal_sleep_window == TimePeriod(
+        start=datetime.time(17, 33, 55), stop=datetime.time(5, 42, 30))

@@ -217,10 +217,23 @@ class CageCleaningConfig:
 
 
 @dataclass
-class LEDAlarmConfig:
+class TimePeriod:
+    start: datetime.time
+    stop: datetime.time
 
-    start_ignore_hour: datetime.time = datetime.time(10, 0)
-    stop_ignore_hour: datetime.time = datetime.time(20, 0)
+    def is_time_present(self, cur_time: datetime.time):
+        start, stop = self.start, self.stop
+        return (
+            (start <= cur_time <= stop)
+            if start < stop
+            else (cur_time >= start or cur_time <= stop)
+        )
+
+
+@dataclass
+class AnimalSleepWindow(TimePeriod):
+    start: datetime.time = datetime.time(10, 0)
+    stop: datetime.time = datetime.time(20, 0)
 
 
 @dataclass
@@ -242,7 +255,7 @@ class _BehaviorConfiguration:
     home_on_excessive_drift_distance: HomeOnExcessiveDriftDistanceConfiguration = field(default_factory=HomeOnExcessiveDriftDistanceConfiguration)
     cage_cleaning: CageCleaningConfig = field(default_factory=CageCleaningConfig)
     autoclamp_evasion_detector: AutoClampEvasionDetectorConfig = field(default_factory=AutoClampEvasionDetectorConfig)
-    led_alarm: LEDAlarmConfig = field(default_factory=LEDAlarmConfig)
+    animal_sleep_window: TimePeriod = field(default_factory=AnimalSleepWindow)
 
     @classmethod
     def from_version_zero(cls, content: Dict) -> Self:
@@ -324,7 +337,8 @@ _tag_2_cls = dict(
     AnimalThrashAlarmConfig=AnimalThrashAlarmConfig,
     PresenceInCageAlarmConfig=PresenceInCageAlarmConfig,
     DeviceCommAlarmConfig=DeviceCommAlarmConfig,
-    LEDAlarmConfig=LEDAlarmConfig,
+    TimePeriod=TimePeriod,
+    AnimalSleepWindow=AnimalSleepWindow,
 )
 
 

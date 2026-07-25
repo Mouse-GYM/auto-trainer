@@ -58,6 +58,12 @@ _V52_NESTED_RENAMES = {
     },
 }
 
+# renames which occurred at version-55:
+_V55_BEHAVIOR_KEY_RENAMES = {"led_alarm": "animal_sleep_window"}
+_V55_NESTED_RENAMES = {
+    "animal_sleep_window": {"start_ignore_hour": "start", "stop_ignore_hour": "stop"},
+}
+
 
 def _to_offset3d(value: Any) -> Offset3DTuple:
     if isinstance(value, Offset3DTuple):
@@ -113,7 +119,7 @@ class SystemConfiguration:
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_CONFIG_DIR.joinpath(f"{DEFAULT_NAME}.yaml")  # caller/user must expanduser() on it
 
-    version: int = 54
+    version: int = 55
 
     cameras: List[CameraConfiguration] = field(default_factory=list)
     hardware: HardwareConfiguration = field(default_factory=HardwareConfiguration)
@@ -137,8 +143,8 @@ class SystemConfiguration:
             configuration: Self = yaml.load(data, SystemConfigurationLoader)
         elif version < SystemConfiguration.version:
             content = humps.decamelize(raw_content)
+            behavior_dct = content.get("behavior", {})
             if version < 52:
-                behavior_dct = content.get("behavior", {})
                 if version == 0:
                     pellet_dct = content.get("pellet", {})
                 else:
@@ -146,14 +152,30 @@ class SystemConfiguration:
                 for old_key, new_key in _V52_RENAMES.items():
                     if old_key in behavior_dct:
                         behavior_dct[new_key] = behavior_dct.pop(old_key)
+                        logger.debug("renamed %s -> %s in config", old_key, new_key)
                     if old_key in pellet_dct:
                         pellet_dct[new_key] = pellet_dct.pop(old_key)
+                        logger.debug("renamed %s -> %s in config", old_key, new_key)
                 for parent_key, nested_renames in _V52_NESTED_RENAMES.items():
                     nested_dct = behavior_dct.get(parent_key)
                     if isinstance(nested_dct, dict):
                         for old_key, new_key in nested_renames.items():
                             if old_key in nested_dct:
                                 nested_dct[new_key] = nested_dct.pop(old_key)
+                                logger.debug("renamed %s -> %s in config", old_key, new_key)
+            if version < 55:
+                for old_key, new_key in _V55_BEHAVIOR_KEY_RENAMES.items():
+                    if old_key in behavior_dct:
+                        behavior_dct[new_key] = behavior_dct.pop(old_key)
+                        logger.debug("renamed %s -> %s in config", old_key, new_key)
+                for parent_key, nested_renames in _V55_NESTED_RENAMES.items():
+                    nested_dct = behavior_dct.get(parent_key)
+                    if isinstance(nested_dct, dict):
+                        for old_key, new_key in nested_renames.items():
+                            if old_key in nested_dct:
+                                nested_dct[new_key] = nested_dct.pop(old_key)
+                                logger.debug("renamed %s -> %s in config", old_key, new_key)
+
             if version == 0:
                 configuration = cls()
                 configuration._deserialize_version_zero(content)

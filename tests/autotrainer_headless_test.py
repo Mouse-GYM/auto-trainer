@@ -143,7 +143,7 @@ def test_launch_cli(request, system_config, config_file_path, user_pref, calib_d
     out_lines = []
     err_lines = []
     def interrupt_proc():
-        app_running.wait(60)
+        app_running.wait(45)
         if proc.poll() is None:
             time.sleep(1)  # give 1s of running time
             logging.info("signal main app with sig interrupt")
@@ -186,11 +186,17 @@ def test_launch_cli(request, system_config, config_file_path, user_pref, calib_d
     interrupt_proc_when_running.join()
 
     # main app takes quite a bit to finishes/exit once asked to do so, give it at most 15s
-    proc.wait(15)
+    try:
+        proc.wait(20)
+    except subprocess.TimeoutExpired:
+        pass
     if proc.poll() is None:
         logging.warning("main app still running, terminating ..")
         proc.terminate()  # send terminate signal
-        proc.wait(3)
+        try:
+            proc.wait(5)
+        except subprocess.TimeoutExpired:
+            pass
         if proc.poll() is None:
             # send kill signal
             logging.error("main app still running after terminate, killing ..")

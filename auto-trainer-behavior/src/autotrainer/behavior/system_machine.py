@@ -160,11 +160,6 @@ class SystemMachine(StateMachine):
             analysis.headbar_pressure_monitor.property_changed += self._on_headbar_pressure_monitor_property_changed
             analysis.load_cell_tare_monitor.tare_callback = self._on_load_cell_tare_requested
             analysis.auto_tunnel_sweep_monitor.property_changed += self._on_auto_tunnel_sweep_property_changed
-            # analysis.pellet_misplaced_monitor.dcs_config = algo.diamond_triangle_config
-            #   handled by property changed.
-            # set current configs from monitors:
-            algo.active_config.auto_tunnel_sweep = analysis.auto_tunnel_sweep_monitor.config
-            # analysis.pellet_misplaced_monitor.config  # not in system config for now
 
         self._inference = inference
         inference.pose_response_ready += self._on_pose_changed
@@ -1107,11 +1102,15 @@ class SystemMachine(StateMachine):
         elif name == props.DIAMOND_TRIANGLE_CONFIG:
             self._analysis.pellet_misplaced_monitor.dcs_config = new_value
 
-    def _on_auto_tunnel_sweep_property_changed(self, name, value, _):
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _on_auto_tunnel_sweep_property_changed(self, name, value, old_value):
         if name == BaseDetector.IS_ENGAGED:
-            if value:
+            if value and not old_value:
+                self._tunnel_device.open_tunnel_gate()  # ensure open
                 self._pellet_device.set_tunnel_fan_on()
-            else:
+            elif not value:  #  and old_value:
+                with self._algorithm.set_allow_reentrant(True):
+                    self._consider_close_gate_during_intertrial()
                 self._pellet_device.set_tunnel_fan_off()
 
     def _on_pellet_loading(self):
