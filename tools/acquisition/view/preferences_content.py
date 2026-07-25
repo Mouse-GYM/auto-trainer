@@ -1062,15 +1062,17 @@ class PreferencesContent(QWidget):
         left_grid_layout.addWidget(line_edit, cur_row, cur_col + 1)
         cur_row += 1
 
-        system_fault_mon = analysis.system_fault_alarm
+        free_disk_space_det = analysis.free_disk_space_detector
         left_grid_layout.addWidget(QLabel("<b>Free Disk Space Min MB:</b>"), cur_row, cur_col)
         spinbox = QSpinBox()
         spinbox.setMinimum(50)
         spinbox.setMaximum(1e9)
-        spinbox.setValue(system_fault_mon.config.free_disk_space.min_limit_mb)
+        spinbox.setValue(free_disk_space_det.config.min_limit_mb)
         def free_disk_space_min_limit_mb_changed(value):
-            system_fault_mon.config.free_disk_space.min_limit_mb = value
-            system_fault_mon.check_state()
+            free_disk_space_det.config.min_limit_mb = value
+            # this trigger property changed event callback(s),
+            # and a check_state:
+            free_disk_space_det.config = free_disk_space_det.config
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1

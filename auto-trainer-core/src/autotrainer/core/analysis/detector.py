@@ -177,18 +177,30 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self.check_state()
 
     def check_state(self, *, force: bool=False):
-        with self._lock:
-            if not self._running and not force:
+        if not self._running and not force:  # no need take lock to check this
+            return None
+        # if the detector is daemon, and it's running,
+        # then also don't try to take the lock from another thread, and directly:
+        th_q = self._thread_queue
+        if th_q is not None:
+            th, th_q = th_q
+            if th is not threading.current_thread() and th.is_alive():
+                # push a new request_check_state to it:
+                th_q.put(_request_check_state)
                 return None
-            th_q = self._thread_queue
-            if th_q is not None:
-                # if it's daemon detector, and it's running, put request_check_state to it:
-                th, th_q = th_q
-                if th is not threading.current_thread() and th.is_alive():
-                    th_q.put(_request_check_state)
-                    return None
+        if self._checking_state:
+            self._logger.verbose("checking_state already in progress, skipping check.")
+            return None
+        # nb: it's actually still *not* impossible for 2 threads to get exactly here together at the same time
+        # so, use relatively big timeout:
+        if not self._lock.acquire(timeout=5):
+            # check_state is supposed to be very fast,
+            # so not being able to take the lock after that long would imply something is being deadlocked.
+            self._logger.critical("lock acquire takes too long, skipping check")
+            return None  # or raise ??
+        try:
             if self._checking_state:
-                logger.warning("checking_state already in progress")
+                self._logger.warning("skipping reentrant check")
                 return None
             self._checking_state = True
             try:
@@ -209,6 +221,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 # or that is manually checked.
                 self._cur_timer.cancel()
                 self._cur_timer = no_op_timer
+        finally:
+            self._lock.release()
         return next_delay
 
     def _start(self):

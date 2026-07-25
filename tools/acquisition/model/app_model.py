@@ -545,10 +545,7 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continous mode and is_from_start is not True, or else it was already recording.
-        if status in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
-            self._analysis.stop()
-        else:
-            self._analysis.restart()
+        self._analysis.restart()  # always
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -1603,6 +1600,7 @@ class AppModel(ObservableObject):
 
         analysis = self._analysis
         analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
+        analysis.free_disk_space_detector.start()
         self._refresh_cage_clean_data()
 
         self._hardware.load_config(configuration.hardware)

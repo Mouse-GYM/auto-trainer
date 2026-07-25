@@ -10,7 +10,12 @@ from autotrainer.core.analysis.free_disk_space_detector import FreeDiskSpaceDete
 
 @pytest.fixture
 def free_disk_space_det():
-    return FreeDiskSpaceDetector()
+    det = FreeDiskSpaceDetector()
+    det.use_daemon = False  # doesn't require start, and run checks in foreground
+    try:
+        yield det
+    finally:
+        det.stop()  # to be clean.
 
 
 def test_check_state_with_set_persistence_config(free_disk_space_det):
@@ -22,7 +27,7 @@ def test_check_state_with_set_persistence_config(free_disk_space_det):
     assert det.is_engaged, "should have engaged from set_persistence_config"
     # now:
     det.config.min_limit_mb = 0
-    det.check_state(force=True)
+    det.check_state()
     assert not det.is_engaged
 
 
@@ -54,5 +59,5 @@ def test_with_permission_error(
     assert "this-is-denied" in caplog.text
     m.side_effect = orig_usage
     det.config.min_limit_mb = -1
-    det.check_state(force=True)
+    det.check_state()
     assert not det.is_engaged

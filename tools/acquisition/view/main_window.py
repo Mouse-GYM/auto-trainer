@@ -195,7 +195,6 @@ class MainWindow(QMainWindow):
             WatchdogItems.MAIN_UI_THREAD, lambda: self._watchdog_perf_c)
 
     def _update_watchdog_perf_c(self):
-        # logger.spam("updating watchog")
         self._watchdog_perf_c = get_perf_now()
 
     @property

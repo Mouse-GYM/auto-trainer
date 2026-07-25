@@ -20,11 +20,17 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
 
     def __init__(self):
         super().__init__()
-        self._persistence_cfg = PersistenceConfiguration()
+        self._config.min_limit_mb = 0
+        self._persistence_cfg = PersistenceConfiguration(output_location="")
+
+    def check_state(self, *, force: bool=False):
+        return super().check_state(force=True)  # always check, even if daemon/check thread not running so.
 
     def _check_state(self) -> Optional[float]:
         cfg = self._config
         loc = self._persistence_cfg.output_location
+        if not loc:
+            return None
         try:
             usage = psutil.disk_usage(loc)
         except (IOError, PermissionError) as err:
@@ -43,4 +49,4 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
         self._logger.verbose("Received persistence config: %s", config)
-        self.check_state(force=True)
+        self.check_state()

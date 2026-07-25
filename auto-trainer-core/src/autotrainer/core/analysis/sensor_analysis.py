@@ -94,11 +94,13 @@ class SensorAnalysis(ObservableObject):
         self._watchdog_monitor = WatchdogMonitor()
 
         self._system_maintenance_alarm = SystemMaintenanceAlarm()
+        self._system_maintenance_alarm.start()
 
         self._free_disk_space_detector = FreeDiskSpaceDetector()
         self._boards_hardware_reset_detector = BoardsHardwareResetDetector()
 
         fault_alarm = self._system_fault_alarm = SystemFaultAlarm()
+        fault_alarm.start()
         fault_reg = fault_alarm.register_sub_detector
         fault_reg(SystemFaultReason.WATCHDOG, self._watchdog_monitor)
         fault_reg(SystemFaultReason.FREE_DISK_SPACE, self._free_disk_space_detector)
@@ -122,6 +124,7 @@ class SensorAnalysis(ObservableObject):
         self._animal_evasion_alarm.register_sub_detector("autoclamp_evasion", self._autoclamp_evasion_detector)
 
         alarm_mon = self._alarm_monitor = EmergencyAlarmMonitor()
+        alarm_mon.start()
         #  dynamically handled alarm sub-monitors:
         reg_alarm_cond = alarm_mon.register_sub_detector
         reg_alarm_cond(EmergencyReason.ANIMAL_EVASION, self._animal_evasion_alarm)
