@@ -118,7 +118,7 @@ def test_cli_help():
     assert "usage: " in output
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. mostlikely signal related, different on windows")
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="hang atm. most likely signal related, different on windows")
 @pytest.mark.parametrize("record_mode", list(VideoRecordMode))
 def test_launch_cli(request, system_config, config_file_path, user_pref, calib_dir, diamond_config_path, settings_ini_path, record_mode):
     verb_opt = request.config.option.verbose
@@ -140,18 +140,24 @@ def test_launch_cli(request, system_config, config_file_path, user_pref, calib_d
     ], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=-1)
     #
     app_running = threading.Event()
+    app_running_timeout = 45  # can be relatively very slow to get to "App is now running",
+    # especially with coverage or debugger enabled.
+
     out_lines = []
     err_lines = []
+
     def interrupt_proc():
-        app_running.wait(45)
+        app_running.wait(app_running_timeout)
         if proc.poll() is None:
             time.sleep(1)  # give 1s of running time
             logging.info("signal main app with sig interrupt")
             proc.send_signal(signal.SIGINT)
         else:
             logging.warning("app exited unexpectedly")
+
     interrupt_proc_when_running = threading.Thread(target=interrupt_proc, daemon=True)
     interrupt_proc_when_running.start()
+
     def handle_line(line, dest_fh):
         line = line.strip()
         if line and output_to_stdout:
@@ -185,9 +191,8 @@ def test_launch_cli(request, system_config, config_file_path, user_pref, calib_d
 
     interrupt_proc_when_running.join()
 
-    # main app takes quite a bit to finishes/exit once asked to do so, give it at most 15s
     try:
-        proc.wait(20)
+        proc.wait(app_running_timeout + 15)
     except subprocess.TimeoutExpired:
         pass
     if proc.poll() is None:
@@ -203,9 +208,11 @@ def test_launch_cli(request, system_config, config_file_path, user_pref, calib_d
             proc.kill()
             proc.wait()
 
+    logging.info("main app exited with exit_code=%s", proc.returncode)
+
     # can now wait/join on communicate threads
-    communicate_out_thread.join()
-    communicate_err_thread.join()
+    communicate_out_thread.join(3)
+    communicate_err_thread.join(3)
 
     def assert_is_present(content):
         assert any(content in line for line in out_lines), f"content {content!r} not found in:\n{out_lines}"
