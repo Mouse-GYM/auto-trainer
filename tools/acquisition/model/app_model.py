@@ -533,6 +533,8 @@ class AppModel(ObservableObject):
         self.check_target_status_valid(status)
         self._status = status
         algo_status = app_status_to_behavior_algo_status(status)
+        animal_in_training = algo_status == BehaviorAlgoStatus.ANIMAL_IN_TRAINING
+        self._analysis.auto_tunnel_sweep_monitor.animal_in_training = animal_in_training
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
         self.property_changed(self.Props.STATUS, status, prev)
@@ -544,7 +546,7 @@ class AppModel(ObservableObject):
             # see: VideoRecord._disable_record()
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
-            # if it's continous mode and is_from_start is not True, or else it was already recording.
+            # if it's continuous mode and is_from_start is not True, or else it was already recording.
         self._analysis.restart()  # always
         # reload training plans:
         self.reload_training_plans()

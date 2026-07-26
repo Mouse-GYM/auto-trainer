@@ -44,5 +44,6 @@ class BoardsHardwareResetDetector(BaseDetector[BoardsHardwareResetDetectorConfig
             and self._requested_send_pos != self._hardware_send_pos
             # so we check for that to not trigger false-positive.
         )
-        self._logger.debug("check_state: %s ; %s vs %s", engaged, self._hardware_send_pos, self._requested_send_pos)
+        if engaged != self._is_engaged:
+            self._logger.debug("check_state: %s ; %s vs %s", engaged, self._hardware_send_pos, self._requested_send_pos)
         self.is_engaged = engaged
