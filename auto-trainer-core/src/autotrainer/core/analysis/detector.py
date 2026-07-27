@@ -123,8 +123,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         return self._started_datetime
 
     @property
-    def is_engaged(self):
-        return self._is_engaged or self._force_engaged
+    def is_engaged(self) -> bool:
+        return bool(self._is_engaged or self._force_engaged)
 
     @is_engaged.setter
     def is_engaged(self, value):
@@ -472,6 +472,9 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         if new_engaged != prev_engaged:
             # ensure IS_ENGAGED property changed event still always relayed,
             # even if same is_engaged, so that listeners will get/see the new_engaged reasons/sub-detectors.
-            self._is_engaged = None
+            self._is_engaged = "1" if prev_engaged else ""
+            # using same "bool/truthy" value than previously, so that possible readers of self.is_engaged,
+            # which is not using the lock to read the private attribute, will keep see/get the correct value.
+            # and also so that the prev_value != value, used in the is_engaged setter, will still trigger.
         self._engaged_reasons = new_engaged
         self.is_engaged = len(new_engaged) > 0
