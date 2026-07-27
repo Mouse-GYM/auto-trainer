@@ -67,6 +67,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             name = self.__class__.__qualname__
         self._name = name
         self._config = self.config_cls() if config is None else config
+        self._lock_acquire_timeout = 5
         self._running = False
         self._p_started = -math.inf
         self._started_datetime = datetime.datetime.now()
@@ -208,7 +209,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # So that check_state() will be basically ignored,
             # but it's not a big deal given the detector is anyway being stopped concurrently.
             return None
-        if not self._lock.acquire(timeout=5):  # for different threads
+        if not self._lock.acquire(timeout=self._lock_acquire_timeout):  # for different threads
             # check_state is supposed to be very fast, if not then it's a bug.
             # so not being able to take the lock after that long would imply something might be deadlocked,
             # or would become deadlocked if we would keep waiting. hence this critical log level:
