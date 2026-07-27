@@ -23,9 +23,6 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
         self._config.min_limit_mb = 0
         self._persistence_cfg = PersistenceConfiguration(output_location="")
 
-    def check_state(self, *, force: bool=False):
-        return super().check_state(force=True)  # always check, even if daemon/check thread not running so.
-
     def _check_state(self) -> Optional[float]:
         cfg = self._config
         loc = self._persistence_cfg.output_location

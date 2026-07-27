@@ -11,7 +11,11 @@ from autotrainer.core.analysis.free_disk_space_detector import FreeDiskSpaceDete
 @pytest.fixture
 def free_disk_space_det():
     det = FreeDiskSpaceDetector()
-    det.use_daemon = False  # doesn't require start, and run checks in foreground
+    # runs everything in foreground:
+    det.use_daemon = False
+    det.default_timer_delay = None
+    #
+    det.start()
     try:
         yield det
     finally:

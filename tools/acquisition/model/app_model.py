@@ -1601,8 +1601,8 @@ class AppModel(ObservableObject):
         self._load_animals()
 
         analysis = self._analysis
-        analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         analysis.free_disk_space_detector.start()
+        analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
 
         self._hardware.load_config(configuration.hardware)
@@ -1828,6 +1828,7 @@ class AppModel(ObservableObject):
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
             self._hardware.set_color_led(*color)
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:
