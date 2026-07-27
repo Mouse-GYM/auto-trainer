@@ -270,7 +270,6 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 return
             self._logger.verbose("%s: starting monitor", self._name)
             self._running = True
-            self.is_engaged = False  # force reset "engaged" to False
             self._p_started = get_perf_now()
             self._started_datetime = datetime.datetime.now()
             self._start()
