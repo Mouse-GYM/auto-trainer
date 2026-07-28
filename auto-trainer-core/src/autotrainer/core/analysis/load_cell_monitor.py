@@ -129,7 +129,6 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
         with self._lock:
             if is_engaged == self._context.is_engaged:
                 return
-            self._is_engaged = is_engaged  # keeps BaseDetector._is_engaged private synced
             new_context = dataclasses.replace(self._context, is_engaged=is_engaged)
             if is_engaged:
                 related_perf_c = self._p_start_active
@@ -141,13 +140,14 @@ class LoadCellMonitor(BaseDetector[LoadCellConfiguration]):
                 new_context.last_engaged_perf_c = related_perf_c
             else:
                 new_context.last_disengaged_perf_c = related_perf_c
+            self._is_engaged = is_engaged  # keeps BaseDetector._is_engaged private synced
             self._context = new_context
         # executing the event without the lock acquired:
         logger.verbose("new context: %s", new_context)
         EventManager.default().post_event_content(
             ApiEventKind.loadCellEngagedChanged, data=dict(is_engaged=is_engaged),
             when=datetime.now() - timedelta(seconds=get_perf_now() - related_perf_c), index=self._index)
-        self._on_property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, is_engaged, not is_engaged)
+        self.property_changed(LoadCellMonitor.IS_ENGAGED_PROPERTY, is_engaged, not is_engaged)
 
     @property
     def thrashing_detected(self) -> bool:
