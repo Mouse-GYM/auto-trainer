@@ -366,10 +366,9 @@ class GroupSubDetectorContext:
 
 
 GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[GroupSubDetectorConfig])
-GroupSubDetectorConfigT = TypeVar("GroupSubDetectorConfigT", bound=GroupSubDetectorConfig)
 
 
-class GroupBaseDetector(BaseDetector[GroupSubDetectorConfigT], Generic[GroupSubDetectorConfigT, GroupSubDetectorT]):
+class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
     """Group Detector base class, is ORing of the sub-detectors"""
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
