@@ -547,10 +547,7 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continuous mode and is_from_start is not True, or else it was already recording.
-        if status in {AppModelStatus.IDLE, AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS}:
-            self._analysis.stop()
-        else:
-            self._analysis.restart()
+        self._analysis.restart()  # always
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -1604,6 +1601,7 @@ class AppModel(ObservableObject):
         self._load_animals()
 
         analysis = self._analysis
+        analysis.free_disk_space_detector.start()
         analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
 
@@ -1830,6 +1828,7 @@ class AppModel(ObservableObject):
         if cur_led is None or color != (cur_led.red, cur_led.green, cur_led.blue):
             self._hardware.set_color_led(*color)
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:

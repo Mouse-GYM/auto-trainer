@@ -82,7 +82,8 @@ class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, Alarm
         is_emergency = len(reasons) > 0
         if is_emergency and not self._is_engaged:
             logger.notice("Engaging emergency: %s", reasons)
-        if reasons != self._engaged_reasons:
-            self._is_engaged = None  # force trigger again, so that new reasons are seen
+        if reasons != prev_reasons:
+            self._is_engaged = "1" if len(prev_reasons) > 0 else ""  # force trigger again, so that new reasons are seen.
+            # see GroupBaseDetector for this "1" / ""
             self._engaged_reasons = reasons
         self.is_engaged = len(reasons) > 0

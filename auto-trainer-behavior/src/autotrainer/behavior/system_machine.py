@@ -679,7 +679,6 @@ class SystemMachine(StateMachine):
         if self._auto_clamp_in_progress:
             logger.debug("auto_clamp already in progress")
             return
-        is_headbar_pressure_engaged = self._analysis.headbar_pressure_monitor.is_engaged
         if not algo.head_fixation_enabled:
             logger.info("auto-clamp: disabled (no action taken)")
             return
@@ -692,7 +691,7 @@ class SystemMachine(StateMachine):
         if not algo.is_in_trial_capture:
             logger.info("auto-clamp: algo not in-trial (no action taken)")
             return
-        if not is_headbar_pressure_engaged:
+        if not self._analysis.headbar_pressure_monitor.is_engaged:
             logger.info("auto-clamp: detector not engaged (no action taken)")
             return
         self._timer_auto_clamp_evaluate.cancel()

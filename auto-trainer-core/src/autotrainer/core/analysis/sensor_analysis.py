@@ -66,7 +66,6 @@ class SensorAnalysis(ObservableObject):
         self._load_cell_monitor = LoadCellMonitor()
 
         # The analog pressure sensor on the headbar.
-        self._is_headbar_pressure_engaged = False
         self._headbar_pressure_monitor = HeadbarPressureMonitor()
 
         # The digital i/o switch on the headbar.
