@@ -90,11 +90,21 @@ def force_use_emulation_iface(monkeypatch):
     monkeypatch.setenv('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE', "1")
 
 
+class SimulatePerfNow:
+
+    get_current_perf_now: Callable[[], float]
+    increase_simulate_perf_now: Callable[[float], None]
+
+
 @pytest.fixture
-def mock_get_perf_now(monkeypatch):
+def mock_get_perf_now(monkeypatch) -> SimulatePerfNow:
     global fake_perf_now
     fake_perf_now = 0
     monkeypatch.setattr(autotrainer.core, "_get_perf_now", simulate_get_perf_now)
+    obj = SimulatePerfNow()
+    obj.get_current_perf_now = get_current_simulate_perf_now
+    obj.increase_simulate_perf_now = increase_simulate_perf_now
+    return obj
 
 
 @pytest.fixture(autouse=True)

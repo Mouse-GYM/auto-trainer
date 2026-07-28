@@ -1,3 +1,4 @@
+import logging
 import math
 from unittest import mock
 
@@ -6,10 +7,11 @@ import pytest
 
 from autotrainer.core import PersistenceConfiguration
 from autotrainer.core.analysis.free_disk_space_detector import FreeDiskSpaceDetector
+from top_fixtures import increase_simulate_perf_now
 
 
 @pytest.fixture
-def free_disk_space_det():
+def free_disk_space_det(mock_get_perf_now):
     det = FreeDiskSpaceDetector()
     # runs everything in foreground:
     det.use_daemon = False
@@ -31,7 +33,7 @@ def test_check_state_with_set_persistence_config(free_disk_space_det):
     assert det.is_engaged, "should have engaged from set_persistence_config"
     # now:
     det.config.min_limit_mb = 0
-    det.check_state()
+    det.check_state(force=True)
     assert not det.is_engaged
 
 
@@ -63,5 +65,46 @@ def test_with_permission_error(
     assert "this-is-denied" in caplog.text
     m.side_effect = orig_usage
     det.config.min_limit_mb = -1
-    det.check_state()
+    det.check_state(force=True)
     assert not det.is_engaged
+
+
+@pytest.mark.parametrize("delay", [-1, 0, 15, 30])
+def test_recheck_min_delay(free_disk_space_det, delay, caplog):
+    det = free_disk_space_det
+    cfg = det.config
+    cfg.recheck_min_delay = delay
+    det.set_persistence_config(PersistenceConfiguration(output_location="/"))
+    det.restart()  # to get first one done
+    cfg.min_limit_mb = math.inf  # ensure it will trigger is_engaged on next **real** check
+    skip_msg = "skipping check due to recheck_min_delay"
+    with caplog.at_level(logging.DEBUG):
+        det.check_state()
+    if delay > 0:
+        assert not det.is_engaged
+        assert skip_msg in caplog.text
+    else:
+        assert det.is_engaged
+        assert skip_msg not in caplog.text
+    caplog.clear()
+    #
+    det.config = det.config  # now this should trigger a check_state(force=True)
+    assert det.is_engaged
+    #
+    cfg.min_limit_mb = -1
+    with caplog.at_level(logging.DEBUG):
+        det.check_state()
+    if delay <= 0:
+        assert not det.is_engaged
+        assert skip_msg not in caplog.text
+    else:
+        assert det.is_engaged
+        assert skip_msg in caplog.text
+        half = delay / 2
+        increase_simulate_perf_now(half)
+        det.check_state()
+        assert det.is_engaged
+        #
+        increase_simulate_perf_now(half + .1)
+        det.check_state()
+        assert not det.is_engaged

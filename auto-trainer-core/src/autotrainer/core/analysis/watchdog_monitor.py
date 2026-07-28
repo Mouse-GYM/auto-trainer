@@ -18,6 +18,7 @@ class WatchdogItemDetector(BaseDetector[WatchdogItemDetectorConfig]):
     config_cls = WatchdogItemDetectorConfig
     use_daemon = False
     default_timer_delay = None
+    need_explicit_check = True
 
     def __init__(
         self,
