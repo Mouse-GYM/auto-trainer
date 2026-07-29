@@ -139,7 +139,7 @@ class _BoardPendingContext:
     uuid_ack_perf_c: float = -math.inf
     skip_uuid_ack_perf_c: bool = False
     ack_perf_timeout: float = math.inf  # perf timeout for current uuid ack
-    prev_command: Optional[Tuple[str, Any, str]] = None
+    prev_command: Optional[Tuple[str, Any, Optional[Any], Optional[Any]]] = None
     prev_command_relative: bool = False
     uuid_ack_timeout_engaged: bool = False
     repeated_command_count: int = 0
@@ -243,7 +243,7 @@ class CanDevice(Device):
         self._init_handlers()
 
         self._prev_command_timeout: float = self.default_command_ack_timeout_duration
-        self._prev_command: Optional[Tuple[object, Any, type(None)]] = None
+        self._prev_command: Optional[List[Any, Any, Optional, Optional]] = None
         self._prev_command_is_relative = False
 
         self._commands_queue = queue.Queue()
@@ -253,9 +253,9 @@ class CanDevice(Device):
         # internal data cache:
         self._previous_stepper_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
         self._previous_servo_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
-        self._prev_tunnel_gate_open_perf_c: Tuple[bool, float] = (None, -math.inf)
+        self._prev_tunnel_gate_open_perf_c: Tuple[Optional[bool], float] = (None, -math.inf)
 
-        self._boards_pending_ctx: Dict[Target, _BoardPendingContext] = {
+        self._boards_pending_ctx: Dict[Optional[Target], _BoardPendingContext] = {
             None: _BoardPendingContext(
                 target=None, uuid_ack_timeout_engaged_property_name=""
             ),
@@ -698,8 +698,8 @@ class CanDevice(Device):
             #
             p_now = get_perf_now()
             retrying_board = None
-            if kind is _uuid_ack or kind is not None:
-                # ensure we don't try to retry a command when we got an uuid ack
+            if kind is not None:
+                # ensure we don't try to retry a command when we got anything to do
                 search_retry_boards = {}
             else:
                 search_retry_boards = boards_pending_ctx
@@ -728,7 +728,7 @@ class CanDevice(Device):
                     raise RuntimeError(
                         f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
                     )
-                retrying_board = target
+                retrying_board = board_ctx
                 cur_commands.insert(0, board_ctx.prev_command)
                 board_ctx.prev_command = None
                 board_ctx.uuid = None
@@ -767,6 +767,9 @@ class CanDevice(Device):
                 else:
                     found_board_with_uuid_ack.compound_steps = None  # ensure None, always
                     target_board = found_board_with_uuid_ack
+            elif kind is _retry_compound:
+                target_board = retrying_board
+                assert isinstance(target_board, _BoardPendingContext)
             else:
                 # sort by availability and oldest first:
                 # but only if not uuid_ack.
