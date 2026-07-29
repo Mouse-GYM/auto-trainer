@@ -1,10 +1,12 @@
 import logging
 import math
 import queue
+import re
 import threading
 import time
 import uuid
 from functools import partial
+from typing import Union
 from unittest import mock
 
 import pytest
@@ -263,3 +265,141 @@ def test_rel_move_succeed_after_uuid_ack_timeout(
     assert not ack_timeout_engaged
     assert ack_timeout_engaged_count == 1
     assert device._commands_handler_thread.is_alive()
+
+
+def test_home_compound_with_first_fail(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+    monkeypatch,
+    caplog,
+):
+    orig_ = device.device_interface.stepper_home
+
+    def timedout_stepper_home(*args, **kwargs):
+        # consume one uuid, but don't insert ack into return messages as with emulation iface
+        device.device_interface.next_uuid()
+        # restore orig move:
+        device.device_interface.stepper_home = orig_
+        # m_get_perf.increase_simulate_perf_now(0.5)
+        # return True to fake command written to CAN bus ok:
+        return True
+
+    m = mock.MagicMock(side_effect=timedout_stepper_home)
+    device.device_interface.stepper_home = m
+
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device.default_command_ack_timeout_duration = 0.5
+
+    ack_timeout_engaged = False
+    ack_timeout_engaged_count = 0
+
+    def dev_prop_changed(name, value, old):
+        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
+            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
+            ack_timeout_engaged = value
+            if value:
+                ack_timeout_engaged_count += 1
+
+    device.property_changed += dev_prop_changed
+
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.SEND_HOME, None, context=ctx)
+        expected_tok_event.wait(3)
+        # time.sleep(0.1)
+        # print(caplog.text)
+
+    assert ctx in tokens_acked
+    assert not ack_timeout_engaged
+    assert ack_timeout_engaged_count == 1
+    assert device._commands_handler_thread.is_alive()
+    #
+    expected_ordered_lines = [
+        "executing cmd SystemCommandKind.SEND_HOME with ctx",
+        "Starting sequence send_home (3 steps):",
+        "executing next compound step: {'home': <Motor.PELLET_Y_MOTOR: 3>} (remains after=2)",
+        "timeout waiting ack previous command:",
+        "retrying perform next compound with {'home': <Motor.PELLET_Y_MOTOR: 3>}",
+        "executing next compound step: {'home': <Motor.PELLET_Y_MOTOR: 3>} (remains after=2)",
+        "executed {'home': <Motor.PELLET_Y_MOTOR: 3>} write command",
+        "executing next compound step: {'home': <Motor.PELLET_Z_MOTOR: 4>} (remains after=1)",
+        "executing next compound step: {'home': <Motor.PELLET_X_MOTOR: 2>} (remains after=0)",
+        f"finished executing SystemCommandKind.SEND_HOME ; target_board=Target.PELLET_DEVICE ctx={ctx} board={ctx}",
+    ]
+    logs = caplog.text.splitlines()
+    while expected_ordered_lines:
+        xl = expected_ordered_lines.pop(0)
+        for idx, log in enumerate(logs):
+            if xl in log:
+                del logs[:idx + 1]
+                break
+        else:
+            pytest.fail(f"don't find {xl} in output")
+
+
+def test_send_fixed_xyz_timedout(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+    monkeypatch,
+    caplog,
+):
+    orig_ = device.device_interface.fixed_position
+
+    def timedout_cmd(*args, **kwargs):
+        # consume one uuid, but don't insert ack into return messages as with emulation iface
+        device.device_interface.next_uuid()
+        # restore orig:
+        device.device_interface.fixed_position = orig_
+        # return True to fake command written to CAN bus ok:
+        return True
+
+    m = mock.MagicMock(side_effect=timedout_cmd)
+    device.device_interface.fixed_position = m
+
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device.default_command_ack_timeout_duration = 0.5
+
+    ack_timeout_engaged = False
+    ack_timeout_engaged_count = 0
+
+    def dev_prop_changed(name, value, old):
+        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
+            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
+            ack_timeout_engaged = value
+            if value:
+                ack_timeout_engaged_count += 1
+
+    device.property_changed += dev_prop_changed
+
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.SEND_FIXED_XYZ, None, context=ctx)
+        expected_tok_event.wait(3)
+
+    assert ctx in tokens_acked
+    assert not ack_timeout_engaged
+    assert ack_timeout_engaged_count == 1
+    assert device._commands_handler_thread.is_alive()
+    #
+    expected_ordered_lines = [
+        "executing cmd SystemCommandKind.SEND_FIXED_XYZ",
+        "timeout waiting ack previous command: SystemCommandKind.SEND_FIXED_XYZ",
+        "executing command kind: retry_full",
+        "executing cmd SystemCommandKind.SEND_FIXED_XYZ",
+        "finished executing SystemCommandKind.SEND_FIXED_XYZ",
+    ]
+    logs = caplog.text.splitlines()
+    while expected_ordered_lines:
+        xl = expected_ordered_lines.pop(0)
+        for idx, log in enumerate(logs):
+            if xl in log:
+                del logs[:idx + 1]
+                break
+        else:
+            pytest.fail(f"don't find {xl} in output")
