@@ -18,7 +18,6 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
 
     use_daemon = True
     default_timer_delay = 30
-    # need_explicit_check = True
 
     def __init__(self):
         super().__init__()

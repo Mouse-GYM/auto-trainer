@@ -307,14 +307,17 @@ from .configuration import HardwareConfiguration, InferenceConfiguration, Persis
 
 from .message import MotorConfigurations, Motor
 from .message import SystemStatusMessageKind, SystemCommandKind, MeasurementMessageProtocol, AudioSpectrumMessage
+from .message.audio_spectrum_data import AudioSpectrumData
+from .message.measurement_data import MeasurementData
+
 from .configuration import SystemConfiguration, BehaviorConfiguration, CameraConfiguration, CameraId, \
     SystemConfigurationLoader
 
 from .message import MessageHandler, SystemMessageHandler
-from .analysis import SensorAnalysis, MeasurementData, AudioSpectrumData
+from .analysis import SensorAnalysis
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 
-from .event.api_event_kind import ApiEventKind
+# from .event.api_event_kind import ApiEventKind
 from .event.event_info import EventInfo
 from .event.api_event_plugin import EventManagerPlugin
 from .event.event_manager import EventManager

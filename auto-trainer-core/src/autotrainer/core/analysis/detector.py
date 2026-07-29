@@ -169,7 +169,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._cur_timer.cancel()  # safer
         timer = self._cur_timer = make_daemon_timer(delay, self.check_state)
         timer.start()
-        self._logger.verbose("created timer to check_state within %.1fs", delay)
+        self._logger.verbose("%s: created timer to check_state within %.1fs", self._name, delay)
 
     @property
     def check_in_progress(self) -> bool:

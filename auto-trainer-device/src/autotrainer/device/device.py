@@ -1,8 +1,10 @@
 import math
 from typing import Optional, Any
 
+from autotrainer.api import ApiEventKind
+
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import EventManager, SystemStatusMessageKind, ApiEventKind, ObservableObject
+from autotrainer.core import EventManager, SystemStatusMessageKind, ObservableObject
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi

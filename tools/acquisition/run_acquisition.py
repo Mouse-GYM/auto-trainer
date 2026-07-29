@@ -8,7 +8,9 @@ from typing import Optional
 
 from PySide6 import QtGui
 
-from autotrainer.core import EventManager, ApiEventKind
+from autotrainer.api import ApiEventKind
+
+from autotrainer.core import EventManager
 from autotrainer.core.event import try_register_api_event_plugin
 from autotrainer.core.logging import (get_verbose_logger, get_console_handler, set_log_location)
 from autotrainer.pyside import CardHeader

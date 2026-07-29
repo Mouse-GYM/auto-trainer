@@ -3,16 +3,20 @@ import enum
 from datetime import datetime
 from typing import Optional, Callable
 
-from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntertrialState
-from autotrainer.behavior.behavior_algorithm import BehaviorAlgoProps, BehaviorAlgoStatus
+from autotrainer.api import ApiEventKind
+
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
-                              SystemMessageHandler, EventManager, ApiEventKind)
+                              SystemMessageHandler)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+
+from autotrainer.behavior import SystemMachine, InferenceProtocol, BehaviorAlgorithm, SystemState, IntertrialState
+from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from autotrainer.core.project import ProjectDependentProtocol
