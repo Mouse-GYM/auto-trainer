@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import math
 import queue
@@ -53,7 +54,7 @@ def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHol
     if msg_kind == SystemStatusMessageKind.ACKNOWLEDGE:
         tok, perf_c = data
         tokens_acked.append(tok)
-        if tok is not None and expected_tok is not None and tok == expected_tok.value:
+        if tok is not None and tok == expected_tok.value:
             expected_tok.value = None
             if event is not None:
                 event.set()
@@ -82,8 +83,19 @@ def device_conn(device):
         dc.request_disconnect()
 
 
-@pytest.fixture  # (scope="module")
-def device(expected_tok_event, expected_tok, tokens_acked) -> CanDevice:  # noqa
+@dataclasses.dataclass()
+class DeviceAckTimeoutContext:
+    engaged: bool = False
+    engaged_count: int = 0
+
+
+@pytest.fixture
+def dev_ack_timeout_ctx():
+    return DeviceAckTimeoutContext()
+
+
+@pytest.fixture
+def device(expected_tok_event, expected_tok, tokens_acked, dev_ack_timeout_ctx) -> CanDevice:  # noqa
     device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
     # unneeded, at least with emulation iface:
     # device._interface.magnet_address = 0x40
@@ -95,6 +107,15 @@ def device(expected_tok_event, expected_tok, tokens_acked) -> CanDevice:  # noqa
         expected_tok=expected_tok,
         event=expected_tok_event,
     )
+
+    def dev_prop_changed(name, value, old):
+        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
+            dev_ack_timeout_ctx.engaged = value
+            if value:
+                dev_ack_timeout_ctx.engaged_count += 1
+
+    device.property_changed += dev_prop_changed
+
     device.connect()
     device.device_interface.open()
     try:
@@ -223,47 +244,44 @@ def test_can_connect_twice(device, caplog):
     assert device.device_interface.is_open is True
 
 
+
+def mock_device_method_uuid_ack_timeout(device, meth):
+    orig_meth = getattr(device.device_interface, meth)
+
+    def meth_with_uuid_ack_timeout(*args, **kwargs):
+        # consume one uuid, but don't insert ack into return messages as with emulation iface
+        device.device_interface.next_uuid()
+        # restore orig method:
+        setattr(device.device_interface, meth, orig_meth)
+        # still return True to fake command written to CAN bus ok:
+        return True
+
+    m = mock.MagicMock(side_effect=meth_with_uuid_ack_timeout)
+    setattr(device.device_interface, meth, m)
+    device.default_command_ack_timeout_duration = 0.25  # make ~fast timeout
+
+
 def test_rel_move_succeed_after_uuid_ack_timeout(
     expected_tok,
     expected_tok_event,
     tokens_acked,
     device,
     device_conn,
+    dev_ack_timeout_ctx,
     monkeypatch,
     caplog,
 ):
-    orig_move_y = device.device_interface.move_motor_y
-    def ret_move(*args, **kwargs):
-        # consume one uuid, but don't insert ack into return messages as with emulation iface
-        device.device_interface.next_uuid()
-        # restore orig move:
-        device.device_interface.move_motor_y = orig_move_y
-        # return True to fake command written to CAN bus ok:
-        return True
-    m = mock.MagicMock()
-    m.side_effect = ret_move
-    device.device_interface.move_motor_y = m
+    mock_device_method_uuid_ack_timeout(device, "move_motor_y")
+
     ctx = uuid.uuid4()
     expected_tok.value = ctx
-    device.default_command_ack_timeout_duration = 0.5
-
-    ack_timeout_engaged = False
-    ack_timeout_engaged_count = 0
-    def dev_prop_changed(name, value, old):
-        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
-            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
-            ack_timeout_engaged = value
-            if value:
-                ack_timeout_engaged_count += 1
-
-    device.property_changed += dev_prop_changed
 
     device.notify_message(SystemCommandKind.SEND_RETRACT, None, context=ctx)
-
     expected_tok_event.wait(3)
+
     assert ctx in tokens_acked
-    assert not ack_timeout_engaged
-    assert ack_timeout_engaged_count == 1
+    assert not dev_ack_timeout_ctx.engaged
+    assert dev_ack_timeout_ctx.engaged_count == 1
     assert device._commands_handler_thread.is_alive()
 
 
@@ -273,48 +291,22 @@ def test_home_compound_with_first_fail(
     tokens_acked,
     device,
     device_conn,
+    dev_ack_timeout_ctx,
     monkeypatch,
     caplog,
 ):
-    orig_ = device.device_interface.stepper_home
-
-    def timedout_stepper_home(*args, **kwargs):
-        # consume one uuid, but don't insert ack into return messages as with emulation iface
-        device.device_interface.next_uuid()
-        # restore orig move:
-        device.device_interface.stepper_home = orig_
-        # m_get_perf.increase_simulate_perf_now(0.5)
-        # return True to fake command written to CAN bus ok:
-        return True
-
-    m = mock.MagicMock(side_effect=timedout_stepper_home)
-    device.device_interface.stepper_home = m
+    mock_device_method_uuid_ack_timeout(device, "stepper_home")
 
     ctx = uuid.uuid4()
     expected_tok.value = ctx
-    device.default_command_ack_timeout_duration = 0.5
-
-    ack_timeout_engaged = False
-    ack_timeout_engaged_count = 0
-
-    def dev_prop_changed(name, value, old):
-        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
-            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
-            ack_timeout_engaged = value
-            if value:
-                ack_timeout_engaged_count += 1
-
-    device.property_changed += dev_prop_changed
 
     with caplog.at_level(logging.DEBUG):
         device.notify_message(SystemCommandKind.SEND_HOME, None, context=ctx)
         expected_tok_event.wait(3)
-        # time.sleep(0.1)
-        # print(caplog.text)
 
     assert ctx in tokens_acked
-    assert not ack_timeout_engaged
-    assert ack_timeout_engaged_count == 1
+    assert not dev_ack_timeout_ctx.engaged
+    assert dev_ack_timeout_ctx.engaged_count == 1
     assert device._commands_handler_thread.is_alive()
     #
     expected_ordered_lines = [
@@ -346,45 +338,22 @@ def test_send_fixed_xyz_timedout(
     tokens_acked,
     device,
     device_conn,
+    dev_ack_timeout_ctx,
     monkeypatch,
     caplog,
 ):
-    orig_ = device.device_interface.fixed_position
-
-    def timedout_cmd(*args, **kwargs):
-        # consume one uuid, but don't insert ack into return messages as with emulation iface
-        device.device_interface.next_uuid()
-        # restore orig:
-        device.device_interface.fixed_position = orig_
-        # return True to fake command written to CAN bus ok:
-        return True
-
-    m = mock.MagicMock(side_effect=timedout_cmd)
-    device.device_interface.fixed_position = m
+    mock_device_method_uuid_ack_timeout(device, "fixed_position")
 
     ctx = uuid.uuid4()
     expected_tok.value = ctx
-    device.default_command_ack_timeout_duration = 0.5
-
-    ack_timeout_engaged = False
-    ack_timeout_engaged_count = 0
-
-    def dev_prop_changed(name, value, old):
-        if name == device.UUID_ACK_TIMEOUT_ENGAGED:
-            nonlocal ack_timeout_engaged, ack_timeout_engaged_count
-            ack_timeout_engaged = value
-            if value:
-                ack_timeout_engaged_count += 1
-
-    device.property_changed += dev_prop_changed
 
     with caplog.at_level(logging.DEBUG):
         device.notify_message(SystemCommandKind.SEND_FIXED_XYZ, None, context=ctx)
         expected_tok_event.wait(3)
 
     assert ctx in tokens_acked
-    assert not ack_timeout_engaged
-    assert ack_timeout_engaged_count == 1
+    assert not dev_ack_timeout_ctx.engaged
+    assert dev_ack_timeout_ctx.engaged_count == 1
     assert device._commands_handler_thread.is_alive()
     #
     expected_ordered_lines = [
