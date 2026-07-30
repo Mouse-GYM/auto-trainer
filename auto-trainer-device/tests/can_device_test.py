@@ -60,6 +60,18 @@ def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHol
                 event.set()
 
 
+def assert_lines_in_logs(lines, caplog):
+    logs = caplog.text.splitlines()
+    while lines:
+        xl = lines.pop(0)
+        for idx, log in enumerate(logs):
+            if xl in log:
+                del logs[:idx + 1]
+                break
+        else:
+            pytest.fail(f"don't find {xl} in log output: {caplog.text}")
+
+
 @pytest.fixture
 def tokens_acked():
     return []
@@ -284,6 +296,9 @@ def test_rel_move_succeed_after_uuid_ack_timeout(
     assert dev_ack_timeout_ctx.engaged_count == 1
     assert device._commands_handler_thread.is_alive()
 
+    msg = f"finished executing SystemCommandKind.SEND_RETRACT ; target_board=Target.PELLET_DEVICE ctx={ctx} board={ctx}"
+    assert msg in caplog.text
+
 
 def test_home_compound_with_first_fail(
     expected_tok,
@@ -321,15 +336,7 @@ def test_home_compound_with_first_fail(
         "executing next compound step: {'home': <Motor.PELLET_X_MOTOR: 2>} (remains after=0)",
         f"finished executing SystemCommandKind.SEND_HOME ; target_board=Target.PELLET_DEVICE ctx={ctx} board={ctx}",
     ]
-    logs = caplog.text.splitlines()
-    while expected_ordered_lines:
-        xl = expected_ordered_lines.pop(0)
-        for idx, log in enumerate(logs):
-            if xl in log:
-                del logs[:idx + 1]
-                break
-        else:
-            pytest.fail(f"don't find {xl} in output")
+    assert_lines_in_logs(expected_ordered_lines, caplog)
 
 
 def test_send_fixed_xyz_timedout(
@@ -363,12 +370,4 @@ def test_send_fixed_xyz_timedout(
         "executing cmd SystemCommandKind.SEND_FIXED_XYZ",
         "finished executing SystemCommandKind.SEND_FIXED_XYZ",
     ]
-    logs = caplog.text.splitlines()
-    while expected_ordered_lines:
-        xl = expected_ordered_lines.pop(0)
-        for idx, log in enumerate(logs):
-            if xl in log:
-                del logs[:idx + 1]
-                break
-        else:
-            pytest.fail(f"don't find {xl} in output")
+    assert_lines_in_logs(expected_ordered_lines, caplog)
