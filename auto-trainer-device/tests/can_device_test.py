@@ -109,6 +109,7 @@ def dev_ack_timeout_ctx():
 @pytest.fixture
 def device(expected_tok_event, expected_tok, tokens_acked, dev_ack_timeout_ctx) -> CanDevice:  # noqa
     device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
+    device._check_tunnel_pellet_status_age = lambda: None  # disabled for being able to use debug without getting it to trigger
     # unneeded, at least with emulation iface:
     # device._interface.magnet_address = 0x40
     # device._interface.pellet_address = 0x01

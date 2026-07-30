@@ -581,7 +581,6 @@ class CanDevice(Device):
 
     def __command_handler(self):
         cur_commands = []
-        t_perf_last_command_with_uuid = None
         input_q = self._commands_queue
         has_read_from_queue = False
         boards_pending_ctx = self._boards_pending_ctx
@@ -770,6 +769,8 @@ class CanDevice(Device):
             elif kind is _retry_compound:
                 target_board = retrying_board
                 assert isinstance(target_board, _BoardPendingContext)
+                # don't check for available, given it isn't (_retry_compound == len(board.compound_movements) > 0
+                # _retry_compound is triggered by/after uuid ack timeout of the given board.
             else:
                 # sort by availability and oldest first:
                 # but only if not uuid_ack.
