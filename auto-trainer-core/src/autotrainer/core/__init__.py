@@ -317,7 +317,6 @@ from .message import MessageHandler, SystemMessageHandler
 from .analysis import SensorAnalysis
 from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 
-# from .event.api_event_kind import ApiEventKind
 from .event.event_info import EventInfo
 from .event.api_event_plugin import EventManagerPlugin
 from .event.event_manager import EventManager

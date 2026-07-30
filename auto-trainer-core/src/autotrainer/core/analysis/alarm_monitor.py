@@ -56,9 +56,7 @@ class AlarmDetectorContext:
 
 class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, AlarmDetector]):
 
-    # use_daemon = True
     config_cls = EmergencyAlarmConfiguration
-    # default_timer_delay = 1
 
     def _check_state(self, *, force: bool=False):
         # overloaded _check_state vs GroupBaseDetector, to take into account is_emergency_condition.
