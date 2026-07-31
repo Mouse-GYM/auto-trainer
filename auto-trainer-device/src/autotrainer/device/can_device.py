@@ -769,8 +769,9 @@ class CanDevice(Device):
             elif kind is _retry_compound:
                 target_board = retrying_board
                 assert isinstance(target_board, _BoardPendingContext)
-                # don't check for available, given it isn't (_retry_compound == len(board.compound_movements) > 0
-                # _retry_compound is triggered by/after uuid ack timeout of the given board.
+                # Skip the is_available() check on purpose: the board still holds its remaining
+                # compound_steps (they are only cleared once the sequence completes), so
+                # is_available() would always be False here and the retry would never be consumed.
             else:
                 # sort by availability and oldest first:
                 # but only if not uuid_ack.
@@ -861,7 +862,7 @@ class CanDevice(Device):
             #
             compound = self._compound_movement
             if compound is not None and len(compound) > 0:  # on start_sequence commands
-                assert target_board.compound_steps is None, f"{target_board.compound_steps=}"
+                assert not target_board.compound_steps, f"{target_board.compound_steps=}"
                 target_board.compound_steps = compound
                 self._compound_movement = None
             #
