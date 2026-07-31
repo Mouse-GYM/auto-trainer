@@ -1,6 +1,7 @@
 
 import contextlib
 import logging
+import math
 
 import pytest
 from unittest import mock
@@ -170,3 +171,28 @@ class TestBatchAnalysis(MockSystemMachine):
             )
             assert expected_txt in caplog.text
             assert machine.state == SystemState.intertrial  # still
+
+    def test_analyse_cur_batch_when_batch_disabled(self, machine, caplog):
+        algo = self.algo
+        pellet = self.pellet
+        algo.active_config.batch_trial_recording.maximum_batch_size = math.inf
+        #
+        self.start_trial_in_tunnel(set_recording_status=True)
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        assert pellet.state == PelletState.monitoring
+        assert machine.state == SystemState.tunnel
+        self.mock_pellet_missing(mouse_seen=True)
+        assert pellet.state == PelletState.loading
+        assert machine.state == SystemState.tunnel
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        self.mock_pellet_ack(until_none=True)
+        assert pellet.state == PelletState.monitoring
+        assert machine.state == SystemState.tunnel
+        #
+        algo.batch_trial_recording_config.enabled = False
+        with caplog.at_level(logging.DEBUG):
+            self.mock_pellet_missing(mouse_seen=True)
+        assert "batch disabled, doing batch-intertrial analysis" in caplog.text
+        assert machine.state == SystemState.intertrial
+        assert machine.intertrial.state == IntertrialState.segmentation

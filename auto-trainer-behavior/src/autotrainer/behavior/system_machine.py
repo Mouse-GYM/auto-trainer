@@ -451,13 +451,14 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_trial_capture_started(self):
+        algo = self._algorithm
         project = self._project_info
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         if dcs_send_pos is None:
             logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
         self._trial_started_perf_c = get_perf_now()
         self._tot_trials_recorded += 1
-        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
+        pellet_recent_seen = algo.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
         logger.verbose("trial_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, project.when)
@@ -470,7 +471,9 @@ class SystemMachine(StateMachine):
         if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
             self._set_pellet_delivered_presented(project, 0)
         self._inference.project = project
-        self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
+        with algo.set_allow_reentrant(True):
+            self._evaluate_auto_clamp()
+            self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_trial_capture_ended(self, reason: RecordingEndingReason):
@@ -486,7 +489,7 @@ class SystemMachine(StateMachine):
         if not algo.active_config.pellet_delivery.retract_enabled:
             # then stays at current position, whatever it is,
             # it will be resumed/continued once intertrial finishes (and inference comes back live).
-            pass
+            logger.debug("retract disabled, not moving arm after capture ended")
         elif self._pellet_machine.state == PelletState.monitoring:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
@@ -669,6 +672,14 @@ class SystemMachine(StateMachine):
                 else:
                     self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
                                                            data=dict(is_enabled=self._state))
+
+    @property
+    def auto_clamp_in_progress(self) -> bool:
+        return self._auto_clamp_in_progress
+
+    @property
+    def auto_clamp_disengage_in_progress(self) -> bool:
+        return self._auto_clamp_disengage_in_progress
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _evaluate_auto_clamp(self, *, caller: str="NA"):
