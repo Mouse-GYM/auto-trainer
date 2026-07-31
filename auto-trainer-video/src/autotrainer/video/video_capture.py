@@ -59,6 +59,7 @@ class CaptureCommandKind(IntEnum):
     """Set a logger log level"""
 
     SET_CAM_PROPERTY = 100
+    """Allow set any property on the camera instance"""
 
 
 @dataclass
@@ -174,6 +175,7 @@ class VideoCapture(Process):
         )
 
         self._attrs = attrs
+
         self._name = attrs.camera.name
         self._camera_url = attrs.camera.url
 
@@ -265,17 +267,19 @@ class VideoCapture(Process):
     def _prepare_to_run(self) -> bool:
         logger.info("<%s> process started: %s", self._name, self._attrs.inference)
         project = self._project_info
+        url = self._camera_url
         try:
-            if self._camera_url is None:
+            if not url:
                 self._set_error("camera_url not specified")
                 return False
 
             try:
-                camera = self._camera = VideoManager.create_camera(self._camera_url, self._name)
+                camera = self._camera = VideoManager.create_camera(url, self._name)
                 if camera is None:
-                    raise RuntimeError("VideoManager returned None")
+                    raise RuntimeError(f"VideoManager returned None for {url!r}")
             except BaseException as err:
-                self._set_error(f"Could not create camera {self._name}: {err}")
+                logger.exception("Could not create camera %s: %s", self._name, err)
+                self._set_error(f"Could not create camera: {err}")
                 return False
 
             camera.prepare_capture()
@@ -342,6 +346,24 @@ class VideoCapture(Process):
                 self._handle_command(cmd, context)
             except Exception as err:
                 logger.exception("Failure executing cmd %s: %s", raw, err)
+
+    def _apply_ignore_parts(self, frame: numpy.ndarray):
+        cam = self._camera
+        if cam is None:
+            return
+        ign_val = cam.ignore_replace_value
+        h, w = frame.shape
+        t, l, r, b = cam.ignore_borders
+        frame[:t, :] = ign_val
+        frame[h - b:, :] = ign_val
+        frame[:, :l] = ign_val
+        frame[:, w - r:] = ign_val
+        #
+        tl, tr, bl, br = cam.ignore_corners
+        frame[:tl, :tl] = ign_val
+        frame[:tr, w - tr:] = ign_val
+        frame[h - bl:, :bl] = ign_val
+        frame[h - br:, w - br:] = ign_val
 
     def _run_capture_loop(self, camera: CameraBase) -> None:
         log_cam_frame_info_delay_frame_count = camera.fps * 5
@@ -570,6 +592,12 @@ class VideoCapture(Process):
                     fault_count += 1
                     continue
 
+                if len(numpy.shape(frame)) < 3:
+                    pass
+                else:
+                    frame = frame[:, :, 0]
+                self._apply_ignore_parts(frame)
+                # orig_frame = frame.copy()
                 perf_now = get_perf_now()
 
                 cam_frame_id = camera.frame_id

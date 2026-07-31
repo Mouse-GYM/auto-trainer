@@ -1,7 +1,9 @@
+import ast
 import copy
 import sys
+import urllib.parse
 from enum import Enum
-from typing import Optional, Dict, List, Tuple, Type
+from typing import Optional, Dict, List, Tuple, Type, Any
 from urllib.parse import urlparse, ParseResult
 
 import cv2
@@ -84,16 +86,25 @@ class VideoManager:
         return cam_cls
 
     @classmethod
-    def parse_params(cls, camera_url: str) -> Tuple[ParseResult, Dict[str, str]]:
+    def parse_params(cls, camera_url: str) -> Tuple[ParseResult, Dict[str, Any]]:
         parsed = urlparse(camera_url)
         kind = CameraKind(parsed.scheme)
         cam_cls = cls.get_cam_class(kind)
         parameters = copy.deepcopy(cam_cls.default_params)
-        params = parsed.query.split("&")
-        for param in params:
-            values = param.split("=")
-            if len(values) == 2:
-                parameters[values[0].lower()] = values[1]
+        params = urllib.parse.parse_qsl(parsed.query, strict_parsing=True)
+        for p_name, p_value in params:
+            p_name: str
+            low_s = str(p_value).lower()
+            if low_s == "true":
+                p_value = True
+            elif low_s == "false":
+                p_value = False
+            elif isinstance(p_value, str):
+                try:
+                    p_value = ast.literal_eval(p_value)
+                except (SyntaxError, ValueError):
+                    pass
+            parameters[p_name.lower()] = p_value
         return parsed, parameters
 
     @classmethod
@@ -102,11 +113,11 @@ class VideoManager:
         if parsed.scheme == CameraKind.Random:
             camera = RandomCam(name)
         elif parsed.scheme == CameraKind.Spinnaker:
-            camera = cls.get_spin_camera(parsed.hostname, name)
+            camera = cls.get_spin_camera(parsed.hostname or "", name)
         elif parsed.scheme == CameraKind.Playback:
             camera = PlaybackCam(parsed.path, name)
         elif parsed.scheme == CameraKind.OpenCV:
-            camera = OpenCVCam(int(parsed.hostname), name)
+            camera = OpenCVCam(int(parsed.hostname or 0), name)
         else:
             logger.warning("No such cam scheme: %s", parsed.scheme)
             return None

@@ -27,6 +27,10 @@ class CameraBase:
     # Is used to pre-set/applied on the camera instance, once it's created,
     # but before any eventual custom params from config file, that can so override them.
 
+    ignore_borders = (0, 0, 0, 0)  # top,      left,      right,       bottom
+    ignore_corners = (0, 0, 0, 0)  # top-left, top-right, bottom-left, bottom-right
+    ignore_replace_value = 0
+
     def __init__(self, name: str = "camera"):
         self._name = name
         self._width = 0
@@ -140,7 +144,7 @@ class CameraBase:
 
         return None, self._last_when
 
-    def set_property(self, name: str, value: str) -> bool:
+    def set_property(self, name: str, value: Any) -> bool:
         """ Sets known property values, typically from the camera url.
 
         Subclasses should override to handle custom properties for specific camera types and fallback to calling this
@@ -159,7 +163,9 @@ class CameraBase:
         elif name == "name":
             self.name = value
         elif name == "primary":
-            self._is_primary = value.lower() in {"true", "yes", "on", "1"}
+            self._is_primary = value.lower() in {"true", "yes", "on", "1"} if isinstance(value, str) else bool(value)
+        elif hasattr(self, name):
+            setattr(self, name, value)
         else:
             logger.warning(f"<{self._name}> unknown property {name}")
             return False

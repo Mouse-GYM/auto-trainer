@@ -1,3 +1,4 @@
+import ast
 import ctypes
 import math
 import multiprocessing
@@ -10,7 +11,7 @@ from multiprocessing.sharedctypes import (
     Synchronized,
 )
 from multiprocessing.synchronize import Semaphore as SemaphoreType
-from typing import Optional, List, Tuple, Dict, Any, Iterable, Union
+from typing import Optional, List, Tuple, Dict, Any, Iterable, Union, Callable
 from threading import Event
 import urllib.parse
 
@@ -30,6 +31,9 @@ from autotrainer.core.capture import CaptureProcessStatus
 from tools.acquisition.model.user_preferences import UserPreferences
 
 logger = get_verbose_logger(__name__)
+
+
+DisplayUpdateFunctionType = Optional[Callable[[ndarray, float], None]]
 
 
 def create_camera_list():
@@ -125,7 +129,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._still_image_capture_interval = 0.0
         self._display_dots_detection = True
 
-        self._display_update_fcn = None
+        self._display_update_fcn: DisplayUpdateFunctionType = None
 
         self._frame_count = 0
         self._start = 0
@@ -314,8 +318,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             self._fps = 1e9 * self._frame_count / (time.perf_counter_ns() - self._start)
             self._trace(f"display fps: {int(self._fps)}")
 
-        if self._display_update_fcn is not None and self._video_capture is not None:
-            self._display_update_fcn(data, self._fps)
+        func = self._display_update_fcn
+        if func is not None and self._video_capture is not None:
+            func(data, self._fps)
 
     def on_prepare_capture(
         self,
@@ -336,51 +341,50 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
         self._video_reader_initialize()
 
-        if self._camera_source is not None:
-            if "?" in self._camera_source.url:
-                url = self._camera_source.url + f"&name={self._name}"
-            else:
-                url = self._camera_source.url + f"?name={self._name}"
+        url = self._camera_source.url
+        concat_char = '&' if "?" in url else '?'
+        url += f"{concat_char}name={self._name}"
 
-            camera = CaptureCameraAttrs(name=self._name, url=url)
+        camera = CaptureCameraAttrs(name=self._name, url=url)
+        logger.debug("cam=%s: url=%r", self._name, url)
 
-            inference = None if network_queue is None else CaptureInferenceAttrs(
-                queue=network_queue, index=self._camera_index)
+        inference = None if network_queue is None else CaptureInferenceAttrs(
+            queue=network_queue, index=self._camera_index)
 
-            capture_attrs = CaptureAttrs(
-                command_queue=self._video_command_queue,
-                status=self._video_status,
-                image_queue=self._video_image_queue,
-                fps_image_queue=15 if self._preferences is None else self._preferences.live_feed_refresh_rate,
-                frame=self._video_frame_index,
-                camera=camera,
-                camera_index=self._camera_index,
-                inference=inference,
-                errors=self._errors,
-                presence_detection_attrs=self._presence_detection,
-                is_primary=self._is_primary,
-                msg_queue=self._msg_queue,
-                record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
-                watchdog_perf_c=self._watchdog_capture_perf_c,
-                synced_cam_record_enabled=self._synced_cam_recording,
-                synced_cam_frame_index=self._synced_cam_frame_index,
-                record_stop_sema=self._record_stop_sema,
-            )
+        capture_attrs = CaptureAttrs(
+            command_queue=self._video_command_queue,
+            status=self._video_status,
+            image_queue=self._video_image_queue,
+            fps_image_queue=15 if self._preferences is None else self._preferences.live_feed_refresh_rate,
+            frame=self._video_frame_index,
+            camera=camera,
+            camera_index=self._camera_index,
+            inference=inference,
+            errors=self._errors,
+            presence_detection_attrs=self._presence_detection,
+            is_primary=self._is_primary,
+            msg_queue=self._msg_queue,
+            record_prebuffer_duration=self._cur_conf.record_prebuffer_duration,
+            watchdog_perf_c=self._watchdog_capture_perf_c,
+            synced_cam_record_enabled=self._synced_cam_recording,
+            synced_cam_frame_index=self._synced_cam_frame_index,
+            record_stop_sema=self._record_stop_sema,
+        )
 
-            rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
-            image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
-            record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
-                                                      video_rotate_interval=rotate_interval,
-                                                      image_interval=image_interval)
-            # Leave the watchdog counter unset (nan) until the capture child writes its first
-            # real timestamp; the monitor ignores nan. Seeding a live perf_counter here makes the
-            # counter age in real time while the child is still spawning, which on slow spawn-based
-            # startup (notably macOS) can exceed the timeout and raise a false "element(s) timedout"
-            # before capture has even begun.
-            self._watchdog_capture_perf_c.value = math.nan
-            vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
-                                                             project_info=self._project)
-            vid_capture.start()
+        rotate_interval = self._record_rotate_interval if self._is_recording_enabled else -1
+        image_interval = self._still_image_capture_interval if self._is_still_capture_enabled else 0
+        record_properties = VideoRecordProperties(project_info=self._project, record_mode=self.record_mode,
+                                                  video_rotate_interval=rotate_interval,
+                                                  image_interval=image_interval)
+        # Leave the watchdog counter unset (nan) until the capture child writes its first
+        # real timestamp; the monitor ignores nan. Seeding a live perf_counter here makes the
+        # counter age in real time while the child is still spawning, which on slow spawn-based
+        # startup (notably macOS) can exceed the timeout and raise a false "element(s) timedout"
+        # before capture has even begun.
+        self._watchdog_capture_perf_c.value = math.nan
+        vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
+                                                         project_info=self._project)
+        vid_capture.start()
 
         return True
 
@@ -388,6 +392,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         if not self._is_enabled:
             logger.warning("%s: on_capture_start called but disabled", self._name)
             return
+        props = self._camera_properties
+        logger.notice("on_capture_start(): props=%s", props)
         self._send_command(CaptureCommandKind.ENABLE_CAPTURE)
 
     def on_capture_notify_end(self):
@@ -482,19 +488,6 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
     def save_configuration(self) -> CameraConfiguration:
         parsed, params = VideoManager.parse_params(self._camera_source.url)
-        params: Dict[str, Any]
-        for key, value in params.items():
-            try:
-                val = float(value)
-                if abs(int(val) - val) < 2.0 * float(numpy.finfo(float).eps):
-                    val = int(val)
-                value = val
-            except (ValueError, TypeError):
-                if str(value).lower() == "true":
-                    value = True
-                elif str(value).lower() == "false":
-                    value = False
-            params[key] = value
         # undo the %-encode which happened in self.load_configuration():
         path = urllib.parse.unquote(parsed.path)[1:]  # [1:] for strip of first leading "/"
 
@@ -538,9 +531,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         if self._video_capture is not None:
             self.on_trigger_recording(notification.context)
 
-    def _update_camera_source(self, cam: CaptureCameraAttrs):
+    def _update_camera_source(self, cam: Optional[CaptureCameraAttrs]):
         if cam is None or len(cam.url) == 0:
-            self._camera_source = None
+            self._camera_source = CaptureCameraAttrs(name=self._name if cam is None else cam.name, url="")
             self._camera_properties = dict()
             self._video_image_queue = None
             return
@@ -558,29 +551,28 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self.shape = None
 
         if "height" in properties and "width" in properties:
-            width = int(properties["height"])
-            height = int(properties["width"])
+            height = properties["height"]
+            width = properties["width"]
             if width > 0 and height > 0:
-                self.shape = (width, height)
+                self.shape = (height, width)
             else:
                 logger.error("Invalid shape: %s", (width, height))
         else:
             self.shape = (300, 200)
+            logger.debug("%s: missing height and width, default to %s", self.shape)
 
         self._camera_source = cam
-
         self._camera_properties = properties
-
         self._trace(str(self._camera_properties))
 
     def _video_reader_initialize(self):
         if self._video_reader is None and self._video_image_queue is not None:
             self._video_reader_stop_event = Event()
             self._video_reader_reset_event = Event()
-            self._video_reader = VideoReader(self._name, self._video_image_queue, self.refresh_image,
+            vr = self._video_reader = VideoReader(self._name, self._video_image_queue, self.refresh_image,
                                              stop_event=self._video_reader_stop_event,
                                              reset_event=self._video_reader_reset_event)
-            self._video_reader.start()
+            vr.start()
 
     def _video_reader_teardown(self):
         reader = self._video_reader
