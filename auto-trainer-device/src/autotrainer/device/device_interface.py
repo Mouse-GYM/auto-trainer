@@ -465,7 +465,7 @@ class DeviceInterface:
         raise NotImplementedError
 
     def can_read(self) -> bool:
-        pass
+        """Wether can read device"""
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         """ Reads the available number of values from the interface up to max_count
@@ -475,21 +475,18 @@ class DeviceInterface:
         :returns typing.Any: the data
         :rtype: typing.Any
         """
-        pass
 
     def write(self, value: typing.Any) -> int:
         """ Writes the content value(s) to the interface
 
         :param value: The content to be written
         :return: the number of values written"""
-        pass
 
     def write_str(self, value: str) -> int:
         """ Writes the string to the interface
 
         :param value: The string to be written
         :return: the number of bytes written"""
-        pass
 
     def get_motor_configuration(self, motor: Motor) -> Union[ServoConfig, StepperConfig]:
         """Return current motor config"""
@@ -507,6 +504,14 @@ class DeviceInterface:
             if not value:
                 self._motors_drift = no_drift
         return True
+
+    def fixed_position(self):
+        """send-pellet"""
+        raise NotImplementedError
+
+    def stepper_home(self, motor: Motor):
+        """stepper_home == send-to-limit"""
+        raise NotImplementedError
 
     def move_motor_x(
         self,
