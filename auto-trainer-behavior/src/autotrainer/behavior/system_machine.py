@@ -155,11 +155,10 @@ class SystemMachine(StateMachine):
         algo.system_state = self._state  # to be sure
 
         self._analysis = analysis
-        if analysis is not None:
-            analysis.load_cell_monitor.property_changed += self._on_load_cell_monitor_property_changed
-            analysis.headbar_pressure_monitor.property_changed += self._on_headbar_pressure_monitor_property_changed
-            analysis.load_cell_tare_monitor.tare_callback = self._on_load_cell_tare_requested
-            analysis.auto_tunnel_sweep_monitor.property_changed += self._on_auto_tunnel_sweep_property_changed
+        analysis.load_cell_monitor.property_changed += self._on_load_cell_monitor_property_changed
+        analysis.headbar_pressure_monitor.property_changed += self._on_headbar_pressure_monitor_property_changed
+        analysis.load_cell_tare_monitor.tare_callback = self._on_load_cell_tare_requested
+        analysis.auto_tunnel_sweep_monitor.property_changed += self._on_auto_tunnel_sweep_property_changed
 
         self._inference = inference
         inference.pose_response_ready += self._on_pose_changed
@@ -270,8 +269,7 @@ class SystemMachine(StateMachine):
 
     def after_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         self._consider_start_trial(reason=reason)
-        if self._analysis is not None:
-            self._evaluate_auto_clamp(caller="after_enter_tunnel")
+        self._evaluate_auto_clamp(caller="after_enter_tunnel")
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
@@ -472,8 +470,8 @@ class SystemMachine(StateMachine):
             self._set_pellet_delivered_presented(project, 0)
         self._inference.project = project
         with algo.set_allow_reentrant(True):
-            self._evaluate_auto_clamp()
-            self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
+            self._evaluate_auto_clamp(caller="on_trial_capture_started")
+        self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_trial_capture_ended(self, reason: RecordingEndingReason):
