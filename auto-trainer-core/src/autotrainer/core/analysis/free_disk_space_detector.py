@@ -28,10 +28,10 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         p_now = get_perf_now()
         cfg = self._config
-        miss_d = p_now - self._last_check_perf_c
-        if not force and miss_d < cfg.recheck_min_delay:
+        miss_d = cfg.recheck_min_delay - (p_now - self._last_check_perf_c)
+        if not force and miss_d > 0:
             self._logger.debug("skipping check due to recheck_min_delay")
-            return miss_d if miss_d > 0 else None
+            return miss_d
         self._last_check_perf_c = p_now
         loc = self._persistence_cfg.output_location
         if not loc:

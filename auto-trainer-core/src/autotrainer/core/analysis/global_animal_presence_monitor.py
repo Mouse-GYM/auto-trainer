@@ -32,7 +32,7 @@ class GlobalAnimalPresenceAlarm(AlarmDetector[GlobalAnimalPresenceConfig]):
 
     def _on_load_cell_property_changed(self, name: str, value, old_value):
         if name == self._load_cell_monitor.IS_ENGAGED:
-            self.check_state(force=value != old_value)
+            self.check_state()
 
     def _check_state(self):
         perf_now = get_perf_now()

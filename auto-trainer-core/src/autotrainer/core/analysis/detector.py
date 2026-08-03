@@ -104,6 +104,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def config(self, config: DetectorConfigT):
         self._set_config(config)
 
+    def update_config(self, config: Optional[DetectorConfigT]=None):
+        if config is None:
+            config = self._config
+        self.config = config  # this always triggers a CONFIG property_changed, and a check_state(force=True).
+
     def _set_config(self, value: DetectorConfigT):
         self._logger.debug("got new config: %s", value)
         prev, self._config = self._config, value
@@ -292,6 +297,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             delay = self.check_state(force=force)  # always check immediately
             if not self._running:  # in case of, don't even go further.
                 break
+            force = False  # reset for next check
             if delay is None:
                 delay = self.default_timer_delay
                 if delay is None:
@@ -304,6 +310,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # Otherwise, we would need to restart any of them that has its config updated.
             # NB: this might not be necessary anymore, but is still safer to keep.
             delay = min(60., delay)
+            if delay <= 0:
+                warnings.warn(f"Received zero or negative delay: {delay}")
+                delay = 1  # ensure no busy loop can occur
+            assert delay > 0
             try:
                 r = cmd_queue.get(timeout=delay)
             except queue.Empty:
@@ -316,7 +326,6 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 force = r[1]
                 continue
             log.warning("unhandled command object: %r", r)
-            force = False
         # end while True
         log.verbose("%s: exiting main loop", self._name)
 
