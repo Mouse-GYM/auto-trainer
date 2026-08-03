@@ -7,6 +7,7 @@ import pytest
 from autotrainer.core import SystemStatusMessageKind
 from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.video import video_capture
+from autotrainer.video.camera.camera_base import CameraBase
 from top_fixtures import collect_log_queue_to_caplog
 
 
@@ -148,3 +149,15 @@ def test_load_save_config_with_ast_literal(video_capture_model, video_capture_mo
     assert cfg2.params["any_param"] == [5, 5, 5, 5]
     assert cfg2.params["any_param2"] == cfg.params["any_param2"]
     assert cfg2.params["any_param3"] == str(other_object)
+
+
+def test_with_cam_cls_param_type(video_capture_model, video_capture_model2, monkeypatch):
+    class CamTypesWithExplicitStr(CameraBase.ParamsType):
+        foobar = str
+
+    monkeypatch.setattr(CameraBase, CameraBase.ParamsType.__name__, CamTypesWithExplicitStr)
+    cfg = video_capture_model.save_configuration()
+    cfg.params["foobar"] = "0"
+    video_capture_model2.load_configuration(cfg)
+    cfg2 = video_capture_model2.save_configuration()
+    assert cfg2.params["foobar"] == "0"  # and not integer 0

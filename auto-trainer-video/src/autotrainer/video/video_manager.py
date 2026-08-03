@@ -107,9 +107,9 @@ class VideoManager:
                 try:
                     p_value = ast.literal_eval(p_value)
                 except (SyntaxError, ValueError):
-                    logger.error("%s: cannot decode param %s with value %r",
+                    logger.warning("%s: cannot decode param %s with value %r",
                                  cam_cls, p_name, p_value)
-                    raise
+                    # raise
             parameters[p_name] = p_value
         return parsed, parameters
 
