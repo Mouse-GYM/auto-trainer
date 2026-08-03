@@ -16,10 +16,17 @@ class CameraBaseDefaultParams:
 
     width: int = 300
     height: int = 200
-    fps: int = 30
+    fps: float = 30
 
 
 class CameraBase:
+
+    class ParamsType:
+        """Allows Camera subclasses to define the type of their specific possible parameters"""
+        name = str
+        width = int
+        height = int
+        fps = float
 
     default_params: ClassVar[Dict[str, Any]] = dataclasses.asdict(CameraBaseDefaultParams())
     # possible default "params" for camera class,
@@ -27,9 +34,14 @@ class CameraBase:
     # Is used to pre-set/applied on the camera instance, once it's created,
     # but before any eventual custom params from config file, that can so override them.
 
-    ignore_borders = (0, 0, 0, 0)  # top,      left,      right,       bottom
-    ignore_corners = (0, 0, 0, 0)  # top-left, top-right, bottom-left, bottom-right
-    ignore_replace_value = 0
+    # defined as class attrs (for default value), but can be set with different value on the camera instance,
+    # using a camera parameter with the same name:
+    ignore_pose_borders = (0, 0, 0, 0)  # top,      left,      right,       bottom
+    ignore_pose_corners = (0, 0, 0, 0)  # top-left, top-right, bottom-left, bottom-right
+    ignore_pose_replace_value = 0
+    ignore_pose_show_in_video_stream = False
+    ignore_pose_show_in_video_stream_replace_value = 255
+    # not included in CameraBaseDefaultParams on purpose, to not pollute config with the default value.
 
     def __init__(self, name: str = "camera"):
         self._name = name
@@ -149,8 +161,9 @@ class CameraBase:
 
         Subclasses should override to handle custom properties for specific camera types and fallback to calling this
         method for standard properties.
-
         """
+        # nb: since VideoManager now is doing the full decoding of the camera properties,
+        # then all the "decode/parsing" applied here is normally not anymore necessary.
 
         name = name.lower()
 

@@ -94,8 +94,12 @@ class VideoManager:
         params = urllib.parse.parse_qsl(parsed.query, strict_parsing=True)
         for p_name, p_value in params:
             p_name: str
-            low_s = str(p_value).lower()
-            if low_s == "true":
+            p_name = p_name.lower()
+            low_s = (p_value.decode() if isinstance(p_value, bytes) else p_value).lower()
+            cam_param_type = getattr(cam_cls.ParamsType, p_name, None)
+            if cam_param_type is str:
+                pass  # do not even try any decode
+            elif low_s == "true":
                 p_value = True
             elif low_s == "false":
                 p_value = False
@@ -103,8 +107,10 @@ class VideoManager:
                 try:
                     p_value = ast.literal_eval(p_value)
                 except (SyntaxError, ValueError):
-                    pass
-            parameters[p_name.lower()] = p_value
+                    logger.error("%s: cannot decode param %s with value %r",
+                                 cam_cls, p_name, p_value)
+                    raise
+            parameters[p_name] = p_value
         return parsed, parameters
 
     @classmethod

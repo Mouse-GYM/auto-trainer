@@ -239,11 +239,12 @@ class VideoCapture(Process):
         logger.info("%s: started running ; name=%s cam_index=%s primary=%s log_dict=%s",
                     self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary,
                     log_dict_config)
-        if not self._prepare_to_run():
+        camera = self._prepare_to_run()
+        if camera is None:
             return
 
         try:
-            self._run_capture_loop(self._camera)
+            self._run_capture_loop(camera)
         except BaseException as err:
             logger.exception("Fatal error: %s", err)
             save_err = str(err)
@@ -264,24 +265,25 @@ class VideoCapture(Process):
         if self._errors:
             self._errors.value = f"{error}"[:len(self._errors)].encode()
 
-    def _prepare_to_run(self) -> bool:
+    def _prepare_to_run(self) -> Optional[CameraBase]:
         logger.info("<%s> process started: %s", self._name, self._attrs.inference)
         project = self._project_info
         url = self._camera_url
+
+        if not url:
+            self._set_error("camera_url not specified")
+            return None
+
         try:
-            if not url:
-                self._set_error("camera_url not specified")
-                return False
+            camera = self._camera = VideoManager.create_camera(url, self._name)
+            if camera is None:
+                raise RuntimeError(f"VideoManager returned None for {url!r}")
+        except BaseException as err:
+            logger.exception("Could not create camera %s: %s", self._name, err)
+            self._set_error(f"Could not create camera: {err}")
+            return None
 
-            try:
-                camera = self._camera = VideoManager.create_camera(url, self._name)
-                if camera is None:
-                    raise RuntimeError(f"VideoManager returned None for {url!r}")
-            except BaseException as err:
-                logger.exception("Could not create camera %s: %s", self._name, err)
-                self._set_error(f"Could not create camera: {err}")
-                return False
-
+        try:
             camera.prepare_capture()
 
             rec_queue = queue.Queue(maxsize=128)
@@ -315,11 +317,16 @@ class VideoCapture(Process):
                 target=self._command_handler, daemon=True, name="CommandHandler")
             thread.start()
 
-            return True
         except Exception as err:
             logger.exception("%s: Error during prepare to run: %s", self, err)
-            self._set_error(str(err))
-            return False
+            self._set_error(f"failed to prepare running: {str(err)}")
+            try:
+                camera.end_capture()
+            except BaseException as err:
+                logger.warning("end_capture failed: %s", err)
+            return None
+
+        return camera
 
     def _command_handler(self):
         while True:
@@ -347,23 +354,28 @@ class VideoCapture(Process):
             except Exception as err:
                 logger.exception("Failure executing cmd %s: %s", raw, err)
 
-    def _apply_ignore_parts(self, frame: numpy.ndarray):
+    def _apply_ignore_parts(self, frame: numpy.ndarray, ignore_value):
         cam = self._camera
         if cam is None:
-            return
-        ign_val = cam.ignore_replace_value
+            return frame
+        borders = cam.ignore_pose_borders
+        corners = cam.ignore_pose_corners
+        if borders == (0, 0, 0, 0) and corners == (0, 0, 0, 0):
+            return frame
+        frame = frame.copy()
         h, w = frame.shape
-        t, l, r, b = cam.ignore_borders
-        frame[:t, :] = ign_val
-        frame[h - b:, :] = ign_val
-        frame[:, :l] = ign_val
-        frame[:, w - r:] = ign_val
+        t, l, r, b = borders
+        frame[:t, :] = ignore_value
+        frame[h - b:, :] = ignore_value
+        frame[:, :l] = ignore_value
+        frame[:, w - r:] = ignore_value
         #
-        tl, tr, bl, br = cam.ignore_corners
-        frame[:tl, :tl] = ign_val
-        frame[:tr, w - tr:] = ign_val
-        frame[h - bl:, :bl] = ign_val
-        frame[h - br:, w - br:] = ign_val
+        tl, tr, bl, br = corners
+        frame[:tl, :tl] = ignore_value
+        frame[:tr, w - tr:] = ignore_value
+        frame[h - bl:, :bl] = ignore_value
+        frame[h - br:, w - br:] = ignore_value
+        return frame
 
     def _run_capture_loop(self, camera: CameraBase) -> None:
         log_cam_frame_info_delay_frame_count = camera.fps * 5
@@ -395,7 +407,8 @@ class VideoCapture(Process):
         cam_capture = camera.capture
         inference = attrs.inference
         if inference is None:
-            net_q = net_q_idx = net_q_put = None
+            net_q_idx = 0
+            net_q = net_q_put = None
         else:
             net_q = inference.queue
             net_q_put = net_q.put
@@ -596,7 +609,7 @@ class VideoCapture(Process):
                     pass
                 else:
                     frame = frame[:, :, 0]
-                self._apply_ignore_parts(frame)
+
                 # orig_frame = frame.copy()
                 perf_now = get_perf_now()
 
@@ -661,10 +674,14 @@ class VideoCapture(Process):
                     if perf_now >= next_t_image_q:
                         if image_queue_delay is not None:
                             next_t_image_q = perf_now + image_queue_delay
-                        if len(numpy.shape(frame)) < 3:
-                            img_q.put(frame)
+
+                        if camera.ignore_pose_show_in_video_stream:
+                            live_frame = self._apply_ignore_parts(
+                                frame, camera.ignore_pose_show_in_video_stream_replace_value)
                         else:
-                            img_q.put(frame[:, :, 0])
+                            live_frame = frame
+
+                        img_q.put(live_frame)
 
                 if prim_cam_record_enabled is not None and not is_primary:
                     # for secondary synced cams we don't have other choice than to read
@@ -769,7 +786,8 @@ class VideoCapture(Process):
                         FrameIndexCategory.ONLINE_NO_RECORDING if record_start_stop_frame_idx is None
                         else cam_frame_id - record_start_stop_frame_idx
                     )
-                    if net_q_put(frame, net_q_idx, frame_idx_cat, block=False) == BufferResult.Ok:
+                    pose_frame = self._apply_ignore_parts(frame, camera.ignore_pose_replace_value)
+                    if net_q_put(pose_frame, net_q_idx, frame_idx_cat, block=False) == BufferResult.Ok:
                         cnt_net_q_put += 1
 
                 if vid_detection is not None:
