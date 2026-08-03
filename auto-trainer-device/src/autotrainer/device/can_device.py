@@ -388,7 +388,13 @@ class CanDevice(Device):
             SystemCommandKind.SEND_HOME:
                 lambda _: self._start_sequence(MotorSteps(
                     "send_home",
-                    [{"home": m} for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
+                    [
+                        {"home": Motor.PELLET_Y_MOTOR},
+                        {"delay": 0.15},
+                        {"home": Motor.PELLET_Z_MOTOR},
+                        {"delay": 0.15},
+                        {"home": Motor.PELLET_X_MOTOR}
+                    ]
                 )),
 
             # NB: only used by test and can_console, we should always use SEND_PELLET instead.

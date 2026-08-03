@@ -398,6 +398,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Z, coord_idx=2)
 
     def send_to_limits(self) -> Optional[UUID]:
+        # NB: actually unused, and same than send_home
         return self._send_with_token(self._device_conn, SystemCommandKind.SEND_TO_LIMITS,
                                      [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
