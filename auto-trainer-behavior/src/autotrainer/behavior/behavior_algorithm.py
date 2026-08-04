@@ -189,7 +189,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
-        self._project_info: ProjectInfo = ProjectInfo() if project_info is None else project_info
+        if project_info is None:
+            project_info = ProjectInfo.get_null_project()
+        self._project_info: ProjectInfo = project_info
         self._status = BehaviorAlgoStatus.IDLE
 
         self._active_config = BehaviorConfiguration()

@@ -194,6 +194,10 @@ class ProjectInfo(_ProjectInfo):
         self.session_id = session_id
         self.batch_id = batch_id
 
+    @classmethod
+    def get_null_project(cls) -> Self:
+        return cls(when=datetime.fromtimestamp(0), trial=0)
+
     @property
     def short_id(self) -> str:
         return f"{self.when.strftime(DATE_FORMAT)}_{self.device_id}_{self.trial:03d}"

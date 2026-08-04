@@ -88,7 +88,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frame_width = 1
         self._frame_height = 1
 
-        self._project: ProjectInfo = ProjectInfo()
+        self._project: ProjectInfo = ProjectInfo.get_null_project()
         self._intertrial_block: Optional[IntertrialBlock] = None
         self._intertrial_detection: Optional[IntertrialDetection] = None
         self._parts_offsets: Dict[Tuple[SceneElement, SceneElement], Offset3DTuple] = {}

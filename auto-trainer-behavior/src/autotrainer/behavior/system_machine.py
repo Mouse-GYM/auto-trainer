@@ -86,7 +86,7 @@ class SystemMachine(StateMachine):
         )
 
         if project_info is None:
-            project_info = ProjectInfo()
+            project_info = ProjectInfo.get_null_project()
         assert project_info is not None
         self._project_info = project_info
         #
