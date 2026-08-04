@@ -74,7 +74,11 @@ class PresenceInCageAlarm(AlarmDetector[PresenceInCageAlarmConfig]):
             not load_cell.is_engaged  # ~= not in tunnel
             and all(d <= 0 for d in all_missed_delays)  # all delays passed
         )
-        next_delay = 1 if engaged else min(d for d in all_missed_delays if d > 0)
+        if engaged:
+            next_delay = 1
+        else:
+            positive_missed_d = tuple(d for d in all_missed_delays if d > 0)
+            next_delay = 1 if len(positive_missed_d) == 0 else min(positive_missed_d)
         prev = self._is_engaged
         if engaged and not prev:
             meth = logger.notice
