@@ -111,7 +111,7 @@ class _ProjectInfo:
     root: str = ""
     device_id: str = ""
     _when: Union[Synchronized[ctypes.c_double], RawValueHolder] = None
-    when: ClassVar[datetime] = ValueHolderDescriptor(  # noqa
+    when: ClassVar[datetime] = ValueHolderDescriptor[datetime](  # noqa
         convert_from=datetime.fromtimestamp,
         convert_to=lambda v: v.timestamp(),
     )
@@ -119,7 +119,7 @@ class _ProjectInfo:
     camera_1: str = ""
     camera_2: str = ""
     _trial: Union[Synchronized[ctypes.c_uint32], RawValueHolder] = None
-    trial: ClassVar[int] = ValueHolderDescriptor()  # noqa
+    trial: ClassVar[int] = ValueHolderDescriptor[int]()  # noqa
     send_position: Optional[Offset3DTuple] = None
     dcs_send_position: Optional[Offset3DTuple] = None
     start_record_timestamp: float = math.nan  # regular unix timestamp, in seconds

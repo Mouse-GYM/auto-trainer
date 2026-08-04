@@ -2,7 +2,7 @@ import dataclasses
 import math
 import time
 from collections import namedtuple
-from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable
+from typing import Union, List, Tuple, Dict, Any, Iterable, TypeVar, Type, Optional, Callable, Generic
 from typing_extensions import Self
 
 import humps
@@ -44,7 +44,10 @@ def _no_convert(v):
     return v
 
 
-class ValueHolderDescriptor:
+ValueHolderT = TypeVar("ValueHolderT")
+
+
+class ValueHolderDescriptor(Generic[ValueHolderT]):
 
     def __init__(
         self,
@@ -59,13 +62,13 @@ class ValueHolderDescriptor:
         self.name = name
         self._priv_name = f"_{name}"
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance, owner) -> ValueHolderT:
         if instance is None:
             return self
         value_holder = getattr(instance, self._priv_name)
         return None if value_holder is None else self._convert_from(value_holder.value)
 
-    def __set__(self, instance, value):
+    def __set__(self, instance, value: ValueHolderT):
         getattr(instance, self._priv_name).value = self._convert_to(value)
 
 #
