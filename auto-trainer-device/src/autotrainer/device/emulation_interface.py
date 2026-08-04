@@ -6,7 +6,7 @@ from pathlib import Path
 from random import uniform, random
 from typing import Union, Tuple
 
-from autotrainer.core import Offset3DTuple
+from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
 from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
@@ -172,7 +172,7 @@ class EmulationInterface(DeviceInterface):
 
         messages = self._messages.get_and_reset()
 
-        perf_now = time.perf_counter()
+        perf_now = get_perf_now()  # time.perf_counter()
 
         # Just to do one type, even if all should be updated.  Do not want this to be taking up much time.
         if perf_now - self._last_status_message > _STATUS_MESSAGE_INTERVAL:
