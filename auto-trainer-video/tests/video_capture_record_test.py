@@ -158,6 +158,8 @@ def test_with_cam_cls_param_type(video_capture_model, video_capture_model2, monk
     monkeypatch.setattr(CameraBase, CameraBase.ParamsType.__name__, CamTypesWithExplicitStr)
     cfg = video_capture_model.save_configuration()
     cfg.params["foobar"] = "0"
+    cfg.params["not_foobar"] = "0"
     video_capture_model2.load_configuration(cfg)
     cfg2 = video_capture_model2.save_configuration()
     assert cfg2.params["foobar"] == "0"  # and not integer 0
+    assert cfg2.params["not_foobar"] == 0  # given not explicit str and ast literal eval is used.
