@@ -365,7 +365,7 @@ class GroupSubDetectorContext:
 
 
 
-GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[GroupSubDetectorConfig])
+GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
 class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
@@ -433,6 +433,14 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             self.check_state()
         self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
 
+    def _consider_for_new_engage(self, det):
+        cfg = det.config
+        return not isinstance(cfg, GroupSubDetectorConfig) or cfg.use
+
+    def _consider_for_keep_engaged(self, det):
+        cfg = det.config
+        return isinstance(cfg, GroupSubDetectorConfig) and not cfg.allow_autoresume_on_cleared
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
@@ -454,20 +462,12 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                     self._logger.debug("prevented possible reentrant/deadlock check_state to sub-detector %s", det.name)
                 else:
                     det.check_state(force=force)
-            cfg = det.config
-            det_engaged = det.is_engaged
-            is_group_sub_det_cfg = isinstance(cfg, GroupSubDetectorConfig)  # allow be flexible.
-            if det_engaged:
-                if is_group_sub_det_cfg:
-                    keep = cfg.use
-                else:
-                    keep = True
-                if keep:
+            if det.is_engaged:
+                if self._consider_for_new_engage(det):
                     new_engaged.add(sub_name)
-            elif is_group_sub_det_cfg:
-                assert not det_engaged  # per the previous if.
+            else:
                 if sub_name in prev_engaged:
-                    if not cfg.allow_autoresume_on_cleared:
+                    if self._consider_for_keep_engaged(det):
                         new_engaged.add(sub_name)  # keep it
         if new_engaged != prev_engaged:
             # ensure IS_ENGAGED property changed event still always relayed,

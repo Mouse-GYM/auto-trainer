@@ -5,16 +5,16 @@ from typing import Type, TypeVar, Generic, ClassVar, Optional, Callable, Dict, S
 from autotrainer.api import ApiAlarmKind, ApiAlarmStatus, ApiEventKind, build_event
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.detector import DetectorConfig
 
-
-AlarmDetectorConfigT = TypeVar("AlarmDetectorConfigT", bound=AlarmDetectorConfig)
+AlarmDetectorConfigT = TypeVar("AlarmDetectorConfigT", bound=DetectorConfig)
 
 
 class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorConfigT]):
     """Detector base class dedicated to the alarm monitor"""
 
     config_cls: Type[AlarmDetectorConfigT] = AlarmDetectorConfig
-    alarm_api_kind: ClassVar[ApiAlarmKind]
+    alarm_api_kind: ClassVar[ApiAlarmKind] = None  # noqa
 
     def __init__(self, *, name: Optional[str]=None, config: Optional[AlarmDetectorConfigT] = None):
         super().__init__(name=name, config=config)
