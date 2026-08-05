@@ -59,41 +59,42 @@ class PresenceDetectionAttrs:
         def make_shared(*args, **kwargs):
             nonlocal used
             used = True
-            return ctx.Value(*args, **kwargs)
+            return ctx.Value(*args, **kwargs, lock=lock)
 
         if  self._pc_threshold is None:
-            self._pc_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_threshold, lock=lock)
+            self._pc_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_threshold)
+
         if self._pc_high_exclude_threshold is None:
-            self._pc_high_exclude_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold, lock=lock)
+            self._pc_high_exclude_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold)
+
         if self._mask_lower_zero is None:
-            self._mask_lower_zero = make_shared(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero, lock=lock)
+            self._mask_lower_zero = make_shared(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero)
+
         if self._max_delay_skip_threshold is None:
-            self._max_delay_skip_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold, lock=lock)
+            self._max_delay_skip_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold)
+
         if self._last_absence_start_perf_c is None:
-            self._last_absence_start_perf_c = make_shared(ctypes.c_double, -math.inf, lock=lock)
+            self._last_absence_start_perf_c = make_shared(ctypes.c_double, -math.inf)
+
         if self._last_presence_start_perf_c is None:
-            self._last_presence_start_perf_c = make_shared(ctypes.c_double, -math.inf, lock=lock)
+            self._last_presence_start_perf_c = make_shared(ctypes.c_double, -math.inf)
+
         if self._presence_detected is None:
-            self._presence_detected = make_shared(ctypes.c_bool, False, lock=lock)
+            self._presence_detected = make_shared(ctypes.c_bool, False)
+
         if self._movement_detected is None:
-            self._movement_detected = make_shared(ctypes.c_bool, False, lock=lock)
+            self._movement_detected = make_shared(ctypes.c_bool, False)
+
         if self._pc_sum is None:
-            self._pc_sum = make_shared(ctypes.c_double, 0, lock=lock)
+            self._pc_sum = make_shared(ctypes.c_double, 0)
+
         if not used:
             lock = EmptyWithContext()
         self._lock = lock
 
-    def _loop_over_value_holder_desc(self):
-        cls = self.__class__
-        return (
-            a
-            for a in (getattr(cls, k) for k in dir(cls))
-            if isinstance(a, ValueHolderDescriptor)
-        )
-
     def __eq__(self, other):
-        return all(getattr(self, a.name) == getattr(other, a.name)
-                   for a in self._loop_over_value_holder_desc())
+        return all(getattr(self, a) == getattr(other, a)
+                   for a in (a.name.lstrip('_') for a in dataclasses.fields(self)))
 
     @property
     def lock(self):
@@ -103,8 +104,8 @@ class PresenceDetectionAttrs:
         """Detach from the shared values"""
         with self._lock:
             dct = {
-                f"_{a.name}": RawValueHolder(getattr(self, a.name))
-                for a in self._loop_over_value_holder_desc()
+                f"_{a}": RawValueHolder(getattr(self, a))
+                for a in (a.name.lstrip('_') for a in dataclasses.fields(self))
             }
         return self.__class__(**dct)
 
@@ -117,5 +118,3 @@ class PresenceDetectionAttrs:
     def load_config(self, cfg: PresenceDetectionConfig):
         for field in dataclasses.fields(cfg):
             setattr(self, field.name, getattr(cfg, field.name))
-
-
