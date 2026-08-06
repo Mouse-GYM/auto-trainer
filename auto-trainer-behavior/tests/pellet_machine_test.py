@@ -38,7 +38,7 @@ def test_cover_or_release_pellet_on_load_pellet(mock_system, machine, cover_enab
     assert pellet_m.state == PelletState.retract  # still
     assert algo.pellet_recently_seen  # still
     # now:
-    mock_system.increment_perf_now(algo.pellet_missing_time)
+    mock_system.increment_perf_now(algo.pellet_missing_time + 0.0001)
     assert not algo.pellet_recently_seen  # now not recently seen
     mock_system.mock_pose_response(pellet_seen=False)
     assert not algo.pellet_recently_seen  # still ofc

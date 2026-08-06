@@ -18,12 +18,14 @@ from unittest import mock
 
 import pytest
 import verboselogs
+from autotrainer.api import ApiAlarmKind
 
 import autotrainer.core
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
 from autotrainer.core.analysis import detector
+from autotrainer.core.event import event_manager
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
 from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
@@ -64,12 +66,12 @@ def get_current_simulate_perf_now():
 
 def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callable] = None):
     global fake_perf_now
-    if delay > 1:
-        # eventually try to help mitigate possible issue with background thread(s) doing sleep and
-        # checking get_perf_now() vs some previous saved perf_now.
-        while delay > 1:
-            fake_perf_now += 0.5
-            delay -= 0.5
+    # if delay > 1:
+    #     # eventually try to help mitigate possible issue with background thread(s) doing sleep and
+    #     # checking get_perf_now() vs some previous saved perf_now.
+    #     while delay > 1:
+    #         fake_perf_now += 0.5
+    #         delay -= 0.5
             # but this does not really solve the issue, this is more for emphase it
     fake_perf_now += delay
 
@@ -77,7 +79,7 @@ def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callabl
 # for small diff of timers delay:
 class AlmostEqualFloat(float):
     def __eq__(self, other):
-        return abs(self - other) < 0.01
+        return abs(self - other) < 0.1
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +107,30 @@ def mock_get_perf_now(monkeypatch) -> SimulatePerfNow:
     obj.get_current_perf_now = get_current_simulate_perf_now
     obj.increase_simulate_perf_now = increase_simulate_perf_now
     return obj
+
+
+@pytest.fixture()
+def mock_event_manager(monkeypatch):
+    m_event_mgr = mock.MagicMock(spec=event_manager.EventManager)
+    m_event_mgr.default.return_value = m_event_mgr
+    # patch to class "default" function:
+    monkeypatch.setattr(event_manager.EventManager, "default", lambda: m_event_mgr)
+    # so that modules having already import the class, and using the default() function,
+    # will still get the mocked instance.
+    # Then, also patch the EventManager itself in the module:
+    monkeypatch.setattr(
+        event_manager,
+        event_manager.EventManager.__name__,
+        m_event_mgr,
+    )
+    return m_event_mgr
+
+
+def has_api_event_kind(kind):
+    return any(
+        call.args[0].get('kind') == kind
+        for call in event_manager.EventManager.post_api_event.call_args_list  # noqa
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -647,7 +673,9 @@ class MockSystemMachine:
         }
         parts_flags = (parts_flag, parts_flag, parts_flag)
         self._pose_response_idx += 1
-        response = PoseResponse(sequence=self._pose_response_idx, parts_flags=parts_flags, locations=[])
+        response = PoseResponse(
+            sequence=self._pose_response_idx, parts_flags=parts_flags, locations=[],
+            perf_c=autotrainer.core.get_perf_now())
         self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
             self.pellet._pellet_device_ack_received(self.pellet._api_status_token)

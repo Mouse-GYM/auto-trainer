@@ -113,7 +113,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._logger.debug("got new config: %s", value)
         prev, self._config = self._config, value
         self.property_changed(self.CONFIG, value, prev)
-        self.check_state(force=True)  # force check_state even if same config
+        if self._running:
+            self.check_state(force=True)  # force check_state even if same config, but only if running.
 
     def post_detector_event(self, detector_id: ApiDetectorKind, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
@@ -247,15 +248,15 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
             if next_delay is None:
                 next_delay = self.default_timer_delay
-            elif next_delay < 0:
-                warnings.warn(f"received negative next_delay: {next_delay:.1f}")
+            elif next_delay <= 0:
+                warnings.warn(f"received zero or negative next_delay: {next_delay:.1f}")
                 next_delay = 1
 
             if not self._running:
                 # also recheck running after check_state, for eventual stop() called from some inner changed event callback.
                 return None
 
-            if next_delay is not None and not self.use_daemon:
+            if not self.use_daemon and next_delay is not None and next_delay > 0:
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
@@ -311,7 +312,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # NB: this might not be necessary anymore, but is still safer to keep.
             delay = min(60., delay)
             if delay <= 0:
-                warnings.warn(f"Received zero or negative delay: {delay}")
+                warnings.warn(f"{self._name_}: received zero or negative delay: {delay}")
                 delay = 1  # ensure no busy loop can occur
             assert delay > 0
             try:
