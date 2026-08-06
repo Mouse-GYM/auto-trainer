@@ -342,6 +342,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._video_reader_initialize()
 
         url = self._camera_source.url
+        if not url:
+            logger.warning("%s: unconfigured source url", self._name)
+            return True
+
         concat_char = '&' if "?" in url else '?'
         url += f"{concat_char}name={self._name}"
 
