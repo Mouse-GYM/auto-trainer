@@ -559,7 +559,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                 logger.error("Invalid shape: %s", (width, height))
         else:
             self.shape = (300, 200)
-            logger.debug("%s: missing height and width, default to %s", self.shape)
+            logger.debug("%s: missing height and width, default to %s",
+                         self._name, self.shape)
 
         self._camera_source = cam
         self._camera_properties = properties

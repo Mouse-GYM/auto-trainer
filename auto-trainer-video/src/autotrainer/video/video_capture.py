@@ -605,11 +605,6 @@ class VideoCapture(Process):
                     fault_count += 1
                     continue
 
-                if len(numpy.shape(frame)) < 3:
-                    pass
-                else:
-                    frame = frame[:, :, 0]
-
                 # orig_frame = frame.copy()
                 perf_now = get_perf_now()
 
@@ -674,6 +669,9 @@ class VideoCapture(Process):
                     if perf_now >= next_t_image_q:
                         if image_queue_delay is not None:
                             next_t_image_q = perf_now + image_queue_delay
+
+                        if len(numpy.shape(frame)) >= 3:
+                            frame = frame[:, :, 0]
 
                         if camera.ignore_pose_show_in_video_stream:
                             live_frame = self._apply_ignore_parts(

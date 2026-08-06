@@ -91,7 +91,7 @@ class VideoManager:
         kind = CameraKind(parsed.scheme)
         cam_cls = cls.get_cam_class(kind)
         parameters = copy.deepcopy(cam_cls.default_params)
-        params = urllib.parse.parse_qsl(parsed.query, strict_parsing=True)
+        params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
         for p_name, p_value in params:
             p_name: str
             p_name = p_name.lower()
