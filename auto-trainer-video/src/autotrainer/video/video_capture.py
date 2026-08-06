@@ -671,13 +671,13 @@ class VideoCapture(Process):
                             next_t_image_q = perf_now + image_queue_delay
 
                         if len(numpy.shape(frame)) >= 3:
-                            frame = frame[:, :, 0]
+                            live_frame = frame[:, :, 0]
+                        else:
+                            live_frame = frame
 
                         if camera.ignore_pose_show_in_video_stream:
                             live_frame = self._apply_ignore_parts(
-                                frame, camera.ignore_pose_show_in_video_stream_replace_value)
-                        else:
-                            live_frame = frame
+                                live_frame, camera.ignore_pose_show_in_video_stream_replace_value)
 
                         img_q.put(live_frame)
 
