@@ -155,11 +155,10 @@ class SystemMachine(StateMachine):
         algo.system_state = self._state  # to be sure
 
         self._analysis = analysis
-        if analysis is not None:
-            analysis.load_cell_monitor.property_changed += self._on_load_cell_monitor_property_changed
-            analysis.headbar_pressure_monitor.property_changed += self._on_headbar_pressure_monitor_property_changed
-            analysis.load_cell_tare_monitor.tare_callback = self._on_load_cell_tare_requested
-            analysis.auto_tunnel_sweep_monitor.property_changed += self._on_auto_tunnel_sweep_property_changed
+        analysis.load_cell_monitor.property_changed += self._on_load_cell_monitor_property_changed
+        analysis.headbar_pressure_monitor.property_changed += self._on_headbar_pressure_monitor_property_changed
+        analysis.load_cell_tare_monitor.tare_callback = self._on_load_cell_tare_requested
+        analysis.auto_tunnel_sweep_monitor.property_changed += self._on_auto_tunnel_sweep_property_changed
 
         self._inference = inference
         inference.pose_response_ready += self._on_pose_changed
@@ -270,8 +269,7 @@ class SystemMachine(StateMachine):
 
     def after_enter_tunnel(self, *, reason: str = "NA", force_from_cage: bool=False):
         self._consider_start_trial(reason=reason)
-        if self._analysis is not None:
-            self._evaluate_auto_clamp(caller="after_enter_tunnel")
+        self._evaluate_auto_clamp(caller="after_enter_tunnel")
 
     def after_exit_tunnel(self, *, reason: str = "NA"):
         logger.verbose("after_exit_tunnel: %s", reason)
@@ -451,13 +449,14 @@ class SystemMachine(StateMachine):
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_trial_capture_started(self):
+        algo = self._algorithm
         project = self._project_info
         dcs_send_pos = self._pellet_device.last_dcs_set_position
         if dcs_send_pos is None:
             logger.warning("current dcs_send_pos None (DCS), diamond-triangle not calibrated?")
         self._trial_started_perf_c = get_perf_now()
         self._tot_trials_recorded += 1
-        pellet_recent_seen = self._algorithm.is_pellet_recently_seen()
+        pellet_recent_seen = algo.is_pellet_recently_seen()
         pellet_m = self._pellet_machine
         logger.verbose("trial_capture_started: dcs_send_pos=%s prj.when=%s",
                        dcs_send_pos, project.when)
@@ -470,6 +469,8 @@ class SystemMachine(StateMachine):
         if pellet_m.state == PelletState.monitoring and pellet_recent_seen:
             self._set_pellet_delivered_presented(project, 0)
         self._inference.project = project
+        with algo.set_allow_reentrant(True):
+            self._evaluate_auto_clamp(caller="on_trial_capture_started")
         self._consider_auto_end_trial_capture()  # this will postpone the auto-end of the needed delay
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -486,7 +487,7 @@ class SystemMachine(StateMachine):
         if not algo.active_config.pellet_delivery.retract_enabled:
             # then stays at current position, whatever it is,
             # it will be resumed/continued once intertrial finishes (and inference comes back live).
-            pass
+            logger.debug("retract disabled, not moving arm after capture ended")
         elif self._pellet_machine.state == PelletState.monitoring:
             with algo.set_allow_reentrant(True):
                 self._pellet_machine.move_retract()
@@ -669,6 +670,14 @@ class SystemMachine(StateMachine):
                 else:
                     self._event_manager.post_event_content(ApiEventKind.headfixLoadCellChangedWrongState,
                                                            data=dict(is_enabled=self._state))
+
+    @property
+    def auto_clamp_in_progress(self) -> bool:
+        return self._auto_clamp_in_progress
+
+    @property
+    def auto_clamp_disengage_in_progress(self) -> bool:
+        return self._auto_clamp_disengage_in_progress
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _evaluate_auto_clamp(self, *, caller: str="NA"):

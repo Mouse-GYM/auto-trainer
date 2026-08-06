@@ -114,6 +114,17 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     assert has_event(ApiEventKind.sessionEnded), "Now that intertrial is finished sessionEnded must also be posted"
 
 
+def test_with_retract_disabled(mock_system, machine, caplog):
+    algo = mock_system.algo
+    algo.active_config.pellet_delivery.retract_enabled = False
+    #
+    mock_system.start_trial_in_tunnel()
+    mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
+    with caplog.at_level(logging.DEBUG):
+        mock_system.exit_tunnel()
+    assert "retract disabled, not moving arm after capture ended" in caplog.text
+
+
 class TestBadIntertrial(MockSystemMachine):
 
     def _init(self, machine: SystemMachine):
