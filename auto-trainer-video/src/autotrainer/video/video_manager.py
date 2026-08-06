@@ -90,7 +90,7 @@ class VideoManager:
         parsed = urlparse(camera_url)
         kind = CameraKind(parsed.scheme)
         cam_cls = cls.get_cam_class(kind)
-        parameters = copy.deepcopy(cam_cls.default_params)
+        parameters = {}
         params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
         for p_name, p_value in params:
             p_name: str
@@ -131,6 +131,10 @@ class VideoManager:
         if camera is None:
             logger.error("Cannot create %s-cam ; is library installed ?", parsed.scheme)
             return None
+
+        # apply default params:
+        for k, v in camera.default_params.items():
+            parameters.setdefault(k, v)
 
         # set cam params before init:
         for name, value in parameters.items():

@@ -22,23 +22,22 @@ def mock_spinnaker(monkeypatch):
 
 
 @pytest.mark.parametrize("url,xp_params,xp_parsed", [
-    ("random://0", {'fps': 30, 'height': 200, 'width': 300},
+    ("random://0", {},
 ParseResult(scheme='random', netloc='0', path='', params='', query='', fragment='')),
 
-    ("playback:///tmp/a.mp4", {'fps': 30, 'height': 200, 'width': 300},
+    ("playback:///tmp/a.mp4", {},
      ParseResult(scheme='playback', netloc='', path='/tmp/a.mp4', params='', query='', fragment='')),
 
-    ("random://0?width=150&height=300&", {'fps': 30, 'height': 300, 'width': 150},
+    ("random://0?width=150&height=300&", {'height': 300, 'width': 150},
      ParseResult(scheme='random', netloc='0', path='', params='', query='width=150&height=300&', fragment='')),
 
-    ("opencv://0", {'fps': 30, 'height': 200, 'width': 300},
+    ("opencv://0", {},
      ParseResult(scheme='opencv', netloc='0', path='', params='', query='', fragment='')),
 
     # spinnaker has different defaults than the others:
-    ("spinnaker://12345678",
-     {'exposure': 140, 'fps': 150.0, 'hbin': 4, 'vbin': 4, 'width': 256, 'height': 256,
-      'offsetx': 52, 'offsety': 6, 'gain': 1, 'gamma': 0.7},
-     ParseResult(scheme='spinnaker', netloc='12345678', path='', params='', query='', fragment='')),
+    ("spinnaker://12345678?exposure=145",
+     {'exposure': 145},
+     ParseResult(scheme='spinnaker', netloc='12345678', path='', params='', query='exposure=145', fragment='')),
 ])
 def test_parse_url(url, xp_params, xp_parsed):
     parsed, params = VideoManager.parse_params(url)
