@@ -55,9 +55,7 @@ class AlarmDetectorContext:
 
 class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, BaseDetector]):
 
-    use_daemon = True
     config_cls = EmergencyAlarmConfiguration
-    default_timer_delay = 1
 
     def _consider_for_new_engage(self, det):
         if not super()._consider_for_new_engage(det):

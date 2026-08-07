@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 
-
+from autotrainer.core.capture import CaptureProcessStatus
 from top_fixtures import MockSystemMachine, FifoExitStack
 
 from autotrainer.behavior import IntertrialState
@@ -23,7 +23,7 @@ from autotrainer.inference.analysis import IntertrialResponse
 
 class _AutoClampTestCase(MockSystemMachine):
 
-    def start_trial_in_tunnel(self, *, engage_headbar: bool = False):
+    def start_trial_in_tunnel(self, *, engage_headbar: bool = False):  # noqa
         self.mock_pose_response(pellet_seen=True)
         super().start_trial_in_tunnel(set_recording_status=True)
         if engage_headbar:
@@ -295,3 +295,48 @@ class TestEnabled(_AutoClampTestCase):
             self.headbar_pressure.is_engaged = False  # but back to False
         assert "auto-clamp: intertrial not idle (no action taken)" in caplog.text
         assert self.tunnel_dev.update_head_magnet_intensity.call_count == 0
+
+    def test_execute_disengage_twice(self, caplog, machine):
+        algo = self.algo
+        algo.head_clamp_config.prerelease_duration = 5  # this ensures the prerelease is enabled
+        self.start_trial_in_tunnel(engage_headbar=False)
+        assert not machine.auto_clamp_in_progress
+        self.sensor_analysis.headbar_pressure_monitor.is_engaged = True
+        assert machine.auto_clamp_in_progress
+        assert not machine.auto_clamp_disengage_in_progress
+        algo.head_fixation_enabled = False  # this will disengage 1st time
+        assert machine.auto_clamp_in_progress
+        assert machine.auto_clamp_disengage_in_progress
+        algo.head_fixation_enabled = True  # re-enable
+        with caplog.at_level(logging.DEBUG):
+            algo.head_fixation_enabled = False  # this will try disengage 2nd time
+        assert "skipping new disengage while disengage already in progress" in caplog.text
+        assert machine.auto_clamp_in_progress
+        assert machine.auto_clamp_disengage_in_progress  # still obv
+
+    def test_without_trial_in_capture(self, machine, caplog):
+        algo = self.algo
+        algo.pellet_delivery_config.retract_enabled = True
+        algo.head_clamp_config.wait_engaged_before_send_pellet = True
+        #
+        assert not algo.pellet_recently_seen
+        with caplog.at_level(logging.DEBUG):
+            self.sensor_analysis.load_cell_monitor.is_engaged = True
+        assert machine.state == SystemState.tunnel
+        # print(caplog.text)
+        assert "auto-clamp: algo not in-trial (no action taken)" in caplog.text
+        caplog.clear()
+        with caplog.at_level(logging.DEBUG):
+            self.sensor_analysis.headbar_pressure_monitor.is_engaged = True
+        # print(caplog.text)
+        assert "auto-clamp: algo not in-trial (no action taken)" in caplog.text
+        assert not machine.auto_clamp_in_progress
+        caplog.clear()
+        # now:
+        self.mock_pose_response(pellet_seen=True, mouse_seen=True)
+        assert algo.pellet_recently_seen
+        # self.mock_pellet_ack(until_none=True)
+        # print(caplog.text)
+        assert algo.is_in_trial_capture
+        assert machine.auto_clamp_in_progress
+        # both trial capture started and auto-clamp engaged

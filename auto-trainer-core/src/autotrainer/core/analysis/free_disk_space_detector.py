@@ -1,9 +1,10 @@
+import math
 from typing import Optional
 
 import psutil
 from autotrainer.api import ApiDetectorKind
 
-from autotrainer.core import PersistenceConfiguration
+from autotrainer.core import PersistenceConfiguration, get_perf_now
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.free_disk_space_config import FreeDiskSpaceConfig
 from autotrainer.core.event import post_api_detector_event_content
@@ -16,15 +17,22 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
     config_cls = FreeDiskSpaceConfig
 
     use_daemon = True
-    default_timer_delay = 15
+    default_timer_delay = 30
 
     def __init__(self):
         super().__init__()
         self._config.min_limit_mb = 0
         self._persistence_cfg = PersistenceConfiguration(output_location="")
+        self._last_check_perf_c = -math.inf
 
-    def _check_state(self) -> Optional[float]:
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
+        p_now = get_perf_now()
         cfg = self._config
+        miss_d = cfg.recheck_min_delay - (p_now - self._last_check_perf_c)
+        if not force and miss_d > 0:
+            self._logger.debug("skipping check due to recheck_min_delay")
+            return miss_d
+        self._last_check_perf_c = p_now
         loc = self._persistence_cfg.output_location
         if not loc:
             return None
@@ -46,4 +54,4 @@ class FreeDiskSpaceDetector(BaseDetector[FreeDiskSpaceConfig]):
     def set_persistence_config(self, config: PersistenceConfiguration):
         self._persistence_cfg = config
         self._logger.verbose("Received persistence config: %s", config)
-        self.check_state()
+        self.check_state(force=True)
