@@ -168,7 +168,7 @@ class ScenePartsPresenceContext:
         if perf_now > self.last_perf_c:
             self.last_perf_c = perf_now
 
-    def get_animal_absence_age(self, *, perf_now: Optional[float] = None):
+    def get_animal_absence_age(self, *, perf_now: Optional[float] = None) -> float:
         """Returns the animal "absence" age, how old/elapsed time since last absence started,
         can be math.inf if never been absent"""
         if perf_now is None:
@@ -182,7 +182,7 @@ class ScenePartsPresenceContext:
                     max_perf_c = perf_c
         return perf_now - max_perf_c
 
-    def get_animal_presence_age(self, *, perf_now: Optional[float] = None):
+    def get_animal_presence_age(self, *, perf_now: Optional[float] = None) -> float:
         """Returns the animal most recent "presence" age. ie: how old since it has been seen last time"""
         if perf_now is None:
             perf_now = get_perf_now()
