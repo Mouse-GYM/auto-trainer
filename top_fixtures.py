@@ -294,7 +294,8 @@ def _disable_timers():
         mock_finished = timer.finished = mock.create_autospec(threading.Event)
         mock_finished.is_set.return_value = True
         return timer
-    with mock.patch(f"{DaemonTimer.__module__}.{DaemonTimer.__name__}", new=disabled_daemon_timer):
+    obj_fqn = f"{DaemonTimer.__module__}.{DaemonTimer.__name__}"
+    with mock.patch(obj_fqn, new=disabled_daemon_timer):
         yield
 
 
