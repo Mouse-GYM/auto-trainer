@@ -1209,7 +1209,6 @@ class AppModel(ObservableObject):
                 return False
             self._acquisition_starting = True
             self._start_count += 1
-            is_first_start = self._start_count == 1
 
         algo = self._behavior.algorithm
         analysis = self._analysis
@@ -1265,7 +1264,8 @@ class AppModel(ObservableObject):
                         break
                     # 1.1) wait it's running or failed
                     if (
-                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                           timeout=10)
                     ) or camera.video_status != CaptureProcessStatus.RUNNING:
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
@@ -1290,7 +1290,8 @@ class AppModel(ObservableObject):
             for camera in synced_cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera.is_enabled:
-                    if (not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=p_timeout - p_now)
+                    if (not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                           timeout=p_timeout - p_now)
                         or camera.video_status != CaptureProcessStatus.RUNNING):
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
@@ -1325,7 +1326,8 @@ class AppModel(ObservableObject):
                               _failed_camera_template(camera.name, camera.last_error))
             else:
                 if (
-                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                       timeout=5)
                     or camera.video_status != CaptureProcessStatus.RUNNING
                 ):
                     did_start = False
