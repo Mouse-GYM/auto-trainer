@@ -1,4 +1,5 @@
 import inspect
+import pprint
 import textwrap
 import threading
 from io import StringIO
@@ -55,8 +56,12 @@ class DebugView(QDialog):
             "w": main_window,
             "app": app,
             "print": print,
+            "lc": app.left_camera,
+            "rc": app.right_camera,
+            "lcs": app.left_camera.set_cam_property,
+            "rcs": app.right_camera.set_cam_property,
         }
-        print("You can use 'w' for main_window or 'app' for app_model in command ..\n")
+        print(f"Available locals:\n{pprint.pformat(self._locals)}\n\n")
         print(textwrap.dedent(
             "To execute trials/sessions simulations, you can use:\n\n"
             "w._simulate_sessions("

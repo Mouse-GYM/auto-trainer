@@ -7,6 +7,7 @@ import pytest
 from autotrainer.core import SystemStatusMessageKind
 from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.video import video_capture
+from autotrainer.video.camera.camera_base import CameraBase
 from top_fixtures import collect_log_queue_to_caplog
 
 
@@ -79,7 +80,7 @@ def test_with_primary_secondary(
     caplog,
 ):
     msg_q = video_capture_model._msg_queue  # noqa
-    monkeypatch.setattr(video_capture, "make_log_dict_config", make_log_dict_multiproc)
+    monkeypatch.setattr(video_capture, video_capture.make_log_dict_config.__name__, make_log_dict_multiproc)
     #
     conf = video_capture_model.save_configuration()
     conf.params["primary"] = "true"
@@ -135,3 +136,30 @@ def test_with_primary_secondary(
     get_all_msgs_into(msg_q, received_msgs)
     assert check_cam_status_change(received_msgs, 0, CaptureProcessStatus.RUNNING) is not None
     assert check_cam_status_change(received_msgs, 1, CaptureProcessStatus.RUNNING) is not None
+
+
+def test_load_save_config_with_ast_literal(video_capture_model, video_capture_model2):
+    cfg = video_capture_model.save_configuration()
+    cfg.params["any_param"] = [5, 5, 5, 5]
+    cfg.params["any_param2"] = "anything-not-ast-literal-evaluable"
+    other_object = object()
+    cfg.params["any_param3"] = other_object
+    video_capture_model2.load_configuration(cfg)
+    cfg2 = video_capture_model2.save_configuration()
+    assert cfg2.params["any_param"] == [5, 5, 5, 5]
+    assert cfg2.params["any_param2"] == cfg.params["any_param2"]
+    assert cfg2.params["any_param3"] == str(other_object)
+
+
+def test_with_cam_cls_param_type(video_capture_model, video_capture_model2, monkeypatch):
+    class CamTypesWithExplicitStr(CameraBase.ParamsType):
+        foobar = str
+
+    monkeypatch.setattr(CameraBase, CameraBase.ParamsType.__name__, CamTypesWithExplicitStr)
+    cfg = video_capture_model.save_configuration()
+    cfg.params["foobar"] = "0"
+    cfg.params["not_foobar"] = "0"
+    video_capture_model2.load_configuration(cfg)
+    cfg2 = video_capture_model2.save_configuration()
+    assert cfg2.params["foobar"] == "0"  # and not integer 0
+    assert cfg2.params["not_foobar"] == 0  # given not explicit str and ast literal eval is used.

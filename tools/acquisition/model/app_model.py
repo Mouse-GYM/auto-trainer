@@ -806,15 +806,15 @@ class AppModel(ObservableObject):
                 }))
 
     @property
-    def left_camera(self):
+    def left_camera(self) -> VideoCaptureModel:
         return self._left_camera
 
     @property
-    def right_camera(self):
+    def right_camera(self) -> VideoCaptureModel:
         return self._right_camera
 
     @property
-    def top_camera(self):
+    def top_camera(self) -> VideoCaptureModel:
         return self._top_camera
 
     @property

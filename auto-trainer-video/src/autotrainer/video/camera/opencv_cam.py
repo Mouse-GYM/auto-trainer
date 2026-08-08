@@ -79,10 +79,8 @@ class OpenCVCam(CameraBase):
     def set_property(self, name: str, value: str) -> bool:
         if name == "mjpeg":
             self._mjpeg = value
-        else:
-            return super().set_property(name, value)
-
-        return True
+            return True
+        return super().set_property(name, value)
 
     def prepare_capture(self):
         super().prepare_capture()
