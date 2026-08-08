@@ -2,7 +2,7 @@ import dataclasses
 import logging
 import math
 import time
-from typing import Tuple, Optional, ClassVar, Dict, Any
+from typing import Tuple, Optional, ClassVar, Dict, Any, Callable
 
 import numpy
 
@@ -63,6 +63,8 @@ class CameraBase:
         self._last_frame_id = -1
         self._last_frame_perf_c = -math.inf
         self._last_frame_time = -math.inf
+        self._refresh_watchdog: Optional[Callable[[], None]] = None
+        self._prev_watchdog_refresh = -math.inf
 
     @property
     def name(self) -> str:
@@ -198,6 +200,22 @@ class CameraBase:
             return self._frame_count * 1e9 / (self._last_when - self._capture_start)
 
         return 0
+
+    def set_refresh_watchdog(self, func: Optional[Callable[[], None]]) -> None:
+        """Set the desired optional watchdog refresh func"""
+        self._refresh_watchdog = func
+
+    def refresh_watchdog(self):
+        """Shall be called, frequently enough, by any implementation desiring to keep a possible watchdog alive
+        while a long capture is in progress"""
+        func = self._refresh_watchdog
+        p_now = time.perf_counter()
+        if func is not None:
+            # still prevent too "frequent" refresh
+            if p_now - self._prev_watchdog_refresh >= 0.5:
+                func: Callable
+                func()
+                self._prev_watchdog_refresh = p_now
 
     #
 

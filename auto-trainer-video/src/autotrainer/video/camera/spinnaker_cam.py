@@ -358,15 +358,20 @@ class SpinCam(CameraBase):
         logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
 
     def _capture(self):
-        p_timeout = time.perf_counter() + 15  # eventual todo: allow config
+        p_now = time.perf_counter()
+        p_timeout = p_now + 15  # eventual todo: allow config
         try_count = 0
         t_prev_after = p_prev_after = -math.inf
+        p_next_watchdog_refresh = -math.inf
         while True:
             try_count += 1
-            if time.perf_counter() > p_timeout:
+            p_before = time.perf_counter()
+            if p_before > p_next_watchdog_refresh:
+                self.refresh_watchdog()
+                p_next_watchdog_refresh += 1
+            if p_before > p_timeout:
                 raise RuntimeError("Failed capture a frame in time")
             t_before = time.time()
-            p_before = time.perf_counter()
             try:
                 image_result = self._camera.GetNextImage(1)  # 1 millisecond timeout
                 p_after = time.perf_counter()
