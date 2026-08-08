@@ -101,7 +101,7 @@ class PresenceDetectionAttrs:
         return self._lock
 
     def to_local_value(self) -> Self:
-        """Detach from the shared values"""
+        """Detach from the shared values ; given this is used with lock, this ensures consistency for the caller/user"""
         with self._lock:
             dct = {
                 f"_{a}": RawValueHolder(getattr(self, a))

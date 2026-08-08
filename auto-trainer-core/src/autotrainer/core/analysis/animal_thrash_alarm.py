@@ -1,3 +1,6 @@
+
+from typing import List, Tuple, Optional
+
 from autotrainer.api import ApiAlarmKind
 from autotrainer.core import get_perf_now
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
@@ -11,6 +14,9 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
     config_cls = AnimalThrashAlarmConfig
     alarm_api_kind = ApiAlarmKind.thrashing
 
+    use_daemon = True
+    default_timer_delay = 1
+
     def __init__(
         self,
         *,
@@ -21,8 +27,8 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
         self._load_cell_det = load_cell_detector
         self._audio_thrash_det = audio_thrash_detector
         #
-        self._load_cell_thrash_values = []
-        self._audio_thrash_values = []
+        self._load_cell_thrash_values: List[Tuple[float, bool, float]] = []  # perf_c, engaged, age
+        self._audio_thrash_values: List[Tuple[float, bool, float]]  = []
         #
         audio_thrash_detector.property_changed += self._on_audio_prop_changed
         load_cell_detector.property_changed += self._on_load_cell_prop_changed
@@ -49,7 +55,7 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
                 self._load_cell_thrash_values.append((perf_now, value,
                                                       load_cell.thrashing_disengaged_age if value
                                                       else load_cell.thrashing_engaged_age))
-        self.check_state()  # always
+            self.check_state()
 
     def _expire_audio_load_cell(self, perf_now):
         cfg = self._config
@@ -85,7 +91,7 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
         #
         count_audio_thrash_triggers = 0  # count
         tot_audio_thrash_engaged = 0  # seconds
-        v = None
+        v: Optional[Tuple[float, bool, float]] = None
         for idx, v in enumerate(self._audio_thrash_values):
             if v[1]:
                 count_audio_thrash_triggers += 1
@@ -104,10 +110,11 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
             100 * tot_audio_thrash_engaged / cfg.aggregate_delay
         )
         #
-        self.is_engaged = (
+        engaged = (
             pc_load_cell_thrash >= cfg.load_cell_thrash_percent_on
             or count_load_cell_thrash_triggers >= cfg.load_cell_thrash_count
         ) and (
             pc_audio_thrash >= cfg.audio_thrash_percent_on
             or count_audio_thrash_triggers >= cfg.audio_thrash_count
         )
+        self.is_engaged = engaged

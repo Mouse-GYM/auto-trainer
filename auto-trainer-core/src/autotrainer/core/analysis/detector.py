@@ -57,6 +57,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     use_daemon: bool = False
     default_timer_delay: Optional[float] = None
+    need_explicit_check: bool = False
 
     detector_api_kind: ClassVar[Optional[ApiDetectorKind]] = None
     default_detector_enabled: ClassVar[bool] = True  # raw base detectors are always "enabled" by default
@@ -103,11 +104,17 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def config(self, config: DetectorConfigT):
         self._set_config(config)
 
+    def update_config(self, config: Optional[DetectorConfigT]=None):
+        if config is None:
+            config = self._config
+        self.config = config  # this always triggers a CONFIG property_changed, and a check_state(force=True).
+
     def _set_config(self, value: DetectorConfigT):
         self._logger.debug("got new config: %s", value)
         prev, self._config = self._config, value
         self.property_changed(self.CONFIG, value, prev)
-        self.check_state()  # force check_state even if same config
+        if self._running:
+            self.check_state(force=True)  # force check_state even if same config, but only if running.
 
     def post_detector_event(self, detector_id: ApiDetectorKind, active: bool, enabled: Optional[bool] = None):
         if enabled is None:
@@ -168,7 +175,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         self._cur_timer.cancel()  # safer
         timer = self._cur_timer = make_daemon_timer(delay, self.check_state)
         timer.start()
-        self._logger.verbose("created timer to check_state within %.1fs", delay)
+        self._logger.verbose("%s: created timer to check_state within %.1fs", self._name, delay)
 
     @property
     def check_in_progress(self) -> bool:
@@ -189,13 +196,13 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         if th_q is None or threading.current_thread() != th_q[0]:
             self.check_state()
 
-    def _check_put_to_daemon(self):
+    def _check_put_to_daemon(self, *, force: bool=False):
         th_q = self._thread_queue
         if th_q is not None:
             th, th_q = th_q
             if th is not threading.current_thread() and th.is_alive():
                 # push a new request_check_state to it:
-                th_q.put(_request_check_state)
+                th_q.put((_request_check_state, force))
                 return True
         return False
 
@@ -203,7 +210,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # deciding to pre-check for not running and for put to daemon *without* lock acquired *on purpose*:
         if not self._running and not force:
             return None
-        if self._check_put_to_daemon():
+        if self._check_put_to_daemon(force=force):
             # the "worst" which can happen is that the detector is actually being stopped (by some thread),
             # and then its check_state() is also called so (from another thread).
             # So that check_state() will be basically ignored,
@@ -220,7 +227,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             if not self._running and not force:
                 # that will prevent a possible timer to be created if the check_state() returns next_delay > 0
                 return None
-            if self._check_put_to_daemon():
+            if self._check_put_to_daemon(force=force):
                 # this now totally ensures the implementation _check_state() won't be executed from another thread
                 # than the daemon one (when there is one).
                 return None
@@ -241,15 +248,15 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
             if next_delay is None:
                 next_delay = self.default_timer_delay
-            elif next_delay < 0:
-                warnings.warn(f"received negative next_delay: {next_delay:.1f}")
+            elif next_delay <= 0:
+                warnings.warn(f"received zero or negative next_delay: {next_delay:.1f}")
                 next_delay = 1
 
             if not self._running:
                 # also recheck running after check_state, for eventual stop() called from some inner changed event callback.
                 return None
 
-            if next_delay is not None and not self.use_daemon:
+            if not self.use_daemon and next_delay is not None and next_delay > 0:
                 # "recurrent/timed" detector
                 self._make_new_timer(next_delay)
             else:
@@ -286,10 +293,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def _daemon_run(self, cmd_queue):
         log = self._logger
         log.info("%s running", self._name)
+        force = True
         while self._running:
-            delay = self.check_state()  # always check immediately
+            delay = self.check_state(force=force)  # always check immediately
             if not self._running:  # in case of, don't even go further.
                 break
+            force = False  # reset for next check
             if delay is None:
                 delay = self.default_timer_delay
                 if delay is None:
@@ -302,15 +311,21 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # Otherwise, we would need to restart any of them that has its config updated.
             # NB: this might not be necessary anymore, but is still safer to keep.
             delay = min(60., delay)
+            if delay <= 0:
+                warnings.warn(f"{self._name_}: received zero or negative delay: {delay}")
+                delay = 1  # ensure no busy loop can occur
+            assert delay > 0
             try:
                 r = cmd_queue.get(timeout=delay)
             except queue.Empty:
                 continue
             cmd_queue.task_done()
-            if r is _request_check_state:
-                continue
             if r is None:
                 break
+            cmd = r[0]
+            if cmd is _request_check_state:
+                force = r[1]
+                continue
             log.warning("unhandled command object: %r", r)
         # end while True
         log.verbose("%s: exiting main loop", self._name)
@@ -441,7 +456,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             # strictly speaking this should not be necessary to call check_state on the sub-detectors.
             # given we have/are using _on_sub_detector_property_changed(...) to handle the change events.
             # But this allows to be certain that we are seeing all sub-detectors as "synced" here.
-            if not det.use_daemon and not det.default_timer_delay:
+            if det.need_explicit_check:
                 # this actually can prevent check loop(s), and possible deadlock:
                 # when a sub-detector engages, its engaged property changed event is emitted within its check_state(),
                 # with its lock acquired, triggering self._on_sub_detector_property_changed(...),

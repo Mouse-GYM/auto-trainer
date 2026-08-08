@@ -983,7 +983,7 @@ class PreferencesContent(QWidget):
             det = analysis.global_animal_presence_alarm
             prev, det.config.presence_missing_delay_hours = det.config.presence_missing_delay_hours, value
             if value != prev:
-                det.property_changed(det.CONFIG, det.config, None)
+                det.update_config()
         spinbox.valueChanged.connect(global_animal_presence_missing_delay_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1070,9 +1070,7 @@ class PreferencesContent(QWidget):
         spinbox.setValue(free_disk_space_det.config.min_limit_mb)
         def free_disk_space_min_limit_mb_changed(value):
             free_disk_space_det.config.min_limit_mb = value
-            # this trigger property changed event callback(s),
-            # and a check_state:
-            free_disk_space_det.config = free_disk_space_det.config
+            free_disk_space_det.update_config()
         spinbox.valueChanged.connect(free_disk_space_min_limit_mb_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1088,8 +1086,7 @@ class PreferencesContent(QWidget):
         def on_autoclamp_evasion_pellets_consumed_trigger_changed(value: int):
             det = analysis.autoclamp_evasion_detector
             det.config.pellets_consumed_trigger = value
-            det.property_changed(det.CONFIG, det.config, None)  # force global config refresh for listener(s)
-            det.check_state()
+            det.update_config()
         spinbox.valueChanged.connect(on_autoclamp_evasion_pellets_consumed_trigger_changed)
         left_grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1152,7 +1149,7 @@ class PreferencesContent(QWidget):
             cfg = maint_mon.config
             if value != cfg.max_pellets_loaded_count:
                 cfg.max_pellets_loaded_count = value
-                maint_mon.property_changed(maint_mon.CONFIG, cfg, None)
+                maint_mon.update_config()
         spinbox.valueChanged.connect(max_pellet_loaded_count_changed)
         right_layout.addRow("<b>Pellets before refill:</b>", spinbox)
         #
@@ -1183,7 +1180,7 @@ class PreferencesContent(QWidget):
             cfg = maint_mon.config
             if value != cfg.max_consecutive_failed_loaded:
                 cfg.max_consecutive_failed_loaded = value
-                maint_mon.property_changed(maint_mon.CONFIG, cfg, None)
+                maint_mon.update_config()
         spinbox.valueChanged.connect(max_consecutive_failed_load_count_changed)
         right_layout.addRow("<b>Max Consecutive Failed Loads:</b>", spinbox)
 
@@ -1210,7 +1207,7 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             prev, det.config.use = det.config.use, toggled
             if prev != toggled:
-                det.property_changed(det.CONFIG, det.config, None)
+                det.update_config()
                 refresh_enabled(refresh_enabled_cb)
         toggle_use.toggled.connect(on_use_toggle_changed)
         grid_layout.addWidget(toggle_use, cur_row, cur_col + 1)
@@ -1224,7 +1221,7 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             prev, det.config.is_emergency_condition = det.config.is_emergency_condition, toggled
             if prev != toggled:
-                det.property_changed(det.CONFIG, det.config, None)
+                det.update_config()
                 refresh_enabled(refresh_enabled_cb)
         toggle_is_emergency_condition.toggled.connect(on_is_emergency_toggle_changed)
         grid_layout.addWidget(toggle_is_emergency_condition, cur_row, cur_col + 1)
@@ -1238,7 +1235,7 @@ class PreferencesContent(QWidget):
             toggled = value != 0
             prev, det.config.allow_autoresume_on_cleared = det.config.allow_autoresume_on_cleared, toggled
             if prev != toggled:
-                det.property_changed(det.CONFIG, det.config, None)
+                det.update_config()
                 refresh_enabled(refresh_enabled_cb)
         toggle_allow_autoresume.toggled.connect(on_allow_autoresume_toggle_changed)
         grid_layout.addWidget(toggle_allow_autoresume, cur_row, cur_col + 1)
@@ -1249,45 +1246,10 @@ class PreferencesContent(QWidget):
     def _create_alarms_tab(self):
         app_model = self._app_model
         analysis = app_model.analysis
-        alarm_monitor = analysis.emergency_alarm_monitor
-        alarm_cfg = analysis.emergency_alarm_monitor.config
 
         states_refresh = []
         add_enabled_state = states_refresh.append
         refresh_enabled_states = partial(refresh_enabled, states_refresh)
-
-        def make_is_emegency_allow_autoresume(use_toggle, attr_is_emergency, attr_allow_autoresume):
-            nonlocal cur_row
-            # ensure both attributes exists before:
-            getattr(alarm_cfg, attr_is_emergency)
-            getattr(alarm_cfg, attr_allow_autoresume)
-            #
-            grid_layout.addWidget(QLabel("Emergency condition:"), cur_row, cur_col)
-            toggle_is_emergency = QSwitch()
-            add_enabled_state(lambda e=toggle_is_emergency: e.setEnabled(use_toggle.isChecked()))
-            toggle_is_emergency.setChecked(getattr(alarm_cfg, attr_is_emergency))
-            def is_emegency_changed(value):
-                toggled = value != 0
-                cfg = alarm_monitor.config
-                setattr(cfg, attr_is_emergency, toggled)
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                refresh_enabled_states()
-            toggle_is_emergency.stateChanged.connect(is_emegency_changed)
-            grid_layout.addWidget(toggle_is_emergency, cur_row, cur_col + 1)
-            cur_row += 1
-            grid_layout.addWidget(QLabel("Allow auto-resume when cleared:"), cur_row, cur_col)
-            toggle = QSwitch()
-            add_enabled_state(lambda e=toggle: e.setEnabled(use_toggle.isChecked() and toggle_is_emergency.isChecked()))
-            toggle.setChecked(getattr(alarm_cfg, attr_allow_autoresume))
-            def allow_autoresume_changed(value):
-                toggled = value != 0
-                cfg = alarm_monitor.config
-                setattr(cfg, attr_allow_autoresume, toggled)
-                alarm_monitor.property_changed(alarm_monitor.CONFIG, cfg, None)
-                refresh_enabled_states()
-            toggle.stateChanged.connect(allow_autoresume_changed)
-            grid_layout.addWidget(toggle, cur_row, cur_col + 1)
-            cur_row += 1
 
         main_layout = QVBoxLayout()
         main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -1310,20 +1272,20 @@ class PreferencesContent(QWidget):
 
         self._use_audio_load_cell_thrashing_toggle, tog_emergency, tog_autoresume, refresh_cb = self._make_alarm_entries(
             grid_layout, "Animal Thrashing Alarm", analysis.animal_thrashing_alarm, cur_row, cur_col)
-        states_refresh.append(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
+        add_enabled_state(lambda refresh_cb=refresh_cb: refresh_enabled(refresh_cb))
         cur_row += 3
 
         thrash_cfg = analysis.animal_thrashing_alarm.config
         grid_layout.addWidget(QLabel("Thrash aggregate delay (seconds):"), cur_row, cur_col)
         spinbox = QDoubleSpinBox()
-        refresh_cb.append(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
+        add_enabled_state(lambda e=spinbox: e.setEnabled(self._use_audio_load_cell_thrashing_toggle.isChecked()))
         spinbox.setRange(0, _DELAY_OR_DURATION_MAX_VALUE)
         spinbox.setDecimals(1)
         spinbox.setValue(thrash_cfg.aggregate_delay)
         def thrash_aggr_delay_value_changed(value, ):
             det = analysis.animal_thrashing_alarm
             det.config.aggregate_delay = value
-            det.property_changed(det.CONFIG, det.config, None)
+            det.update_config()
         spinbox.valueChanged.connect(thrash_aggr_delay_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1336,7 +1298,7 @@ class PreferencesContent(QWidget):
         def load_cell_thrash_pc_time_value_changed(value):
             det = analysis.animal_thrashing_alarm
             det.config.load_cell_thrash_percent_on = value
-            det.property_changed(det.CONFIG, det.config, None)
+            det.update_config()
         spinbox.valueChanged.connect(load_cell_thrash_pc_time_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1349,7 +1311,7 @@ class PreferencesContent(QWidget):
         def load_cell_thrash_count_value_changed(value):
             det = analysis.animal_thrashing_alarm
             det.config.load_cell_thrash_count = value
-            det.property_changed(det.CONFIG, det.config, None)
+            det.update_config()
         spinbox.valueChanged.connect(load_cell_thrash_count_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1362,7 +1324,7 @@ class PreferencesContent(QWidget):
         def audio_thrash_pc_time_value_changed(value):
             det = analysis.animal_thrashing_alarm
             det.config.audio_thrash_percent_on = value
-            det.property_changed(det.CONFIG, det.config, None)
+            det.update_config()
         spinbox.valueChanged.connect(audio_thrash_pc_time_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1375,7 +1337,7 @@ class PreferencesContent(QWidget):
         def audio_thrash_count_value_changed(value):
             det = analysis.animal_thrashing_alarm
             det.config.audio_thrash_count = value
-            det.property_changed(det.CONFIG, det.config, None)
+            det.update_config()
         spinbox.valueChanged.connect(audio_thrash_count_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1398,7 +1360,7 @@ class PreferencesContent(QWidget):
                 value,
             )
             if prev != value:
-                det.property_changed(det.CONFIG, det.config, None)
+                det.update_config()
         spinbox.valueChanged.connect(missing_delay_after_exit_tunnel_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
@@ -1428,7 +1390,7 @@ class PreferencesContent(QWidget):
             ext_doors = analysis.external_doors_alarm
             if value != ext_doors.config.trigger_open_delay:
                 ext_doors.config.trigger_open_delay = value
-                ext_doors.property_changed(ext_doors.CONFIG, ext_doors.config, None)
+                ext_doors.update_config()
         spinbox.valueChanged.connect(trigger_open_delay_value_changed)
         grid_layout.addWidget(spinbox, cur_row, cur_col + 1)
         cur_row += 1
