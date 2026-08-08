@@ -153,7 +153,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 self._engaged_perf_c = perf_now
             else:
                 self._disengaged_perf_c = perf_now
-        self._logger.notice("is_engaged -> %s (age previous = %.1f)",
+        self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
                             engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
         kind = self.detector_api_kind
         if kind is not None:
@@ -375,7 +375,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
 @dataclasses.dataclass
 class GroupSubDetectorContext:
-    detector: BaseDetector[GroupSubDetectorConfig]
+    detector: BaseDetector[DetectorConfig]
     property_changed_callback: Callable
 
 
@@ -456,6 +456,15 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         cfg = det.config
         return isinstance(cfg, GroupSubDetectorConfig) and not cfg.allow_autoresume_on_cleared
 
+    def _on_engaged_reasons_changed(self, prev_engaged: Set[str], new_engaged: Set[str]) -> None:
+        """Report a reason-set transition; silent by default."""
+        if new_engaged and not prev_engaged:
+            logger.notice("%s: engaging with %s", self._name, new_engaged)
+        elif new_engaged:
+            logger.verbose("%s: reengaging with %s (prev = %s)", self._name, new_engaged, prev_engaged)
+        else:
+            logger.notice("%s: disengaging (prev = %s)", self._name, prev_engaged)
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
@@ -485,6 +494,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                     if self._consider_for_keep_engaged(det):
                         new_engaged.add(sub_name)  # keep it
         if new_engaged != prev_engaged:
+            self._on_engaged_reasons_changed(prev_engaged, new_engaged)
             # ensure IS_ENGAGED property changed event still always relayed,
             # even if same is_engaged, so that listeners will get/see the new_engaged reasons/sub-detectors.
             self._is_engaged = "1" if prev_engaged else ""
