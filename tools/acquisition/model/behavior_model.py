@@ -263,22 +263,23 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s", source)
-        current = EmergencyControlSource(self._source_emergency)
+        # api event is always posted atm:
         api_alarm_kinds = []
-        reasons = tuple(EmergencyReason)
+        all_reasons = tuple(EmergencyReason)
         for r in self._analysis.emergency_alarm_monitor.engaged_reasons:
-            if isinstance(r, EmergencyReason) or r in reasons:
+            if isinstance(r, EmergencyReason) or r in all_reasons:
                 r = EmergencyReason(r)
                 api_alarm_kinds.append(emergency_reason_2_api_alarm_kind(r))
         post_api_event_content(
             ApiEventKind.emergencyStop,
             data=dict(reason=source, active_alarms=api_alarm_kinds))
         if algo.algo_paused and source == self._source_emergency:
-            self.emergency_stopped(source)  # still relay for possible UI or other update(s)
+            # double emergency_stop ?
             return
+        current = EmergencyControlSource(self._source_emergency)
         if current is not None and current.is_admin_source():
-            logger.verbose("ignoring stop emergency from %s given current one is admin", source, current)
-            self.emergency_stopped(source)  # still relay for possible UI or other update(s)
+            logger.verbose("ignoring stop emergency from %s given current one (%s) is admin",
+                           source, current)
             return
         self._source_emergency = source
         algo.algo_paused = True
@@ -291,14 +292,13 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         if not algo.algo_paused:  # should be same than self._source_emergency is None
             logger.debug("algo not paused, skipping emergency_resume from %s", source)
             return
-        # always post api event if emergency was active:
-        post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         control_src = EmergencyControlSource(source)
         current = EmergencyControlSource(self._source_emergency)
         if current is not None and current.is_admin_source() and not control_src.is_admin_source():
             logger.verbose("Refusing resume from emergency %s given was set by %s",
                           source, current)
             return
+        post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
         self._source_emergency = None
         algo.algo_paused = False
         self.emergency_resumed(source)

@@ -11,10 +11,9 @@ known_admin_sources = (
 
 known_not_other_sources = known_admin_sources  # for now
 
+all_values = {member.value for member in EmergencyControlSource}
 
-not_admin_sources = tuple(
-    set(map(str, EmergencyControlSource)) - set(known_admin_sources)
-) + ('unknown1', 'other2')
+not_admin_sources = tuple(all_values - set(known_admin_sources)) + ("unknown1", "other2")
 
 
 @pytest.mark.parametrize("src", known_not_other_sources)

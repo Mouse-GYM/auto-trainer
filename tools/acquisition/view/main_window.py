@@ -1129,11 +1129,10 @@ class MainWindow(QMainWindow):
         def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
-            control_source = EmergencyControlSource(source)
-            if not control_source.is_admin_source():
-                emergency_button.blockSignals(True)  # prevent overwrite of reason with admin control source
-                emergency_button.setChecked(is_toggled)
-                emergency_button.blockSignals(False)
+            # ensure button state stays in sync, even if not applied from it:
+            emergency_button.blockSignals(True)
+            emergency_button.setChecked(is_toggled)
+            emergency_button.blockSignals(False)
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
