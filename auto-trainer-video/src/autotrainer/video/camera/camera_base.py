@@ -16,16 +16,40 @@ class CameraBaseDefaultParams:
 
     width: int = 300
     height: int = 200
-    fps: int = 30
+    fps: float = 30
 
 
 class CameraBase:
+
+    class ParamsType:
+        """Allows Camera subclasses to define the type of their specific possible parameters"""
+        name = str
+        width = int
+        height = int
+        fps = float
 
     default_params: ClassVar[Dict[str, Any]] = dataclasses.asdict(CameraBaseDefaultParams())
     # possible default "params" for camera class,
     # must use same keys than in config file.
     # Is used to pre-set/applied on the camera instance, once it's created,
     # but before any eventual custom params from config file, that can so override them.
+
+    SETTABLE_PROPERTIES = frozenset((
+        "ignore_pose_borders",
+        "ignore_pose_corners",
+        "ignore_pose_replace_value",
+        "ignore_pose_show_in_video_stream",
+        "ignore_pose_show_in_video_stream_replace_value",
+    ))
+
+    # defined as class attrs (for default value), but can be set with different value on the camera instance,
+    # using a camera parameter with the same name:
+    _ignore_pose_borders = (0, 0, 0, 0)  # top,      left,      right,       bottom
+    _ignore_pose_corners = (0, 0, 0, 0)  # top-left, top-right, bottom-left, bottom-right
+    _ignore_pose_replace_value = 0
+    _ignore_pose_show_in_video_stream = True
+    _ignore_pose_show_in_video_stream_replace_value = 255
+    # not included in CameraBaseDefaultParams on purpose, to not pollute config with the default value.
 
     def __init__(self, name: str = "camera"):
         self._name = name
@@ -140,13 +164,14 @@ class CameraBase:
 
         return None, self._last_when
 
-    def set_property(self, name: str, value: str) -> bool:
+    def set_property(self, name: str, value: Any) -> bool:
         """ Sets known property values, typically from the camera url.
 
         Subclasses should override to handle custom properties for specific camera types and fallback to calling this
         method for standard properties.
-
         """
+        # nb: since VideoManager now is doing the full decoding of the camera properties,
+        # then all the "decode/parsing" applied here is normally not anymore necessary.
 
         name = name.lower()
 
@@ -159,7 +184,9 @@ class CameraBase:
         elif name == "name":
             self.name = value
         elif name == "primary":
-            self._is_primary = value.lower() in {"true", "yes", "on", "1"}
+            self._is_primary = value.lower() in {"true", "yes", "on", "1"} if isinstance(value, str) else bool(value)
+        elif name in self.SETTABLE_PROPERTIES:
+            setattr(self, name, value)
         else:
             logger.warning(f"<{self._name}> unknown property {name}")
             return False
@@ -171,3 +198,65 @@ class CameraBase:
             return self._frame_count * 1e9 / (self._last_when - self._capture_start)
 
         return 0
+
+    #
+
+    @property
+    def ignore_pose_borders(self) -> Tuple[int, int, int, int]:
+        return self._ignore_pose_borders
+
+    @ignore_pose_borders.setter
+    def ignore_pose_borders(self, value: Tuple[int, int, int, int]):
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != 4
+            or any(not isinstance(v, int) or v < 0 for v in value)
+        ):
+            logger.warning("%s: skipping invalid ignore_pose_borders: %s", self._name, value)
+            return
+        self._ignore_pose_borders = value
+
+    @property
+    def ignore_pose_corners(self) -> Tuple[int, int, int, int]:
+        return self._ignore_pose_corners
+
+    @ignore_pose_corners.setter
+    def ignore_pose_corners(self, value: Tuple[int, int, int, int]):
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != 4
+            or any(not isinstance(v, int) or v < 0 for v in value)
+        ):
+            logger.warning("%s: skipping invalid ignore_pose_corners: %s", self._name, value)
+            return
+        self._ignore_pose_corners = value
+
+    @property
+    def ignore_pose_replace_value(self):
+        return self._ignore_pose_replace_value
+
+    @ignore_pose_replace_value.setter
+    def ignore_pose_replace_value(self, value: int):
+        if not isinstance(value, int) or not 0 <= value <= 255:
+            logger.warning("%s: skipping invalid ignore_pose_replace_value: %s", self._name, value)
+            return
+        self._ignore_pose_replace_value = value
+
+    @property
+    def ignore_pose_show_in_video_stream(self):
+        return self._ignore_pose_show_in_video_stream
+
+    @ignore_pose_show_in_video_stream.setter
+    def ignore_pose_show_in_video_stream(self, value):
+        self._ignore_pose_show_in_video_stream = value
+
+    @property
+    def ignore_pose_show_in_video_stream_replace_value(self):
+        return self._ignore_pose_show_in_video_stream_replace_value
+
+    @ignore_pose_show_in_video_stream_replace_value.setter
+    def ignore_pose_show_in_video_stream_replace_value(self, value):
+        if not isinstance(value, int) or not 0 <= value <= 255:
+            logger.warning("%s: skipping invalid ignore_pose_show_in_video_stream_replace_value: %s", self._name, value)
+            return
+        self._ignore_pose_show_in_video_stream_replace_value = value

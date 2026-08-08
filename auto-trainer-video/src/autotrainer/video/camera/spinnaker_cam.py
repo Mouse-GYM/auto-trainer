@@ -474,6 +474,9 @@ class SpinCam(CameraBase):
 
     def set_property(self, name: str, value) -> bool:
         cam = self._camera
+        # nb: since VideoManager now is doing the full decoding of the camera properties,
+        # all these "decode" applied here are normally not anymore necessary.
+        # is_truthy + literal_eval_if_str + int/float/etc parsing.
         if name == "primary":
             self._is_primary = is_truthy(value)
             self._is_secondary = not self._is_primary
