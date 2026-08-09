@@ -45,7 +45,8 @@ def calib_dir():
 
 
 @pytest.fixture
-def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_config, monkeypatch, fake_system_msg_handler):
+def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_config, monkeypatch, fake_system_msg_handler,
+              mp_manager):
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
@@ -57,6 +58,7 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         inference_model=mock_system.inference,
         system_message_handler=fake_system_msg_handler,
         calib_dir=calib_dir,
+        mp_manager=mp_manager,
     )
     # ensure all of that is not async:
     analysis = app.analysis
@@ -77,4 +79,11 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
     try:
         yield app
     finally:
-        app.on_close()
+        try:
+            app.on_close()
+        finally:
+            # NB: this allows to prevent to leave unreaped shm sem behind,
+            # otherwise you get them accumulating in process lsof.
+            for a in vars(app):
+                # print(f"setting None to {a}")
+                setattr(app, a, None)

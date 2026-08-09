@@ -66,17 +66,20 @@ def app_model(
     diamond_config_path,
     system_config,
     monkeypatch,
+    mp_manager,
 ) -> AppModel:  # noqa
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
-    app = AppModel(user_pref, calib_dir=calib_dir)
+    app = AppModel(user_pref, calib_dir=calib_dir, mp_manager=mp_manager)
     try:
         yield app  # noqa
     finally:
         app.capture_stop(force=True)
         app.on_close()
+        for a in vars(app):  # ensure shm resources totally reaped
+            setattr(app, a, None)
 
 
 def test_user_preferences(settings_ini_path, user_pref, trainer_config_dir):

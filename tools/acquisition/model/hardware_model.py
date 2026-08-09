@@ -89,7 +89,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_tunnel_status_timeout_engaged = False
         self._device_stream_started = False
 
-        self._pending_tokens: Dict[UUID, Tuple[SystemCommandKind, float]] = {}
+        self._pending_tokens: Dict[str, Tuple[SystemCommandKind, float]] = {}
 
         message_handler.property_changed += self._message_handler_property_changed
         message_handler.ack_received += self._ack_received
@@ -692,7 +692,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         perf_now = get_perf_now()
         logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(self._pending_tokens))
         if self._send_command(device, cmd, data, token):
-            self._pending_tokens[token] = (cmd, perf_now)
+            self._pending_tokens[str(token)] = (cmd, perf_now)
             return token
         else:
             logger.verbose("send_command failed, device not setup yet: cmd=%s token=%s", cmd, token)
@@ -739,7 +739,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
             )
 
-    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
+    def _ack_received(self, token: str, *, perf_c: Optional[float]=None):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())

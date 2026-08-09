@@ -77,6 +77,7 @@ class BaseTrainingPlan(MockSystemMachine):
         sensor_analysis,
         diamond_triangle_config,
         monkeypatch,
+        mp_manager,
     ):
         machine._msg_handler = fake_system_msg_handler
         user_pref.save()
@@ -101,6 +102,7 @@ class BaseTrainingPlan(MockSystemMachine):
             inference_model=machine._inference,
             calib_dir=calib_dir,
             system_machine=machine,
+            mp_manager=mp_manager,
         )
         app_model.check_diamond_coord_enabled = False
         self._animal = app_model.add_animal("mouse1", select=True)  # select=True: also makes 1st pellet_send
@@ -137,6 +139,8 @@ class BaseTrainingPlan(MockSystemMachine):
         finally:
             app_model.capture_stop()
             app_model.on_close()
+            for a in vars(app_model):
+                setattr(app_model, a, None)
 
     def ack_pending_tokens(self, wait_acked: bool=True):
         tokens = list(self._app_model.hardware._pending_tokens)

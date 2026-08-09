@@ -68,6 +68,8 @@ def video_capture_model(project_info, user_pref) -> VideoCaptureModel:  # noqa
         yield model  # noqa
     finally:
         model.on_close()
+        for a in vars(model):
+            setattr(model, a, None)
 
 
 @pytest.fixture
@@ -92,3 +94,5 @@ def video_capture_model2(video_capture_model, user_pref) -> VideoCaptureModel:  
         yield model  # noqa
     finally:
         model.on_close()
+        for a in vars(model):
+            setattr(model, a, None)

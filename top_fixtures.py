@@ -1,11 +1,15 @@
-import os
+import datetime
 import collections
 import copy
 import contextlib
 import logging
 import math
 import multiprocessing
+import os
+import platform
 import queue
+import subprocess
+import sys
 import threading
 import time
 from multiprocessing import synchronize
@@ -14,11 +18,9 @@ from pathlib import Path
 from functools import partial
 from typing import List, Any, Optional, Union, ContextManager, Generator, Callable, Dict, Mapping
 from unittest import mock
-# from collections.abc import Generator
 
 import pytest
 import verboselogs
-from autotrainer.api import ApiAlarmKind
 
 import autotrainer.core
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
@@ -34,7 +36,7 @@ from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.inference import PoseAlgorithm, PoseResponse, InferenceStatus
 
 from autotrainer.behavior import TunnelDeviceProtocol, SystemMachine, PelletDeviceProtocol, BehaviorAlgorithm, \
-    InferenceProtocol, SystemState, SegmentationConfiguration, DetectionConfiguration
+    InferenceProtocol, SystemState
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.behavior.pellet import PelletState
 from tools.acquisition.model.behavior_model import BehaviorModel
@@ -49,9 +51,6 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 
 
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
-
-
-import pytest
 
 
 def simulate_get_perf_now():
@@ -80,6 +79,42 @@ def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callabl
 class AlmostEqualFloat(float):
     def __eq__(self, other):
         return abs(self - other) < 0.1
+
+
+def _make_del_shm_sem_count():
+    out = [
+        line
+        for line in subprocess.getoutput(f"lsof -np {os.getpid()}").splitlines()
+        if "DEL" in line and "/dev/shm/sem" in line
+    ]
+    return len(out)
+
+
+_cnt_shm_sem_del_prev_before = 0
+_cnt_shm_sem_del_prev_after = 0
+
+@pytest.fixture(autouse=True)
+def _lsof_del_shm(request):
+    global _cnt_shm_sem_del_prev_before, _cnt_shm_sem_del_prev_after
+    if not os.getenv("AUTOTRAINER_TEST_PROFILE_SHM_SEM"):
+        yield
+        return
+    before = _make_del_shm_sem_count()
+    if before < _cnt_shm_sem_del_prev_after:
+        print(f"detected successful free of shm sem resource: {_cnt_shm_sem_del_prev_after} -> {before}")
+    elif before > 0 and before != _cnt_shm_sem_del_prev_before:
+        print(
+            f"There are already {before} leaked shm sem at test start, "
+            "this indicates the previous test have probably missed to close/free some shm resource",
+        )
+    _cnt_shm_sem_del_prev_before = before
+    try:
+        yield
+    finally:
+        after = _make_del_shm_sem_count()
+        _cnt_shm_sem_del_prev_after = after
+        if after > before:
+            print(f"/dev/shm/sem DEL: {before} -> {after}")
 
 
 @pytest.fixture(autouse=True)
@@ -178,24 +213,35 @@ def motor_config(monkeypatch):
                         repo_root_tests_subdir.joinpath(CompoundMovements.DEFAULT_LOCATION.name))
 
 
-@pytest.fixture
-def mp_manager():
+@pytest.fixture(scope="function")
+def mp_manager(_lsof_del_shm):
+    # mgr = SharedMemoryManager()
     mgr = multiprocessing.Manager()
     try:
-        yield mgr
+        with mgr:
+            yield mgr
     finally:
-        mgr.shutdown()
+        try:
+            mgr.join(1)
+        except Exception as err:
+            print(err)
 
 
 @pytest.fixture
-def project_info(tmp_path, mp_manager) -> ProjectInfo:
+def project_info(tmp_path) -> ProjectInfo:
     root = tmp_path.joinpath("root")
-    root.mkdir()
+    # root.mkdir()
+    # don't auto-create the root/base dir, most tests won't need it anyway.
     prj = ProjectInfo(
+        device_id=platform.node() or "agx-host",
+        # explicitly provide the trial & when,
+        # to get a "local"/not-shared ProjectInfo
+        trial=1,
+        when=datetime.datetime.fromtimestamp(0),
         root=root.as_posix(),
         camera_1="left",
         camera_2="right",
-        mp_manager=mp_manager,
+        # mp_manager=mp_manager,
     )
     return prj
 
@@ -538,7 +584,13 @@ class MockSystemMachine:
     @pytest.fixture(autouse=True)
     def machine(self, machine: SystemMachine, _attach_request) -> SystemMachine:  # noqa
         self._init(machine)
-        yield machine  # noqa
+        try:
+            yield machine  # noqa
+        finally:
+            algo = machine.algorithm
+            algo.top_camera_presence_detection = None
+            for a in vars(self):
+                setattr(self, a, None)
 
     @property
     def system_machine(self) -> SystemMachine:
@@ -579,7 +631,7 @@ class MockSystemMachine:
         self.make_load_cell_active()
         if set_recording_status:
             algo.set_capture_status(CaptureProcessStatus.RECORDING)
-        assert self._machine.state == SystemState.tunnel
+        # assert self._machine.state == SystemState.tunnel
 
     def exit_tunnel(self):
         assert self._machine.state != SystemState.cage

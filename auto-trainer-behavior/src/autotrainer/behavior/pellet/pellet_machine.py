@@ -253,7 +253,7 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: Optional[str], *, perf_c: Optional[float]=None):
+    def _pellet_device_ack_received(self, token: str, *, perf_c: Optional[float]=None):
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
         if token is None:
             return

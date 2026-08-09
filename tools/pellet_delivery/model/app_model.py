@@ -446,9 +446,9 @@ class AppModel(ObservableObject):
         elif name == MessageHandler.COLOR_LED:
             self.color_led = value
 
-    def reader_ack_received(self, ack, *, perf_c: Optional[float]=None):
-        logger.info(f"ack context received: {ack}")
-        if self._last_command is not None and ack == self._last_command:
+    def reader_ack_received(self, token: str, *, perf_c: Optional[float]=None):
+        logger.info("ack context received: %s", token)
+        if self._last_command is not None and token == self._last_command:
             self._last_command = None
             self.command_pending = False
 

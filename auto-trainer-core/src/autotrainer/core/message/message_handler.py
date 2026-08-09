@@ -10,7 +10,7 @@ from threading import Thread
 from typing import Callable, Union, Any, Optional, Protocol
 
 from autotrainer.core.logging import get_verbose_logger
-from ..observable_object import ObservableObject
+from ..observable_object import ObservableObject, EventHandler
 
 from .system_status_message import SystemStatusMessageKind
 
@@ -71,7 +71,7 @@ class MessageHandler(ObservableObject):
 
     # type hints helper:
     # dynamic event:
-    ack_received: AckReceivedHandlerT
+    ack_received: EventHandler[AckReceivedHandlerT]
 
     def __init__(self, input_queue: Queue, name: str = "message-handler", event_names=()):
         super().__init__(event_names=event_names + ("ack_received",))
@@ -147,22 +147,22 @@ class MessageHandler(ObservableObject):
 
     def wait_terminated(self, *, timeout: float=3):
         thread = self._current_thread
-        queue = self._input_queue
+        input_queue = self._input_queue
         if thread is not None:
             self._current_thread = None
             thread.join(timeout)
             if thread.is_alive():
                 logger.warning("message handler thread still alive")
-        if queue is not None:
+        if input_queue is not None:
             self._input_queue = None
-            while not queue.empty():
+            while not input_queue.empty():
                 try:
-                    obj = queue.get_nowait()
+                    obj = input_queue.get_nowait()
                 except Empty:
                     break
                 logger.warning("drop unhandled %s ; %s", type(obj), obj)
-                queue.task_done()
-            queue.join()
+                input_queue.task_done()
+            input_queue.join()
 
     def message_received(self, msg, _data):
         pass

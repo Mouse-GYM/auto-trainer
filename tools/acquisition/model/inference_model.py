@@ -413,16 +413,23 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             (self._output_data_queue, "inference_output_data_queue"),
             (self._cmd_queue, "inference_cmd_queue"),
             (msg_queue, "inference_msg_queue"),
+            (self._notif_msg_queue, "notif_msg_queue")
         ):
             if mp_q is not None:
                 clear_queue(mp_q, log_dumped=True, name=name)
-                logger.debug("queue: %s: closing size=%s", name, mp_q.qsize())
                 if hasattr(mp_q, "close"):
+                    logger.debug("queue: closing %s: size=%s", name, mp_q.qsize())
                     mp_q.close()
+                    if hasattr(mp_q, "join_thread"):
+                        mp_q.join_thread()
+        self._data_monitor_cmd_queue = \
+        self._output_data_queue = \
+        self._cmd_queue = \
+        self._notif_msg_queue = None
 
-    def load_configuration(self, configuration: InferenceConfiguration):
-        self.model_location = configuration.pose_model_location
-        self.is_enabled = configuration.is_enabled
+    def load_configuration(self, config: InferenceConfiguration):
+        self.model_location = config.pose_model_location
+        self.is_enabled = config.is_enabled
 
     def save_configuration(self) -> InferenceConfiguration:
         return InferenceConfiguration(
