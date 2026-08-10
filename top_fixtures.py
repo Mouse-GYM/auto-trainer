@@ -51,12 +51,13 @@ repo_root_tests_subdir = repo_root_dir.joinpath("tests")
 
 
 fake_perf_now = 0  # used to control time.perf_counter() in BehaviorAlgo/SystemMachine/PelletMachine/Intersession
-
+_lock_fake_perf_now = threading.Lock()
 
 def simulate_get_perf_now():
     global fake_perf_now
-    fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
-    return fake_perf_now
+    with _lock_fake_perf_now:
+        fake_perf_now += 1e-9  # convenience, so that any call to it will get a different value than the previous
+        return fake_perf_now
 
 
 def get_current_simulate_perf_now():
@@ -72,7 +73,8 @@ def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callabl
     #         fake_perf_now += 0.5
     #         delay -= 0.5
             # but this does not really solve the issue, this is more for emphase it
-    fake_perf_now += delay
+    with _lock_fake_perf_now:
+        fake_perf_now += delay
 
 
 # for small diff of timers delay:
