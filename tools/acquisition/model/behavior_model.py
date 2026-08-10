@@ -263,7 +263,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s", source)
-        # api event is always posted atm:
+        if algo.algo_paused and source == self._source_emergency:
+            # double emergency_stop ?
+            return
+        current = EmergencyControlSource(self._source_emergency)
+        if current is not None and current.is_admin_source():
+            logger.verbose("ignoring stop emergency from %s given current one (%s) is admin",
+                           source, current)
+            return
         api_alarm_kinds = []
         all_reasons = tuple(EmergencyReason)
         for r in self._analysis.emergency_alarm_monitor.engaged_reasons:
@@ -273,14 +280,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         post_api_event_content(
             ApiEventKind.emergencyStop,
             data=dict(reason=source, active_alarms=api_alarm_kinds))
-        if algo.algo_paused and source == self._source_emergency:
-            # double emergency_stop ?
-            return
-        current = EmergencyControlSource(self._source_emergency)
-        if current is not None and current.is_admin_source():
-            logger.verbose("ignoring stop emergency from %s given current one (%s) is admin",
-                           source, current)
-            return
         self._source_emergency = source
         algo.algo_paused = True
         self.emergency_stopped(source)
