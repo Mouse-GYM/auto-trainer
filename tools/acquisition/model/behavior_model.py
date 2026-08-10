@@ -24,6 +24,22 @@ from autotrainer.core.project import ProjectDependentProtocol
 logger = get_verbose_logger(__name__)
 
 
+class EmergencyControlSource(str, enum.Enum):
+
+    USER_BUTTON = "user-button"
+    RPC_SERVICE = "RpcService"
+    OTHER = "other"  # any combination of emergency monitor possible alarms
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.OTHER  # Fallback choice for invalid lookups
+
+    default = _missing_  # forward compatibility
+
+    def is_admin_source(self) -> bool:
+        return self is self.USER_BUTTON or self is self.RPC_SERVICE
+
+
 class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     """
     Encapsulation of the Behavior Module (autotrainer-behavior) for the application layer.  This model class manages
@@ -51,7 +67,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     ):
         super().__init__(("emergency_stopped", "emergency_resumed"))
 
-        self._project: Optional[ProjectInfo] = None
+        self._project = ProjectInfo.get_null_project()
 
         self._analysis = analysis
         if system_machine is None:
@@ -115,8 +131,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
                                    algo_status, engaged_reasons)
-                    if algo.algo_paused:
-                        self.emergency_resume("alarm-monitor-no-valid-condition-remaining")
+                    self.emergency_resume("alarm-monitor-no-valid-condition-remaining")
 
     @property
     def analysis(self) -> SensorAnalysis:
@@ -247,30 +262,44 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     @BehaviorAlgorithm.relay_func()
     def emergency_stop(self, source: str):
         algo = self._system_machine.algorithm
-        logger.info("emergency_stop called: %s - current=%s", source, algo.algo_paused)
+        logger.info("emergency_stop called: %s", source)
         if algo.algo_paused and source == self._source_emergency:
+            # double emergency_stop ?
             return
-        algo.algo_paused = True
-        self._source_emergency = source
-        api_alarm_kinds = list(map(emergency_reason_2_api_alarm_kind,
-                                   self._analysis.emergency_alarm_monitor.engaged_reasons))
+        current = EmergencyControlSource(self._source_emergency)
+        if current is not None and current.is_admin_source():
+            logger.verbose("ignoring stop emergency from %s given current one (%s) is admin",
+                           source, current)
+            return
+        api_alarm_kinds = []
+        all_reasons = tuple(EmergencyReason)
+        for r in self._analysis.emergency_alarm_monitor.engaged_reasons:
+            if isinstance(r, EmergencyReason) or r in all_reasons:
+                r = EmergencyReason(r)
+                api_alarm_kinds.append(emergency_reason_2_api_alarm_kind(r))
         post_api_event_content(
             ApiEventKind.emergencyStop,
             data=dict(reason=source, active_alarms=api_alarm_kinds))
+        self._source_emergency = source
+        algo.algo_paused = True
         self.emergency_stopped(source)
 
     @BehaviorAlgorithm.relay_func()
     def emergency_resume(self, source: str):
         algo = self._system_machine.algorithm
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
-        if not algo.algo_paused:
+        if not algo.algo_paused:  # should be same than self._source_emergency is None
+            logger.debug("algo not paused, skipping emergency_resume from %s", source)
             return
-        if self._source_emergency == "user-button" and source != "user-button":
-            logger.notice("Refusing resume from emergency given was set by user ; resume source=%s", source)
+        control_src = EmergencyControlSource(source)
+        current = EmergencyControlSource(self._source_emergency)
+        if current is not None and current.is_admin_source() and not control_src.is_admin_source():
+            logger.verbose("Refusing resume from emergency %s given was set by %s",
+                          source, current)
             return
-        algo.algo_paused = False
-        self._source_emergency = None
         post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
+        self._source_emergency = None
+        algo.algo_paused = False
         self.emergency_resumed(source)
 
     def get_led_color(self, *, now: Optional[datetime]=None):

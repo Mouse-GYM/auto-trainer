@@ -9,6 +9,7 @@ from autotrainer.core import PersistenceConfiguration
 from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
+from tools.acquisition.model.behavior_model import EmergencyControlSource
 from top_fixtures import MockSystemMachine
 
 
@@ -118,7 +119,7 @@ class TestEmergency(MockSystemMachine):
         assert not algo.algo_paused
         tunnel_dev = self.tunnel_dev
         pellet_dev = self.pellet_dev
-        app_model.behavior.emergency_stop(source="user-button")
+        app_model.behavior.emergency_stop(source=EmergencyControlSource.USER_BUTTON)
         assert app_model.behavior.source_emergency == "user-button"
         assert algo.algo_paused
         tunnel_dev.reset_mock()  # ensure clear
@@ -127,12 +128,12 @@ class TestEmergency(MockSystemMachine):
         app_model.behavior.emergency_resume(source="something-else")
         # but still engaged:
         assert algo.algo_paused
-        assert app_model.behavior.source_emergency == "user-button"
+        assert app_model.behavior.source_emergency == EmergencyControlSource.USER_BUTTON
         assert tunnel_dev.open_tunnel_gate.call_args_list == []
         assert pellet_dev.send_pellet.call_args_list == []
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == []
         # now:
-        app_model.behavior.emergency_resume(source="user-button")
+        app_model.behavior.emergency_resume(source=EmergencyControlSource.USER_BUTTON)
         assert not algo.algo_paused
 
 
