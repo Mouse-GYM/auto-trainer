@@ -2343,6 +2343,8 @@ class AppModel(ObservableObject):
 
         alarms = []
         for alarm in analysis.alarms:
+            if alarm.alarm_api_kind is None:
+                continue
             alarm_cfg = alarm.config
             alarms.append(
                 ApiAlarmStatus(

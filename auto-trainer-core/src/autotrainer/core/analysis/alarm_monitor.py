@@ -1,16 +1,15 @@
 import dataclasses
 import enum
-from functools import partial
 from typing import Optional, List, Set, Callable, Dict, Union
 
-from autotrainer.api import ApiEventKind, ApiAlarmKind, ApiAlarmStatus, build_event
+from autotrainer.api import ApiAlarmKind
 
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import make_daemon_timer
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
-from autotrainer.core.analysis.detector import BaseDetector, GroupBaseDetector
+from autotrainer.core.analysis.detector import GroupBaseDetector, BaseDetector
 
 logger = get_verbose_logger(__name__)
 
@@ -54,34 +53,12 @@ class AlarmDetectorContext:
     property_changed_callback: Callable
 
 
-class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, AlarmDetector]):
+class EmergencyAlarmMonitor(GroupBaseDetector[EmergencyAlarmConfiguration, BaseDetector]):
 
     config_cls = EmergencyAlarmConfiguration
 
-    def _check_state(self, *, force: bool=False):
-        # overloaded _check_state vs GroupBaseDetector, to take into account is_emergency_condition.
-        reasons = set()
-        prev_reasons = self._engaged_reasons
-        for name, ctx in self._sub_detectors.items():
-            det = ctx.detector
-            cfg = det.config
-            if not det.use_daemon and not det.default_timer_delay:
-                det.check_state(force=force)
-            if (
-                det.is_engaged
-                and cfg.use
-                and (not isinstance(cfg, AlarmDetectorConfig) or cfg.is_emergency_condition)
-            ):
-                reasons.add(name)
-            elif not det.is_engaged:
-                if name in prev_reasons and not cfg.allow_autoresume_on_cleared:
-                    reasons.add(name)
-        #
-        is_emergency = len(reasons) > 0
-        if is_emergency and not self._is_engaged:
-            logger.notice("Engaging emergency: %s", reasons)
-        if reasons != prev_reasons:
-            self._is_engaged = "1" if len(prev_reasons) > 0 else ""  # force trigger again, so that new reasons are seen.
-            # see GroupBaseDetector for this "1" / ""
-            self._engaged_reasons = reasons
-        self.is_engaged = len(reasons) > 0
+    def _consider_for_new_engage(self, det):
+        if not super()._consider_for_new_engage(det):
+            return False
+        cfg = det.config
+        return not isinstance(cfg, AlarmDetectorConfig) or cfg.is_emergency_condition
