@@ -5,13 +5,17 @@ from unittest import mock
 import pytest
 
 import autotrainer.behavior.pellet.pellet_machine
-from autotrainer.behavior import SystemState, PelletDeviceProtocol, BehaviorAlgorithm, \
-    SystemMachine
+from autotrainer.behavior import SystemState
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 from autotrainer.core.capture import CaptureProcessStatus
 
-from top_fixtures import MockSystemMachine, mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
+from top_fixtures import mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
 
 
 @pytest.mark.parametrize("cover_enabled", [False, True])

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
                                QSpinBox, QDoubleSpinBox, QFrame, QDialog)
 import qtawesome as qta
+from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual, ProjectInfo, get_perf_now
@@ -1137,9 +1138,9 @@ class MainWindow(QMainWindow):
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
             if is_toggled:
-                behavior.emergency_stop(EmergencyControlSource.USER_BUTTON)
+                behavior.emergency_stop(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyStopReason.user_button)
             else:
-                behavior.emergency_resume(EmergencyControlSource.USER_BUTTON)
+                behavior.emergency_resume(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyResumeReason.user_button)
 
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)
