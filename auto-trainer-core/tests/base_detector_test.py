@@ -1,3 +1,4 @@
+import logging
 import time
 import threading
 from typing import Optional
@@ -116,5 +117,6 @@ def test_reentrant_check_state_does_not_loop(caplog):
             self.check_state()
 
     d = Detector()
+    caplog.set_level(logging.DEBUG)
     d.start()
     assert "skipping reentrant check" in caplog.text

@@ -232,7 +232,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 # than the daemon one (when there is one).
                 return None
             if self._checking_state:  # for same thread (lock is *R*Lock)
-                self._logger.warning("%s: skipping reentrant check", self._name)
+                self._logger.verbose("%s: skipping reentrant check", self._name)
                 # should not happen ideally. but using as safety measure.
                 return None
             # all "green" for check:
@@ -392,6 +392,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         super().__init__(name=name, config=config)
         self._engaged_reasons: Set[str] = set()
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
+        self._reentrant_recheck: bool = False
 
     @property
     def engaged_reasons(self) -> List[str]:
@@ -465,15 +466,28 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         else:
             logger.notice("%s: disengaging (prev = %s)", self._name, prev_engaged)
 
+    def check_state(self, *, force: bool=False):
+        delay = super().check_state(force=force)
+        if self._reentrant_recheck:
+            logger.verbose("detected reentrant_check, rechecking")
+            try:
+                delay = super().check_state(force=force)
+            finally:
+                self._reentrant_recheck = False
+        return delay
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
+        before_reentrant_recheck = self._reentrant_recheck  # get value before loop,
+        # to ensure all with need_explicit_check are done when self._reentrant_recheck is at start False
+        # but is modified during loop.
         for sub_name, sub_ctx in self._sub_detectors.items():
             det = sub_ctx.detector
             # strictly speaking this should not be necessary to call check_state on the sub-detectors.
             # given we have/are using _on_sub_detector_property_changed(...) to handle the change events.
             # But this allows to be certain that we are seeing all sub-detectors as "synced" here.
-            if det.need_explicit_check:
+            if det.need_explicit_check and not before_reentrant_recheck:
                 # this actually can prevent check loop(s), and possible deadlock:
                 # when a sub-detector engages, its engaged property changed event is emitted within its check_state(),
                 # with its lock acquired, triggering self._on_sub_detector_property_changed(...),
@@ -484,6 +498,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                 # changed event is handled "synchronously" via some side/different thread than this calling one.
                 if det.check_in_progress:
                     self._logger.debug("prevented possible reentrant/deadlock check_state to sub-detector %s", det.name)
+                    self._reentrant_recheck = True
                 else:
                     det.check_state(force=force)
             if det.is_engaged:
