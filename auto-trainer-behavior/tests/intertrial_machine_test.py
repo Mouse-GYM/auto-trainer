@@ -1,12 +1,8 @@
-import contextlib
-import datetime
 import logging
-from unittest import mock
 
 import pytest
 from autotrainer.api import ApiEventKind
 
-from autotrainer.core import ProjectInfo, EventManager, EventInfo
 from transitions import MachineError
 
 from autotrainer.behavior import SegmentationConfiguration, DetectionConfiguration, SystemState, SystemMachine
@@ -14,6 +10,11 @@ from autotrainer.behavior.intertrial import IntertrialState
 from autotrainer.core.interfaces import CaptureAnalysisResult
 from autotrainer.inference.analysis import IntertrialResponse
 from top_fixtures import MockSystemMachine
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
 
 
 def test_intertrial(
@@ -86,8 +87,7 @@ def test_exit_tunnel_when_analysis_ongoing(mock_system, machine, caplog):
     mock_system.start_trial_in_tunnel()
     mock_system.mock_pose_response(pellet_seen=True, mouse_seen=True, triangle_seen=True)
 
-    mock_system.mock_event_manager()
-    has_event = mock_system.has_event
+    has_event = mock_system.has_api_event
 
     def perform_exit_tunnel():
         assert machine.state == SystemState.intertrial

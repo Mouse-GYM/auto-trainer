@@ -12,7 +12,7 @@ from multiprocessing import synchronize
 
 from pathlib import Path
 from functools import partial
-from typing import List, Any, Optional, Union, ContextManager, Generator, Callable
+from typing import List, Any, Optional, Union, ContextManager, Generator, Callable, Dict, Mapping
 from unittest import mock
 # from collections.abc import Generator
 
@@ -23,7 +23,7 @@ from autotrainer.api import ApiAlarmKind
 import autotrainer.core
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 
-from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo
+from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo, EventInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.event import event_manager
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
@@ -109,28 +109,50 @@ def mock_get_perf_now(monkeypatch) -> SimulatePerfNow:
     return obj
 
 
+_m_event_mgr: Optional[mock.MagicMock] = None
+
+
 @pytest.fixture()
 def mock_event_manager(monkeypatch):
-    m_event_mgr = mock.MagicMock(spec=event_manager.EventManager)
+    real_manager = event_manager.EventManager
+    real_post_api_event = real_manager.post_api_event
+    real_post_event_content = real_manager.post_event_content
+    m_event_mgr = mock.MagicMock(spec=real_manager)
     m_event_mgr.default.return_value = m_event_mgr
-    # patch to class "default" function:
-    monkeypatch.setattr(event_manager.EventManager, "default", lambda: m_event_mgr)
+    m_event_mgr.post_api_event.side_effect = lambda *a, **kw: real_post_api_event(m_event_mgr, *a, **kw)
+    m_event_mgr.post_event_content.side_effect = lambda *a, **kw: real_post_event_content(m_event_mgr, *a, **kw)
+    # patch "default" function on real manager class:
+    monkeypatch.setattr(real_manager, "default", mock.MagicMock(side_effect=lambda: m_event_mgr))
     # so that modules having already import the class, and using the default() function,
     # will still get the mocked instance.
     # Then, also patch the EventManager itself in the module:
-    monkeypatch.setattr(
-        event_manager,
-        event_manager.EventManager.__name__,
-        m_event_mgr,
-    )
-    return m_event_mgr
+    monkeypatch.setattr(event_manager, real_manager.__name__, m_event_mgr)
+    # actually also patch this:
+    # monkeypatch.setattr(real_manager, "__new__", mock.MagicMock(side_effect=lambda *a: m_event_mgr))
+    # so that any direct caller of EventManager() will also get the mock instance.
+    global _m_event_mgr
+    _m_event_mgr = m_event_mgr
+    try:
+        yield m_event_mgr
+    finally:
+        _m_event_mgr = None
 
 
 def has_api_event_kind(kind):
-    return any(
-        call.args[0].get('kind') == kind
-        for call in event_manager.EventManager.post_api_event.call_args_list  # noqa
-    )
+    if _m_event_mgr is None:
+        raise RuntimeError(f"mock_event_manager not active")
+    return any(call.args[0].kind == kind for call in _m_event_mgr.post_event.call_args_list)  # noqa
+
+
+def get_api_event_context(kind) -> Optional[Mapping[str, Any]]:
+    if _m_event_mgr is None:
+        raise RuntimeError(f"mock_event_manager not active")
+    for call in _m_event_mgr.post_event.call_args_list:
+        info = call.args[0]
+        info: EventInfo
+        if info.kind == kind:
+            return info.context
+    return None
 
 
 @pytest.fixture(autouse=True)
@@ -726,26 +748,17 @@ class MockSystemMachine:
             self._load_cell.update(
                 self._load_cell.config.weight_inactive_threshold - 0.001, time.time(), int(p_now * 1e9))
 
-    def has_event(self, kind):
-        return any(call.args[0].kind == kind for call in self._m_post_event.call_args_list)  # noqa
+    @staticmethod
+    def has_api_event(kind):
+        return has_api_event_kind(kind)
 
-    def get_event_context(self, kind):
-        for call in self._m_post_event.call_args_list:
-            info = call.args[0]
-            if info.kind == kind:
-                return info.context
-        return None
-
-    def mock_event_manager(self):
-        event_mgr = self._machine._event_manager
-        mock_post_event = mock.patch.object(event_mgr, "post_event")
-        self._m_post_event = mock_post_event.start()
-        self._pytest_request.addfinalizer(mock_post_event.stop)
-        return self._m_post_event
+    get_api_event_context = staticmethod(get_api_event_context)
 
     @property
     def m_post_event(self) -> mock.MagicMock:
-        return self._m_post_event
+        if _m_event_mgr is None:
+            raise RuntimeError("mock_event_manager not active")
+        return _m_event_mgr.post_event
 
 
 @pytest.fixture

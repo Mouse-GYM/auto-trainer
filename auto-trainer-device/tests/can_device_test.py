@@ -36,6 +36,12 @@ from autotrainer.device.can_device import (
     default_send_pellet,
 )
 
+
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
+
+
 _expected = None
 
 def data_callback(kind: int, response):

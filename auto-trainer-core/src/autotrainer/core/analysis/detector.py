@@ -153,7 +153,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 self._engaged_perf_c = perf_now
             else:
                 self._disengaged_perf_c = perf_now
-        self._logger.notice("is_engaged -> %s (age previous = %.1f)",
+        self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
                             engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
         kind = self.detector_api_kind
         if kind is not None:
@@ -375,12 +375,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
 @dataclasses.dataclass
 class GroupSubDetectorContext:
-    detector: BaseDetector[GroupSubDetectorConfig]
+    detector: BaseDetector[DetectorConfig]
     property_changed_callback: Callable
 
 
 
-GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[GroupSubDetectorConfig])
+GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
 class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
@@ -448,6 +448,23 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             self.check_state()
         self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
 
+    def _consider_for_new_engage(self, det):
+        cfg = det.config
+        return not isinstance(cfg, GroupSubDetectorConfig) or cfg.use
+
+    def _consider_for_keep_engaged(self, det):
+        cfg = det.config
+        return isinstance(cfg, GroupSubDetectorConfig) and not cfg.allow_autoresume_on_cleared
+
+    def _on_engaged_reasons_changed(self, prev_engaged: Set[str], new_engaged: Set[str]) -> None:
+        """Report a reason-set transition; silent by default."""
+        if new_engaged and not prev_engaged:
+            logger.notice("%s: engaging with %s", self._name, new_engaged)
+        elif new_engaged:
+            logger.verbose("%s: reengaging with %s (prev = %s)", self._name, new_engaged, prev_engaged)
+        else:
+            logger.notice("%s: disengaging (prev = %s)", self._name, prev_engaged)
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
@@ -469,22 +486,15 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                     self._logger.debug("prevented possible reentrant/deadlock check_state to sub-detector %s", det.name)
                 else:
                     det.check_state(force=force)
-            cfg = det.config
-            det_engaged = det.is_engaged
-            is_group_sub_det_cfg = isinstance(cfg, GroupSubDetectorConfig)  # allow be flexible.
-            if det_engaged:
-                if is_group_sub_det_cfg:
-                    keep = cfg.use
-                else:
-                    keep = True
-                if keep:
+            if det.is_engaged:
+                if self._consider_for_new_engage(det):
                     new_engaged.add(sub_name)
-            elif is_group_sub_det_cfg:
-                assert not det_engaged  # per the previous if.
+            else:
                 if sub_name in prev_engaged:
-                    if not cfg.allow_autoresume_on_cleared:
+                    if self._consider_for_keep_engaged(det):
                         new_engaged.add(sub_name)  # keep it
         if new_engaged != prev_engaged:
+            self._on_engaged_reasons_changed(prev_engaged, new_engaged)
             # ensure IS_ENGAGED property changed event still always relayed,
             # even if same is_engaged, so that listeners will get/see the new_engaged reasons/sub-detectors.
             self._is_engaged = "1" if prev_engaged else ""

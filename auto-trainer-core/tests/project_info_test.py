@@ -1,3 +1,4 @@
+import dataclasses
 import importlib
 import os
 import sys
@@ -6,8 +7,9 @@ from unittest import mock
 
 import pytest
 
-from autotrainer.core.project import ProjectInfo
+from autotrainer.core.project import ProjectInfo, project_info
 from autotrainer.core.project.project_info import REACH_EVENT_SUFFIX
+from autotrainer.core.project.project_info import _get_datetime_now
 
 device_id = "A1357"
 
@@ -59,9 +61,9 @@ def test_explicit_trial(root):
 
 
 def test_without_trial_and_when_are_shared(root):
-    module = importlib.import_module(ProjectInfo.__module__)
+    module = project_info
     unix_start_as_local = datetime(2001, 1, 1, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
-    with mock.patch.object(module, "_get_datetime_now") as m_get_datetime:
+    with mock.patch.object(module, module._get_datetime_now.__name__) as m_get_datetime:
         m_get_datetime.return_value = unix_start_as_local
         info = ProjectInfo(root=root, device_id=device_id)
     assert info.trial == 1
@@ -77,14 +79,14 @@ def test_get_path_at_different_day_does_not_change_result(root):
     info = ProjectInfo(root=root, device_id=device_id)
     some_day = datetime(2025, 1, 1)
     other_day = datetime(2025, 1, 2)
-    module = importlib.import_module(ProjectInfo.__module__)
-    with mock.patch.object(module, "_get_datetime_now") as m_datetime_now:
-        m_datetime_now.return_value = some_day
+    module = project_info
+    with mock.patch.object(module, module._get_datetime_now.__name__) as m_get_datetime:
+        m_get_datetime.return_value = some_day
         info.calculate_next_trial_index()
         loc1, d1 = info.get_day_path()
         assert d1 == "20250101"
         # now change the day:
-        m_datetime_now.return_value = other_day
+        m_get_datetime.return_value = other_day
         # and get path again:
         loc2, d2 = info.get_day_path()
         assert loc1 == loc2 and d1 == d2, "must be same still"
@@ -135,7 +137,6 @@ def test_new_day_if_output_dir_exists(root, monkeypatch):
     now = datetime.now()
     prj = ProjectInfo(root=root, when=now, trial=100)
     m = mock.MagicMock()
-    from autotrainer.core.project.project_info import _get_datetime_now
     monkeypatch.setattr(f"{_get_datetime_now.__module__}."
                         f"{_get_datetime_now.__qualname__}", m)
     tomorrow = now + timedelta(days=1)
@@ -153,3 +154,30 @@ def test_new_day_if_output_dir_exists(root, monkeypatch):
 def test_reach_event(project_info):
     p = project_info.get_reach_event_path()
     assert str(p).endswith(REACH_EVENT_SUFFIX)
+
+
+def test_null_project():
+    null_prj = ProjectInfo.get_null_project()
+    assert isinstance(null_prj, ProjectInfo)
+    expected = dict(
+        trial=0,
+        when=datetime.fromtimestamp(0),
+        root="",
+        device_id="",
+        camera_1="",
+        camera_2="",
+        batch_id=None,
+    )
+    actual = dict((k, getattr(null_prj, k)) for k in expected)
+    assert actual == expected
+
+
+def test_invalid_when_and_trial():
+    with pytest.raises(ValueError, match="Cannot create ProjectInfo with trial but without when"):
+        ProjectInfo(trial="anything")  # noqa
+
+
+@pytest.mark.parametrize("trial", [-1, 0, 42])
+def test_with_specific_trial(trial):
+    prj = ProjectInfo(when=datetime.now(), trial=trial)
+    assert prj.trial == trial

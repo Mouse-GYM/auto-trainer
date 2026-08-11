@@ -1,4 +1,3 @@
-import contextlib
 from itertools import chain
 from pathlib import Path
 from threading import Timer
@@ -13,7 +12,7 @@ from autotrainer.inference import PoseResponse, PoseLocation
 from top_fixtures import MockSystemMachine
 
 
-from autotrainer.core import HeadbarPressureMonitor, get_perf_now, Offset3DTuple, EventManager
+from autotrainer.core import Offset3DTuple
 from autotrainer.core import Notification, TriggerNotification, NotificationCenter
 
 from autotrainer.behavior import IntertrialState
@@ -23,6 +22,11 @@ from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletMachine
 
 from autotrainer.inference.analysis import IntertrialResponse
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
 
 
 def test_enter_exit_tunnel(mock_system, machine):
@@ -342,8 +346,7 @@ class TestTrialProcessingEndingIntertrialEnabled(MockSystemMachine):
 
     def test_exit_reenter_tunnel_while_analysis_in_progress(self, machine, caplog):
         algo = self.algo
-        self.mock_event_manager()
-        has_event = self.has_event
+        has_event = self.has_api_event
         self.mock_pose_response(pellet_seen=True)
         self.mock_pellet_ack(until_none=True)
         assert not has_event(ApiEventKind.tunnelEnter)

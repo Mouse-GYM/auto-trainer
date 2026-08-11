@@ -10,6 +10,11 @@ from autotrainer.core.analysis.free_disk_space_detector import FreeDiskSpaceDete
 from top_fixtures import increase_simulate_perf_now
 
 
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
+
+
 @pytest.fixture
 def free_disk_space_det(mock_get_perf_now):
     det = FreeDiskSpaceDetector()

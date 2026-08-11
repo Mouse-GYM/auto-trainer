@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessa
                                QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
                                QSpinBox, QDoubleSpinBox, QFrame, QDialog)
 import qtawesome as qta
+from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason
 
 from autotrainer.core import EventManager, Offset3DTuple, AnimalSubject, SystemConfiguration, CameraConfiguration, \
     calculate_std_dev_manual, ProjectInfo, get_perf_now
@@ -46,6 +47,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult, TrainingPhase
 
 from autotrainer.pyside.xyz_label import XYZQLabel
+from tools.acquisition.model.behavior_model import EmergencyControlSource
 
 from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, WatchdogItems
@@ -1128,14 +1130,17 @@ class MainWindow(QMainWindow):
         def update_emergency_ui(is_toggled: bool, source: str):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
-            if source != "user-button":
-                emergency_button.blockSignals(True)  # prevent overwrite of reason with user-button
-                emergency_button.setChecked(is_toggled)
-                emergency_button.blockSignals(False)
+            # ensure button state stays in sync, even if not applied from it:
+            emergency_button.blockSignals(True)
+            emergency_button.setChecked(is_toggled)
+            emergency_button.blockSignals(False)
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
-            (behavior.emergency_stop if is_toggled else behavior.emergency_resume)("user-button")
+            if is_toggled:
+                behavior.emergency_stop(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyStopReason.user_button)
+            else:
+                behavior.emergency_resume(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyResumeReason.user_button)
 
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)

@@ -27,7 +27,8 @@ from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
-    ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+    ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind, ApiEmergencyStopReason, \
+    ApiEmergencyResumeReason
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
 from autotrainer.core import (
@@ -95,7 +96,7 @@ from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
-from tools.acquisition.model.behavior_model import BehaviorModel
+from tools.acquisition.model.behavior_model import BehaviorModel, EmergencyControlSource
 from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -294,7 +295,7 @@ class AppModel(ObservableObject):
         self._prev_raw_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_valid_diamond_perf_c: float = -math.inf
         self._check_diamond_coord_enabled = True
-        self._trigger_emergency_on_bad_diamond_coord = False
+        self._trigger_emergency_on_bad_diamond_coord = False  # currently unused, given never/nowhere set to True
         self._warned_bad_diamond_coord = False
         self._triggered_bad_diamond_coord = False
         self._p_start_capture = -math.inf
@@ -2012,7 +2013,7 @@ class AppModel(ObservableObject):
             if not self._triggered_bad_diamond_coord:
                 self._triggered_bad_diamond_coord = True
                 if self._trigger_emergency_on_bad_diamond_coord:
-                    self._behavior.emergency_stop(source="Diamond-Coord-Check")
+                    self._behavior.emergency_stop("Diamond-Coord-Check", reason_code=ApiEmergencyStopReason.diamond_coord_check)
                     self.on_error("Diamond not detected or invalid position",
                                   "Could not ensure valid diamond position for too long.\n\n"
                                   "Please re-execute a diamond-triangle calibration via menu Tools -> Calibrate Coordinate System\n\n"
@@ -2244,12 +2245,12 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            self._behavior.emergency_stop(source="RpcService")
-            return dict(reason="RpcService")
+            self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyStopReason.rpc_service)
+            return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            self._behavior.emergency_resume(source="RpcService")
-            return dict(reason="RpcService")
+            self._behavior.emergency_resume(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyResumeReason.rpc_service)
+            return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.USER_DEFINED:
             logger.verbose("TODO")
@@ -2343,6 +2344,8 @@ class AppModel(ObservableObject):
 
         alarms = []
         for alarm in analysis.alarms:
+            if alarm.alarm_api_kind is None:
+                continue
             alarm_cfg = alarm.config
             alarms.append(
                 ApiAlarmStatus(
@@ -2463,10 +2466,10 @@ class AppModel(ObservableObject):
                                            action_func, err)
         execute_emergency_proc()
 
-    def _on_emergency_resumed(self, source):
+    def _on_emergency_resumed(self, source: str):
+        self._emergency_source = None
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
-        self._emergency_source = None
         self._analysis.boards_hardware_reset_detector.restart()
 
     # pellet machine events
