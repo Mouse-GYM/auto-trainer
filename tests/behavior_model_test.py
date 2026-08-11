@@ -3,6 +3,7 @@ import datetime as dtm
 from unittest import mock
 
 import pytest
+from autotrainer.api import ApiEventKind, ApiEmergencyStopReason, ApiEmergencyResumeReason, ApiAlarmKind
 
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import PersistenceConfiguration
@@ -10,7 +11,12 @@ from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.behavior_model import EmergencyControlSource
-from top_fixtures import MockSystemMachine
+from top_fixtures import MockSystemMachine, has_api_event_kind
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
 
 
 def test_save_config_include_sensor_analysis_monitors_and_detectors(app_model):
@@ -59,8 +65,10 @@ class TestEmergency(MockSystemMachine):
         self._app_model = app_model
         self._behavior = app_model.behavior
 
-    @pytest.mark.parametrize("baseline_intensity", [0, 5, 100])
-    def test_pause_then_resume(self, app_model, baseline_intensity):
+    @pytest.mark.parametrize("reason", list(ApiEmergencyStopReason))
+    @pytest.mark.parametrize("resume_reason", [ApiEmergencyResumeReason.user_button, ApiEmergencyResumeReason.rpc_service])
+    @pytest.mark.parametrize("baseline_intensity", [0, 100])
+    def test_pause_then_resume(self, app_model, baseline_intensity, reason, resume_reason):
         algo = app_model.behavior.algorithm
         self.pellet.state = PelletState.loading
         self.pellet_state_trans.clear()
@@ -73,19 +81,23 @@ class TestEmergency(MockSystemMachine):
         #
         assert app_model.behavior.source_emergency is None
         assert self.pellet_state_trans == []
-        app_model.behavior.emergency_stop(source="testing")
+        app_model.behavior.emergency_stop(source="testing", reason_code=reason)
         assert self.pellet_state_trans == [PelletState.home]
         assert app_model.behavior.source_emergency == "testing"
         assert algo.algo_paused
+        ctx = self.get_api_event_context(ApiEventKind.emergencyStop)
+        assert ctx == {'active_alarms': [], 'reason': 'testing', 'reason_code': reason}
         assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
         assert pellet_dev.send_pellet.call_args_list == []
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(0)]
         tunnel_dev.reset_mock()  # ensure clear
         pellet_dev.reset_mock()  # ensure clear
         assert self.pellet_state_trans == [PelletState.home]
-        app_model.behavior.emergency_resume(source="testing")
+        app_model.behavior.emergency_resume(source="testing", reason_code=resume_reason)
         assert app_model.behavior.source_emergency is None
         assert not algo.algo_paused
+        ctx = self.get_api_event_context(ApiEventKind.emergencyResume)
+        assert ctx == {'reason': 'testing', 'reason_code': resume_reason, 'resumed_alarms': []}
         assert tunnel_dev.open_tunnel_gate.call_args_list == [mock.call()]
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == [mock.call(algo.baseline_intensity)]
         self.mock_pellet_ack(until_none=True)
@@ -114,27 +126,63 @@ class TestEmergency(MockSystemMachine):
         assert pellet_dev.send_pellet.call_args_list == []
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == []
 
-    def test_user_source_cannot_be_resumed(self, app_model):
+    @pytest.mark.parametrize("source", [EmergencyControlSource.USER_BUTTON, EmergencyControlSource.RPC_SERVICE])
+    def test_admin_source_cannot_be_resumed(self, app_model, source):
         algo = app_model.behavior.algorithm
         assert not algo.algo_paused
         tunnel_dev = self.tunnel_dev
         pellet_dev = self.pellet_dev
-        app_model.behavior.emergency_stop(source=EmergencyControlSource.USER_BUTTON)
-        assert app_model.behavior.source_emergency == "user-button"
+        app_model.behavior.emergency_stop(source=source)
+        assert app_model.behavior.source_emergency == source
         assert algo.algo_paused
         tunnel_dev.reset_mock()  # ensure clear
         pellet_dev.reset_mock()  # ensure clear
         # now:
+        self.m_post_event.reset_mock()
         app_model.behavior.emergency_resume(source="something-else")
         # but still engaged:
         assert algo.algo_paused
-        assert app_model.behavior.source_emergency == EmergencyControlSource.USER_BUTTON
+        assert app_model.behavior.source_emergency == source
+        assert not self.has_api_event(ApiEventKind.emergencyResume)
         assert tunnel_dev.open_tunnel_gate.call_args_list == []
         assert pellet_dev.send_pellet.call_args_list == []
         assert tunnel_dev.update_head_magnet_intensity.call_args_list == []
         # now:
-        app_model.behavior.emergency_resume(source=EmergencyControlSource.USER_BUTTON)
+        app_model.behavior.emergency_resume(source=source)
         assert not algo.algo_paused
+        ctx = self.get_api_event_context(ApiEventKind.emergencyResume)
+        assert ctx == {
+            'reason': source,
+            'reason_code': ApiEmergencyResumeReason.unknown,  # not passed
+            'resumed_alarms': []
+        }
+
+    def test_stop_resume_from_alarm(self, app_model):
+        algo = app_model.behavior.algorithm
+        analysis = app_model.analysis
+        fault_alarm = analysis.system_fault_alarm
+        fault_alarm.config.use = True
+        fault_alarm.config.allow_autoresume_on_cleared = True
+        fault_alarm.config.is_emergency_condition = True
+        #
+        assert not algo.algo_paused
+        fault_alarm.force_engaged(True)
+        assert algo.algo_paused
+        ctx = self.get_api_event_context(ApiEventKind.emergencyStop)
+        assert ctx == {
+            'reason': 'alarm-monitor: SYSTEM_FAULT',
+            'reason_code': ApiEmergencyStopReason.alarm_monitor,
+            'active_alarms': [ApiAlarmKind.systemFault],
+        }
+        self.m_post_event.reset_mock()
+        fault_alarm.force_engaged(False)
+        assert not algo.algo_paused
+        ctx = self.get_api_event_context(ApiEventKind.emergencyResume)
+        assert ctx == {
+            'reason': 'alarm-monitor-resumed',
+            'reason_code': ApiEmergencyResumeReason.alarm_monitor_resume,
+            'resumed_alarms': [ApiAlarmKind.systemFault],
+        }
 
 
 mid_day = dtm.datetime(2026,1,1, 12, 0)

@@ -33,6 +33,11 @@ this_dir = Path(__file__).parent.resolve()
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
+
+
 @pytest.fixture
 def inference_model(pose_algo):
     # unused atm
@@ -43,10 +48,6 @@ def inference_model(pose_algo):
 
 
 class BaseTrainingPlan(MockSystemMachine):
-
-    @pytest.fixture(autouse=True)
-    def _event_manager(self, machine, monkeypatch, _attach_request):
-        self.mock_event_manager()
 
     @pytest.fixture(autouse=True)
     def training_plans(self, trainer_config_dir):
@@ -363,7 +364,7 @@ class TestWithBatch(BaseTrainingPlan):
             self.exit_tunnel()
         logger.info("all done")
 
-        has_event = self.has_event
+        has_event = self.has_api_event
         # assert has_event(ApiEventKind.protocolPhaseEvent)
         assert has_event(ApiEventKind.trainingPlanLoad)
         assert has_event(ApiEventKind.trainingPhaseEnter)

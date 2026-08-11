@@ -7,6 +7,11 @@ from unittest import mock
 from autotrainer.core.analysis.load_cell_tare_monitor import LoadCellTareMonitor
 
 
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
+
+
 @pytest.mark.parametrize("threshold, range_threshold", [
     (0.1, 1),
     (0.5, 2),

@@ -8,14 +8,15 @@ from autotrainer.behavior import SystemMachine
 from top_fixtures import MockSystemMachine
 
 
+@pytest.fixture(autouse=True)
+def _use_mock_event_manager(mock_event_manager):
+    pass
+
+
 class TestApiEventPayloads(MockSystemMachine):
 
-    def _init(self, machine: SystemMachine):
-        super()._init(machine)
-        self.mock_event_manager()
-
     def test_trial_start_events_carry_session_and_trial(self, machine):
-        get_event_ctx = self.get_event_context
+        get_event_ctx = self.get_api_event_context
         project = self.algo._project_info  # noqa: SLF001
         assert project.is_valid()
         self.start_trial_in_tunnel()
@@ -41,7 +42,7 @@ class TestApiEventPayloads(MockSystemMachine):
         project = self.algo._project_info  # noqa: SLF001
         assert self.algo.start_trial_capture(reason="manual") is True
         assert self.algo.end_capture_trial() is True
-        capture_ended = self.get_event_context(ApiEventKind.trialCaptureEnded)
+        capture_ended = self.get_api_event_context(ApiEventKind.trialCaptureEnded)
         assert capture_ended is not None
         assert set(capture_ended.keys()) == {"session_id", "trial_id"}
         assert capture_ended["session_id"] == project.session_id
