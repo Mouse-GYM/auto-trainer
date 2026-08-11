@@ -80,6 +80,7 @@ def mon():
     mon = Mon()
     try:
         mon.restart()
+        mon.check_done.clear()
         yield mon
     finally:
         for det in mon.sub_detectors.values():
@@ -232,7 +233,7 @@ def test_concurrent_reentrant_alarms_engage(
         need_explicit_check = True
 
         def _check_state(self) -> Optional[float]:
-            det1_relax_check.wait()
+            det1_relax_check.wait(5)
             return super()._check_state()
 
     det1 = Det1()
@@ -273,10 +274,7 @@ def test_concurrent_reentrant_alarms_engage(
     assert det1.engaged_event.wait(0.5)  # should be very fast
     assert det2.check_attempted.wait(0.5)
     if det2_engage:
-        assert det2.engaged_event.wait(0.5)
-    # assert det2.check_attempted.wait(0.5)
-    # x, y, z = mon.is_engaged, det1.is_engaged, det2.is_engaged
-    # mon.stop()
+        assert det2.engaged_event.is_set()
     assert mon.is_engaged and det1.is_engaged and det2.is_engaged is det2_engage
     assert mon.engaged_reasons == (["det1", "det2"] if det2_engage
                                    else ["det1"])
