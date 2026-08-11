@@ -1,7 +1,10 @@
 import dataclasses
 import enum
 from datetime import datetime
-from typing import Optional, Callable
+from typing import Optional, Callable, List
+
+from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason, ApiAlarmKind
+from autotrainer.api.event import build_event, EmergencyStopContext, EmergencyResumeContext
 
 from autotrainer.api import ApiEventKind
 
@@ -9,7 +12,7 @@ from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, Beh
                               SystemMessageHandler)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
-from autotrainer.core.event import post_api_event_content
+from autotrainer.core.event import post_api_event_content, post_api_event
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -20,7 +23,6 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from tools.acquisition.model.hardware_model import HardwareModel
 
 from autotrainer.core.project import ProjectDependentProtocol
-
 logger = get_verbose_logger(__name__)
 
 
@@ -83,11 +85,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         self._hardware_model = hardware_model
         #
         self._source_emergency: Optional[str] = None
+        self._emergency_engaged_alarms: List[ApiAlarmKind] = []
         #
-        # system_machine.pellet.events.state_changed += lambda old_val, new_val: self._on_property_changed(
-        #     f"pellet.{StateMachine.Properties.STATE_PROPERTY}", new_val, old_val)
-        # actually unused event (pellet.state)
-
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
 
     @BehaviorAlgorithm.relay_func(wait=False)
@@ -99,8 +98,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             algo_status = algo.status
             if not value:
                 # nothing engaged, all ok
-                if algo.algo_paused:
-                    self.emergency_resume("alarm-monitor-resumed")
+                if self._source_emergency is not None:
+                    self.emergency_resume(
+                        "alarm-monitor-resumed",
+                        reason_code=ApiEmergencyResumeReason.alarm_monitor_resume,
+                        resumed_alarms=list(self._emergency_engaged_alarms),
+                    )
             else:
                 if algo_status is BehaviorAlgoStatus.ANIMAL_IN_TRAINING:
                     valid_reasons = list(EmergencyReason)
@@ -127,11 +130,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                     reasons = " ".join(
                         reason.name if isinstance(reason, enum.Enum) else reason
                         for reason in engaged_reasons)
-                    self.emergency_stop(f"alarm-monitor: {reasons}")
+                    self.emergency_stop(f"alarm-monitor: {reasons}", reason_code=ApiEmergencyStopReason.alarm_monitor)
                 else:
                     logger.verbose("skipping emergency stop ; algo status=%s reasons=%s",
                                    algo_status, engaged_reasons)
-                    self.emergency_resume("alarm-monitor-no-valid-condition-remaining")
+                    self.emergency_resume("alarm-monitor-no-valid-condition-remaining",
+                                          reason_code=ApiEmergencyResumeReason.alarm_monitor_status_change)
 
     @property
     def analysis(self) -> SensorAnalysis:
@@ -260,7 +264,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         return self._source_emergency
 
     @BehaviorAlgorithm.relay_func()
-    def emergency_stop(self, source: str):
+    def emergency_stop(self, source: str, *, reason_code: ApiEmergencyStopReason=ApiEmergencyStopReason.unknown):
         algo = self._system_machine.algorithm
         logger.info("emergency_stop called: %s", source)
         if algo.algo_paused and source == self._source_emergency:
@@ -277,17 +281,29 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             if isinstance(r, EmergencyReason) or r in all_reasons:
                 r = EmergencyReason(r)
                 api_alarm_kinds.append(emergency_reason_2_api_alarm_kind(r))
-        post_api_event_content(
+        self._emergency_engaged_alarms = api_alarm_kinds
+        #
+        post_api_event(build_event(
             ApiEventKind.emergencyStop,
-            data=dict(reason=source, active_alarms=api_alarm_kinds))
+            EmergencyStopContext(reason=source,
+                                 reason_code=reason_code,
+                                 active_alarms=api_alarm_kinds)))
         self._source_emergency = source
         algo.algo_paused = True
         self.emergency_stopped(source)
 
     @BehaviorAlgorithm.relay_func()
-    def emergency_resume(self, source: str):
+    def emergency_resume(
+        self,
+        source: str,
+        *,
+        reason_code: ApiEmergencyResumeReason=ApiEmergencyResumeReason.unknown,
+        resumed_alarms: Optional[List[ApiAlarmKind]] = None,
+    ):
         algo = self._system_machine.algorithm
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
+        if resumed_alarms is None:
+            resumed_alarms = []
         if not algo.algo_paused:  # should be same than self._source_emergency is None
             logger.debug("algo not paused, skipping emergency_resume from %s", source)
             return
@@ -297,7 +313,12 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             logger.verbose("Refusing resume from emergency %s given was set by %s",
                           source, current)
             return
-        post_api_event_content(ApiEventKind.emergencyResume, data=dict(reason=source))
+        post_api_event(build_event(ApiEventKind.emergencyResume,
+            EmergencyResumeContext(
+                reason=source, reason_code=reason_code, resumed_alarms=resumed_alarms)))
+        self._source_emergency = None
+        if reason_code == ApiEmergencyResumeReason.alarm_monitor_resume:
+            self._emergency_engaged_alarms = []
         self._source_emergency = None
         algo.algo_paused = False
         self.emergency_resumed(source)

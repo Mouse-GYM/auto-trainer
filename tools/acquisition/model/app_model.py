@@ -27,7 +27,8 @@ from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
-    ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind
+    ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind, ApiEmergencyStopReason, \
+    ApiEmergencyResumeReason
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
 from autotrainer.core import (
@@ -2012,7 +2013,7 @@ class AppModel(ObservableObject):
             if not self._triggered_bad_diamond_coord:
                 self._triggered_bad_diamond_coord = True
                 if self._trigger_emergency_on_bad_diamond_coord:
-                    self._behavior.emergency_stop(source="Diamond-Coord-Check")
+                    self._behavior.emergency_stop("Diamond-Coord-Check", reason_code=ApiEmergencyStopReason.diamond_coord_check)
                     self.on_error("Diamond not detected or invalid position",
                                   "Could not ensure valid diamond position for too long.\n\n"
                                   "Please re-execute a diamond-triangle calibration via menu Tools -> Calibrate Coordinate System\n\n"
@@ -2244,11 +2245,11 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            self._behavior.emergency_stop(source=EmergencyControlSource.RPC_SERVICE)
+            self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyStopReason.rpc_service)
             return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            self._behavior.emergency_resume(source=EmergencyControlSource.RPC_SERVICE)
+            self._behavior.emergency_resume(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyResumeReason.rpc_service)
             return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.USER_DEFINED:
