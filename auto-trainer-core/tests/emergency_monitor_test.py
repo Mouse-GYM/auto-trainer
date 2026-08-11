@@ -108,14 +108,10 @@ def test_monitor_engage_from_itself(mon, det_cls, use_daemon, caplog):
     det.check_attempted.clear()
     det.engaged_event.clear()
     mon.check_state()
-    # assert det.check_attempted.wait(0.3)
-    assert det.engaged_event.wait(0.2)  # should be very fast
+    assert det.engaged_event.wait(0.4)  # should be very fast
     assert det.is_engaged and mon.is_engaged
     msg = "prevented possible reentrant/deadlock"
-    if use_daemon:
-        assert msg in caplog.text
-    else:
-        assert msg not in caplog.text
+    assert (msg in caplog.text) == use_daemon
 
 
 @pytest.mark.parametrize("need_explicit_check", [True, False])
@@ -233,18 +229,26 @@ def test_concurrent_reentrant_alarms_engage(
         need_explicit_check = True
 
         def _check_state(self) -> Optional[float]:
-            det1_relax_check.wait(5)
+            # wait to be relaxed while holding this detector lock:
+            det1_relax_check.wait(0.5)
             return super()._check_state()
 
     det1 = Det1()
     if not det1_use_daemon:
+        # without daemon the start() executes a check_state() directly,
+        # so ensure it doesn't lock this main thread with that first check:
         det1.check_state = lambda f=False: None
         det1.start()
-        del det1.check_state
+        del det1.check_state  # remove no-op check_state, that will make the normal class method to be used again.
     det1.desired_set_value = True
     mon.register_sub_detector("det1", det1)
     assert det1.running
     assert not det1.is_engaged and not mon.is_engaged
+
+    det1_check_attempted_when_det2_was_set = False
+    det2_was_locked_while_det1_executed = False
+
+    det2_check_finished = threading.Event()
 
     class Det2(SimpleDetector):
 
@@ -252,14 +256,21 @@ def test_concurrent_reentrant_alarms_engage(
         need_explicit_check = True
 
         def _check_state(self) -> Optional[float]:
+            nonlocal det1_check_attempted_when_det2_was_set, det2_was_locked_while_det1_executed
             desired = self.desired_set_value
             if desired is not None:
+                det1_check_attempted_when_det2_was_set = det1.check_attempted.is_set()
                 det1_relax_check.set()
                 if not det1_use_daemon and not det2_engage:
+                    # without daemon for det1 and without det2 engage,
+                    # then det1 needs explicit check otherwise the monitor check_state won't be called back.
                     det1.check_state()
             super()._check_state()
             if desired is not None:
-                det1.check_attempted.wait(5)
+                # ensure we keep this detector lock acquired while det1 executes its check,
+                # which should be very fast, retain the value:
+                det2_was_locked_while_det1_executed = det1.check_attempted.wait(0.5)
+            det2_check_finished.set()
 
     det2 = Det2()
     mon.register_sub_detector("det2", det2)
@@ -267,19 +278,23 @@ def test_concurrent_reentrant_alarms_engage(
     caplog.set_level(logging.DEBUG)
 
     det2.desired_set_value = det2_engage
+    det1.check_attempted.clear()  # to be sure
     det2.check_attempted.clear()
-    # if not det2_use_daemon:
+    det2_check_finished.clear()
     det2.check_state()
 
-    assert det1.engaged_event.wait(0.5)  # should be very fast
-    assert det2.check_attempted.wait(0.5)
-    if det2_engage:
-        assert det2.engaged_event.is_set()
-    assert mon.is_engaged and det1.is_engaged and det2.is_engaged is det2_engage
-    assert mon.engaged_reasons == (["det1", "det2"] if det2_engage
-                                   else ["det1"])
+    assert det1.check_attempted.wait(0.5)  # ensure det1 check has been reached, should be very fast
+    assert det2_check_finished.wait(0.5)  # should be very fast
+    assert det2.engaged_event.is_set() == det2_engage # can use is_set after given using check_finished.wait before,
+        # which is set after is_engaged is set.
+    assert not det1_check_attempted_when_det2_was_set
+    assert det2_was_locked_while_det1_executed
+    assert mon.is_engaged and det1.is_engaged and det2.is_engaged == det2_engage
+    assert mon.engaged_reasons == (["det1", "det2"] if det2_engage else ["det1"])
     assert "could not acquire lock" not in caplog.text
-    assert "prevented possible reentrant/deadlock check_state to sub-detector" in caplog.text
+    msg = "prevented possible reentrant/deadlock check_state to sub-detector"
+    assert any(msg in rec.message and det2.name in str(rec.args) for rec in caplog.records)
+    # NB: this asserts that in all the variants of the test case, at least the sub-detector2 was prevented from...
 
 
 @pytest.mark.parametrize("use_daemon", [True, False])
@@ -290,17 +305,21 @@ def test_when_not_using_need_explicit_check(mon, det_cls, use_daemon, caplog):
         default_timer_delay = 60
         need_explicit_check = False
         use_daemon = r_use_daemon
-        check_attempted = threading.Event()
 
         def check_state(self, *, force: bool=False):
-            super().check_state(force=force)
-            self.check_attempted.set()
+            # NB: "check_state" is executed in/by the caller thread,
+            # while "_check_state" will be executed by the daemon thread if it's daemon.
+            try:
+                super().check_state(force=force)
+            finally:
+                self.check_attempted.set()  # so set the check_attempted here, too
 
     det = Det()
     mon.register_sub_detector("det", det)
-    det.check_attempted.wait(1)  # because started
+    assert det.check_attempted.wait(0.5)  # because started
     det.check_attempted.clear()
     assert det.running
+    mon.check_done.clear()
     mon.check_state()
     assert mon.check_done.is_set()
     assert not det.check_attempted.is_set()
