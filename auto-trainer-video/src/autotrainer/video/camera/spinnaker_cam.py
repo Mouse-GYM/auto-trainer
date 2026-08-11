@@ -6,7 +6,7 @@ import math
 import statistics
 import time
 from enum import IntEnum
-from typing import Tuple, List, Dict, Optional, Type
+from typing import Tuple, List, Dict, Optional, Type, TypeVar, cast
 
 import numpy
 import PySpin
@@ -80,6 +80,9 @@ class SpinCamDefaultParams:
     gamma: float = 0.7
 
 
+GetDefT = TypeVar("GetDefT", int, float, str)
+
+
 class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
@@ -120,11 +123,11 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        def get_def(k):
+        def get_def(k: str) -> GetDefT:
             v = self.default_params.get(k)
             if v is None:
                 logger.verbose("No default for param %r", k)
-            return v
+            return cast(GetDefT, v)
 
         self._exposure: float = get_def("exposure")
         self._fps: float = get_def("fps")
@@ -155,6 +158,12 @@ class SpinCam(CameraBase):
         # not needed
         # self._image_processor = PySpin.ImageProcessor()
         # self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
+
+    def _get_spincam(self) -> PySpin.Camera:
+        cam = self._camera
+        if cam is None:
+            raise RuntimeError("camera not initialized or spincam not available")
+        return cam
 
     def __del__(self):
         self.end_capture()
@@ -227,7 +236,7 @@ class SpinCam(CameraBase):
             self._apply_exposure(cam, value)
 
     def _reinit_cam(self):
-        spincam = self._camera
+        spincam = self._get_spincam()
         logger.notice("doing cam reset with begin+end acquisition")
         # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
         spincam.BeginAcquisition()
@@ -236,7 +245,7 @@ class SpinCam(CameraBase):
         spincam.Init()
 
     def init(self):
-        spincam = self._camera
+        spincam = self._get_spincam()
         spincam.Init()
 
         self._consecutive_late_acquire = 0
@@ -417,14 +426,15 @@ class SpinCam(CameraBase):
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
         first_capture = False
+        spincam = self._get_spincam()
         if not self._acquisition_started:
             self._acquisition_started = True
             first_capture = True
-            self._camera.BeginAcquisition()
+            spincam.BeginAcquisition()
             if self._is_primary:
-                self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
-                self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
-                self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+                spincam.LineSelector.SetValue(PySpin.LineSelector_Line1)
+                spincam.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+                spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
             logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
 
         expected_shape = (self._height, self._width)
