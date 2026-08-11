@@ -278,7 +278,8 @@ def test_concurrent_reentrant_alarms_engage(
     # x, y, z = mon.is_engaged, det1.is_engaged, det2.is_engaged
     # mon.stop()
     assert mon.is_engaged and det1.is_engaged and det2.is_engaged is det2_engage
-    assert mon.engaged_reasons == ["det1", "det2"] if det2_engage else ["det1"]
+    assert mon.engaged_reasons == (["det1", "det2"] if det2_engage
+                                   else ["det1"])
     assert "could not acquire lock" not in caplog.text
     assert "prevented possible reentrant/deadlock check_state to sub-detector" in caplog.text
 
