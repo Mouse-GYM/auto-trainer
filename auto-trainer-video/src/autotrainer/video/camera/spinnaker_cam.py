@@ -368,7 +368,7 @@ class SpinCam(CameraBase):
             p_before = time.perf_counter()
             if p_before > p_next_watchdog_refresh:
                 self.refresh_watchdog()
-                p_next_watchdog_refresh += 1
+                p_next_watchdog_refresh = p_before + self.watchdog_refresh_min_delay
             if p_before > p_timeout:
                 raise RuntimeError("Failed capture a frame in time")
             t_before = time.time()

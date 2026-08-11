@@ -422,8 +422,8 @@ class VideoCapture(Process):
         if watch_value_holder is not None:
             def refresh_watchdog():
                 nonlocal p_prev_watchdog
-                p_now_w = time.perf_counter()
-                if p_now_w - p_prev_watchdog >= 1:
+                p_now_w = get_perf_now()
+                if p_now_w - p_prev_watchdog >= camera.watchdog_refresh_min_delay:
                     p_prev_watchdog = watch_value_holder.value = p_now_w
             # also set on the camera itself:
             camera.set_refresh_watchdog(refresh_watchdog)

@@ -51,6 +51,12 @@ class CameraBase:
     _ignore_pose_show_in_video_stream_replace_value = 255
     # not included in CameraBaseDefaultParams on purpose, to not pollute config with the default value.
 
+    watchdog_refresh_min_delay = 0.3
+    # Only refresh the watchdog value if older than this delay. only applicable if watchdog enabled.
+    # nb: only used to prevent possible too frequent refresh of the shared value.
+    # Keep quite smaller than 1s on purpose. Could be set to other value based on the watchdog alarm trigger timeout.
+    # But it's assumed the watchdog trigger delay/timeout is not too low (that is >= 1-2 seconds).
+
     def __init__(self, name: str = "camera"):
         self._name = name
         self._width = 0
@@ -212,8 +218,7 @@ class CameraBase:
         p_now = time.perf_counter()
         if func is not None:
             # still prevent too "frequent" refresh
-            if p_now - self._prev_watchdog_refresh >= 0.5:
-                func: Callable
+            if p_now - self._prev_watchdog_refresh >= self.watchdog_refresh_min_delay:
                 func()
                 self._prev_watchdog_refresh = p_now
 
