@@ -206,6 +206,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 return True
         return False
 
+    skip_lock_acquire_timeout_msg = "could not acquire lock \"fast\" enough, skipping check"
+
     def check_state(self, *, force: bool=False):
         # deciding to pre-check for not running and for put to daemon *without* lock acquired *on purpose*:
         if not self._running and not force:
@@ -220,17 +222,9 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # check_state is supposed to be very fast, if not then it's a bug.
             # so not being able to take the lock after that long would imply something might be deadlocked,
             # or would become deadlocked if we would keep waiting. hence this critical log level:
-            self._logger.critical("%s: could not acquire lock \"fast\" enough, skipping check", self._name)
+            self._logger.critical("%s: %s", self._name, self.skip_lock_acquire_timeout_msg)
             return None
         try:
-            # still re-check for running and put_to_daemon with lock acquired:
-            if not self._running and not force:
-                # that will prevent a possible timer to be created if the check_state() returns next_delay > 0
-                return None
-            if self._check_put_to_daemon(force=force):
-                # this now totally ensures the implementation _check_state() won't be executed from another thread
-                # than the daemon one (when there is one).
-                return None
             if self._checking_state:  # for same thread (lock is *R*Lock)
                 self._logger.verbose("%s: skipping reentrant check", self._name)
                 # should not happen ideally. but using as safety measure.
@@ -238,6 +232,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # all "green" for check:
             self._checking_state = True
             try:
+                # still re-check for running and put_to_daemon with lock acquired:
+                if not self._running and not force:
+                    # that will prevent a possible timer to be created if the check_state() returns next_delay > 0
+                    return None
+                if self._check_put_to_daemon(force=force):
+                    # this now totally ensures the implementation _check_state() won't be executed from another thread
+                    # than the daemon one (when there is one).
+                    return None
                 next_delay = self._check_state(force=force)
             except Exception as err:
                 self._logger.exception("_check_state() failed: %s", err)

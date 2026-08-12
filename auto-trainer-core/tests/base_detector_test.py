@@ -107,7 +107,7 @@ def test_lock_acquire_timeout(caplog, monkeypatch):
     m.acquire.return_value = False
     monkeypatch.setattr(det, "_lock", m)
     det.check_state()
-    assert "could not acquire lock \"fast\" enough, skipping check" in caplog.text
+    assert det.skip_lock_acquire_timeout_msg in caplog.text
 
 
 def test_reentrant_check_state_does_not_loop(caplog):
