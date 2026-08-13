@@ -202,7 +202,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             th, th_q = th_q
             if th is not threading.current_thread() and th.is_alive():
                 # push a new request_check_state to it:
-                th_q.put((_request_check_state, force))
+                th_q.put_nowait((_request_check_state, force))
                 return True
         return False
 
@@ -282,14 +282,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._running = True
             self._p_started = get_perf_now()
             self._started_datetime = datetime.datetime.now()
-            self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue(maxsize=32)
                 thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
                 thread.start()
-            else:
+            self._start()
+            if not self.use_daemon:
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
@@ -354,7 +354,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 log.warning("%s: stop() from daemon thread, should not happen", self._name)
             else:
                 if thread.is_alive():
-                    q.put(None)
+                    q.put_nowait(None)
                 log.debug("Joining check thread %s", thread)
                 thread.join(3)
                 if thread.is_alive():
@@ -396,6 +396,9 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
     """Group Detector base class, is ORing of the sub-detectors"""
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
+
+    use_daemon = True
+    default_timer_delay = 60  # ensure not too frequent recurrent check
 
     def __init__(self, *, name: Optional[str] = None, config: Optional[DetectorConfigT] = None):
         super().__init__(name=name, config=config)

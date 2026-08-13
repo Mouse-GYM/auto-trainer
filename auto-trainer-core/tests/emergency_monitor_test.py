@@ -20,8 +20,6 @@ def _use_mock_event_manager(mock_event_manager):
 
 class Mix:
 
-    use_daemon = False
-    need_explicit_check = True
     desired_set_value = None
 
     def __init__(self, *a, **kw):
@@ -69,7 +67,6 @@ class GroupSubDetector(Mix, BaseDetector[GroupSubDetectorConfig]):
 
 
 class Mon(EmergencyAlarmMonitor):
-    use_daemon = False  # ensure
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
@@ -85,11 +82,10 @@ def mon():
     mon = Mon()
     try:
         mon.restart()
+        mon.check_done.wait(0.5)
         mon.check_done.clear()
         yield mon
     finally:
-        for det in mon.sub_detectors.values():
-            det.stop()
         mon.stop()
 
 
@@ -106,17 +102,18 @@ def test_monitor_engage_from_itself(mon, det_cls, use_daemon, caplog):
     det.use_daemon = use_daemon
     mon.register_sub_detector("det", det)
     mon.check_state()
+    mon.check_done.wait(0.5)
+    mon.check_done.clear()
     assert not mon.is_engaged
     caplog.set_level(logging.DEBUG)
     det.desired_set_value = True
     assert not det.is_engaged
     det.check_attempted.clear()
     det.engaged_event.clear()
-    mon.check_state()
-    assert det.engaged_event.wait(0.4)  # should be very fast
+    det.check_state()
+    mon.check_done.wait(0.5)
+    mon.check_done.clear()
     assert det.is_engaged and mon.is_engaged
-    msg = "prevented possible reentrant/deadlock"
-    assert (msg in caplog.text) == use_daemon
 
 
 @pytest.mark.parametrize("need_explicit_check", [True, False])
@@ -134,12 +131,8 @@ def test_monitor_engage_from_detector(mon, det_cls, use_daemon, need_explicit_ch
     det.desired_set_value = True
     det.check_state()
     assert det.engaged_event.wait(0.2)  # should be very fast
+    assert mon.check_done.wait(0.2)
     assert det.is_engaged and mon.is_engaged
-    msg = "prevented possible reentrant/deadlock"
-    if need_explicit_check:
-        assert msg in caplog.text
-    else:
-        assert msg not in caplog.text
 
 
 @pytest.mark.parametrize("det_cls", [AlarmDet, GroupSubDetector])
@@ -148,13 +141,21 @@ def test_with_use(mon, det_cls, caplog):
     det.config.use = True
     mon.register_sub_detector("det", det)
     det.desired_set_value = True
-    mon.check_state()
+    det.check_state()
+    assert mon.check_done.wait(0.5)
+    mon.check_done.clear()
     assert det.is_engaged and mon.is_engaged
     det.is_engaged = False
+    assert mon.check_done.wait(0.5)
+    mon.check_done.clear()
     assert not det.is_engaged and not mon.is_engaged
     det.desired_set_value = True
     det.config.use = False
-    mon.check_state()
+    det.check_attempted.clear()
+    det.update_config()
+    assert mon.check_done.wait(0.5)
+    mon.check_done.clear()
+    assert det.check_attempted.wait(0.5)
     assert det.is_engaged and not mon.is_engaged
     assert "prevented possible reentrant/deadlock" not in caplog.text
 
@@ -163,6 +164,7 @@ def test_with_use(mon, det_cls, caplog):
 @pytest.mark.parametrize("update_method", ["det", "mon", "det_cfg"])
 def test_is_emergency_cond(mon, use_daemon, update_method):
     det = AlarmDet()
+    det.need_explicit_check = True
     #
     if update_method == "det":
         update = det.check_state
@@ -179,12 +181,19 @@ def test_is_emergency_cond(mon, use_daemon, update_method):
     assert det.engaged_event.wait(0.2)
     assert det.is_engaged and not mon.is_engaged
     det.config.is_emergency_condition = True
+    mon.check_done.clear()
     mon.check_state()
-    assert det.is_engaged and mon.is_engaged
+    assert mon.check_done.wait(0.2)
+    mon.check_done.clear()
     det.check_attempted.clear()
+    assert det.is_engaged and mon.is_engaged
     det.desired_set_value = False
     update()
+    assert mon.check_done.wait(0.2)
+    mon.check_done.clear()
     assert det.check_attempted.wait(0.2)
+    if use_daemon:
+        mon.check_done.wait(0.05)
     assert not det.is_engaged and not mon.is_engaged
 
 
@@ -192,6 +201,7 @@ def test_is_emergency_cond(mon, use_daemon, update_method):
 @pytest.mark.parametrize("update_method", ["det", "mon", "det_cfg"])
 def test_allow_autoresume(mon, det_cls, update_method):
     det = det_cls()
+    det.need_explicit_check = True
     if update_method == "det":
         update = det.check_state
     elif update_method == "det_cfg":
@@ -201,21 +211,30 @@ def test_allow_autoresume(mon, det_cls, update_method):
     #
     det.config.allow_autoresume_on_cleared = False
     mon.register_sub_detector("det", det)
+    mon.check_done.wait(0.2)
+    mon.check_done.clear()
+    det.check_attempted.wait(0.2)
+    det.check_attempted.clear()
     det.desired_set_value = True
     update()
     det.engaged_event.wait(0.2)
+    mon.check_done.wait(0.2)
+    mon.check_done.clear()
     assert det.is_engaged and mon.is_engaged
     det.desired_set_value = False
     det.check_attempted.clear()
     update()
     assert det.check_attempted.wait(0.2)
+    assert mon.check_done.wait(0.2)
     assert not det.is_engaged and mon.is_engaged
     det.check_attempted.clear()
+    mon.check_done.clear()
     # now, only update config:
     det.config.allow_autoresume_on_cleared = True
     det.update_config()  # this is what actually always ensures emergency monitor check_state is actually called.
     # and should always be used after a detector config change. rather than any possible other _update()_.
     assert det.check_attempted.wait(0.2)
+    assert mon.check_done.wait(0.2)
     assert not det.is_engaged and not mon.is_engaged
 
 
@@ -248,7 +267,6 @@ def test_concurrent_reentrant_alarms_engage(
 
     class Det2(SimpleDetector):
 
-        # use_daemon = True
         need_explicit_check = True
 
         def _check_state(self) -> Optional[float]:
@@ -282,6 +300,8 @@ def test_concurrent_reentrant_alarms_engage(
     assert det2.engaged_event.is_set() == det2_engage # can use is_set after given using check_finished.wait before,
         # which is set after is_engaged is set.
     # x, y, z = mon.is_engaged, det1.is_engaged, det2.is_engaged
+    assert mon.check_done.wait(0.2)
+    mon.check_done.clear()
     assert mon.is_engaged
     assert det1.is_engaged == det1_engage and det2.is_engaged == det2_engage and det3.is_engaged == det3_engage
     # NB: det3 given need_explicit check and don't use daemon is always synced with monitor/emergency.
@@ -295,9 +315,6 @@ def test_concurrent_reentrant_alarms_engage(
     if det3_engage:
         xp_r_add("det3")
     assert mon.engaged_reasons == exp_reasons
-    msg = "prevented possible reentrant/deadlock check_state to sub-detector"
-    assert any(msg in rec.message and (det1.name if det1_engage else det2.name) in str(rec.args) for rec in caplog.records)
-    # NB: this asserts that in all the variants of the test case, at least the sub-detector2 was prevented from...
     assert mon.skip_lock_acquire_timeout_msg not in caplog.text  # see BaseDetector.
 
 
@@ -323,7 +340,8 @@ def test_when_not_using_need_explicit_check(mon, det_cls, use_daemon, caplog):
     assert det.check_attempted.wait(0.5)  # because started
     det.check_attempted.clear()
     assert det.running
+    mon.check_done.wait(0.2)
     mon.check_done.clear()
     mon.check_state()
-    assert mon.check_done.is_set()
+    assert mon.check_done.wait(0.2)
     assert not det.check_attempted.is_set()
