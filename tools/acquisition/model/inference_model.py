@@ -393,6 +393,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                     logger.warning("killing monitor data process")
                     data_proc.kill()
                     data_proc.join(1)
+            data_proc.on_close()
         logger.verbose("joined %s ; exit_code=%s", data_proc, data_proc.exitcode)
 
     def terminate(self, *, timeout: float = 5):
@@ -412,7 +413,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             (self._data_monitor_cmd_queue, "data_monitor_cmd_queue"),
             (self._output_data_queue, "inference_output_data_queue"),
             (self._cmd_queue, "inference_cmd_queue"),
-            (msg_queue, "inference_msg_queue"),
             (self._notif_msg_queue, "notif_msg_queue")
         ):
             if mp_q is not None:

@@ -40,9 +40,6 @@ from autotrainer.core import (
     CameraId,
     PersistenceConfiguration,
     HardwareConfiguration,
-    Notification,
-    NotificationCenter,
-    TriggerNotification,
     SystemStatusMessageKind,
     SensorAnalysis,
     Offset3DTuple,
@@ -51,7 +48,6 @@ from autotrainer.core import (
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
-from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
 from autotrainer.core.observable_object import EventHandler
@@ -261,8 +257,11 @@ class AppModel(ObservableObject):
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         mp_ctx = get_mp_ctx()
         if mp_manager is None:
+            self._owns_mp_mgr = True
             mp_manager = mp_ctx.Manager()
-        self._mp_manager: SyncManager = mp_manager
+        else:
+            self._owns_mp_mgr = False
+        self._mp_manager: Optional[SyncManager] = mp_manager
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
@@ -718,7 +717,11 @@ class AppModel(ObservableObject):
         logger.info("handle_proc_msg_queue now running")
         cams_closed_finished = {}
         while True:
-            raw = proc_msg_q.get()
+            try:
+                raw = proc_msg_q.get()
+            except (EOFError, OSError, ValueError) as err:
+                logger.warning("Cannot get from queue: %s", err)
+                break
             if raw is None:
                 break
             try:
@@ -1716,13 +1719,19 @@ class AppModel(ObservableObject):
         # then these will be naturally processed before the stop message is processed.
         self._system_message_handler.wait_terminated()
 
+        self._preferences.save()  # maybe could be put on top/at begin of func ?
+        self.save_configuration()
+
+        # at this point the related thread reading this queue is already joined.
         if proc_msg_queue is not None:
             proc_msg_queue.close()
             proc_msg_queue.join_thread()
             self._multiproc_msg_queue = None
 
-        self._preferences.save()
-        self.save_configuration()
+        mgr = self._mp_manager
+        if self._owns_mp_mgr and mgr is not None:
+            mgr.shutdown()
+            self._mp_manager = None
 
     def _load_animals(self):
         animals = []

@@ -1,18 +1,14 @@
-from pathlib import Path
 
 import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
-from autotrainer.device import MotorConfigurationFile, CompoundMovements
-
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.model.user_preferences import UserPreferences
 
 
 import top_fixtures
+from top_fixtures import nullify_attributes
 
 
 @pytest.fixture
@@ -82,8 +78,4 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         try:
             app.on_close()
         finally:
-            # NB: this allows to prevent to leave unreaped shm sem behind,
-            # otherwise you get them accumulating in process lsof.
-            for a in vars(app):
-                # print(f"setting None to {a}")
-                setattr(app, a, None)
+            nullify_attributes(app)

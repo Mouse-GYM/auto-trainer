@@ -8,6 +8,7 @@ from functools import partial
 from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union, Any, Optional, Protocol
+from uuid import UUID
 
 from autotrainer.core.logging import get_verbose_logger
 from ..observable_object import ObservableObject, EventHandler
@@ -22,7 +23,7 @@ TERMINATE = -1001
 
 class AckReceivedHandlerT(Protocol):
 
-    def __call__(self, token: str, *, perf_c: Optional[float]=None):
+    def __call__(self, token: UUID, *, perf_c: Optional[float]=None):
         """Acknowledge of given token"""
 
 

@@ -25,7 +25,7 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
-from top_fixtures import MockSystemMachine, FifoExitStack
+from top_fixtures import MockSystemMachine, FifoExitStack, nullify_attributes
 
 this_dir = Path(__file__).parent.resolve()
 
@@ -137,10 +137,11 @@ class BaseTrainingPlan(MockSystemMachine):
         try:
             yield app_model
         finally:
-            app_model.capture_stop()
-            app_model.on_close()
-            for a in vars(app_model):
-                setattr(app_model, a, None)
+            try:
+                app_model.capture_stop()
+                app_model.on_close()
+            finally:
+                nullify_attributes(app_model)
 
     def ack_pending_tokens(self, wait_acked: bool=True):
         tokens = list(self._app_model.hardware._pending_tokens)

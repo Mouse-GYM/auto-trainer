@@ -1,7 +1,9 @@
 import math
 import os
+import uuid
 from functools import partial
 from typing import Callable, Optional, get_type_hints, Protocol
+from uuid import UUID
 
 from transitions import Machine
 
@@ -79,7 +81,7 @@ class PelletMachine(StateMachine):
 
         self._consecutive_failed_load = 0
         self._load_retract_current_count = 0  # for auto-home when count >= threshold
-        self._api_status_token = None
+        self._api_status_token: Optional[UUID] = None
         self._token_pellet_send = None
         self._token_pellet_load = None
         self._token_move_retract = None
@@ -253,10 +255,8 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: str, *, perf_c: Optional[float]=None):
+    def _pellet_device_ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
-        if token is None:
-            return
 
         perf_now = get_perf_now() if perf_c is None else perf_c
         api_evt = None

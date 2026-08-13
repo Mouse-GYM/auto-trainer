@@ -28,7 +28,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo, EventInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.event import event_manager
-from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer
+from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer, get_mp_ctx
 from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
 
@@ -81,6 +81,15 @@ def increase_simulate_perf_now(delay: float = 60, refresh_func: Optional[Callabl
 class AlmostEqualFloat(float):
     def __eq__(self, other):
         return abs(self - other) < 0.1
+
+
+def nullify_attributes(obj, *, filter_attr=lambda a: not a.startswith('__')):
+    """This is used to help prevent reference cycle/loops,
+    which makes it harder for Python to free such objects,
+    and sometimes can even possibly lead to resources not freed at all, at least during testing."""
+    for attr in list(vars(obj)):
+        if filter_attr(attr):
+            setattr(obj, attr, None)
 
 
 def _make_del_shm_sem_count():
@@ -217,8 +226,7 @@ def motor_config(monkeypatch):
 
 @pytest.fixture(scope="function")
 def mp_manager(_lsof_del_shm):
-    # mgr = SharedMemoryManager()
-    mgr = multiprocessing.Manager()
+    mgr = get_mp_ctx().Manager()
     try:
         with mgr:
             yield mgr
@@ -235,7 +243,7 @@ def project_info(tmp_path) -> ProjectInfo:
     # root.mkdir()
     # don't auto-create the root/base dir, most tests won't need it anyway.
     prj = ProjectInfo(
-        device_id=platform.node() or "agx-host",
+        device_id="agx-test-host",
         # explicitly provide the trial & when,
         # to get a "local"/not-shared ProjectInfo
         trial=1,
@@ -243,7 +251,6 @@ def project_info(tmp_path) -> ProjectInfo:
         root=root.as_posix(),
         camera_1="left",
         camera_2="right",
-        # mp_manager=mp_manager,
     )
     return prj
 
@@ -297,10 +304,18 @@ def user_pref(
     return pref
 
 
-def collect_log_queue_to_caplog(log_queue):
-    # Drain the queue after the process completes and inject into caplog
-    while not log_queue.empty():
-        record = log_queue.get()
+def collect_log_queue_to_caplog(log_queue, *, timeout: float=0.1, max_duration: float=5):
+    """Drain the log until 1 "full" timeout occurs trying to read a record, or max_duration is reached"""
+    p_begin = time.perf_counter()
+    p_end = p_begin + max_duration
+    while True:
+        if time.perf_counter() > p_end:
+            pytest.fail("unexpected too long duration collecting log record queue")
+            break
+        try:
+            record = log_queue.get(timeout=timeout)
+        except queue.Empty:
+            break
         logging.getLogger(record.name).handle(record)
 
 
@@ -311,8 +326,8 @@ def capture_multiprocess_logs(caplog) -> multiprocessing.Queue:  # noqa
     try:
         yield log_queue  # noqa
     finally:
-        collect_log_queue_to_caplog(log_queue)
         log_queue.close()
+        log_queue.join_thread()
 
 
 @pytest.fixture
@@ -591,8 +606,7 @@ class MockSystemMachine:
         finally:
             algo = machine.algorithm
             algo.top_camera_presence_detection = None
-            for a in vars(self):
-                setattr(self, a, None)
+            nullify_attributes(self)
 
     @property
     def system_machine(self) -> SystemMachine:
@@ -633,7 +647,7 @@ class MockSystemMachine:
         self.make_load_cell_active()
         if set_recording_status:
             algo.set_capture_status(CaptureProcessStatus.RECORDING)
-        # assert self._machine.state == SystemState.tunnel
+        assert self._machine.state == SystemState.tunnel
 
     def exit_tunnel(self):
         assert self._machine.state != SystemState.cage
