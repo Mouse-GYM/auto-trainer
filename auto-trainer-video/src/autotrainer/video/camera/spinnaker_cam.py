@@ -80,7 +80,7 @@ class SpinCamDefaultParams:
     gamma: float = 0.7
 
 
-GetDefT = TypeVar("GetDefT", int, float, str)
+GetDefT = TypeVar("GetDefT")
 
 
 class SpinCam(CameraBase):
@@ -123,23 +123,21 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        def get_def(k: str) -> GetDefT:
-            v = self.default_params.get(k)
-            if v is None:
-                logger.verbose("No default for param %r", k)
-            return cast(GetDefT, v)
+        def get_def(k: str, t: Type[GetDefT]) -> GetDefT:
+            v = self.default_params[k]
+            return cast(t, v)  # noqa
 
-        self._exposure: float = get_def("exposure")
-        self._fps: float = get_def("fps")
-        self._horizontal_binning: int = get_def("hbin")
-        self._vertical_binning: int = get_def("vbin")
-        self._width: int = get_def("width")
-        self._height: int = get_def("height")
-        self._offset_x: int = get_def("offsetx")
-        self._offset_y: int = get_def("offsety")
+        self._exposure: float = get_def("exposure", float)
+        self._fps: float = get_def("fps", float)
+        self._horizontal_binning: int = get_def("hbin", int)
+        self._vertical_binning: int = get_def("vbin", int)
+        self._width: int = get_def("width", int)
+        self._height: int = get_def("height", int)
+        self._offset_x: int = get_def("offsetx", int)
+        self._offset_y: int = get_def("offsety", int)
 
-        self._gain: float = get_def("gain")
-        self._gamma: float = get_def("gamma")
+        self._gain: float = get_def("gain", float)
+        self._gamma: float = get_def("gamma", float)
 
         self._is_primary = False
         self._is_secondary = True
