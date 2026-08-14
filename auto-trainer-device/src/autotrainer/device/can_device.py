@@ -154,6 +154,13 @@ class _BoardPendingContext:
         )
 
 
+def _make_proc_access(name: str):
+    def wrapped(self: "CanDevice"):
+        return self._steps_procedures[name]
+    wrapped.__name__ = f"_{name}"
+    return property(wrapped)
+
+
 class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
@@ -269,14 +276,24 @@ class CanDevice(Device):
             ),
         }
 
+    _load_pellet = _make_proc_access("load_pellet")
+    _send_pellet = _make_proc_access("send_pellet")
+    _cover_pellet = _make_proc_access("cover_pellet")
+    _release_pellet = _make_proc_access("release_pellet")
+    _open_tunnel_gate = _make_proc_access("open_tunnel_gate")
+    _close_tunnel_gate = _make_proc_access("close_tunnel_gate")
+    _move_retract = _make_proc_access("move_retract")
+
     def _init_default_move_configs(self):
-        self._load_pellet = default_load_pellet()
-        self._send_pellet = default_send_pellet()
-        self._cover_pellet = default_cover_pellet()
-        self._release_pellet = default_release_pellet()
-        self._open_tunnel_gate = default_open_gate()
-        self._close_tunnel_gate = default_close_gate()
-        self._move_retract = default_move_retract()
+        self._steps_procedures = dict(
+            load_pellet=default_load_pellet(),
+            send_pellet=default_send_pellet(),
+            cover_pellet=default_cover_pellet(),
+            release_pellet=default_release_pellet(),
+            open_tunnel_gate=default_open_gate(),
+            close_tunnel_gate=default_close_gate(),
+            move_retract=default_move_retract(),
+        )
 
     def _clear_caches(self):
         for cache in (
@@ -303,38 +320,30 @@ class CanDevice(Device):
                 steps = sequence.steps
             return self._start_sequence(MotorSteps(f"{motor.name}_{sequence.name}", steps))
 
-        def set_load_pellet_proc(proc):
+        def set_steps_proc(name: str, proc: MotorSteps):
             if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._load_pellet = proc
+                if name not in self._steps_procedures:
+                    logger.warning("unknown step procedure name: %r", name)
+                self._steps_procedures[name] = proc
+                logger.verbose("set procedure %r to %s", name, proc)
             else:
-                logger.warning("set_load_pellet_proc: empty proc: %s", proc)
+                logger.warning("set_%s_proc: empty proc: %s", name, proc)
             return True
+
+        def set_load_pellet_proc(proc):
+            return set_steps_proc("load_pellet", proc)
 
         def set_send_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._send_pellet = proc
-            else:
-                logger.warning("set_send_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("send_pellet", proc)
 
         def set_cover_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._cover_pellet = proc
-            else:
-                logger.warning("set_cover_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("cover_pellet", proc)
 
         def set_release_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._release_pellet = proc
-            else:
-                logger.warning("set_release_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("release_pellet", proc)
 
         def set_move_retract_proc(proc):
-            prev, self._move_retract = self._move_retract, proc
-            logger.verbose("replaced retract proc by %s (prev=%s)", proc, prev)
-            return True
+            return set_steps_proc("move_retract", proc)
 
         def apply_set_or_move(func, motor, *args, **kwargs):
             has_relative = "relative" in kwargs
@@ -421,6 +430,8 @@ class CanDevice(Device):
             SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION: self._handle_write_motor_configuration,
+
+            SystemCommandKind.SET_STEPS_PROCEDURE: set_steps_proc,
 
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE: set_load_pellet_proc,
 
@@ -1122,6 +1133,7 @@ class CanDevice(Device):
             # is no CAN operation
             return None
         elif kind in {
+            SystemCommandKind.SET_STEPS_PROCEDURE,
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE,
             SystemCommandKind.SET_SEND_PELLET_PROCEDURE,
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE,

@@ -26,6 +26,7 @@ from .device_interface import DeviceInterface, ServoConfig, StepperConfig
 from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
 from autotrainer.core.logging import get_verbose_logger
+from ..core.message import SystemDataArgsKwargs
 
 logger = get_verbose_logger(__name__)
 
@@ -191,17 +192,19 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
-        for kind, steps in (
-            (SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet),
-            (SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet),
-            (SystemCommandKind.SET_COVER_PELLET_PROCEDURE, data.cover_pellet),
-            (SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet),
-            (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, data.move_retract),
+        for name, steps in (
+            ("load_pellet", data.load_pellet),
+            ("send_pellet", data.send_pellet),
+            ("cover_pellet", data.cover_pellet),
+            ("release_pellet", data.release_pellet),
+            ("move_retract", data.move_retract),
+            ("open_tunnel_gate", data.open_tunnel_gate),
+            ("close_tunnel_gate", data.close_tunnel_gate),
         ):
             if steps.is_empty:
-                logger.notice("config compound %s empty, not using. builtin default config will remain.", kind)
+                logger.notice("config compound %s empty, not using. builtin default config will remain.", name)
             else:
-                self.send_message(kind, steps)
+                self.set_steps_procedure(name, steps)
 
     def use_motor_configurations(self, data: MotorConfigurations):
         logger.notice("Setting motor configurations")
@@ -229,6 +232,9 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             with self.await_acknowledge(tokens, timeout=3):
                 send(conf)
+
+    def set_steps_procedure(self, name: str, steps: MotorSteps):
+        self.send_message(SystemCommandKind.SET_STEPS_PROCEDURE, SystemDataArgsKwargs(name, steps))
 
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
