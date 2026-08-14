@@ -1145,7 +1145,7 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
 
-        if isinstance(position, float) or isinstance(position, int):
+        if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
         elif isinstance(position, tuple):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity

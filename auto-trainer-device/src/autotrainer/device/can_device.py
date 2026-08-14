@@ -1417,12 +1417,16 @@ class CanDevice(Device):
         elif '_servo_max_pos' in step:
             motor: Motor = step['_servo_max_pos']  # noqa
             cfg = self._motor_configs[motor]
-            success = self._interface.move_servo_motor(motor, cfg.maximum_position)
+            pos_off = step.get('_pos_offset', 0)
+            inc_or_dec = -pos_off if cfg.maximum_position > cfg.minimum_position else pos_off
+            success = self._interface.move_servo_motor(motor, cfg.maximum_position + inc_or_dec)
 
         elif '_servo_min_pos' in step:
             motor: Motor = step['_servo_min_pos']  # noqa
             cfg = self._motor_configs[motor]
-            success = self._interface.move_servo_motor(motor, cfg.minimum_position)
+            pos_off = step.get("_pos_offset", 0)
+            inc_or_dec = pos_off if cfg.maximum_position > cfg.minimum_position else -pos_off
+            success = self._interface.move_servo_motor(motor, cfg.minimum_position + inc_or_dec)
 
         elif 'delay' in step:
             motor = Motor.DELAY
@@ -1610,7 +1614,7 @@ def default_open_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the open gate sequence
     """
-    return MotorSteps("open_gate", [{'_servo_min_pos': Motor.TUNNEL_GATE_SERVO}])
+    return MotorSteps("open_gate", [{'_servo_min_pos': Motor.TUNNEL_GATE_SERVO, '_pos_offset': 10}])
 
 
 def default_close_gate() -> MotorSteps:
@@ -1620,7 +1624,7 @@ def default_close_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the close gate sequence
     """
-    return MotorSteps("close_gate", [{'_servo_max_pos': Motor.TUNNEL_GATE_SERVO}])
+    return MotorSteps("close_gate", [{'_servo_max_pos': Motor.TUNNEL_GATE_SERVO, '_pos_offset': 10}])
 
 
 def default_move_retract() -> MotorSteps:
