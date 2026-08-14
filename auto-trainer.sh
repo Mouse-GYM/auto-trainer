@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -exv
+set -e
 
 echo "Refreshing view from origin"
 git fetch origin
@@ -16,5 +16,9 @@ is_develop_and_clean=$(test "${cur_branch_or_commit}" == "develop" -a "${is_clea
 export AUTOTRAINER_IS_SPECIAL_BUILD=$(test "${is_develop_and_clean}" != "1" && echo "1" || echo "0")
 export AUTOTRAINER_LATEST_TAG="${latest_v}"
 export AUTOTRAINER_LOCAL_TAG="${local_v}"
+
+echo
+echo "Starting acquisition application .."
+echo
 
 python -m tools.acquisition.gui "${@}"
