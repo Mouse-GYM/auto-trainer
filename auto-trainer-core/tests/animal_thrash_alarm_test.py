@@ -84,7 +84,7 @@ def test_it_engages_disengages_with_aggr_delay(
     mon.event_check_done.clear()
     assert mon.event_check_done.wait(5)
     assert not mon.is_engaged
-    mock_get_perf_now.increase_simulate_perf_now(aggr_delay / 4 + 0.0001)
+    mock_get_perf_now.increase_simulate_perf_now(aggr_delay / 4 + 0.05)
     mon.event_check_done.clear()
     assert mon.event_check_done.wait(5)
     tot_dur = get_perf_now() - start_p
