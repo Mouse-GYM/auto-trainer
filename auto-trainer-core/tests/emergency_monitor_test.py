@@ -18,17 +18,20 @@ def _use_mock_event_manager(mock_event_manager):
     pass
 
 
-class Mix:
+class MixinEvents:
 
-    desired_set_value = None
+    is_engaged: bool
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
         self.check_in_progress_event = threading.Event()
         self.check_attempted = threading.Event()
         self.engaged_event = threading.Event()
-        disengaged_e = self.disengaged_event = threading.Event()
-        disengaged_e.set()
+        self.disengaged_event = threading.Event()
+        if self.is_engaged:
+            self.engaged_event.set()
+        else:
+            self.disengaged_event.set()
 
     def set_is_engaged(self, engaged):
         super().set_is_engaged(engaged)  # noqa
@@ -39,14 +42,24 @@ class Mix:
             self.disengaged_event.set()
             self.engaged_event.clear()
 
-    def _check_state(self) -> Optional[float]:
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         self.check_in_progress_event.set()
+        try:
+            d = super()._check_state(force=force)
+        finally:
+            self.check_attempted.set()
+        return d
+
+
+class MixinAllowSetEngaged:
+
+    desired_set_value = None
+
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         desired = self.desired_set_value
         if desired is not None:
             self.desired_set_value = None
             self.is_engaged = desired
-        self.check_attempted.set()
-        self.check_in_progress_event.clear()
 
 
 @dataclasses.dataclass()
@@ -54,19 +67,19 @@ class DefaultEmergencyAlarmDetectorConfig(AlarmDetectorConfig):
     is_emergency_condition: bool = True
 
 
-class AlarmDet(Mix, AlarmDetector[DefaultEmergencyAlarmDetectorConfig]):
+class AlarmDet(MixinEvents, MixinAllowSetEngaged, AlarmDetector[DefaultEmergencyAlarmDetectorConfig]):
     config_cls = DefaultEmergencyAlarmDetectorConfig
 
 
-class SimpleDetector(Mix, BaseDetector):
+class SimpleDetector(MixinEvents, MixinAllowSetEngaged, BaseDetector):
     pass
 
 
-class GroupSubDetector(Mix, BaseDetector[GroupSubDetectorConfig]):
+class GroupSubDetector(MixinEvents, MixinAllowSetEngaged, BaseDetector[GroupSubDetectorConfig]):
     config_cls = GroupSubDetectorConfig
 
 
-class Mon(EmergencyAlarmMonitor):
+class Mon(MixinEvents, EmergencyAlarmMonitor):
 
     def __init__(self, *a, **kw):
         super().__init__(*a, **kw)
@@ -102,7 +115,7 @@ def test_monitor_engage_from_itself(mon, det_cls, use_daemon, caplog):
     det.use_daemon = use_daemon
     mon.register_sub_detector("det", det)
     mon.check_state()
-    mon.check_done.wait(0.5)
+    assert mon.check_done.wait(0.5)
     mon.check_done.clear()
     assert not mon.is_engaged
     caplog.set_level(logging.DEBUG)
@@ -111,7 +124,7 @@ def test_monitor_engage_from_itself(mon, det_cls, use_daemon, caplog):
     det.check_attempted.clear()
     det.engaged_event.clear()
     det.check_state()
-    mon.check_done.wait(0.5)
+    assert mon.check_done.wait(0.5)
     mon.check_done.clear()
     assert det.is_engaged and mon.is_engaged
 
@@ -131,7 +144,7 @@ def test_monitor_engage_from_detector(mon, det_cls, use_daemon, need_explicit_ch
     det.desired_set_value = True
     det.check_state()
     assert det.engaged_event.wait(0.2)  # should be very fast
-    assert mon.check_done.wait(0.2)
+    assert mon.engaged_event.wait(0.2)  # both
     assert det.is_engaged and mon.is_engaged
 
 
@@ -192,8 +205,7 @@ def test_is_emergency_cond(mon, use_daemon, update_method):
     assert mon.check_done.wait(0.2)
     mon.check_done.clear()
     assert det.check_attempted.wait(0.2)
-    if use_daemon:
-        mon.check_done.wait(0.05)
+    assert mon.disengaged_event.wait(0.2)
     assert not det.is_engaged and not mon.is_engaged
 
 
@@ -211,20 +223,17 @@ def test_allow_autoresume(mon, det_cls, update_method):
     #
     det.config.allow_autoresume_on_cleared = False
     mon.register_sub_detector("det", det)
-    mon.check_done.wait(0.2)
-    mon.check_done.clear()
-    det.check_attempted.wait(0.2)
+    assert det.check_attempted.wait(0.2)
     det.check_attempted.clear()
     det.desired_set_value = True
     update()
-    det.engaged_event.wait(0.2)
-    mon.check_done.wait(0.2)
+    assert mon.engaged_event.wait(0.2)
     mon.check_done.clear()
     assert det.is_engaged and mon.is_engaged
     det.desired_set_value = False
     det.check_attempted.clear()
     update()
-    assert det.check_attempted.wait(0.2)
+    assert det.disengaged_event.wait(0.2)
     assert mon.check_done.wait(0.2)
     assert not det.is_engaged and mon.is_engaged
     det.check_attempted.clear()
@@ -234,7 +243,7 @@ def test_allow_autoresume(mon, det_cls, update_method):
     det.update_config()  # this is what actually always ensures emergency monitor check_state is actually called.
     # and should always be used after a detector config change. rather than any possible other _update()_.
     assert det.check_attempted.wait(0.2)
-    assert mon.check_done.wait(0.2)
+    assert mon.disengaged_event.wait(0.2)
     assert not det.is_engaged and not mon.is_engaged
 
 
@@ -340,7 +349,6 @@ def test_when_not_using_need_explicit_check(mon, det_cls, use_daemon, caplog):
     assert det.check_attempted.wait(0.5)  # because started
     det.check_attempted.clear()
     assert det.running
-    mon.check_done.wait(0.2)
     mon.check_done.clear()
     mon.check_state()
     assert mon.check_done.wait(0.2)
