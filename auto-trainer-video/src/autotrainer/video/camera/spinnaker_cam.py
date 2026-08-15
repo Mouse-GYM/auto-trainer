@@ -6,7 +6,7 @@ import math
 import statistics
 import time
 from enum import IntEnum
-from typing import Tuple, List, Dict, Optional, Type
+from typing import Tuple, List, Dict, Optional, Type, TypeVar, cast
 
 import numpy
 import PySpin
@@ -80,6 +80,9 @@ class SpinCamDefaultParams:
     gamma: float = 0.7
 
 
+GetDefT = TypeVar("GetDefT")
+
+
 class SpinCam(CameraBase):
 
     _cameras: Dict[str, "SpinCam"] = {}  # class level cache
@@ -120,23 +123,21 @@ class SpinCam(CameraBase):
 
         self._serial_number = serial_number
 
-        def get_def(k):
-            v = self.default_params.get(k)
-            if v is None:
-                logger.verbose("No default for param %r", k)
-            return v
+        def get_def(k: str, t: Type[GetDefT]) -> GetDefT:
+            v = self.default_params[k]
+            return cast(t, v)  # noqa
 
-        self._exposure: float = get_def("exposure")
-        self._fps: float = get_def("fps")
-        self._horizontal_binning: int = get_def("hbin")
-        self._vertical_binning: int = get_def("vbin")
-        self._width: int = get_def("width")
-        self._height: int = get_def("height")
-        self._offset_x: int = get_def("offsetx")
-        self._offset_y: int = get_def("offsety")
+        self._exposure: float = get_def("exposure", float)
+        self._fps: float = get_def("fps", float)
+        self._horizontal_binning: int = get_def("hbin", int)
+        self._vertical_binning: int = get_def("vbin", int)
+        self._width: int = get_def("width", int)
+        self._height: int = get_def("height", int)
+        self._offset_x: int = get_def("offsetx", int)
+        self._offset_y: int = get_def("offsety", int)
 
-        self._gain: float = get_def("gain")
-        self._gamma: float = get_def("gamma")
+        self._gain: float = get_def("gain", float)
+        self._gamma: float = get_def("gamma", float)
 
         self._is_primary = False
         self._is_secondary = True
@@ -155,6 +156,12 @@ class SpinCam(CameraBase):
         # not needed
         # self._image_processor = PySpin.ImageProcessor()
         # self._image_processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
+
+    def _get_spincam(self) -> PySpin.Camera:
+        cam = self._camera
+        if cam is None:
+            raise RuntimeError("camera not initialized or spincam not available")
+        return cam
 
     def __del__(self):
         self.end_capture()
@@ -227,7 +234,7 @@ class SpinCam(CameraBase):
             self._apply_exposure(cam, value)
 
     def _reinit_cam(self):
-        spincam = self._camera
+        spincam = self._get_spincam()
         logger.notice("doing cam reset with begin+end acquisition")
         # Stackoverflow 64660434.  Apparently there is no simple reset/release call to fix when it is in this state.
         spincam.BeginAcquisition()
@@ -236,7 +243,7 @@ class SpinCam(CameraBase):
         spincam.Init()
 
     def init(self):
-        spincam = self._camera
+        spincam = self._get_spincam()
         spincam.Init()
 
         self._consecutive_late_acquire = 0
@@ -358,15 +365,20 @@ class SpinCam(CameraBase):
         logger.debug("released spincam for %s (%s)", self._name, self._serial_number)
 
     def _capture(self):
-        p_timeout = time.perf_counter() + 15  # eventual todo: allow config
+        p_now = time.perf_counter()
+        p_timeout = p_now + 15  # eventual todo: allow config
         try_count = 0
         t_prev_after = p_prev_after = -math.inf
+        p_next_watchdog_refresh = -math.inf
         while True:
             try_count += 1
-            if time.perf_counter() > p_timeout:
+            p_before = time.perf_counter()
+            if p_before > p_next_watchdog_refresh:
+                self.refresh_watchdog()
+                p_next_watchdog_refresh = p_before + self.watchdog_refresh_min_delay
+            if p_before > p_timeout:
                 raise RuntimeError("Failed capture a frame in time")
             t_before = time.time()
-            p_before = time.perf_counter()
             try:
                 image_result = self._camera.GetNextImage(1)  # 1 millisecond timeout
                 p_after = time.perf_counter()
@@ -412,14 +424,15 @@ class SpinCam(CameraBase):
 
     def capture(self) -> Tuple[numpy.ndarray, int]:
         first_capture = False
+        spincam = self._get_spincam()
         if not self._acquisition_started:
             self._acquisition_started = True
             first_capture = True
-            self._camera.BeginAcquisition()
+            spincam.BeginAcquisition()
             if self._is_primary:
-                self._camera.LineSelector.SetValue(PySpin.LineSelector_Line1)
-                self._camera.LineSource.SetValue(PySpin.LineSource_Counter0Active)
-                self._camera.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+                spincam.LineSelector.SetValue(PySpin.LineSelector_Line1)
+                spincam.LineSource.SetValue(PySpin.LineSource_Counter0Active)
+                spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
             logger.info("Beginning acquisition ; skip_dup_copy=%s", self._skip_duplicate_frame_copy)
 
         expected_shape = (self._height, self._width)

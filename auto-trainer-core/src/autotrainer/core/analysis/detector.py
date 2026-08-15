@@ -202,9 +202,11 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             th, th_q = th_q
             if th is not threading.current_thread() and th.is_alive():
                 # push a new request_check_state to it:
-                th_q.put((_request_check_state, force))
+                th_q.put_nowait((_request_check_state, force))
                 return True
         return False
+
+    skip_lock_acquire_timeout_msg = "could not acquire lock \"fast\" enough, skipping check"
 
     def check_state(self, *, force: bool=False):
         # deciding to pre-check for not running and for put to daemon *without* lock acquired *on purpose*:
@@ -220,24 +222,24 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             # check_state is supposed to be very fast, if not then it's a bug.
             # so not being able to take the lock after that long would imply something might be deadlocked,
             # or would become deadlocked if we would keep waiting. hence this critical log level:
-            self._logger.critical("%s: could not acquire lock \"fast\" enough, skipping check", self._name)
+            self._logger.critical("%s: %s", self._name, self.skip_lock_acquire_timeout_msg)
             return None
         try:
-            # still re-check for running and put_to_daemon with lock acquired:
-            if not self._running and not force:
-                # that will prevent a possible timer to be created if the check_state() returns next_delay > 0
-                return None
-            if self._check_put_to_daemon(force=force):
-                # this now totally ensures the implementation _check_state() won't be executed from another thread
-                # than the daemon one (when there is one).
-                return None
             if self._checking_state:  # for same thread (lock is *R*Lock)
-                self._logger.warning("%s: skipping reentrant check", self._name)
+                self._logger.verbose("%s: skipping reentrant check", self._name)
                 # should not happen ideally. but using as safety measure.
                 return None
             # all "green" for check:
             self._checking_state = True
             try:
+                # still re-check for running and put_to_daemon with lock acquired:
+                if not self._running and not force:
+                    # that will prevent a possible timer to be created if the check_state() returns next_delay > 0
+                    return None
+                if self._check_put_to_daemon(force=force):
+                    # this now totally ensures the implementation _check_state() won't be executed from another thread
+                    # than the daemon one (when there is one).
+                    return None
                 next_delay = self._check_state(force=force)
             except Exception as err:
                 self._logger.exception("_check_state() failed: %s", err)
@@ -280,14 +282,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._running = True
             self._p_started = get_perf_now()
             self._started_datetime = datetime.datetime.now()
-            self._start()
             if self.use_daemon:
                 cmd_queue = queue.Queue(maxsize=32)
                 thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
                 thread.start()
-            else:
+            self._start()
+            if not self.use_daemon:
                 self.check_state()
 
     def _daemon_run(self, cmd_queue):
@@ -352,7 +354,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 log.warning("%s: stop() from daemon thread, should not happen", self._name)
             else:
                 if thread.is_alive():
-                    q.put(None)
+                    q.put_nowait(None)
                 log.debug("Joining check thread %s", thread)
                 thread.join(3)
                 if thread.is_alive():
@@ -383,15 +385,26 @@ class GroupSubDetectorContext:
 GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
+class _GroupThreadLocals(threading.local):
+
+    def __init__(self):
+        super().__init__()
+        self.reentrant_recheck = False  # this is/assign the default for any thread access
+
+
 class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, GroupSubDetectorT]):
     """Group Detector base class, is ORing of the sub-detectors"""
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
 
+    use_daemon = True
+    default_timer_delay = 60  # ensure not too frequent recurrent check
+
     def __init__(self, *, name: Optional[str] = None, config: Optional[DetectorConfigT] = None):
         super().__init__(name=name, config=config)
         self._engaged_reasons: Set[str] = set()
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
+        self._thread_local = _GroupThreadLocals()
 
     @property
     def engaged_reasons(self) -> List[str]:
@@ -465,15 +478,28 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         else:
             logger.notice("%s: disengaging (prev = %s)", self._name, prev_engaged)
 
+    def check_state(self, *, force: bool=False):
+        delay = super().check_state(force=force)
+        if self._thread_local.reentrant_recheck:
+            logger.verbose("detected reentrant_check, rechecking")
+            try:
+                delay = super().check_state(force=force)
+            finally:
+                self._thread_local.reentrant_recheck = False
+        return delay
+
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         prev_engaged = self._engaged_reasons.copy()
         new_engaged = set()
+        before_reentrant_recheck = self._thread_local.reentrant_recheck  # get value before loop,
+        # to ensure all with need_explicit_check are done when self._reentrant_recheck is at start False
+        # but is modified during loop.
         for sub_name, sub_ctx in self._sub_detectors.items():
             det = sub_ctx.detector
             # strictly speaking this should not be necessary to call check_state on the sub-detectors.
             # given we have/are using _on_sub_detector_property_changed(...) to handle the change events.
             # But this allows to be certain that we are seeing all sub-detectors as "synced" here.
-            if det.need_explicit_check:
+            if det.need_explicit_check and not before_reentrant_recheck:
                 # this actually can prevent check loop(s), and possible deadlock:
                 # when a sub-detector engages, its engaged property changed event is emitted within its check_state(),
                 # with its lock acquired, triggering self._on_sub_detector_property_changed(...),
@@ -484,6 +510,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                 # changed event is handled "synchronously" via some side/different thread than this calling one.
                 if det.check_in_progress:
                     self._logger.debug("prevented possible reentrant/deadlock check_state to sub-detector %s", det.name)
+                    self._thread_local.reentrant_recheck = True
                 else:
                     det.check_state(force=force)
             if det.is_engaged:
