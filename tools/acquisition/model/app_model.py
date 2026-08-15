@@ -16,6 +16,7 @@ import time
 import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
+from multiprocessing.managers import SyncManager
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
 
@@ -39,9 +40,6 @@ from autotrainer.core import (
     CameraId,
     PersistenceConfiguration,
     HardwareConfiguration,
-    Notification,
-    NotificationCenter,
-    TriggerNotification,
     SystemStatusMessageKind,
     SensorAnalysis,
     Offset3DTuple,
@@ -50,7 +48,6 @@ from autotrainer.core import (
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
-from autotrainer.core.configuration.behavior_configuration import CageCleaningConfig
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
 from autotrainer.core.observable_object import EventHandler
@@ -242,6 +239,7 @@ class AppModel(ObservableObject):
             inference_model: Optional[InferenceProtocol] = None,
             system_message_handler: Optional[SystemMessageHandler] = None,
             system_machine: Optional[SystemMachine] = None,
+            mp_manager: Optional[SyncManager] = None,
     ):
         event_names = tuple(filter(lambda n: not n.startswith('_'), dir(AppModelEvents)))
         super().__init__(event_names)
@@ -258,8 +256,12 @@ class AppModel(ObservableObject):
         # using a shared process manager,
         # this allows to put shared values, created via the manager, to any multiprocess shared queue, notably.
         mp_ctx = get_mp_ctx()
-        self._mp_manager = mp_ctx.Manager()
-
+        if mp_manager is None:
+            self._owns_mp_mgr = True
+            mp_manager = mp_ctx.Manager()
+        else:
+            self._owns_mp_mgr = False
+        self._mp_manager: Optional[SyncManager] = mp_manager
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
@@ -274,8 +276,8 @@ class AppModel(ObservableObject):
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
-        self._left_camera = VideoCaptureModel("left")
-        self._right_camera = VideoCaptureModel("right")
+        left = self._left_camera = VideoCaptureModel("left", mp_ctx=mp_ctx)
+        right = self._right_camera = VideoCaptureModel("right", mp_ctx=mp_ctx)
 
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None
@@ -320,14 +322,17 @@ class AppModel(ObservableObject):
         # so that the later doesn't try to open the video files, before they are finished written to and closed.
         # Preventing the opencv lib to emit warning on stderr.
 
+        left.on_close()
         self._left_camera = VideoCaptureModel(
             "left", self._preferences, 0,
             msg_queue=proc_msg_queue, cam_id=CameraId.Left,
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
             record_stop_sema=self._record_stop_sema,
+            mp_ctx=mp_ctx,
         )
 
+        right.on_close()
         self._right_camera = VideoCaptureModel(
             "right",
             self._preferences,
@@ -712,7 +717,11 @@ class AppModel(ObservableObject):
         logger.info("handle_proc_msg_queue now running")
         cams_closed_finished = {}
         while True:
-            raw = proc_msg_q.get()
+            try:
+                raw = proc_msg_q.get()
+            except (EOFError, OSError, ValueError) as err:
+                logger.warning("Cannot get from queue: %s", err)
+                break
             if raw is None:
                 break
             try:
@@ -1163,8 +1172,8 @@ class AppModel(ObservableObject):
             root=self._output_location,
             device_id=self._preferences.serial_number,
             ensure_exists=True,
-            camera_1=left,
-            camera_2=right,
+            camera_1=left or "cam1",
+            camera_2=right or "cam2",
             mp_manager=self._mp_manager,  # required,
             # so to have shared values that can be put to multiprocess queue.
             # The active ProjectInfo must effectively be shared across all processes/threads.
@@ -1693,14 +1702,14 @@ class AppModel(ObservableObject):
             camera.on_close()
 
         # Now stop the multi-proc messages handler thread:
-        logger.debug("Putting None to process messages thread")
-        self._multiproc_msg_queue.put(None)
+        proc_msg_queue = self._multiproc_msg_queue
+        if proc_msg_queue is not None:
+            logger.debug("Putting None to process messages thread")
+            proc_msg_queue.put(None)
         logger.debug("Joining process messages thread")
         self._handle_proc_msg_thread.join(5)
         if self._handle_proc_msg_thread.is_alive():
             logger.warning("Handle process messages thread still alive ; closing queue")
-        # self._multiproc_msg_queue.close()
-        # do not close to allow multiple on_close() calls.
 
         # at this point all background processes are normally stopped and fully joined,
         # there only remains the system message handler thread:
@@ -1710,17 +1719,19 @@ class AppModel(ObservableObject):
         # then these will be naturally processed before the stop message is processed.
         self._system_message_handler.wait_terminated()
 
-        # somehow if many AppModel are created (like in test cases), this makes the ones following an on_close on any
-        # of them to fails hardly. MP manager looks be a singleton per python process so it might be smth related.
-        # commenting to prevent this bad effect for now.
-        # TODO: could investigate to see if can close it or not, might be at cli main() level is where to do
-        # mp_mgr = self._mp_manager
-        # logger.debug("shutting down multiprocess manager %s", mp_mgr)
-        # mp_mgr.shutdown()
-        # mp_mgr.join()
-
-        self._preferences.save()
+        self._preferences.save()  # maybe could be put on top/at begin of func ?
         self.save_configuration()
+
+        # at this point the related thread reading this queue is already joined.
+        if proc_msg_queue is not None:
+            proc_msg_queue.close()
+            proc_msg_queue.join_thread()
+            self._multiproc_msg_queue = None
+
+        mgr = self._mp_manager
+        if self._owns_mp_mgr and mgr is not None:
+            mgr.shutdown()
+            self._mp_manager = None
 
     def _load_animals(self):
         animals = []

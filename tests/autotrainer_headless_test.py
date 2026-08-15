@@ -20,6 +20,7 @@ from autotrainer.video import VideoRecordMode
 from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.user_preferences import UserPreferences
+from top_fixtures import nullify_attributes
 
 
 def remove_ansi_escape_sequences(s):
@@ -66,17 +67,21 @@ def app_model(
     diamond_config_path,
     system_config,
     monkeypatch,
+    mp_manager,
 ) -> AppModel:  # noqa
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
     #
-    app = AppModel(user_pref, calib_dir=calib_dir)
+    app = AppModel(user_pref, calib_dir=calib_dir, mp_manager=mp_manager)
     try:
         yield app  # noqa
     finally:
-        app.capture_stop(force=True)
-        app.on_close()
+        try:
+            app.capture_stop(force=True)
+            app.on_close()
+        finally:
+            nullify_attributes(app)
 
 
 def test_user_preferences(settings_ini_path, user_pref, trainer_config_dir):
