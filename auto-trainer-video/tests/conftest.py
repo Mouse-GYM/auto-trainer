@@ -101,6 +101,7 @@ def video_capture_model2(video_capture_model, user_pref) -> VideoCaptureModel:  
     try:
         yield model  # noqa
     finally:
-        model.on_close()
-        for a in vars(model):
-            setattr(model, a, None)
+        try:
+            model.on_close()
+        finally:
+            nullify_attributes(model)
