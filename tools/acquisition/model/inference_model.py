@@ -7,6 +7,7 @@ import signal
 import threading
 import time
 from multiprocessing import synchronize
+from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
@@ -64,6 +65,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
         self._data_monitor_cmd_ack_event = mp_ctx.Event()
         self._record_stop_sema = record_stop_sema
+        self._main_watchdog_holder: Optional[Synchronized[float]] = None
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
         self._offline_segmentation_thread: Optional[Thread] = None
@@ -103,6 +105,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             },
         }
         self._process_pool: Optional[multiprocessing.pool.Pool] = None
+
+    def set_main_watchdog_holder(self, value):
+        self._main_watchdog_holder = value
+        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_MAIN_WATCHDOG, (value,), None))
+        with self._cmd_queue_lock:
+            self._cmd_queue.put((InferenceCommandMessageKind.SetMainWatchdog, value))
 
     @property
     def watchdog_pose_process_perf_c(self) -> float:
@@ -303,6 +311,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             record_stop_sema=self._record_stop_sema,
         )
         proc.start()
+
+        self.set_main_watchdog_holder(self._main_watchdog_holder)
 
         return True
 

@@ -22,6 +22,7 @@ from autotrainer.core.logging import (
     setup_logging,
     install_log_exception_hook,
 )
+from autotrainer.core.multiproc import get_mp_ctx, MixinMainWatchdogChecker
 from autotrainer.core.frame_index import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel
@@ -40,6 +41,7 @@ class InferenceCommandMessageKind(IntEnum):
     ProcessOffline = 3  # used for immediate 1 session/trial offline trigger
     SetOfflineToLive = 4  # used either after end-of-recording, or at end of analysis, to switch back to live
     SetLoggerLevel = 20
+    SetMainWatchdog = 30
 
 
 class InferenceStatusMessageKind(IntEnum):
@@ -56,7 +58,7 @@ class InferenceMode(IntEnum):
     Offline = 1
 
 
-class PoseProcess(Process):
+class PoseProcess(MixinMainWatchdogChecker, Process):
     """
     Defines an independent Process for loading and processing a pose interference model.
 
@@ -214,6 +216,8 @@ class PoseProcess(Process):
         Wait for Start or Terminate command.
         """
         while True:
+            if not self.check_main_watchdog():
+                return False
             try:
                 cmd, context = self._cmd_queue.get(timeout=1)
             except Empty:
@@ -229,6 +233,8 @@ class PoseProcess(Process):
             elif cmd == InferenceCommandMessageKind.ProcessOffline:
                 logger.warning("unexpected cmd %s while wait for start", cmd)
                 # self._set_process_offline()
+            elif cmd == InferenceCommandMessageKind.SetMainWatchdog:
+                self.main_watchdog_holder = context
             else:
                 logger.warning("Unhandled command: %s", cmd)
 
@@ -236,6 +242,10 @@ class PoseProcess(Process):
 
     def _handle_cmd_queue(self, offline_input: OfflineInputProcess):
         while True:
+            if not self.check_main_watchdog():
+                logger.error("main watchdog holder timedout, exiting")
+                self._is_running = False
+                break
             try:
                 cmd, context = self._cmd_queue.get(timeout=1)
             except Empty:
@@ -252,6 +262,8 @@ class PoseProcess(Process):
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     prj, wait_stop_recorded = context
                     offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
+                elif cmd == InferenceCommandMessageKind.SetMainWatchdog:
+                    self.main_watchdog_holder = context
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Exception as err:

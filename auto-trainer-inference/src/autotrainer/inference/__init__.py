@@ -25,6 +25,7 @@ class InferenceMonitorDataMsg(str, Enum):
     POSE_RESULT_READY = "pose_result_ready"
     INTERTRIAL_SEGMENTATION_FINISHED = "intertrial_segmentation_finished"
     SET_FEED_INTERTRIAL_RESULT = "set_feed_intertrial_result"
+    SET_MAIN_WATCHDOG = "set_main_watchdog"
 
 #
 

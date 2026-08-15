@@ -1,7 +1,12 @@
+import os
 import logging.config
 import multiprocessing
 import signal
 import threading
+from multiprocessing.sharedctypes import Synchronized
+from typing import Optional
+
+from autotrainer.core import get_perf_now
 
 
 def get_mp_ctx():
@@ -45,6 +50,27 @@ def pool_init(log_dict_cfg=None):
         logging.config.dictConfig(log_dict_cfg)
         install_log_exception_hook()
     logging.root.info("Initialized pool worker")
+
+
+_default_main_watchdog_timeout = 15
+try:
+    _main_watchdog_timeout = float(os.getenv("AUTOTRAINER_MAIN_WATCHDOG_TIMEOUT", _default_main_watchdog_timeout))
+except ValueError:
+    _main_watchdog_timeout = _default_main_watchdog_timeout
+
+
+class MixinMainWatchdogChecker:
+
+    main_watchdog_holder: Optional[Synchronized] = None
+    main_watchdog_timeout: float = _main_watchdog_timeout
+
+    def check_main_watchdog(self) -> bool:
+        """Return True if "alive" (or not configured), False if timedout"""
+        holder = self.main_watchdog_holder
+        if holder is None:
+            return True
+        p_now = get_perf_now()
+        return p_now - holder.value < self.main_watchdog_timeout
 
 
 no_op_timer = make_daemon_timer(0, lambda: None)

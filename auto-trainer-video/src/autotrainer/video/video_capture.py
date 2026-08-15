@@ -26,6 +26,8 @@ from autotrainer.video.video_detection import VideoDetection
 from autotrainer.core.capture import CaptureProcessStatus
 from .camera.camera_base import CameraBase
 
+from autotrainer.core.multiproc import MixinMainWatchdogChecker
+
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
 
@@ -60,6 +62,8 @@ class CaptureCommandKind(IntEnum):
 
     SET_CAM_PROPERTY = 100
     """Allow set any property on the camera instance"""
+
+    SET_MAIN_WATCHDOG = 110
 
 
 @dataclass
@@ -150,7 +154,7 @@ class CaptureAttrs:
     so that offline reader thread can know when it can open the files for offline processing"""
 
 
-class VideoCapture(Process):
+class VideoCapture(MixinMainWatchdogChecker, Process):
     """
     Process-based class for video capture and recording.
 
@@ -217,9 +221,13 @@ class VideoCapture(Process):
             CaptureCommandKind.DISABLE_RECORDING: self._disable_record,
             CaptureCommandKind.SET_LOGGER_LEVEL: set_logger_level,
             CaptureCommandKind.SET_CAM_PROPERTY: self._set_cam_property,
+            CaptureCommandKind.SET_MAIN_WATCHDOG: self._set_main_watchdog_holder,
         }
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
+
+    def _set_main_watchdog_holder(self, value):
+        self.main_watchdog_holder = value
 
     def _set_cam_property(self, name: str, value):
         cam = self._camera
@@ -330,6 +338,7 @@ class VideoCapture(Process):
 
     def _command_handler(self):
         while True:
+            p_now = get_perf_now()
             vid_rec = self._record
             if vid_rec is not None and not vid_rec.is_alive():
                 logger.warning("VideoRecord not alive, terminating")
@@ -341,6 +350,10 @@ class VideoCapture(Process):
                 logger.warning("Video Detection not alive, terminating")
                 self._user_terminate()
                 self._set_error("video_detection thread dead")
+                break
+            if not self.check_main_watchdog():
+                logger.error("Main watchdog timedout, setting exit flag")
+                self._is_running = False
                 break
             try:
                 raw = self._command_queue.get(timeout=1)

@@ -18,7 +18,7 @@ import numpy
 
 from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
-from autotrainer.core.multiproc import get_mp_ctx
+from autotrainer.core.multiproc import get_mp_ctx, MixinMainWatchdogChecker
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook, \
     get_multiprocess_log_queue
 
@@ -67,7 +67,7 @@ def _close_fhs(cams_frame_idx_fhs: Optional[List[Optional[TextIO]]]):
 
 #
 
-class InferenceMonitorDataProc(multiprocessing.Process):
+class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process):
 
     Msg = InferenceMonitorDataMsg
 
@@ -176,22 +176,37 @@ class InferenceMonitorDataProc(multiprocessing.Process):
 
     def _monitor_cmd_queue(self):
         logger.debug("running monitor_cmd_queue")
+        message = self.Msg
+        cmd_queue = self._cmd_queue
+        if cmd_queue is None:
+            return
         while self._is_running:
-            raw = self._cmd_queue.get()
+            if not self.check_main_watchdog():
+                logger.error("Main watchdog timedout, setting exit flag")
+                self._is_running = False
+                break
+            try:
+                raw = cmd_queue.get(timeout=1)
+            except queue.Empty:
+                continue
             if raw is None:
                 self._is_running = False
                 break
             cmd, args, kwargs = raw
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
-            if cmd is self.Msg.SET_POSE_ALGO:
+            if cmd is message.SET_POSE_ALGO:
                 pose_algo = args[0]
                 self._pose_algo = pose_algo
-            elif cmd is self.Msg.SET_PROJECT_INFO:
+            elif cmd is message.SET_PROJECT_INFO:
                 self._project = args[0]
-            elif cmd is self.Msg.SET_FEED_INTERTRIAL_RESULT:
+            elif cmd is message.SET_FEED_INTERTRIAL_RESULT:
                 project, error = args
                 self._feed_intertrial_project = project
                 self._feed_intertrial_error = error
+            elif cmd is message.SET_MAIN_WATCHDOG:
+                self.main_watchdog_holder = args[0]
+            else:
+                logger.warning("Unknown command: %s", cmd)
             self._cmd_ack_event.set()
 
     def _send_msg(self, msg, *args, block_msg_queue_put: bool=True, **kwargs):

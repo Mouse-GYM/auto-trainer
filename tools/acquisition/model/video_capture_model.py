@@ -141,11 +141,16 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
 
         self._is_trace_enabled = True
 
-        self._project: Optional[ProjectInfo] = None
+        self._project = ProjectInfo.get_null_project()
+        self._main_watchdog_holder = None
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
         self._update_camera_source(self._camera_list[0])
+
+    def set_main_watchdog_holder(self, value):
+        self._main_watchdog_holder = value
+        self._send_command(CaptureCommandKind.SET_MAIN_WATCHDOG, value)
 
     @property
     def camera_index(self):
@@ -389,6 +394,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
                                                          project_info=self._project)
         vid_capture.start()
+        self.set_main_watchdog_holder(self._main_watchdog_holder)
 
         return True
 

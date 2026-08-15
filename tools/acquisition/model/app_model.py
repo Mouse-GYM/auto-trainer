@@ -17,6 +17,7 @@ import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
 from multiprocessing.managers import SyncManager
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
 
@@ -283,6 +284,8 @@ class AppModel(ObservableObject):
         self._current_day: Optional[date] = None
         self._log_file_path: Optional[Path] = None
 
+        self._main_watchdog_holder: Optional[Synchronized] = None
+
         self.set_log_location()
 
         self._plan_repo = PlanRepository()
@@ -381,13 +384,15 @@ class AppModel(ObservableObject):
         self.reload_calib(calib_dir)
         #
         if inference_model is None:
-            inference_model = InferenceModel(
+            inference = InferenceModel(
                 self._pose_algorithm,
                 calib_dir=calib_dir,
                 mp_manager=self._mp_manager,
                 record_stop_sema=self._record_stop_sema,
             )
-        inference = self._inference =  inference_model
+        else:
+            inference = inference_model
+        self._inference: InferenceModel = inference
         #
 
         self._training_plans: List[PlanInfo] = []
@@ -458,6 +463,11 @@ class AppModel(ObservableObject):
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
 
         one_minute_timer_handle_and_reschedule()
+
+    def set_main_watchdog_holder(self, value: Optional[Synchronized]):
+        self._main_watchdog_holder = value
+        for model in self._models:
+            model.set_main_watchdog_holder(value)
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
