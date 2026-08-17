@@ -418,14 +418,19 @@ class VideoCapture(Process):
         empty_frame = numpy.zeros((camera.height, camera.width), dtype=numpy.uint8)
         vid_detection = self._video_detection
         p_prev_watchdog = -math.inf
-        if attrs.watchdog_perf_c is not None:
-            def set_watchdog(value):
+        watch_value_holder = attrs.watchdog_perf_c
+        if watch_value_holder is not None:
+            def refresh_watchdog():
                 nonlocal p_prev_watchdog
-                if value - p_prev_watchdog >= 0.2:
-                    p_prev_watchdog = attrs.watchdog_perf_c.value = value
+                p_now_w = get_perf_now()
+                if p_now_w - p_prev_watchdog >= camera.watchdog_refresh_min_delay:
+                    p_prev_watchdog = watch_value_holder.value = p_now_w
+            # also set on the camera itself:
+            camera.set_refresh_watchdog(refresh_watchdog)
+            # for eventual unusual long frame capture.
         else:
-            def set_watchdog(_):
-                """Void set_watchdog without shared value"""
+            def refresh_watchdog():
+                """Void refresh_watchdog without shared value"""
         #
         frames_prebuffer_list: List[Tuple[numpy.ndarray, Union[int, float], float, float, int]] = []
         #                           frame, frame_when, time, perf_now, frame-idx
@@ -576,7 +581,7 @@ class VideoCapture(Process):
                 # secondary cam reads this value from the primary cam shared flag below.
 
             perf_now = get_perf_now()
-            set_watchdog(perf_now)
+            refresh_watchdog()
 
             if not self._is_capturing:
                 if record_start_stop_frame_idx is not None:

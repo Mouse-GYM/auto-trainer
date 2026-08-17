@@ -120,6 +120,13 @@ class InferenceMonitorDataProc(multiprocessing.Process):
         self._live_old_workers: List[LivePoseResultProcessWorker] = []
         self._live_generation_renew_age = LIVE_WORKERS_RENEW_TIMER_DELAY
 
+    def on_close(self):
+        live_q = self._live_input_q
+        if live_q is not None:
+            live_q.close()
+            live_q.join_thread()
+            self._live_input_q = None
+
     @property
     def stop_recorded(self) -> synchronize.Event:
         return self._stop_recorded

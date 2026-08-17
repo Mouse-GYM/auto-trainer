@@ -437,6 +437,17 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
     def on_close(self):
         logger.debug("closing %s", self.name)
         self.on_capture_stop()
+        for q in (self._video_command_queue, ):
+            if q is not None:
+                q.close()
+                q.join_thread()
+        self._video_command_queue = None  # ensure shm resources completely reaped
+        try:
+            NotificationCenter.default_center().remove_observer(
+                TriggerNotification.CAPTURE_ID, self._on_trigger
+            )
+        except Exception as err:
+            logger.warning("while remove observer: %s", err)
 
     @property
     def active_config(self) -> CameraConfiguration:
@@ -589,9 +600,10 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
             self._video_reader = None
 
     def _send_command(self, cmd: CaptureCommandKind, *args, **kwargs):
-        if self._video_command_queue is not None:
+        v_cmd_q = self._video_command_queue
+        if v_cmd_q is not None:
             data = (args, kwargs) if (args and kwargs) else (args, None) if args else ((), kwargs) if kwargs else None
-            self._video_command_queue.put((cmd, data))
+            v_cmd_q.put((cmd, data))
         else:
             logger.warning("%s: _send_command: %s but video command queue is None", self._name, cmd)
 

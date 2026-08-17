@@ -1,18 +1,14 @@
-from pathlib import Path
 
 import pytest
 
 from autotrainer.behavior import BehaviorAlgorithm
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import SystemConfiguration, CameraConfiguration, CameraId
-from autotrainer.device import MotorConfigurationFile, CompoundMovements
-
 from tools.acquisition.model.app_model import AppModel
-from tools.acquisition.model.user_preferences import UserPreferences
 
 
 import top_fixtures
+from top_fixtures import nullify_attributes
 
 
 @pytest.fixture
@@ -45,7 +41,8 @@ def calib_dir():
 
 
 @pytest.fixture
-def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_config, monkeypatch, fake_system_msg_handler):
+def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_config, monkeypatch, fake_system_msg_handler,
+              mp_manager):
     # for now:
     monkeypatch.setattr(BehaviorAlgorithm, "_no_handler_thread", True)
     assert BehaviorAlgorithm._no_handler_thread is True  # to be safe to start with
@@ -57,6 +54,7 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         inference_model=mock_system.inference,
         system_message_handler=fake_system_msg_handler,
         calib_dir=calib_dir,
+        mp_manager=mp_manager,
     )
     # ensure all of that is not async:
     analysis = app.analysis
@@ -77,4 +75,7 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
     try:
         yield app
     finally:
-        app.on_close()
+        try:
+            app.on_close()
+        finally:
+            nullify_attributes(app)

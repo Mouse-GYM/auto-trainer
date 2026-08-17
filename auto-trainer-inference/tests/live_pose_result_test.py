@@ -84,6 +84,7 @@ def inference_data_proc(pose_algo, capture_multiprocess_logs, monkeypatch, caplo
         proc.join(15)  # give large amount for allow coverage to write to disk
         proc.terminate()
         proc.join(5)
+        proc.on_close()
 
 
 def test_live_no_recording(inference_data_proc, caplog, pose_algo):

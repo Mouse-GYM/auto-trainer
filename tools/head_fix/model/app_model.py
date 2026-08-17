@@ -21,7 +21,6 @@ class AppModel(ObservableObject):
 
         self._message_handler = SystemMessageHandler(queue.Queue())
         self._message_handler.property_changed += self.message_handler_property_changed
-        self._message_handler.ack_received += self.reader_ack_received
 
         self._analysis = self._message_handler.analysis
         self._analysis.interval = ProjectInterval.HOUR
@@ -209,10 +208,6 @@ class AppModel(ObservableObject):
             self.gate_position = value
         elif name == "config":
             self.config = value
-
-    @staticmethod
-    def reader_ack_received(ack, *, perf_c: Optional[float]=None):
-        logger.info(f"ack context received: {ack}")
 
     def _enable_data_stream(self):
         if self._device_connection is not None:

@@ -4,7 +4,7 @@ from multiprocessing import Queue, Value, Array
 
 import pytest
 
-from autotrainer.core import CameraId
+from autotrainer.core import CameraId, ProjectInfo
 from autotrainer.video import (
     CaptureCameraAttrs,
     CaptureAttrs,
@@ -13,10 +13,17 @@ from autotrainer.video import (
 )
 from autotrainer.core.capture import CaptureProcessStatus
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
+from top_fixtures import nullify_attributes
 
 
 @pytest.fixture
-def video_capture():
+def project_info(tmp_path) -> ProjectInfo:
+    root = tmp_path.joinpath("root")
+    return ProjectInfo(device_id="test-agx-host", root=root.as_posix())
+
+
+@pytest.fixture
+def video_capture() -> VideoCapture:  # noqa
     cmd_queue = Queue()
     image_queue = Queue()
     status = Value("i", CaptureProcessStatus.UNKNOWN)
@@ -39,7 +46,7 @@ def video_capture():
 
     process = VideoCapture(attrs)
     try:
-        yield process
+        yield process  # noqa
     finally:
         process.terminate()
         process.join(3)
@@ -67,7 +74,10 @@ def video_capture_model(project_info, user_pref) -> VideoCaptureModel:  # noqa
     try:
         yield model  # noqa
     finally:
-        model.on_close()
+        try:
+            model.on_close()
+        finally:
+            nullify_attributes(model)
 
 
 @pytest.fixture
@@ -91,4 +101,7 @@ def video_capture_model2(video_capture_model, user_pref) -> VideoCaptureModel:  
     try:
         yield model  # noqa
     finally:
-        model.on_close()
+        try:
+            model.on_close()
+        finally:
+            nullify_attributes(model)

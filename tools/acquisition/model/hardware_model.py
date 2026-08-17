@@ -166,7 +166,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self._refresh_cmd_in_progress(after_commands)
 
     @property
-    def pending_tokens(self) -> List[str]:
+    def pending_tokens(self) -> List[Union[UUID, str]]:
         return list(self._pending_tokens)
 
     def _check_dcs_cfg(self, *, return_none: bool=False):
@@ -690,9 +690,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         token = uuid4()
         perf_now = get_perf_now()
-        logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(self._pending_tokens))
+        pending = self._pending_tokens
+        logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(pending))
         if self._send_command(device, cmd, data, token):
-            self._pending_tokens[token] = (cmd, perf_now)
+            pending[token] = (cmd, perf_now)
             return token
         else:
             logger.verbose("send_command failed, device not setup yet: cmd=%s token=%s", cmd, token)

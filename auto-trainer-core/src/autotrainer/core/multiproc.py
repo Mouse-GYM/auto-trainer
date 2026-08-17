@@ -5,6 +5,7 @@ import threading
 
 
 def get_mp_ctx():
+    """Using on purpose the spawn mp context"""
     return multiprocessing.get_context("spawn")
 
 
