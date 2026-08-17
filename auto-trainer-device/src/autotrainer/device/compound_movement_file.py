@@ -11,6 +11,8 @@ It can have 5 subgroups:
 """
 import enum
 from pathlib import Path
+from typing import Dict, Any
+
 import yaml
 
 from autotrainer.core.logging import get_verbose_logger
@@ -27,12 +29,21 @@ class CompoundMovementKind(str, enum.Enum):
     COVER_PELLET = "cover_pellet"
     RELEASE_PELLET = "release_pellet"
     MOVE_RETRACT = "move_retract"
+    OPEN_TUNNEL_GATE = "open_tunnel_gate"
+    CLOSE_TUNNEL_GATE = "close_tunnel_gate"
 
 
 CompoundMovementByStringValue = {
     kind.value: kind
     for kind in CompoundMovementKind
 }
+
+
+def _make_steps_accessor(kind: CompoundMovementKind) -> MotorSteps:
+    def wrapper(self: "CompoundMovements") -> MotorSteps:
+        return self._movements[kind] or MotorSteps(kind.value)
+    wrapper.__name__ = kind.value
+    return property(wrapper)  # noqa
 
 
 class CompoundMovements(CompoundMovementDataSet):
@@ -50,7 +61,7 @@ class CompoundMovements(CompoundMovementDataSet):
         Set the default movements to an empty sequence
         """
         self._movements = {
-            kind: MotorSteps()
+            kind: MotorSteps(name=kind.value)
             for kind in CompoundMovementKind
         }
 
@@ -126,22 +137,10 @@ class CompoundMovements(CompoundMovementDataSet):
     Meet the CompoundMovementDataSet Protocol
     '''
 
-    @property
-    def load_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementKind.LOAD_PELLET]
-
-    @property
-    def send_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementKind.SEND_PELLET]
-
-    @property
-    def cover_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementKind.COVER_PELLET]
-
-    @property
-    def release_pellet(self) -> MotorSteps:
-        return self._movements[CompoundMovementKind.RELEASE_PELLET]
-
-    @property
-    def move_retract(self) -> MotorSteps:
-        return self._movements[CompoundMovementKind.MOVE_RETRACT]
+    send_pellet = _make_steps_accessor(CompoundMovementKind.SEND_PELLET)
+    load_pellet = _make_steps_accessor(CompoundMovementKind.LOAD_PELLET)
+    cover_pellet = _make_steps_accessor(CompoundMovementKind.COVER_PELLET)
+    release_pellet = _make_steps_accessor(CompoundMovementKind.RELEASE_PELLET)
+    move_retract = _make_steps_accessor(CompoundMovementKind.MOVE_RETRACT)
+    open_tunnel_gate = _make_steps_accessor(CompoundMovementKind.OPEN_TUNNEL_GATE)
+    close_tunnel_gate = _make_steps_accessor(CompoundMovementKind.CLOSE_TUNNEL_GATE)

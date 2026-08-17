@@ -14,11 +14,15 @@ class MotorSteps:
     def from_raw(cls, name: str, data: List[Dict[str, Any]]):
         steps = []
         for step in data:
-            step_type = step.get('type', _missing)
-            step_value = step.get('value', _missing)
+            d = step.copy()
+            step_type = d.pop('type', _missing)
+            step_value = d.pop('value', _missing)
             if _missing in (step_type, step_value):
-                raise ValueError(f"Missing 'type' or 'value' key for motor steps, got {step!r}")
-            steps.append({step_type: step_value})
+                raise ValueError(f"Missing 'type' or 'value' key for motor steps, got {step}")
+            if step_type in d:
+                raise ValueError(f"Cannot have key {step_type!r} in step dict {step}")
+            d[step_type] = step_value
+            steps.append(d)
         if len(steps) == 0:
             logger.warning("Empty steps for MotorSteps %s", name)
         return MotorSteps(name, steps)
