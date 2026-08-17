@@ -80,8 +80,22 @@ Please see https://github.com/Mouse-GYM/auto-trainer-device-deployment
 6) Activate an appropriate branch, *e.g.,*
 `git checkout develop`
 
-7) From the repository directory perform the following Python package installation steps.
-`pip install -e .`
+   Neither script below switches branches: `update.sh` warns when the checkout is not `develop` and
+   continues, and `auto-trainer.sh` reports a non-`develop` or modified checkout to the application as a
+   custom build. Whatever is selected here is what both act on.
+
+7) From the repository directory, install the project and its dependencies.
+`./update.sh`
+
+   This fetches `origin`, brings a `develop` checkout up to date, and performs the editable install.
+   It is also the routine update command — run it again whenever the machine needs to be brought current,
+   rather than repeating the install by hand.
+
+8) From the repository directory, start the acquisition application.
+`./auto-trainer.sh` is generally preferred over `python -m tools.acquisition.gui`. It supplies the build and version information the
+   application uses to report whether the machine is running a custom or out-of-date build; started any
+   other way, the application has nothing to report. Arguments are forwarded, *e.g.,*
+   `./auto-trainer.sh --help`.
 
 
 ### Environment requirements
