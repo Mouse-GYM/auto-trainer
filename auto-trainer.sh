@@ -16,11 +16,16 @@ then
 fi
 echo
 
-cur_branch_or_commit=$(git rev-parse --abbrev-ref HEAD)
+cur_branch_or_commit=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 is_clean=$(git diff-index --quiet HEAD && echo "1" || echo "0")  # NB: diff against local
 local_v=$(python -m setuptools_scm 2>/dev/null || echo "NA")
-latest_v=$(git describe --tags --exact-match origin/develop 2>/dev/null | sed "s/^v//")
+latest_v=$(git describe --tags --exact-match origin/develop --match "v[0-9]*" 2>/dev/null | sed "s/^v//")
 latest_v=${latest_v:-"NA"}
+
+if test "${latest_v}" == "NA" -o "${local_v}" == "NA"
+then
+    echo "WARNING: Could not determine local or latest version" >&2
+fi
 
 is_develop_and_clean=$(test "${cur_branch_or_commit}" == "develop" -a "${is_clean}" == "1" && echo "1" || echo "0")
 

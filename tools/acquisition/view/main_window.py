@@ -668,7 +668,9 @@ class MainWindow(QMainWindow):
                 "You are using a custom build of the application. Application behavior may differ from expected.",
                 QMessageBox.Icon.Warning,
             )
-        elif self._local_version_var != self._latest_version_var:
+        elif ("NA" not in (self._local_version_var, self._latest_version_var)
+            and self._local_version_var != self._latest_version_var
+        ):
             self._show_msg_box(
                 "WARNING: App not up2date",
                 f"You are running version {self._local_version_var}. {self._latest_version_var} is available. "
