@@ -662,13 +662,7 @@ class MainWindow(QMainWindow):
                     self._on_capture_start_stop(True, target_status=target_status)
             else:
                 logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
-        if self._is_special_build_var is None:
-            self._show_msg_box(
-                "Warning",
-                "Have you used auto-trainer.sh launch script ?",
-                QMessageBox.Icon.Warning,
-            )
-        elif self._is_special_build_var == "1":
+        if self._is_special_build_var == "1":
             self._show_msg_box(
                 "WARNING: App special build",
                 "You are using a custom build of the application. Application behavior may differ from expected.",
