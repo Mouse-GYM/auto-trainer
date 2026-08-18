@@ -20,6 +20,8 @@ class HardwareConfiguration:
     If not set here then default code value of 15s is used.
     """
 
+    camera_start_timeout: float = 10
+
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
         configuration = cls()
