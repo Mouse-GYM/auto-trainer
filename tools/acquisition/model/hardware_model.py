@@ -757,11 +757,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
+        is_cancelled = lambda: False,
     ):
         p_start = time.perf_counter()
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
         while True:
+            if is_cancelled():
+                return
             with self._lock:
                 if token not in self._pending_tokens:
                     logger.debug("Got ack for token=%s ; delay=%.6f",
