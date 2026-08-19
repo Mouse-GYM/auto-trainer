@@ -85,6 +85,9 @@ def monitor_message_queue(msg_queue):
         kinds.add(kind)
 
         if kind == SystemStatusMessageKind.ACKNOWLEDGE:
+            tok, perf_c, error = data[:3]
+            if error is not None:
+                logger.error("command acknowledge error: token=%s error=%s", tok, error)
             get_input = True
 
         elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:

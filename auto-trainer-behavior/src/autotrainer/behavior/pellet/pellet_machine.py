@@ -2,7 +2,7 @@ import math
 import os
 import uuid
 from functools import partial
-from typing import Callable, Optional, get_type_hints, Protocol
+from typing import Callable, Optional, get_type_hints, Protocol, Any
 from uuid import UUID
 
 from transitions import Machine
@@ -255,7 +255,7 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
+    def _pellet_device_ack_received(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional[Any]=None):
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
 
         perf_now = get_perf_now() if perf_c is None else perf_c
@@ -264,6 +264,10 @@ class PelletMachine(StateMachine):
         if token == self._api_status_token:
             self._api_status_token = None
             was_api_token = True
+            if error is not None:
+                logger.error("command %s failed: %s", token, error)
+                self._algorithm.algo_paused = True
+                # todo: should probably have some dedicated handling ?
         else:
             was_api_token = False
 

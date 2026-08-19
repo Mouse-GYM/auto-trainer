@@ -501,7 +501,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         device_conn = self._device_conn = DeviceConnection(can_device, cmd_queue, name="can-device")
         device_conn.request_connect()
 
-        send_dev_cmd = partial(self._send_command, device_conn)
+        send_dev_cmd = self._send_command
         def send_dev_ack_cmd(kind, data=None):
             tok = str(uuid.uuid4())
             with device_conn.await_acknowledge({tok}):
@@ -737,7 +737,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
             )
 
-    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
+    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional=None):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())
@@ -746,6 +746,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             (logger.debug if not self._device_stream_started else logger.warning)(
                 "Received unexpected ack token: %s", token)
         else:
+            if error is not None:
+                logger.error("command token %s failed: %s", token, error)
+                # what else to do ?
+                # error event callback ?
             self._refresh_cmd_in_progress(commands_in_prog)
 
     def wait_pending_command_acked(

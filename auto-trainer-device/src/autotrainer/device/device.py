@@ -55,7 +55,7 @@ class Device(ObservableObject):
         :param data: one or more bytes received from the device to be handled/interpreted by this Device instance
         """
 
-    def notify_message(self, kind: int, data: object, context: object = None) -> None:
+    def notify_message(self, kind: int, data: Any, context: Optional[Any] = None) -> None:
         """Notification for messages received from the client script or application
 
         A set of message kind values and any expected associated data are typically defined by specific Device subclass
@@ -68,12 +68,16 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token: object, *, perf_c: float=math.nan):
+    def _acknowledge_command(self, token, *, perf_c: float=math.nan, error: Optional[Any] = None):
+        if token is None:  # if a caller has given a None token, it means it doesn't want to get the ack,
+            # so makes that.
+            return
         logger.verbose("sending command ack: %s perf_c=%.3f", token, perf_c)
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
-        if self._api is not None:
-            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c))
+        api = self._api
+        if api is not None:
+            api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, error))
 
     @property
     def api(self):

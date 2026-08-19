@@ -12,6 +12,7 @@ from unittest import mock
 
 import pytest
 from autotrainer.core import RawValueHolder
+from autotrainer.core.observable_object import ObservableObject
 
 from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import (
@@ -35,6 +36,7 @@ from autotrainer.device.can_device import (
     default_load_pellet,
     default_send_pellet,
 )
+from autotrainer.device.device_interface import Acknowledge
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +60,7 @@ def expected_tok() -> RawValueHolder:
 def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHolder):
     # print(msg_kind, data)
     if msg_kind == SystemStatusMessageKind.ACKNOWLEDGE:
-        tok, perf_c = data
+        tok, perf_c, error = data[:3]
         tokens_acked.append(tok)
         if tok is not None and tok == expected_tok.value:
             expected_tok.value = None
@@ -114,12 +116,14 @@ def dev_ack_timeout_ctx():
 
 @pytest.fixture
 def device(expected_tok_event, expected_tok, tokens_acked, dev_ack_timeout_ctx) -> CanDevice:  # noqa
+    observable = ObservableObject(event_names=("message_callback",))
     device = CanDevice(api=DeviceApi(message_callback=data_callback), force_emulation=True)
     # unneeded, at least with emulation iface:
     # device._interface.magnet_address = 0x40
     # device._interface.pellet_address = 0x01
     # device.notify_message(_REQUEST_CONNECT)
-    device.api.message_callback = partial(
+    device.api.message_callback = observable.message_callback
+    observable.message_callback += partial(
         api_msg_cb,
         tokens_acked=tokens_acked,
         expected_tok=expected_tok,
@@ -377,3 +381,60 @@ def test_send_fixed_xyz_timedout(
         "finished executing SystemCommandKind.SEND_FIXED_XYZ",
     ]
     assert_lines_in_logs(expected_ordered_lines, caplog)
+
+
+@pytest.mark.parametrize("fail_all_retries", [False, True])
+def test_command_with_uuid_error(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+    dev_ack_timeout_ctx,
+    monkeypatch,
+    caplog,
+    fail_all_retries,
+):
+    api = device.api
+    iface = device.device_interface
+    uuid_ack_err_code = 133
+
+    # patch move_servo_motor, which is used for the following command we send (OPEN_TUNNEL_GATE)
+    orig = iface.move_servo_motor
+    def patched(
+        motor: Motor, position
+    ):
+        if isinstance(position, tuple):
+            position = position[0]
+        iface._positions[motor] = position  # noqa
+        iface._messages.append(Acknowledge(uuid=iface.next_uuid(), error=uuid_ack_err_code))  # noqa
+        if not fail_all_retries:
+            iface.move_servo_motor = orig
+        return True
+    monkeypatch.setattr(iface, "move_servo_motor", mock.MagicMock(spec=iface.move_servo_motor, side_effect=patched))
+
+    orig_api_cb = api.message_callback
+    ack_received = None
+    def recv_cb(kind, data):
+        nonlocal ack_received
+        if kind == SystemStatusMessageKind.ACKNOWLEDGE:
+            # print(kind, data)
+            if data[0] == ctx:
+                ack_received = data
+        orig_api_cb(kind, data)
+
+    api.message_callback = recv_cb
+
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
+        assert expected_tok_event.wait(3)
+    assert ack_received is not None, "should have received the ack, even if possibly with error"
+    ack_tok, ack_perf, ack_err = ack_received
+    if fail_all_retries:
+        assert ack_err == "Reached default_repeated_failed_command_count 3 on board <Target.PELLET_DEVICE: 0>"
+    else:
+        assert ack_err is None
+    assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} error={uuid_ack_err_code}" in caplog.text

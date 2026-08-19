@@ -162,8 +162,10 @@ class DeviceConnection(DeviceConnectionProtocol):
         tokens_acked = []
         def cb(kind, context):
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, *r_args = context
+                tok, perf_c, error = context[:3]
                 if tok in tokens:
+                    if error is not None:
+                        raise RuntimeError(f"command token {tok} failed to executed: {error}")
                     tokens_acked.append(tok)
                     tokens.remove(tok)
             elif orig_cb is not None:

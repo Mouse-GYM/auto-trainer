@@ -23,7 +23,7 @@ TERMINATE = -1001
 
 class AckReceivedHandlerT(Protocol):
 
-    def __call__(self, token: UUID, *, perf_c: Optional[float]=None):
+    def __call__(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional[Any]=None):
         """Acknowledge of given token"""
 
 
@@ -122,9 +122,9 @@ class MessageHandler(ObservableObject):
                 break
             #
             if msg == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, perf_c = data
+                tok, perf_c, error = data[:3]
                 try:
-                    self.ack_received(tok, perf_c=perf_c)
+                    self.ack_received(tok, perf_c=perf_c, error=error)
                 except Exception as err:
                     logger.exception("Error during ack_received callback: %s", err)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:

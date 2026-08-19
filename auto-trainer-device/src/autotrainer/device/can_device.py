@@ -144,6 +144,11 @@ class _BoardPendingContext:
     uuid_ack_timeout_engaged: bool = False
     repeated_command_count: int = 0
     compound_steps: Optional[List[Dict[str, Any]]] = None
+    command_perf_c: float = math.nan  # current main command perf_c
+
+    def clear(self):
+        self.kind = self.ctx = self.uuid = self.prev_command = self.compound_steps = None
+        self.repeated_command_count = 0
 
     def is_available(self):
         return (
@@ -160,6 +165,7 @@ class CanDevice(Device):
     default_command_ack_timeout_duration: float = 3  # seconds
 
     default_command_ack_timeout_repeat_count: int = 3
+    default_max_repeated_failed_command_count: int = 3
 
     same_data_refresh_delay: float = _similar_data_refresh_delay
     """When > 0: if new data value is equal to previous value,
@@ -233,10 +239,10 @@ class CanDevice(Device):
         self._motor_configs: Dict[Motor, Union[StepperConfig, ServoConfig]] = {}
         # ensure we have config for these steppers/servos, even if empty/default:
         for m in {Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR}:
-            self._motor_configs[m] = StepperConfig()
+            self._motor_configs[m] = StepperConfig(motor=m)
         for m in {Motor.TUNNEL_GATE_SERVO, Motor.TUNNEL_FAN_SERVO, Motor.TUNNEL_MAGNET_SERVO,
                   Motor.PELLET_COVER_SERVO, Motor.PELLET_LOAD_SERVO}:
-            self._motor_configs[m] = ServoConfig()
+            self._motor_configs[m] = ServoConfig(motor=m)
         # NB: these are the config possibly written/set to the motors.
         # Not the config reported by the motor themselves.
 
@@ -614,6 +620,16 @@ class CanDevice(Device):
             b: _BoardPendingContext = self._boards_pending_ctx[t]
             return (0 if b.is_available() else 1, perf_c)
 
+        def handle_command_error(board: _BoardPendingContext, ctx, error):
+            board.clear()
+            self._acknowledge_command(ctx, perf_c=get_perf_now(), error=error)
+
+        def search_board_for_uuid(msg_uuid) -> Optional[_BoardPendingContext]:
+            for target, board_ctx in boards_pending_ctx.items():
+                if board_ctx.uuid is not None and board_ctx.uuid == msg_uuid:
+                    return board_ctx
+            return None
+
         p_before_loop = get_perf_now()
         while True:
             if has_read_from_queue:
@@ -650,30 +666,42 @@ class CanDevice(Device):
             raw = kind, data, ctx, p_now
             found_board_with_uuid_ack = None
             if kind is _uuid_ack:
-                msg_uuid, msg_perf_c = data
-                for target, board_ctx in boards_pending_ctx.items():
-                    if board_ctx.uuid is not None and board_ctx.uuid == msg_uuid:
-                        found_board_with_uuid_ack = board_ctx
-                        ctx = board_ctx.ctx
+                msg_uuid, msg_err, msg_perf_c = data
+                logger.debug("searching uuid=%s", msg_uuid)
+                board_ctx = found_board_with_uuid_ack = search_board_for_uuid(msg_uuid)
+                if board_ctx is not None:
+                    assert found_board_with_uuid_ack is board_ctx
+                    ctx = board_ctx.ctx
+                    if msg_err == 0:
                         cur_commands.insert(0, (_uuid_ack, data, ctx, -math.inf))
-                        board_ctx.uuid = None
                         board_ctx.repeated_command_count = 0
-                        board_ctx.prev_command = None
-                        logger.debug("uuid_ack_perf_c=%.3f board=%s ctx=%s kind=%s",
-                                     msg_perf_c, board_ctx.target, ctx, board_ctx.kind)
-                        if board_ctx.skip_uuid_ack_perf_c:
-                            board_ctx.skip_uuid_ack_perf_c = False
-                        else:  # if board_ctx.ctx is not None and board_ctx.kind is not None:
-                            board_ctx.uuid_ack_perf_c = msg_perf_c
-                        if board_ctx.uuid_ack_timeout_engaged:
-                            board_ctx.uuid_ack_timeout_engaged = False
-                            if not boards_has_ack_timeout_engaged():
-                                self.property_changed(
-                                    self.UUID_ACK_TIMEOUT_ENGAGED,
-                                    False,
-                                    True,
-                                )
-                        break
+                    else:
+                        # command not accepted by corresponding motor/element,
+                        board_ctx.repeated_command_count += 1
+                        if (
+                            board_ctx.repeated_command_count >= self.default_max_repeated_failed_command_count
+                        ):
+                            handle_command_error(board_ctx, ctx,
+                                                 f"Reached default_repeated_failed_command_count {board_ctx.repeated_command_count} "
+                                                 f"on board {board_ctx.target!r}")
+                            continue
+                        cur_commands.insert(0, board_ctx.prev_command)  # can be either _retry_compound or _retry_full
+                    board_ctx.uuid = None
+                    board_ctx.prev_command = None
+                    logger.debug("uuid_ack_perf_c=%.3f board=%s ctx=%s kind=%s error=%s",
+                                 msg_perf_c, board_ctx.target, ctx, board_ctx.kind, msg_err)
+                    if board_ctx.skip_uuid_ack_perf_c:
+                        board_ctx.skip_uuid_ack_perf_c = False
+                    else:  # if board_ctx.ctx is not None and board_ctx.kind is not None:
+                        board_ctx.uuid_ack_perf_c = msg_perf_c
+                    if board_ctx.uuid_ack_timeout_engaged:
+                        board_ctx.uuid_ack_timeout_engaged = False
+                        if not boards_has_ack_timeout_engaged():
+                            self.property_changed(
+                                self.UUID_ACK_TIMEOUT_ENGAGED,
+                                False,
+                                True,
+                            )
                 if found_board_with_uuid_ack is None:
                     logger.debug("skipping unknown CAN uuid: %s", data)
                     continue
@@ -719,14 +747,16 @@ class CanDevice(Device):
                     self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, True, before)
                 board_ctx.repeated_command_count += 1
                 if board_ctx.repeated_command_count >= self.default_command_ack_timeout_repeat_count:
-                    raise RuntimeError(
-                        f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}"
-                    )
+                    handle_command_error(board_ctx, board_ctx.ctx,
+                                         f"Reached default_command_ack_timeout_repeat_count {board_ctx.repeated_command_count} on board {target}")
+                    continue
                 if board_ctx.prev_command_relative:
-                    # TODO: should/could simply continue, probably, although surely only for retract command
-                    raise RuntimeError(
+                    handle_command_error(
+                        board_ctx,
+                        board_ctx.ctx,
                         f"Command {board_ctx.prev_command} uuid ack timed out ; refusing retry given relative."
                     )
+                    continue
                 retrying_board = board_ctx
                 cur_commands.insert(0, board_ctx.prev_command)
                 board_ctx.prev_command = None
@@ -768,6 +798,8 @@ class CanDevice(Device):
                     target_board = found_board_with_uuid_ack
             elif kind is _retry_compound:
                 target_board = retrying_board
+                if target_board is None:
+                    target_board = self._boards_pending_ctx[self._find_step_board(data[1])]
                 assert isinstance(target_board, _BoardPendingContext)
                 # Skip the is_available() check on purpose: the board still holds its remaining
                 # compound_steps (they are only cleared once the sequence completes), so
@@ -822,6 +854,7 @@ class CanDevice(Device):
                     target_board.compound_steps = steps
                     target_board.ctx = found_board_with_uuid_ack.ctx
                     target_board.kind = found_board_with_uuid_ack.kind
+                    target_board.command_perf_c = found_board_with_uuid_ack.command_perf_c
                     if found_board_with_uuid_ack is not target_board:
                         found_board_with_uuid_ack.ctx = None
                         found_board_with_uuid_ack.kind = None
@@ -848,7 +881,9 @@ class CanDevice(Device):
                         break
                     logger.error("Failed sending %s to bus", kind)
                 if not success:
-                    raise RuntimeError(f"Failed writing too many consecutive times to the device/bus. kind={kind} ctx={ctx}")
+                    handle_command_error(target_board, ctx,
+                                         f"Failed writing too many consecutive times to the device/bus. kind={kind} ctx={ctx}")
+                    continue
                 target_board.kind = kind  # only used for debug/log
             # end possible handling cases
             #
@@ -902,16 +937,16 @@ class CanDevice(Device):
                     logger.success("finished executing %s ; target_board=%s ctx=%s board=%s perf_c=%.3f",
                                    kind, target_board.target, ctx, target_board.ctx, target_board.uuid_ack_perf_c)
                     if ctx is not None:
-                        self._acknowledge_command(ctx, perf_c=target_board.uuid_ack_perf_c)
+                        self._acknowledge_command(ctx, perf_c=target_board.uuid_ack_perf_c, error=None)
                         target_board.ctx = None
                     target_board.kind = None
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
         perf_c = msg.perf_c
-        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s ; perf_c=%.3f",
-                     msg.target, msg.uuid, cur_can_uuid, perf_c)
-        self._put_to_cmd_queue((_uuid_ack, (msg.uuid, perf_c), None))
+        logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s ; perf_c=%.3f ; err=%s",
+                     msg.target, msg.uuid, cur_can_uuid, perf_c, msg.error)
+        self._put_to_cmd_queue((_uuid_ack, (msg.uuid, msg.error, perf_c), None))
 
     @property
     def api(self):
@@ -1157,12 +1192,7 @@ class CanDevice(Device):
             self._motor_configs[motor] = copy.deepcopy(config)
         return success
 
-    def notify_message(
-        self,
-        kind: SystemCommandKind,
-        data: Any,  # Union[str, float, int, SupportsInt],
-        context: object = None,
-    ) -> None:
+    def notify_message(self, kind: int, data: Any, context: Optional[Any] = None):
         """
         This method is called when a command to a target is requested. This method
         translates the application command to the appropriate call to the CanInterface
@@ -1173,11 +1203,7 @@ class CanDevice(Device):
             data: The data associated with the command
             context: The context object for this command
         """
-        if self._interface is None:
-            return
-
         self._put_to_cmd_queue((kind, data, context))
-        return
 
     def notify_data(self, data: Any) -> None:
         """
@@ -1371,7 +1397,7 @@ class CanDevice(Device):
         assert isinstance(step, dict)
         save_as_fixed = step.get("save_as_fixed", False)
 
-        motor = None
+        motor = None  # noqa, in case of.
         before_uuid = self._interface.uuid()
 
         if 'x' in step:

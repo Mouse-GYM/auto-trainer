@@ -62,7 +62,7 @@ class EmulationInterface(DeviceInterface):
     def __init__(self):
         super().__init__()
 
-        self._thread_lock = threading.Lock()
+        self._thread_lock = threading.RLock()
         self._is_open = False
 
         self._last_status_message = 0.0

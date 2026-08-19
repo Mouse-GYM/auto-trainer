@@ -76,6 +76,10 @@ logger = get_verbose_logger(__name__)
 _debug_path_fake_status_timeout = Path("/tmp/autotrainer_fake_device_timeout")
 
 
+def no_op(msg):
+    None
+
+
 class MissingDeviceAddressError(RuntimeError):
     """Dedicated for when device address could not be read"""
 
@@ -432,13 +436,15 @@ class CanInterface(DeviceInterface):
 
         self._load_cell_factor = 21053.0
 
-        no_op = lambda msg: None
-
         self._last_positions = Offset3DTuple.get_nan()
         self._prev_send_pos = Offset3DTuple.get_nan()
 
         self._last_gpio_status_perf: Dict[int, Tuple[
             Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
+
+        def handle_ack(msg):
+            logger.verbose("Received ack message: uuid=%s error=%s", msg.uuid, msg.ack.error)
+            return Acknowledge(uuid=msg.uuid, error=msg.ack.error)
 
         # Simple handlers implemented as lambdas
         self._handlers = {
@@ -477,7 +483,7 @@ class CanInterface(DeviceInterface):
                 temperature_c=self.round_float(float(msg.temp_hum_read.temperature) / 100.0),
                 humidity_percent=self.round_float(float(msg.temp_hum_read.humidity) / 100.0),
             ),
-            JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
+            JerryCANCmdType.ACKNOWLEDGE: handle_ack,
             # no-op handlers, to silence the warning if unknown message type
             JerryCANCmdType.STEPPER_HOME: no_op,
             JerryCANCmdType.STEPPER_MOVE: no_op,

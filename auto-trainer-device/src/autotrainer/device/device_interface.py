@@ -399,6 +399,7 @@ class Version(Source):
 @dataclass
 class Acknowledge(Source):
     uuid: int = 0
+    error: int = 0
 
 
 _zero_position = Offset3DTuple(0, 0, 0)
@@ -511,6 +512,10 @@ class DeviceInterface:
 
     def stepper_home(self, motor: Motor):
         """stepper_home == send-to-limit"""
+        raise NotImplementedError
+
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        """Move given motor to given absolute position"""
         raise NotImplementedError
 
     def move_motor_x(

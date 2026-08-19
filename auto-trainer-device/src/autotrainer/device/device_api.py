@@ -37,12 +37,14 @@ class DeviceApi:
 
     def send_message(self, kind: int, context: object):
         """Sends a message identifier and optional data to client script or application"""
-        if self._message_queue is not None:
+        msg_q = self._message_queue
+        if msg_q is not None:
             # logger.debug("putting %s", kind)
-            self._message_queue.put((kind, context))
+            msg_q.put((kind, context))
 
-        if self._message_callback is not None:
-            self._message_callback(kind, context)
+        msg_cb = self._message_callback
+        if msg_cb is not None:
+            msg_cb(kind, context)
 
         self._tot_msgs += 1
         p_now = get_perf_now()
