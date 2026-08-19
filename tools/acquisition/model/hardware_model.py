@@ -304,7 +304,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if position != self._head_magnet_position:
             logger.verbose("sending move magnet to %.3f", position)
             # self._head_magnet_position = value  # this is set from reading the hardware status
-            return self._send_with_token(self._device_conn, SystemCommandKind.MOVE_MAGNET_SERVO, position)
+            return self._send_with_token(SystemCommandKind.MOVE_MAGNET_SERVO, position)
         logger.debug("head magnet currently already at pos %.3f", position)
         return None
 
@@ -313,13 +313,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._tunnel_gate_open_status
 
     def open_tunnel_gate(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.OPEN_TUNNEL_GATE)
+        return self._send_with_token(SystemCommandKind.OPEN_TUNNEL_GATE)
 
     def close_tunnel_gate(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.CLOSE_TUNNEL_GATE)
+        return self._send_with_token(SystemCommandKind.CLOSE_TUNNEL_GATE)
 
     def tare_load_cell(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
+        return self._send_with_token(SystemCommandKind.UPDATE_SCALE_TARE)
 
     def _set_axis(self, value: float, *, absolute: bool = True,
                   system_set_cmd: SystemCommandKind, coord_idx: int, sender: str="NA") -> Optional[UUID]:
@@ -341,8 +341,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             new_value = 0
             logger.verbose("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
                          coord.upper(), value, absolute)
-        res = self._send_with_token(self._device_conn, system_set_cmd,
-                                    SystemDataArgsKwargs(value, relative=not absolute))
+        res = self._send_with_token(system_set_cmd, SystemDataArgsKwargs(value, relative=not absolute))
         if res is not None:
             prev_set_xyz, self._last_requested_set_coordinates = self._last_requested_set_coordinates, self._last_requested_set_coordinates.replace(**{coord: new_value})
             prop_name = (self.SET_X, self.SET_Y, self.SET_Z)[coord_idx]
@@ -385,7 +384,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                "XYZ"[coord_idx])
                 return None
             value += prev_value
-        res = self._send_with_token(self._device_conn, system_move_cmd, value)
+        res = self._send_with_token(system_move_cmd, value)
         return res
 
     def move_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
@@ -398,32 +397,32 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Z, coord_idx=2)
 
     def send_to_limits(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_TO_LIMITS,
+        return self._send_with_token(SystemCommandKind.SEND_TO_LIMITS,
                                      [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
     def send_retract(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_RETRACT)
+        return self._send_with_token(SystemCommandKind.SEND_RETRACT)
 
     def send_home(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_HOME)
+        return self._send_with_token(SystemCommandKind.SEND_HOME)
 
     def load_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.LOAD_PELLET)
+        return self._send_with_token(SystemCommandKind.LOAD_PELLET)
 
     def send_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_PELLET)
+        return self._send_with_token(SystemCommandKind.SEND_PELLET)
 
     def release_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.RELEASE_PELLET)
+        return self._send_with_token(SystemCommandKind.RELEASE_PELLET)
 
     def cover_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.COVER_PELLET)
+        return self._send_with_token(SystemCommandKind.COVER_PELLET)
 
     def attach_servo(self, servo: Motor) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_ATTACH, servo)
+        return self._send_with_token(SystemCommandKind.SERVO_ATTACH, servo)
 
     def detach_servo(self, servo: Motor) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_DETACH, servo)
+        return self._send_with_token(SystemCommandKind.SERVO_DETACH, servo)
 
     def play_tone(self, frequency: int, duration: float) -> Optional[UUID]:
         """Play a tone
@@ -431,20 +430,20 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         :param duration: in seconds (float)
         """
         duration_ms = int(duration * 1000)
-        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
+        return self._send_with_token(SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
 
     def delay(self, amount: float) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.DELAY, amount)
+        return self._send_with_token(SystemCommandKind.DELAY, amount)
 
     def set_tunnel_fan_on(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_ON)
+        return self._send_with_token(SystemCommandKind.TUNNEL_FAN_ON)
 
     def set_tunnel_fan_off(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_OFF)
+        return self._send_with_token(SystemCommandKind.TUNNEL_FAN_OFF)
 
     def set_color_led(self, r: int, g: int, b: int):
         """0 -> 100"""
-        return self._send_with_token(self._device_conn, SystemCommandKind.SET_RGB_LED, (r, g, b))
+        return self._send_with_token(SystemCommandKind.SET_RGB_LED, (r, g, b))
 
     def load_config(self, config: HardwareConfiguration):
         self.set_device_ack_timeout(config.min_ack_timeout)
@@ -673,26 +672,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         elif name == props.COLOR_LED:
             self._color_led = value
 
-    def _send_with_token(self, device: Optional[DeviceConnectionProtocol], cmd: SystemCommandKind, data=None) -> Optional[UUID]:
-        if device is None:
-            return None
+    def _send_with_token(self, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         with self._lock:
             # ensure only 1 command can be sent at the same time
             # NB: there are multiple threads which can act on this instance,
             # and we don't want to try to send 2 messages at the same time,
             # or the pending command token might be overwritten.
-            tok = self.__send_with_token(device, cmd, data)
+            tok = self.__send_with_token(cmd, data)
             commands_tuple = list(self._pending_tokens.values())
         if tok is not None:
             self._refresh_cmd_in_progress(commands_tuple)
         return tok
 
-    def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+    def __send_with_token(self, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         token = uuid4()
         perf_now = get_perf_now()
         pending = self._pending_tokens
         logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(pending))
-        if self._send_command(device, cmd, data, token):
+        if self._send_command(cmd, data, token):
             pending[token] = (cmd, perf_now)
             return token
         else:
@@ -701,10 +698,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     # noinspection PyMethodMayBeStatic
     def _send_command(self,
-                      device: Optional[DeviceConnectionProtocol],
                       cmd: SystemCommandKind,
                       data=None,
                       context=None) -> bool:
+        device = self._device_conn
         if device is not None:
             device.send_message(cmd, data, context)
             return True
