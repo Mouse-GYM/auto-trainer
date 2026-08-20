@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from functools import partial
 from multiprocessing import Process
+from multiprocessing.managers import ValueProxy
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedString
 from typing import Callable, Dict, Union, Optional, List, Tuple
@@ -166,7 +167,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
         attrs: CaptureAttrs,
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
-        main_watchdog_holder: Optional[Synchronized] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         logger.debug("project_info=%s", project_info)
         log_dict_config = make_log_dict_config()

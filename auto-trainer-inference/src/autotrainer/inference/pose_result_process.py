@@ -9,6 +9,7 @@ import threading
 import time
 from itertools import chain
 from multiprocessing import synchronize
+from multiprocessing.managers import ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, TextIO, Tuple, Callable, Dict
@@ -83,7 +84,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
         monitored_parts_offsets: List[Tuple[str, str]],
         watchdog_perf_c: Synchronized,
         tot_live_workers: int = 4,
-        main_watchdog_holder: Optional[Synchronized] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()

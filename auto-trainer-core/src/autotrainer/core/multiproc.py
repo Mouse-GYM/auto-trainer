@@ -6,7 +6,7 @@ import multiprocessing
 import signal
 import threading
 import time
-from multiprocessing.managers import SyncManager
+from multiprocessing.managers import SyncManager, ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from typing import Optional
 
@@ -67,7 +67,7 @@ except ValueError:
 
 class MixinMainWatchdogChecker:
 
-    main_watchdog_holder: Optional[Synchronized] = None
+    main_watchdog_holder: Optional[ValueProxy] = None
     main_watchdog_timeout: float = _main_watchdog_timeout
 
     def check_main_watchdog(self) -> bool:

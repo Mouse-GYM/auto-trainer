@@ -287,6 +287,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 frames_per_cam=live_queue.frames_per_camera,
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
                 watchdog_perf_c=self._data_monitor_watchdog_perf_c,
+                main_watchdog_holder=self._main_watchdog_holder,
             )
             data_monitor_proc.start()
 
