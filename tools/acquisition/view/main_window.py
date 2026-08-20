@@ -59,7 +59,6 @@ from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.app_model import AppModel, WatchdogItems
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.handle_3d_calibration import make_3d_calib
-from tools.acquisition.model.training_plan import get_plan_id
 from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.view.main_content import MainContent
 from tools.acquisition.view.preferences_dialog import PreferencesDialog
@@ -136,6 +135,10 @@ class MainWindow(QMainWindow):
         self._training_plan_index_by_plan_id: Dict[Optional[str], int] = {}
         self._diamond_triangle_calib_run = None
         self._warned_invalid_dcs_config = False
+
+        self._is_special_build_var = os.getenv("AUTOTRAINER_IS_SPECIAL_BUILD")
+        self._local_version_var = os.getenv("AUTOTRAINER_LOCAL_TAG", "NA")
+        self._latest_version_var = os.getenv("AUTOTRAINER_LATEST_TAG", "NA")
 
         self._previous_intertrial_analysis_rsp: Optional[Tuple[ProjectInfo, IntertrialResponse]] = None
 
@@ -661,6 +664,21 @@ class MainWindow(QMainWindow):
                     self._on_capture_start_stop(True, target_status=target_status)
             else:
                 logger.verbose("AppModelStatus not idle, not starting acquisition", app_status)
+        if self._is_special_build_var == "1":
+            self._show_msg_box(
+                "WARNING: App special build",
+                "You are using a custom build of the application. Application behavior may differ from expected.",
+                QMessageBox.Icon.Warning,
+            )
+        elif ("NA" not in (self._local_version_var, self._latest_version_var)
+            and self._local_version_var != self._latest_version_var
+        ):
+            self._show_msg_box(
+                "WARNING: App not up2date",
+                f"You are running version {self._local_version_var}. {self._latest_version_var} is available. "
+                f"Updating is recommended.",
+                QMessageBox.Icon.Warning,
+            )
 
     def on_calibrate_diamond_triangle(self, is_toggled, *, calib_duration: float=DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         self._timer_calibrate_diamond_triangle.cancel()
