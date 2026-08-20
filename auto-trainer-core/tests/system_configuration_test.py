@@ -494,3 +494,9 @@ def test_v55_renames_are_respected():
     assert isinstance(cfg, SystemConfiguration)
     assert cfg.behavior.animal_sleep_window == TimePeriod(
         start=datetime.time(17, 33, 55), stop=datetime.time(5, 42, 30))
+
+
+@pytest.mark.parametrize("delay", [-1, 0])
+def test_hardware_config_fail_with_zero_or_negative_cam_timeout(delay):
+    with pytest.raises(ValueError, match="camera_start_timeout negative or zero"):
+        HardwareConfiguration(camera_start_timeout=delay)
