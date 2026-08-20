@@ -63,8 +63,6 @@ class CaptureCommandKind(IntEnum):
     SET_CAM_PROPERTY = 100
     """Allow set any property on the camera instance"""
 
-    SET_MAIN_WATCHDOG = 110
-
 
 @dataclass
 class CaptureCameraAttrs:
@@ -168,6 +166,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
         attrs: CaptureAttrs,
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
+        main_watchdog_holder: Optional[Synchronized] = None,
     ):
         logger.debug("project_info=%s", project_info)
         log_dict_config = make_log_dict_config()
@@ -183,6 +182,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
         self._name = attrs.camera.name
         self._camera_url = attrs.camera.url
 
+        self.main_watchdog_holder = main_watchdog_holder
         self._project_info = project_info
         self._command_queue = attrs.command_queue
         self._command_thread: Optional[threading.Thread] = None
@@ -221,7 +221,6 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
             CaptureCommandKind.DISABLE_RECORDING: self._disable_record,
             CaptureCommandKind.SET_LOGGER_LEVEL: set_logger_level,
             CaptureCommandKind.SET_CAM_PROPERTY: self._set_cam_property,
-            CaptureCommandKind.SET_MAIN_WATCHDOG: self._set_main_watchdog_holder,
         }
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
@@ -312,7 +311,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
             vid_rec.start()
 
             det_attrs = self._attrs.presence_detection_attrs
-            if project is None or det_attrs is None:
+            if project is None or not project.is_valid() or det_attrs is None:
                 self._video_detection = None
             else:
                 vid_det = self._video_detection = VideoDetection(project, det_attrs)

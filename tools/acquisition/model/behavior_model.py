@@ -86,12 +86,8 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         #
         self._source_emergency: Optional[str] = None
         self._emergency_engaged_alarms: List[ApiAlarmKind] = []
-        self._main_watchdog_holder = None  # actually unused here
         #
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
-
-    def set_main_watchdog_holder(self, value):
-        self._main_watchdog_holder = value
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _alarm_monitor_property_changed(self, name, value, old_value):

@@ -83,6 +83,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
         monitored_parts_offsets: List[Tuple[str, str]],
         watchdog_perf_c: Synchronized,
         tot_live_workers: int = 4,
+        main_watchdog_holder: Optional[Synchronized] = None,
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
@@ -119,6 +120,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
         self._live_pose_workers: List[LivePoseResultProcessWorker] = []
         self._live_old_workers: List[LivePoseResultProcessWorker] = []
         self._live_generation_renew_age = LIVE_WORKERS_RENEW_TIMER_DELAY
+        self.main_watchdog_holder = main_watchdog_holder
 
     def on_close(self):
         live_q = self._live_input_q
@@ -203,8 +205,6 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
                 project, error = args
                 self._feed_intertrial_project = project
                 self._feed_intertrial_error = error
-            elif cmd is message.SET_MAIN_WATCHDOG:
-                self.main_watchdog_holder = args[0]
             else:
                 logger.warning("Unknown command: %s", cmd)
             self._cmd_ack_event.set()

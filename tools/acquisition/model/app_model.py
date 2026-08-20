@@ -16,17 +16,23 @@ import time
 import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
-from multiprocessing.managers import SyncManager
+from multiprocessing.managers import SyncManager, ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
 
 import pandas
 import yaml
+
+from autotrainer.api import (
+    RpcService,
+    ApiCommandRequest,
+    ApiCommandRequestResponse,
+    ApiCommandRequestResult,
+    ApiEventKind,
+    build_event,
+)
 from autotrainer.api.event import DayStartedContext
-
-from autotrainer.core.analysis.alarm_detector import AlarmDetector
-
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind, ApiEmergencyStopReason, \
@@ -54,12 +60,13 @@ from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisRe
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.multiproc import no_op_timer
+from autotrainer.core.multiproc import no_op_timer, make_multiproc_manager
 from autotrainer.core.logging import get_verbose_logger, set_log_location
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -79,15 +86,6 @@ from autotrainer.behavior import IntertrialState, BehaviorAlgorithm, TrainingMod
     IntertrialMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
-
-from autotrainer.api import (
-    RpcService,
-    ApiCommandRequest,
-    ApiCommandRequestResponse,
-    ApiCommandRequestResult,
-    ApiEventKind,
-    build_event,
-)
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.autotrainer_version import __version__ as app_version
@@ -259,7 +257,7 @@ class AppModel(ObservableObject):
         mp_ctx = get_mp_ctx()
         if mp_manager is None:
             self._owns_mp_mgr = True
-            mp_manager = mp_ctx.Manager()
+            mp_manager = make_multiproc_manager()
         else:
             self._owns_mp_mgr = False
         self._mp_manager: Optional[SyncManager] = mp_manager
@@ -284,7 +282,8 @@ class AppModel(ObservableObject):
         self._current_day: Optional[date] = None
         self._log_file_path: Optional[Path] = None
 
-        self._main_watchdog_holder: Optional[Synchronized] = None
+        self._main_watchdog_holder: Optional[ValueProxy] = mp_ctx.Value(ctypes.c_float, math.nan)
+        # NB: c_float ok, do not need to be very precise
 
         self.set_log_location()
 
@@ -333,25 +332,28 @@ class AppModel(ObservableObject):
             synced_cam_recording=self._cams_record_enabled,
             record_stop_sema=self._record_stop_sema,
             mp_ctx=mp_ctx,
+            main_watchdog_holder=self._main_watchdog_holder,
         )
 
         right.on_close()
         self._right_camera = VideoCaptureModel(
-            "right",
-            self._preferences,
-            1,
+            "right", self._preferences, 1,
             msg_queue=proc_msg_queue,
             cam_id=CameraId.Right,
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
             record_stop_sema=self._record_stop_sema,
+            main_watchdog_holder=self._main_watchdog_holder,
         )
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
-        self._top_camera = VideoCaptureModel("web", self._preferences, -1,
-                                             presence_detection=self._top_camera_presence_detection,
-                                             msg_queue=None,  # not interested to webcam status for now.
-                                             cam_id=CameraId.Web)
+        self._top_camera = VideoCaptureModel(
+            "web", self._preferences, -1,
+            presence_detection=self._top_camera_presence_detection,
+            msg_queue=None,  # not interested to webcam status for now.
+            cam_id=CameraId.Web,
+            main_watchdog_holder=self._main_watchdog_holder,
+        )
 
         self._cameras = [  # must respect camera_idx/inference_index order
             self._left_camera,
@@ -389,6 +391,7 @@ class AppModel(ObservableObject):
                 calib_dir=calib_dir,
                 mp_manager=self._mp_manager,
                 record_stop_sema=self._record_stop_sema,
+                main_watchdog_holder=self._main_watchdog_holder,
             )
         else:
             inference = inference_model
@@ -464,10 +467,22 @@ class AppModel(ObservableObject):
 
         one_minute_timer_handle_and_reschedule()
 
-    def set_main_watchdog_holder(self, value: Optional[Synchronized]):
-        self._main_watchdog_holder = value
-        for model in self._models:
-            model.set_main_watchdog_holder(value)
+
+    @property
+    def main_watchdog_perf_c(self) -> float:
+        holder = self._main_watchdog_holder
+        if holder is None:
+            return math.nan
+        return holder.value
+
+    def refresh_main_watchdog(self):
+        holder = self._main_watchdog_holder
+        if holder is not None:
+            holder.value = get_perf_now()
+
+    @property
+    def main_watchdog_holder(self) -> Optional[Synchronized]:
+        return self._main_watchdog_holder
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):

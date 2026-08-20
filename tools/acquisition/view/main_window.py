@@ -29,7 +29,12 @@ from autotrainer.core.animal.animal_subject import AnimalPelletCounts
 from autotrainer.core.capture import CaptureProcessStatus
 from autotrainer.core.configuration import DEFAULT_3D_CALIB_DIR_NAME
 from autotrainer.core.logging import get_console_handler, get_verbose_logger
-from autotrainer.core.multiproc import make_daemon_timer, no_op_timer, get_mp_ctx
+from autotrainer.core.multiproc import (
+    make_daemon_timer,
+    no_op_timer,
+    get_mp_ctx,
+    make_multiproc_manager,
+)
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.event.api_event_kind import ApiEventKind
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
@@ -134,9 +139,7 @@ class MainWindow(QMainWindow):
 
         self._previous_intertrial_analysis_rsp: Optional[Tuple[ProjectInfo, IntertrialResponse]] = None
 
-        mp_manager = get_mp_ctx().Manager()
-
-        app_model = self._app_model = AppModel(prefs, mp_manager=mp_manager)
+        app_model = self._app_model = AppModel(prefs)
 
         try:
             self.setContentsMargins(0, 0, 0, 0)
@@ -192,17 +195,11 @@ class MainWindow(QMainWindow):
         self._set_reset_cage_clean_text()
         self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
 
-        watchdog_holder = mp_manager.Value(ctypes.c_double, get_perf_now())
-        self._watchdog_perf_c_holder = watchdog_holder
-        app_model.set_main_watchdog_holder(watchdog_holder)
         watchdog_timer = self._watchdog_timer = QTimer(self)
-        watchdog_timer.timeout.connect(self._update_watchdog_perf_c)
+        watchdog_timer.timeout.connect(app_model.refresh_main_watchdog)
         watchdog_timer.start(1000)  # every 1s
         app_model.analysis.watchdog_monitor.register_watchdog(
-            WatchdogItems.MAIN_UI_THREAD, lambda: self._watchdog_perf_c_holder.value)
-
-    def _update_watchdog_perf_c(self):
-        self._watchdog_perf_c_holder.value = get_perf_now()
+            WatchdogItems.MAIN_UI_THREAD, lambda: app_model.main_watchdog_perf_c)
 
     @property
     def app_model(self) -> AppModel:

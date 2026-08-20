@@ -6,6 +6,7 @@ import threading
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue, synchronize
+from multiprocessing.managers import ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
@@ -41,7 +42,6 @@ class InferenceCommandMessageKind(IntEnum):
     ProcessOffline = 3  # used for immediate 1 session/trial offline trigger
     SetOfflineToLive = 4  # used either after end-of-recording, or at end of analysis, to switch back to live
     SetLoggerLevel = 20
-    SetMainWatchdog = 30
 
 
 class InferenceStatusMessageKind(IntEnum):
@@ -89,6 +89,7 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
         offline_input_event_cb_ack: synchronize.Event,
         watchdog_perf_c: Synchronized,
         record_stop_sema: Optional[SemaphoreType] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -120,6 +121,7 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
         self._record_stop_sema = record_stop_sema
         self._process_live_when_ready = False
         self._is_running = True
+        self.main_watchdog_holder = main_watchdog_holder
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
         #
@@ -233,8 +235,6 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
             elif cmd == InferenceCommandMessageKind.ProcessOffline:
                 logger.warning("unexpected cmd %s while wait for start", cmd)
                 # self._set_process_offline()
-            elif cmd == InferenceCommandMessageKind.SetMainWatchdog:
-                self.main_watchdog_holder = context
             else:
                 logger.warning("Unhandled command: %s", cmd)
 
@@ -262,8 +262,6 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
                 elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
                     prj, wait_stop_recorded = context
                     offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
-                elif cmd == InferenceCommandMessageKind.SetMainWatchdog:
-                    self.main_watchdog_holder = context
                 else:
                     logger.warning("Unhandled command: %s", cmd)
             except Exception as err:

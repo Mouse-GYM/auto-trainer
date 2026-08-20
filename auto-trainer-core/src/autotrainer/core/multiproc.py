@@ -1,10 +1,16 @@
+import math
 import os
+import sys
 import logging.config
 import multiprocessing
 import signal
 import threading
+import time
+from multiprocessing.managers import SyncManager
 from multiprocessing.sharedctypes import Synchronized
 from typing import Optional
+
+import psutil
 
 from autotrainer.core import get_perf_now
 
@@ -69,9 +75,74 @@ class MixinMainWatchdogChecker:
         holder = self.main_watchdog_holder
         if holder is None:
             return True
+        try:
+            main_watch_perf_c = holder.value
+        except (ValueError, OSError, EOFError, IOError):
+            return False  # consider as dead as well
+        if math.isnan(main_watch_perf_c):
+            return True
         p_now = get_perf_now()
-        return p_now - holder.value < self.main_watchdog_timeout
+        return p_now - main_watch_perf_c < self.main_watchdog_timeout
 
 
 no_op_timer = make_daemon_timer(0, lambda: None)
 no_op_timer.finished.set()
+
+
+def _get_child_pids(pid):
+    current_process = psutil.Process(pid=pid)
+    children = current_process.children(recursive=True)
+    return sorted(child.pid for child in children)
+
+
+def _monitor_pid(monitored_pid):
+    this_pid = os.getpid()
+    prev_child_pids = _get_child_pids(monitored_pid)
+    if False:
+        def log(s):
+            """disabled"""
+    else:
+        log = print
+    log(f"Started monitor pid {monitored_pid} ; parent pid = {os.getppid()} ; pid={this_pid} ; childs={prev_child_pids}")
+    while True:
+        try:
+            child_pids = _get_child_pids(monitored_pid)
+        except psutil.NoSuchProcess:
+            break
+        if child_pids != prev_child_pids:
+            log(f"detected child pids change: prev={prev_child_pids} new={child_pids}")
+        prev_child_pids = child_pids
+        time.sleep(1)
+    log(f"Monitored process pid={monitored_pid} died")
+    # ensure/give other child processes which are monitoring the _main_watchdog_timeout their timeout is reached:
+    time.sleep(_main_watchdog_timeout + 3)
+    for c_pid in prev_child_pids or []:
+        if c_pid != os.getpid():
+            log(f"killing pid={c_pid}")
+            try:
+                os.kill(c_pid, signal.SIGTERM)
+            except Exception:
+                pass
+    time.sleep(0.5)
+    for c_pid in prev_child_pids or []:
+        if c_pid != this_pid:
+            log(f"killing pid={c_pid}")
+            try:
+                os.kill(c_pid, signal.SIGKILL)
+            except Exception:
+                pass
+    log("exiting monitor pid")
+    os.kill(this_pid, signal.SIGTERM)
+    time.sleep(1)
+    os.kill(this_pid, signal.SIGKILL)  # harakiri
+
+
+def _init_monitor_pid(pid):
+    thread = threading.Thread(target=_monitor_pid, daemon=True, args=(pid,))
+    thread.start()
+
+
+def make_multiproc_manager():
+    m = SyncManager(ctx=get_mp_ctx())
+    m.start(initializer=_init_monitor_pid, initargs=(os.getpid(),))
+    return m

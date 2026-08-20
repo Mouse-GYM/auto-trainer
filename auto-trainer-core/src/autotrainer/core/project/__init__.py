@@ -1,4 +1,3 @@
-from multiprocessing.sharedctypes import Synchronized
 from typing import Protocol, Optional
 
 from .project_info import ProjectInfo
@@ -14,9 +13,6 @@ class ProjectDependentProtocol(Protocol):
     @project.setter
     def project(self, value: ProjectInfo):
         """Project-info setter"""
-
-    def set_main_watchdog_holder(self, value: Optional[Synchronized]):
-        """Set the main watchdog value holder"""
 
 
 ProjectDependentProtol = ProjectDependentProtocol  # previous typo alias
