@@ -441,7 +441,7 @@ def test_command_with_uuid_error(
         assert ack_err == expected_err
     else:
         assert ack_err is None
-    assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} error={uuid_ack_err_code}" in caplog.text
+    assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} error={uuid_ack_err_code} " in caplog.text
 
     # also ensure that board remains in error after:
     if fail_all_retries or max_command_repeat_count <= 1:
