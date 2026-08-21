@@ -384,6 +384,7 @@ def test_send_fixed_xyz_timedout(
 
 
 @pytest.mark.parametrize("fail_all_retries", [False, True])
+@pytest.mark.parametrize("max_command_repeat_count", [1, 3])
 def test_command_with_uuid_error(
     expected_tok,
     expected_tok_event,
@@ -394,13 +395,15 @@ def test_command_with_uuid_error(
     monkeypatch,
     caplog,
     fail_all_retries,
+    max_command_repeat_count,
 ):
+    device.default_max_failed_command_count = max_command_repeat_count
     api = device.api
     iface = device.device_interface
     uuid_ack_err_code = 133
 
     # patch move_servo_motor, which is used for the following command we send (OPEN_TUNNEL_GATE)
-    orig = iface.move_servo_motor
+    orig_move_servo_motor = iface.move_servo_motor
     def patched(
         motor: Motor, position
     ):
@@ -409,7 +412,7 @@ def test_command_with_uuid_error(
         iface._positions[motor] = position  # noqa
         iface._messages.append(Acknowledge(uuid=iface.next_uuid(), error=uuid_ack_err_code))  # noqa
         if not fail_all_retries:
-            iface.move_servo_motor = orig
+            iface.move_servo_motor = orig_move_servo_motor
         return True
     monkeypatch.setattr(iface, "move_servo_motor", mock.MagicMock(spec=iface.move_servo_motor, side_effect=patched))
 
@@ -433,8 +436,25 @@ def test_command_with_uuid_error(
         assert expected_tok_event.wait(3)
     assert ack_received is not None, "should have received the ack, even if possibly with error"
     ack_tok, ack_perf, ack_err = ack_received
-    if fail_all_retries:
-        assert ack_err == "Reached default_repeated_failed_command_count 3 on board <Target.PELLET_DEVICE: 0>"
+    expected_err = f"Reached default_repeated_failed_command_count {max_command_repeat_count} on board <Target.PELLET_DEVICE: 0>"
+    if fail_all_retries or max_command_repeat_count <= 1:
+        assert ack_err == expected_err
     else:
         assert ack_err is None
     assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} error={uuid_ack_err_code}" in caplog.text
+
+    # also ensure that board remains in error after:
+    if fail_all_retries or max_command_repeat_count <= 1:
+        ctx = uuid.uuid4()
+        expected_tok.value = ctx
+        iface.move_servo_motor = orig_move_servo_motor
+        expected_tok_event.clear()
+        ack_received = None
+        with caplog.at_level(logging.DEBUG):
+            device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
+            assert expected_tok_event.wait(3)
+        assert ack_received is not None, (
+            "should have received the ack, with error"
+        )
+        ack_tok, ack_perf, ack_err = ack_received
+        assert ack_err == expected_err  # still

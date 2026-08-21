@@ -265,7 +265,7 @@ class PelletMachine(StateMachine):
             self._api_status_token = None
             was_api_token = True
             if error is not None:
-                logger.error("command %s failed: %s", token, error)
+                logger.error("command %s failed: %s ; pausing algo", token, error)
                 self._algorithm.algo_paused = True
                 # todo: should probably have some dedicated handling ?
         else:
@@ -369,7 +369,8 @@ class PelletMachine(StateMachine):
                                   caller=caller, is_from_inference=is_from_inference)
 
     def _check_cover_or_release(self):
-        action = reason = None
+        action = None
+        reason = ""
         can_release = self.can_release_pellet()
         can_cover = self.can_cover_pellet()
         if can_release:
@@ -496,7 +497,7 @@ class PelletMachine(StateMachine):
                 action()
                 if self._state in {PelletState.covering, PelletState.releasing}:
                     self.state = cur_state
-                    # put back immediatelly cur_state after cover/release,
+                    # put back immediately cur_state after cover/release,
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

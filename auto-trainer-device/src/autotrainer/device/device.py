@@ -1,10 +1,15 @@
 import math
-from typing import Optional, Any
+from typing import Optional, Any, Protocol
 
 from autotrainer.api import ApiEventKind
 
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import EventManager, SystemStatusMessageKind, ObservableObject
+from autotrainer.core import (
+    EventManager,
+    SystemStatusMessageKind,
+    ObservableObject,
+    get_perf_now,
+)
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
@@ -16,11 +21,11 @@ logger = get_verbose_logger(__name__)
 class Device(ObservableObject):
     """Defines the required methods to represent a device."""
 
-    UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"
+    UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"  # when any of pellet or magnet uuid ack times out
     PELLET_UUID_ACK_TIMEOUT_ENGAGED = "pellet_uuid_ack_timeout_engaged"  # actually unused
     MAGNET_UUID_ACK_TIMEOUT_ENGAGED = "magnet_uuid_ack_timeout_engaged"  # actually unused
-    PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"
-    TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"
+    PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"  # all pellet board status messages
+    TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"  # all magnet board status messages
 
     def __init__(
         self,
@@ -68,10 +73,12 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token, *, perf_c: float=math.nan, error: Optional[Any] = None):
+    def _acknowledge_command(self, token, *, perf_c: Optional[float]=None, error: Optional[Any] = None):
         if token is None:  # if a caller has given a None token, it means it doesn't want to get the ack,
             # so makes that.
             return
+        if perf_c is None:
+            perf_c = get_perf_now()
         logger.verbose("sending command ack: %s perf_c=%.3f", token, perf_c)
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
