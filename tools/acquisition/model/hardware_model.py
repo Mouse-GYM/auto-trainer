@@ -44,8 +44,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SLIDE_DOOR_PROPERTY = "slide_door"
 
     DEVICE_ACK_TIMEOUT_ENGAGED = "device_ack_timeout_engaged"
-    DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"
-    DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"
+    DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"  # unused
+    DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"  # unused
 
     # POS_X = "pos_x"
     # POS_Y = "pos_y"
@@ -80,11 +80,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._event_manager = EventManager.default()
         self._board_status_timeout: Optional[float] = None
+        self._device_ack_timeout_engaged = False
+        self._device_command_nack_engaged = False
         self._device_ack_timeout_delay: Optional[float] = None
         self._device_conn: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
         self._sensor_analysis = sensor_analysis
-        self._device_uuid_ack_timeout_engaged = False
         self._device_pellet_status_timeout_engaged = False
         self._device_tunnel_status_timeout_engaged = False
         self._device_stream_started = False
@@ -117,7 +118,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._color_led: Optional[ColorLed] = None
 
-        self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
 
@@ -214,7 +214,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return cfg.motor_to_diamond(value)
 
     @property
-    def device_ack_timeout_engaged(self):
+    def device_command_nack_engaged(self) -> bool:
+        return self._device_command_nack_engaged
+
+    @device_command_nack_engaged.setter
+    def device_command_nack_engaged(self, value: bool):
+        self._device_command_nack_engaged = value
+
+    @property
+    def device_ack_timeout_engaged(self) -> bool:
         return self._device_ack_timeout_engaged
 
     @device_ack_timeout_engaged.setter
@@ -567,6 +575,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if name == props.UUID_ACK_TIMEOUT_ENGAGED:
             self.device_ack_timeout_engaged = value
             is_dev_comm_err_possible = True
+        elif name == props.COMMAND_NACK_ENGAGED:
+            self.device_command_nack_engaged = value
+            is_dev_comm_err_possible = True
         elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
             post_api_detector_event_content(
                 self._event_manager,
@@ -589,18 +600,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             is_dev_comm_err_possible = True
         #
         if is_dev_comm_err_possible:
-            engaged = any((
-                self._device_uuid_ack_timeout_engaged,
-                self._device_tunnel_status_timeout_engaged,
-                self._device_pellet_status_timeout_engaged,
-            ))
+            possible_sources_engaged = dict(
+                command_nack=self._device_command_nack_engaged,
+                ack_timeout=self._device_ack_timeout_engaged,
+                tunnel_status_timeout=self._device_tunnel_status_timeout_engaged,
+                pellet_status_timeout=self._device_pellet_status_timeout_engaged,
+            )
+            engaged = any(possible_sources_engaged.values())
             prev, self._sensor_analysis.device_comm_alarm.is_engaged = self._sensor_analysis.device_comm_alarm.is_engaged, engaged
             if engaged and prev != engaged:
-                logger.error("Device Comm Alarm engaged: uuid_ack_timeout=%s tunnel_status_timeout=%s pellet_status_timeout=%s",
-                             self._device_uuid_ack_timeout_engaged,
-                             self._device_tunnel_status_timeout_engaged,
-                             self._device_pellet_status_timeout_engaged,
-                             )
+                logger.error("Device Comm Alarm engaged: %s", possible_sources_engaged)
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         props = MessageHandler

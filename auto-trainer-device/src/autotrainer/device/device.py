@@ -26,6 +26,7 @@ class Device(ObservableObject):
     MAGNET_UUID_ACK_TIMEOUT_ENGAGED = "magnet_uuid_ack_timeout_engaged"  # actually unused
     PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"  # all pellet board status messages
     TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"  # all magnet board status messages
+    COMMAND_NACK_ENGAGED = "command_nack_engaged"  # when any command with uuid is NACKed
 
     def __init__(
         self,
