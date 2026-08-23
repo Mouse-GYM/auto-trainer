@@ -1596,8 +1596,9 @@ class AppModel(ObservableObject):
         logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
         self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
-        self.inference.load_configuration(configuration.inference)
-        self.behavior.load_configuration(configuration.behavior)
+        self._hardware.load_config(configuration.hardware)
+        self._inference.load_configuration(configuration.inference)
+        self._behavior.load_configuration(configuration.behavior)
 
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
@@ -1617,8 +1618,6 @@ class AppModel(ObservableObject):
         analysis.free_disk_space_detector.start()
         analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
-
-        self._hardware.load_config(configuration.hardware)
 
         self.configuration_loaded_event(configuration)
 
