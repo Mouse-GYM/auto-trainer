@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from enum import IntEnum
 from functools import partial
 from multiprocessing import Process
+from multiprocessing.managers import ValueProxy
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedString
-from typing import Callable, Dict, Union, Optional, List, Tuple
+from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 
 import numpy
 
@@ -25,6 +26,8 @@ from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video.video_detection import VideoDetection
 from autotrainer.core.capture import CaptureProcessStatus
 from .camera.camera_base import CameraBase
+
+from autotrainer.core.multiproc import MixinMainWatchdogChecker
 
 from .video_manager import VideoManager
 from .video_record import VideoRecord, VideoRecordProperties, VideoRecordMode
@@ -150,7 +153,7 @@ class CaptureAttrs:
     so that offline reader thread can know when it can open the files for offline processing"""
 
 
-class VideoCapture(Process):
+class VideoCapture(MixinMainWatchdogChecker, Process):
     """
     Process-based class for video capture and recording.
 
@@ -164,6 +167,7 @@ class VideoCapture(Process):
         attrs: CaptureAttrs,
         record_properties: Optional[VideoRecordProperties] = None,
         project_info: Optional[ProjectInfo] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         logger.debug("project_info=%s", project_info)
         log_dict_config = make_log_dict_config()
@@ -179,6 +183,7 @@ class VideoCapture(Process):
         self._name = attrs.camera.name
         self._camera_url = attrs.camera.url
 
+        self.main_watchdog_holder = main_watchdog_holder
         self._project_info = project_info
         self._command_queue = attrs.command_queue
         self._command_thread: Optional[threading.Thread] = None
@@ -220,6 +225,9 @@ class VideoCapture(Process):
         }
 
         self._set_status(CaptureProcessStatus.INITIALIZED)
+
+    def _set_main_watchdog_holder(self, value):
+        self.main_watchdog_holder = value
 
     def _set_cam_property(self, name: str, value):
         cam = self._camera
@@ -304,7 +312,7 @@ class VideoCapture(Process):
             vid_rec.start()
 
             det_attrs = self._attrs.presence_detection_attrs
-            if project is None or det_attrs is None:
+            if project is None or not project.is_valid() or det_attrs is None:
                 self._video_detection = None
             else:
                 vid_det = self._video_detection = VideoDetection(project, det_attrs)
@@ -330,6 +338,7 @@ class VideoCapture(Process):
 
     def _command_handler(self):
         while True:
+            p_now = get_perf_now()
             vid_rec = self._record
             if vid_rec is not None and not vid_rec.is_alive():
                 logger.warning("VideoRecord not alive, terminating")
@@ -341,6 +350,10 @@ class VideoCapture(Process):
                 logger.warning("Video Detection not alive, terminating")
                 self._user_terminate()
                 self._set_error("video_detection thread dead")
+                break
+            if not self.check_main_watchdog():
+                logger.error("Main watchdog timedout, setting exit flag")
+                self._is_running = False
                 break
             try:
                 raw = self._command_queue.get(timeout=1)
@@ -819,28 +832,43 @@ class VideoCapture(Process):
 
             if camera is not None:
                 camera.end_capture()
+                self._camera = None
 
             vid_rec = self._record
+            video_detection = self._video_detection
+            cmd_thread = self._command_thread
+
+            # request for stop first to all threads :
             if vid_rec is not None:
                 vid_rec.cancel()
-                logger.debug("joining record thread")
-                vid_rec.join()
-                self._record = None
-
-            video_detection = self._video_detection
+            if cmd_thread is not None:
+                if cmd_thread.is_alive():
+                    self._command_queue.put(None)
             if video_detection is not None:
                 video_detection.cancel()
+
+            p_end = get_perf_now() + 3
+            # then eventually join:
+            if vid_rec is not None:
+                logger.debug("joining record thread")
+                vid_rec.join(max(0, p_end - get_perf_now()))
+                if vid_rec.is_alive():
+                    logger.warning("video record thread still alive but continuing")
+                self._record = None
+
+            if video_detection is not None:
                 logger.debug("joining video-detection thread")
-                video_detection.join()
+                video_detection.join(max(0, p_end - get_perf_now()))
+                if video_detection.is_alive():
+                    logger.warning("video detection thread still alive but continuing")
                 self._video_detection = None
 
             logger.debug("joining command thread")
-            thread = self._command_thread
-            if thread is not None:
-                if thread.is_alive():
-                    self._command_queue.put(None)
-                thread.join()
-
+            if cmd_thread is not None:
+                cmd_thread.join(max(0, p_end - get_perf_now()))
+                if cmd_thread.is_alive():
+                    logger.warning("video command thread still alive but continuing")
+                self._command_thread = None
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             if error is None:  # keep orig error
@@ -855,7 +883,7 @@ class VideoCapture(Process):
                 self._set_status(CaptureProcessStatus.TERMINATED)
         logger.debug("exiting")
 
-    def _handle_command(self, cmd: CaptureCommandKind, context: object):
+    def _handle_command(self, cmd: CaptureCommandKind, context: Optional[Tuple[Tuple, Dict[str, Any]]]):
         logger.info("executing %s", cmd)
         handler = self._command_handlers.get(cmd)
         if handler is None:

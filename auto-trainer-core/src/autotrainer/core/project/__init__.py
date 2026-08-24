@@ -1,4 +1,4 @@
-from typing import Protocol
+from typing import Protocol, Optional
 
 from .project_info import ProjectInfo
 from .project_info import ProjectInterval

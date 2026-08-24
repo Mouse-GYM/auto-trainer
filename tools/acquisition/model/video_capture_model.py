@@ -6,6 +6,7 @@ import os
 import pathlib
 import time
 from multiprocessing.context import BaseContext
+from multiprocessing.managers import ValueProxy
 from multiprocessing.sharedctypes import (
     SynchronizedString,
     Synchronized,
@@ -82,6 +83,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         synced_cam_recording: Optional[Synchronized] = None,
         synced_cam_frame_index: Optional[Synchronized] = None,
         record_stop_sema: Optional[SemaphoreType] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         super().__init__()
 
@@ -100,6 +102,7 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._synced_cam_recording = synced_cam_recording
         self._synced_cam_frame_index = synced_cam_frame_index
         self._record_stop_sema = record_stop_sema
+        self._project = ProjectInfo.get_null_project()
 
         self._camera_source: CaptureCameraAttrs = CaptureCameraAttrs(name="", url="")
         self._camera_properties = {}
@@ -116,11 +119,12 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._video_image_queue: Optional[FixedArrayQueue] = None
         self._errors: SynchronizedString = mp_ctx.Array(ctypes.c_char, bytes(512))
         self._watchdog_capture_perf_c = mp_ctx.Value(ctypes.c_double, math.nan)
-        self._shape = None
+        self._main_watchdog_holder = main_watchdog_holder
 
         self._cur_conf: CameraConfiguration = CameraConfiguration()
         self._is_enabled = True
         self._is_primary = False
+        self._shape = None
 
         self._record_mode = VideoRecordMode.CONTINUOUS
         self._is_recording_enabled = False
@@ -136,12 +140,9 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         self._fps = 0  # NB: this is NOT the camera acquire FPS
 
         self._last_error = None
-
-        self._camera_list = create_camera_list()
-
         self._is_trace_enabled = True
 
-        self._project: Optional[ProjectInfo] = None
+        self._camera_list = create_camera_list()
 
         NotificationCenter.default_center().add_observer(TriggerNotification.CAPTURE_ID, self._on_trigger)
 
@@ -386,8 +387,11 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         # startup (notably macOS) can exceed the timeout and raise a false "element(s) timedout"
         # before capture has even begun.
         self._watchdog_capture_perf_c.value = math.nan
-        vid_capture = self._video_capture = VideoCapture(capture_attrs, record_properties,
-                                                         project_info=self._project)
+        vid_capture = self._video_capture = VideoCapture(
+            capture_attrs, record_properties,
+            project_info=self._project,
+            main_watchdog_holder=self._main_watchdog_holder,
+        )
         vid_capture.start()
 
         return True
