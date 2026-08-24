@@ -81,7 +81,7 @@ class Device(ObservableObject):
             return
         if perf_c is None:
             perf_c = get_perf_now()
-        logger.verbose("sending command ack: %s perf_c=%.3f", token, perf_c)
+        logger.verbose("sending command ack: %s err=%s perf_c=%.3f", token, error, perf_c)
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
         api = self._api
