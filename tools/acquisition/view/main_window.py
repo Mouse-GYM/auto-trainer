@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         self._set_reset_cage_clean_text()
         self._set_autoclamp_evasion(analysis.autoclamp_evasion_detector)
 
-        watchdog_timer = self._watchdog_timer = QTimer(self)
+        watchdog_timer = self._main_ui_watchdog_timer = QTimer(self)
         watchdog_timer.timeout.connect(app_model.refresh_main_watchdog)
         watchdog_timer.start(1000)  # every 1s
         app_model.analysis.watchdog_monitor.register_watchdog(
@@ -808,6 +808,7 @@ class MainWindow(QMainWindow):
 
     def close(self):
         logger.debug("received close")
+        self._main_ui_watchdog_timer.stop()  # ensure doesn't race
         with self._app_model.app_lock:
             event = self._close_event
             if self._closing:
