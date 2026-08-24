@@ -88,47 +88,74 @@ class MixinMainWatchdogChecker:
 no_op_timer = make_daemon_timer(0, lambda: None)
 no_op_timer.finished.set()
 
+#
 
-def _get_child_pids(pid):
-    current_process = psutil.Process(pid=pid)
-    children = current_process.children(recursive=True)
-    return sorted(child.pid for child in children)
+if False:
+    def log(s):
+        """disabled"""
+else:
+    log = print
+
+
+def _wait_children(children, timeout):
+    p_end = get_perf_now() + timeout
+    while True:
+        if get_perf_now() > p_end:
+            log("timeout waiting children processes exited")
+            break
+        for proc in list(children):
+            if not proc.is_running() or proc.status() == psutil.STATUS_ZOMBIE:
+                children.remove(proc)
+        if not children:
+            log("No more children processes, exiting")
+            break
+        time.sleep(0.1)
+
+
+def _filt_children(children, filt_pid):
+    return [proc for proc in children if proc.pid != filt_pid]
 
 
 def _monitor_pid(monitored_pid):
     this_pid = os.getpid()
-    prev_child_pids = _get_child_pids(monitored_pid)
-    if False:
-        def log(s):
-            """disabled"""
-    else:
-        log = print
-    log(f"Started monitor pid {monitored_pid} ; parent pid = {os.getppid()} ; pid={this_pid} ; childs={prev_child_pids}")
+    try:
+        monitored_proc = psutil.Process(pid=monitored_pid)
+        prev_children = _filt_children(monitored_proc.children(recursive=True), this_pid)
+    except psutil.NoSuchProcess:
+        # unusual/abnormal case, nothing we can do.
+        return
+    log(f"Started monitor pid {monitored_pid} ; parent pid = {os.getppid()} ; pid={this_pid} ; childs={prev_children}")
     while True:
         try:
-            child_pids = _get_child_pids(monitored_pid)
+            children = _filt_children(monitored_proc.children(recursive=True), this_pid)  # get children list before check status
         except psutil.NoSuchProcess:
             break
-        if child_pids != prev_child_pids:
-            log(f"detected child pids change: prev={prev_child_pids} new={child_pids}")
-        prev_child_pids = child_pids
+        if children != prev_children:
+            log(f"detected child pids change: prev={children} new={prev_children}")
+        if not monitored_proc.is_running() or monitored_proc.status() == psutil.STATUS_ZOMBIE:
+            break
+        prev_children = children  # and only assign after check status
+        # monitored_proc.wait(1)  not a big deal if delayed by up to 1s for the below steps
         time.sleep(1)
-    log(f"Monitored process pid={monitored_pid} died")
     # ensure/give other child processes which are monitoring the _main_watchdog_timeout their timeout is reached:
-    time.sleep(_main_watchdog_timeout + 3)
-    for c_pid in prev_child_pids or []:
-        if c_pid != os.getpid():
-            log(f"killing pid={c_pid}")
+    log(f"monitored proc: {monitored_proc} - children: {prev_children}")
+    # NB: give relatively more delay for waiting on children processes to exit,
+    # to better ensure they can exit gracefully.
+    _wait_children(prev_children, _main_watchdog_timeout + 5)
+    for proc in prev_children:
+        if proc.is_running():
+            log(f"Signaling (TERM) proc {proc}")
             try:
-                os.kill(c_pid, signal.SIGTERM)
+                proc.send_signal(signal.SIGTERM)
             except Exception:
                 pass
-    time.sleep(0.5)
-    for c_pid in prev_child_pids or []:
-        if c_pid != this_pid:
-            log(f"killing pid={c_pid}")
+    time.sleep(0.1)
+    _wait_children(prev_children, 1)
+    for proc in prev_children:
+        if proc.is_running():
+            log(f"Signaling (KILL) proc={proc}")
             try:
-                os.kill(c_pid, signal.SIGKILL)
+                proc.kill()
             except Exception:
                 pass
     log("exiting monitor pid")

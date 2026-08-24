@@ -14,7 +14,7 @@ from multiprocessing import Process
 from multiprocessing.managers import ValueProxy
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from multiprocessing.sharedctypes import Synchronized, SynchronizedArray, SynchronizedString
-from typing import Callable, Dict, Union, Optional, List, Tuple
+from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 
 import numpy
 
@@ -832,28 +832,43 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
 
             if camera is not None:
                 camera.end_capture()
+                self._camera = None
 
             vid_rec = self._record
+            video_detection = self._video_detection
+            cmd_thread = self._command_thread
+
+            # request for stop first to all threads :
             if vid_rec is not None:
                 vid_rec.cancel()
-                logger.debug("joining record thread")
-                vid_rec.join()
-                self._record = None
-
-            video_detection = self._video_detection
+            if cmd_thread is not None:
+                if cmd_thread.is_alive():
+                    self._command_queue.put(None)
             if video_detection is not None:
                 video_detection.cancel()
+
+            p_end = get_perf_now() + 3
+            # then eventually join:
+            if vid_rec is not None:
+                logger.debug("joining record thread")
+                vid_rec.join(max(0, p_end - get_perf_now()))
+                if vid_rec.is_alive():
+                    logger.warning("video record thread still alive but continuing")
+                self._record = None
+
+            if video_detection is not None:
                 logger.debug("joining video-detection thread")
-                video_detection.join()
+                video_detection.join(max(0, p_end - get_perf_now()))
+                if video_detection.is_alive():
+                    logger.warning("video detection thread still alive but continuing")
                 self._video_detection = None
 
             logger.debug("joining command thread")
-            thread = self._command_thread
-            if thread is not None:
-                if thread.is_alive():
-                    self._command_queue.put(None)
-                thread.join()
-
+            if cmd_thread is not None:
+                cmd_thread.join(max(0, p_end - get_perf_now()))
+                if cmd_thread.is_alive():
+                    logger.warning("video command thread still alive but continuing")
+                self._command_thread = None
         except Exception as err:
             logger.exception("%s: terminate capture loop error: %s", self, err)
             if error is None:  # keep orig error
@@ -868,7 +883,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
                 self._set_status(CaptureProcessStatus.TERMINATED)
         logger.debug("exiting")
 
-    def _handle_command(self, cmd: CaptureCommandKind, context: object):
+    def _handle_command(self, cmd: CaptureCommandKind, context: Optional[Tuple[Tuple, Dict[str, Any]]]):
         logger.info("executing %s", cmd)
         handler = self._command_handlers.get(cmd)
         if handler is None:
