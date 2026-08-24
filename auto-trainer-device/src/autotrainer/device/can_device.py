@@ -699,6 +699,7 @@ class CanDevice(Device):
                             err = (
                                 f"Reached default_repeated_failed_command_count {board_ctx.repeated_command_count} "
                                 f"on board {board_ctx.target!r}" )
+                            board_ctx.repeated_command_count = 0
                             self._handle_command_error(board_ctx, ctx, err, perf_c=msg_perf_c)
                             self.command_nack_engaged = True
                             continue
