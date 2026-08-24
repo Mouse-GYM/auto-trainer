@@ -286,6 +286,14 @@ class CanDevice(Device):
             cache.clear()
         self._prev_tunnel_gate_open_perf_c = (None, -math.inf)
 
+    def _handle_delay(self, duration: float):
+        success = self._interface.delay(duration)
+        if success:
+            duration += 1
+            logger.debug("setting command timeout to requested duration + 1: (%s)", duration)
+            self._prev_command_timeout = duration
+        return success
+
     def _init_handlers(self):
 
         def handle_servo_move(motor: Motor, position):
@@ -416,7 +424,7 @@ class CanDevice(Device):
             # digital only allow 2 "position"
             # SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
 
-            SystemCommandKind.DELAY: self._interface.delay,
+            SystemCommandKind.DELAY: self._handle_delay,
 
             SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
@@ -1426,8 +1434,7 @@ class CanDevice(Device):
 
         elif 'delay' in step:
             motor = Motor.DELAY
-            duration = step['delay']
-            success = self._interface.delay(duration)
+            success = self._handle_delay(step['delay'])
 
         elif 'tone' in step:
             motor = Motor.TONE

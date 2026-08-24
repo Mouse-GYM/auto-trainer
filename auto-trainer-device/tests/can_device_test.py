@@ -11,7 +11,7 @@ from typing import Union
 from unittest import mock
 
 import pytest
-from autotrainer.core import RawValueHolder
+from autotrainer.core import RawValueHolder, get_perf_now
 
 from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
 from autotrainer.device import (
@@ -28,13 +28,14 @@ from autotrainer.device import (
     ServoConfig,
     StepperConfig,
     MotorSteps,
-    DeviceConnection,
+    DeviceConnection, emulation_interface,
 )
 from autotrainer.device.can_device import (
     default_move_retract,
     default_load_pellet,
     default_send_pellet,
 )
+from autotrainer.device.device_interface import Acknowledge
 
 
 @pytest.fixture(autouse=True)
@@ -377,3 +378,41 @@ def test_send_fixed_xyz_timedout(
         "finished executing SystemCommandKind.SEND_FIXED_XYZ",
     ]
     assert_lines_in_logs(expected_ordered_lines, caplog)
+
+
+@pytest.mark.parametrize("delay", [0.5, 3])
+def test_delay_doesnt_ack_timeout(
+    expected_tok,
+    expected_tok_event,
+    tokens_acked,
+    device,
+    device_conn,
+    dev_ack_timeout_ctx,
+    monkeypatch,
+    caplog,
+    delay,
+):
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    iface = device.device_interface
+    orig_delay = iface.delay
+    # NB: ensure the board delay func is executed asyncly :
+    def patched_delay(duration):
+        new_uuid = iface.next_uuid()  # but ensure generate uuid sync
+        def new_delay(dur):
+            time.sleep(dur)
+            iface._messages.append(Acknowledge(uuid=new_uuid))  # noqa
+        thread = threading.Thread(target=new_delay, daemon=True, args=(duration,))
+        thread.start()
+        return True  # write CAN bus ok.
+    monkeypatch.setattr(iface, iface.delay.__name__, mock.MagicMock(side_effect=patched_delay))
+    # even with default_command_ack_timeout_duration smaller, the command won't ack timeout :
+    device.default_command_ack_timeout_duration = delay / 3
+    t_before = get_perf_now()
+    expected_tok_event.clear()
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.DELAY, delay, context=ctx)
+        assert expected_tok_event.wait(delay + 1.5)  # need at least delay + smth here !
+    t_after = get_perf_now()
+    assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
+    assert t_after - t_before >= delay

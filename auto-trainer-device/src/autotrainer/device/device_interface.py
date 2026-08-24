@@ -632,3 +632,6 @@ class DeviceInterface:
     @tunnel_status_perf_c.setter
     def tunnel_status_perf_c(self, value):
         self._tunnel_status_perf_c = value
+
+    def delay(self, delay_sec: float) -> bool:
+        """Request a "sleep" delay to the pellet board"""
