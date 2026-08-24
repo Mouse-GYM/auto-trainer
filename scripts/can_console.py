@@ -4,6 +4,7 @@ import logging
 import queue
 import sys
 import time
+import uuid
 from threading import Thread
 from copy import copy
 from enum import IntEnum
@@ -620,7 +621,7 @@ def handle_motor_command(motor: Motor, params, device_connection):
     elif params[0] == 'config':
         if params[1] == 'read':
             device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor,
-                                           context="motor read")
+                                           context=f"motor_read_{uuid.uuid4()}")
         elif params[1] == 'write':
             write_config(motor, device_connection)
         else:
