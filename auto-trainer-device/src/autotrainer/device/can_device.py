@@ -701,17 +701,18 @@ class CanDevice(Device):
                         ):
                             err = (
                                 f"Reached default_repeated_failed_command_count {board_ctx.repeated_command_count} "
-                                f"on board {board_ctx.target!r}" )
-                            board_ctx.repeated_command_count = 0
+                                f"on board {board_ctx.target!r}")
                             self._handle_command_error(board_ctx, ctx, err, perf_c=msg_perf_c)
                             self.command_nack_engaged = True
                             continue
                         prev_cmd = board_ctx.prev_command
+                        logger.debug("prev_cmd=%s", prev_cmd)
                         if prev_cmd is not None:
                             cur_commands.insert(0, prev_cmd)  # can be either _retry_compound or _retry_full
-                    # board_ctx.uuid = None
-                    # board_ctx.prev_command = None
-                    board_ctx.clear()
+                    board_ctx.ctx = None
+                    board_ctx.uuid = None
+                    board_ctx.prev_command = None
+                    # nb: don't use board_ctx.clear(), which also resets the command_repeated_count here
                     if board_ctx.skip_uuid_ack_perf_c:
                         board_ctx.skip_uuid_ack_perf_c = False
                     else:  # if board_ctx.ctx is not None and board_ctx.kind is not None:
