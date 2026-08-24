@@ -684,7 +684,7 @@ class CanDevice(Device):
                 if board_ctx is not None:
                     assert found_board_with_uuid_ack is board_ctx
                     ctx = board_ctx.ctx
-                    logger.debug("board=%s ctx=%s kind=%s error=%s uuid_ack_perf_c=%.3f",
+                    logger.debug("board=%s ctx=%s kind=%s can_error=%s uuid_ack_perf_c=%.3f",
                                  board_ctx.target, ctx, board_ctx.kind, msg_err, msg_perf_c)
                     if msg_err == 0:
                         cur_commands.insert(0, (_uuid_ack, data, ctx, -math.inf))

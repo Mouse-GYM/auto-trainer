@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from functools import partial
-from typing import Union
+from typing import Union, Any, Optional
 from unittest import mock
 
 import pytest
@@ -417,7 +417,7 @@ def test_command_with_uuid_error(
     monkeypatch.setattr(iface, "move_servo_motor", mock.MagicMock(spec=iface.move_servo_motor, side_effect=patched))
 
     orig_api_cb = api.message_callback
-    ack_received = None
+    ack_received: Optional[Any] = None
     def recv_cb(kind, data):
         nonlocal ack_received
         if kind == SystemStatusMessageKind.ACKNOWLEDGE:
@@ -441,20 +441,18 @@ def test_command_with_uuid_error(
         assert ack_err == expected_err
     else:
         assert ack_err is None
-    assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} error={uuid_ack_err_code} " in caplog.text
+    assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} can_error={uuid_ack_err_code} " in caplog.text
 
-    # also ensure that board remains in error after:
-    if fail_all_retries or max_command_repeat_count <= 1:
-        ctx = uuid.uuid4()
-        expected_tok.value = ctx
-        iface.move_servo_motor = orig_move_servo_motor
-        expected_tok_event.clear()
-        ack_received = None
-        with caplog.at_level(logging.DEBUG):
-            device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
-            assert expected_tok_event.wait(3)
-        assert ack_received is not None, (
-            "should have received the ack, with error"
-        )
-        ack_tok, ack_perf, ack_err = ack_received
-        assert ack_err == expected_err  # still
+    # also ensure that board may remain in error after:
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    iface.move_servo_motor = orig_move_servo_motor
+    expected_tok_event.clear()
+    ack_received = None
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
+        assert expected_tok_event.wait(3)
+    assert ack_received is not None, "should have received the ack, with or without error"
+    ack_tok, ack_perf, ack_err = ack_received
+    assert ack_err == (expected_err if fail_all_retries or max_command_repeat_count <= 1 else None)
+    # depending on settings: previous error is reset or kept active
