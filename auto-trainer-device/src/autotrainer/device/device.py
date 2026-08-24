@@ -40,6 +40,7 @@ class Device(ObservableObject):
         self._interface = dev_interface
         self._tunnel_status_timeout_engaged = False
         self._pellet_status_timeout_engaged = False
+        self._command_nack_engaged = False
 
     @property
     def connected(self) -> bool:
@@ -120,3 +121,12 @@ class Device(ObservableObject):
         if prev != value:
             (logger.notice if prev else logger.error)("pellet_status_timeout=%s", value)
         self._on_property_changed(self.PELLET_STATUS_TIMEOUT_ENGAGED, value, prev)
+
+    @property
+    def command_nack_engaged(self) -> bool:
+        return self._command_nack_engaged
+
+    @command_nack_engaged.setter
+    def command_nack_engaged(self, value):
+        prev, self._command_nack_engaged = self._command_nack_engaged, value
+        self._on_property_changed(self.COMMAND_NACK_ENGAGED, value, prev)

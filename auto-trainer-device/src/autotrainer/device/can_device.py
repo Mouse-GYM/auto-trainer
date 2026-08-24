@@ -700,6 +700,7 @@ class CanDevice(Device):
                                 f"Reached default_repeated_failed_command_count {board_ctx.repeated_command_count} "
                                 f"on board {board_ctx.target!r}" )
                             self._handle_command_error(board_ctx, ctx, err, perf_c=msg_perf_c)
+                            self.command_nack_engaged = True
                             continue
                         prev_cmd = board_ctx.prev_command
                         if prev_cmd is not None:
@@ -1019,9 +1020,9 @@ class CanDevice(Device):
         self._init_default_move_configs()
 
         logger.info("Starting CanCommandHandler thread handler")
+        self.command_nack_engaged = False  # reset
         self._commands_handler_watchdog_perf_c = get_perf_now()
-        thread = threading.Thread(
-            target=self._command_handler, name="CanCommandHandler", daemon=True)
+        thread = threading.Thread(target=self._command_handler, name="CanCommandHandler", daemon=True)
         thread.start()
         self._commands_handler_thread = thread  # only assign after start
         thread = self._tunnel_pellet_status_check_thread
