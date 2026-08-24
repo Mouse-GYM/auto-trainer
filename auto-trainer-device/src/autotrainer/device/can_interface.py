@@ -443,7 +443,8 @@ class CanInterface(DeviceInterface):
             Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
 
         def handle_ack(msg):
-            logger.verbose("Received ack message: uuid=%s error=%s", msg.uuid, msg.ack.error)
+            logger.verbose("Received ack message: dst_id=%s uuid=%s error=%s",
+                           msg.dst_id, msg.uuid, msg.ack.error)
             return Acknowledge(uuid=msg.uuid, error=msg.ack.error)
 
         # Simple handlers implemented as lambdas

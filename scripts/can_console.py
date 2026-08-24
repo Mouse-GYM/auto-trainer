@@ -78,9 +78,8 @@ def monitor_message_queue(msg_queue):
                 next_perf_log += 600
 
         try:
-            kind, data = msg_queue.get_nowait()
+            kind, data = msg_queue.get(timeout=0.1)
         except queue.Empty:
-            time.sleep(0.001)
             continue
 
         kinds.add(kind)
@@ -351,6 +350,7 @@ def run_monitor():
     mon_thread.start()
 
     can_dev = CanDevice()
+    can_dev.default_max_failed_command_count = 3
     device_connection = DeviceConnection(can_dev, msg_queue)
 
     device_connection.request_connect()
@@ -481,6 +481,7 @@ def run_monitor():
 
                 elif cmd == 't' or cmd == 'tare':
                     device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE, context="tare")
+                    get_input = True  # force
 
                 elif cmd == 'v' or cmd == 'version':
                     device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
@@ -496,6 +497,21 @@ def run_monitor():
 
                 elif cmd == 'close_gate':
                     device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE, context="close_gate")
+
+                elif cmd == 'board_clear':
+                    if len(params) != 1:
+                        logger.warning("expected 1 board target name (magnet or pellet)")
+                        continue
+                    if params[0] == "magnet":
+                        tgt = Target.MAGNET_DEVICE
+                    elif params[0] == "pellet":
+                        tgt = Target.PELLET_DEVICE
+                    else:
+                        logger.error("unknown target board: %s", params[0])
+                        continue
+                    device_connection.device._boards_pending_ctx[tgt].active_error = None
+                    device_connection.device._boards_pending_ctx[tgt].clear()  # noqa
+                    get_input = True
 
                 elif cmd == 'board_reboot':
                     if len(params) != 1:
@@ -620,8 +636,9 @@ def handle_motor_command(motor: Motor, params, device_connection):
     # read or write configuration
     elif params[0] == 'config':
         if params[1] == 'read':
+            logger.verbose("sending command READ_MOTOR_CONFIGURATION to %s", motor)
             device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor,
-                                           context=f"motor_read_{uuid.uuid4()}")
+                                           context=f"motor_read_{motor}_{uuid.uuid4()}")
         elif params[1] == 'write':
             write_config(motor, device_connection)
         else:
@@ -754,6 +771,8 @@ def print_help():
           " ::Set tunnel fan OFF")
     print("board_reboot <board>               "
           " ::Reboot the given board, either magnet or pellet")
+    print("board_clear <board>                "
+          " ::clear the internal board context. to allow new commands")
     print("v[ersion]                          "
           " ::Version")
     print("logger [<name>] <level>            "

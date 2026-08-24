@@ -14,6 +14,7 @@ import os
 import queue
 import threading
 import time
+import uuid
 from functools import partial
 from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
 
@@ -676,6 +677,8 @@ class CanDevice(Device):
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = raw
+            if ctx is None:
+                ctx = uuid.uuid4()  # auto-generate
             raw = kind, data, ctx, p_now
             found_board_with_uuid_ack = None
             if kind is _uuid_ack:
@@ -706,8 +709,9 @@ class CanDevice(Device):
                         prev_cmd = board_ctx.prev_command
                         if prev_cmd is not None:
                             cur_commands.insert(0, prev_cmd)  # can be either _retry_compound or _retry_full
-                    board_ctx.uuid = None
-                    board_ctx.prev_command = None
+                    # board_ctx.uuid = None
+                    # board_ctx.prev_command = None
+                    board_ctx.clear()
                     if board_ctx.skip_uuid_ack_perf_c:
                         board_ctx.skip_uuid_ack_perf_c = False
                     else:  # if board_ctx.ctx is not None and board_ctx.kind is not None:
@@ -838,6 +842,7 @@ class CanDevice(Device):
             if target_board.active_error is not None:
                 # if board had already error, refuse/error the new command,
                 # with that same error:
+                logger.error("kind=%s: target board already error: %s", kind, target_board.target)
                 self._handle_command_error(target_board, ctx, target_board.active_error)
                 # todo: allow user to clear board ack error,
                 #  to allow reconfigure of boards/motors, for instance after board power reset
