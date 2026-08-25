@@ -20,6 +20,15 @@ class HardwareConfiguration:
     If not set here then default code value of 15s is used.
     """
 
+    camera_start_timeout: float = 5
+    """Delay to wait, in seconds, for a camera to be confirmed running once it is started.
+    If it isn't confirmed within that delay: an error will be set/raised by the correspond code.
+    """
+
+    def __post_init__(self):
+        if self.camera_start_timeout <= 0:
+            raise ValueError(f"camera_start_timeout negative or zero: {self.camera_start_timeout}")
+
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
         configuration = cls()

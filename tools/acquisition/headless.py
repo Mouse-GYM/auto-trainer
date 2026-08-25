@@ -4,6 +4,10 @@ import time
 import sys
 import faulthandler
 from multiprocessing import set_start_method
+
+from autotrainer.core import get_perf_now
+
+
 # NB: do not put any imports of autotrainer* or any module not part from standard python lib.
 
 
@@ -54,6 +58,7 @@ def _exec_main(args):
     exit_rc = 1
     try:
         while True:
+            app_model.refresh_main_watchdog()
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Interrupted, exiting..")

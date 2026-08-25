@@ -78,6 +78,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._lock = threading.RLock()  # **required** re-entrant lock !!
         self._connect_count = 0
 
+        self._active_config = HardwareConfiguration()
+
         self._event_manager = EventManager.default()
         self._board_status_timeout: Optional[float] = None
         self._device_ack_timeout_delay: Optional[float] = None
@@ -446,7 +448,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """0 -> 100"""
         return self._send_with_token(self._device_conn, SystemCommandKind.SET_RGB_LED, (r, g, b))
 
+    @property
+    def config(self) -> HardwareConfiguration:
+        return self._active_config
+
     def load_config(self, config: HardwareConfiguration):
+        self._active_config = config
         self.set_device_ack_timeout(config.min_ack_timeout)
         self.set_board_status_timeout(config.board_status_timeout)
 
