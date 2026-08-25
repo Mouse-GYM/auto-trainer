@@ -20,8 +20,6 @@ import verboselogs
 import coloredlogs
 from datetime import datetime
 
-from autotrainer.core.multiproc import get_mp_ctx
-
 logger = logging.getLogger(__name__)
 
 _LogLevelT = Union[str, int]
@@ -142,6 +140,8 @@ class LogQueueListenerProc(Process):
     ):
         super().__init__(daemon=True)
         self._queue = log_queue
+        # delayed import on purpose
+        from autotrainer.core.multiproc import get_mp_ctx
         mp_ctx = get_mp_ctx()
         self._command_queue = mp_ctx.Queue()
         self._command_executed = mp_ctx.Event()
