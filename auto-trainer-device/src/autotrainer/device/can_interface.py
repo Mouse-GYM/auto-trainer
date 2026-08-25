@@ -1589,17 +1589,18 @@ class CanInterface(DeviceInterface):
                      addr, gpio_id, state, res, uuid)
         return res == 0
 
-    def emit_tone(self, frequency: int, duration_ms: int) -> bool:
+    def emit_tone(self, frequency: int, duration: float) -> bool:
         """
         Emit a tone for the animal to hear
 
         Args:
             frequency: Frequency of tone (Hz)
-            duration_ms: Duration of tone (milliseconds)
+            duration: Duration of tone (seconds)
 
         Returns:
             bool: True if successful else False
         """
+        duration_ms = int(duration * 1000)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         uuid = CanInterface.next_uuid()
         res = self._jc.ToneWrite(addr, 0, frequency, duration_ms, uuid)

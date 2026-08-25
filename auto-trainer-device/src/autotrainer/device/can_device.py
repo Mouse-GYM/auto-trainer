@@ -1359,7 +1359,6 @@ class CanDevice(Device):
         Issue the next step in a multi-step motor sequence.
         """
         step = compound_movements[0]
-        orig_step = step.copy()
         step_type = step.get("type")
         step_val = step.get("value")
         step_clean = {step_type: step_val}
@@ -1423,11 +1422,13 @@ class CanDevice(Device):
         elif step_type == '_servo_max_pos':
             motor: Motor = step_val  # noqa
             cfg = self._motor_configs[motor]
+            assert isinstance(cfg, ServoConfig)
             success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
         elif step_type == '_servo_min_pos':
             motor: Motor = step_val  # noqa
             cfg = self._motor_configs[motor]
+            assert isinstance(cfg, ServoConfig)
             success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
         elif step_type == 'delay':
@@ -1437,7 +1438,7 @@ class CanDevice(Device):
         elif step_type == 'tone':
             motor = Motor.TONE
             freq, duration = step_val  # noqa
-            success = self._interface.emit_tone(freq, int(duration * 1000))
+            success = self._interface.emit_tone(freq, duration)
             if success:
                 board.skip_uuid_ack_perf_c = True
 
@@ -1468,11 +1469,11 @@ class CanDevice(Device):
             elif predefined == 'home':
                 # replace by home steps (not predefined->home), 1 for each XYZ :
                 motor = Motor.PELLET_Y_MOTOR
-                step = {'home': motor}  # for possible retry on ack timeout
+                step = mk_step('home', motor)  # for possible retry on ack timeout
                 compound_movements[0] = step
                 # inject at index 1 the steps:
                 compound_movements[1:1] = [
-                    {'home': m}
+                    mk_step('home', m)
                     for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
                 ]
                 logger.debug("initiated home steps: %s", compound_movements)
@@ -1495,7 +1496,7 @@ class CanDevice(Device):
             success = self._interface.stepper_home(motor)
 
         elif step_type == '_internal_func':
-            func = step_val  # step['_internal_func']
+            func = step_val
             motor: Motor = step['_internal_func_motor']  # noqa
             success = func()  # noqa
 
@@ -1505,14 +1506,17 @@ class CanDevice(Device):
         # actually now unused:
         elif step_type == 'x_rel':
             motor = Motor.PELLET_X_MOTOR
+            step_val: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_x(step_val, relative=True)
 
         elif step_type == 'y_rel':
             motor = Motor.PELLET_Y_MOTOR
+            step_val: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_y(step_val, relative=True)
 
         elif step_type == 'z_rel':
             motor = Motor.PELLET_Z_MOTOR
+            step_val: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_z(step_val, relative=True)
 
         else:

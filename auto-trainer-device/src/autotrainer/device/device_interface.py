@@ -513,6 +513,10 @@ class DeviceInterface:
         """stepper_home == send-to-limit"""
         raise NotImplementedError
 
+    def emit_tone(self, frequency: int, duration: float) -> bool:
+        """freq as Hz, duration in seconds"""
+        raise NotImplementedError
+
     def move_motor_x(
         self,
         position: Union[float, Tuple[float, float]],
