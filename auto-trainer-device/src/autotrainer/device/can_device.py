@@ -1031,7 +1031,7 @@ class CanDevice(Device):
         elif tp == 'home':
             motor = val
         elif tp == '_internal_func':
-            motor = val  # step['_internal_func_motor']
+            motor = step['_internal_func_motor']
         elif tp == 'predefined':
             predef = val
             if predef in {'send', 'cover', 'release', 'retrieve', 'home', 'scoop'}:
