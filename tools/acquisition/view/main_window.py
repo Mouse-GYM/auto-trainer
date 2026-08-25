@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self._update_log_level(prefs.log_level)
         self._title = _make_window_title(prefs)
         self._closing = False
+        self._closed = False
         self._close_event = None
         self._start_capture_thread: Optional[threading.Thread] = None
 
@@ -242,7 +243,12 @@ class MainWindow(QMainWindow):
             run_action.setText("Start")
             run_action.setIcon(icon)
 
-    def _on_capture_start_stop(self, is_toggled, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
+    def _on_capture_start_stop(
+        self,
+        is_toggled, *,
+        target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+        after_callback=lambda: None,
+    ):
         app_model = self._app_model
         if is_toggled and self._closing:
             logger.warning("skipping capture_start_stop: %s", is_toggled)
@@ -276,6 +282,7 @@ class MainWindow(QMainWindow):
                     self.animal_in_device_action.setEnabled(True)
                     self.animal_in_training_action.setEnabled(True)
                     self._app_model_status_combo.setEnabled(True)
+                    after_callback()
                 InvokeMethod(after_exec_start)
             thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
@@ -284,20 +291,28 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Stopping acquisition...")
             prev_start = self._start_capture_thread
             app_model.analysis.stop()
-            if prev_start is not None:
-                if prev_start.is_alive():
-                    logger.verbose("joining previous start thread")
-                    prev_start.join()
-                    logger.success("previous start thread joined")
-                self._start_capture_thread = None
-            logger.info("stopping acquisition")
-            app_model.capture_stop()
-            self.running_status_changed.emit(False)
-            self.run_action.setEnabled(True)
-            self.animal_in_device_action.setEnabled(True)
-            self.animal_in_training_action.setEnabled(True)
-            self._app_model_status_combo.setEnabled(True)
-            self._status_label.setText("")
+            def exec_stop():
+                if prev_start is not None:
+                    if prev_start.is_alive():
+                        logger.verbose("joining previous start thread")
+                        prev_start.join()
+                        logger.success("previous start thread joined")
+                    self._start_capture_thread = None
+                logger.info("stopping acquisition")
+                app_model.capture_stop()
+                InvokeMethod(after_exec_stop)
+
+            def after_exec_stop():
+                self.running_status_changed.emit(False)
+                self.run_action.setEnabled(True)
+                self.animal_in_device_action.setEnabled(True)
+                self.animal_in_training_action.setEnabled(True)
+                self._app_model_status_combo.setEnabled(True)
+                self._status_label.setText("")
+                after_callback()
+
+            thread = threading.Thread(target=exec_stop, daemon=True)
+            thread.start()
 
     def _on_system_mode_combo_changed(self, idx: int):
         status = self._app_model_status_combo.itemData(idx)
@@ -794,7 +809,7 @@ class MainWindow(QMainWindow):
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
     def close(self):
-        logger.debug("received close")
+        logger.notice("received close ; event=%s", self._close_event)
         self._main_ui_watchdog_timer.stop()  # ensure doesn't race
         with self._app_model.app_lock:
             event = self._close_event
@@ -806,12 +821,16 @@ class MainWindow(QMainWindow):
                     logger.warning("already closing")
                 return
             self._closing = True
+        self._on_capture_start_stop(False, after_callback=self._on_closed_finished)
+
+    def _on_closed_finished(self):
+        if self._closed:
+            return
+        logger.info("finishing close ..")
         app_model = self._app_model
         app_model.property_changed -= self._on_app_model_property_changed
-        self._on_capture_start_stop(False)
         self._timer_calibrate_diamond_triangle.cancel()
-        logger.info("finishing close ..")
-        self._app_model.on_close()
+        app_model.on_close()
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
@@ -819,18 +838,22 @@ class MainWindow(QMainWindow):
             dialog.close()
         close_event = self._close_event
         logger.debug("closing super close")
+        self._closed = True
         super().close()
         if close_event is not None:
-            logger.verbose("accepting close event")
-            close_event.accept()
+            # logger.verbose("accepting close event")
+            # close_event.accept()
             self._close_event = None
 
     def closeEvent(self, event):
         close_event = self._close_event
+        if self._closed:
+            return
         logger.debug("received closeEvent: %s, prev=%s", event, close_event)
         if close_event is None:
             self._close_event = event
             self.close()
+            event.ignore()
         else:
             event.accept()
             super().closeEvent(event)
