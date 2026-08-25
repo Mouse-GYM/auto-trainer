@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, Any, Callable
 
 import yaml
+from typing_extensions import Self
 
 from autotrainer.core.logging import get_verbose_logger
 
@@ -63,8 +64,8 @@ class CompoundMovements(CompoundMovementDataSet):
         }
 
     @classmethod
-    def from_file(cls, filename):
-        """
+    def from_file(cls, filename) -> Self:
+        """`
         Import sequences from a file.
 
         Args:

@@ -67,6 +67,7 @@ from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
+from autotrainer.device import CompoundMovements
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -1627,6 +1628,12 @@ class AppModel(ObservableObject):
 
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
+
+        # ensure move config file is valid
+        default_move_cfg_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
+        if default_move_cfg_file.exists():
+            move_cfg = CompoundMovements.from_file(default_move_cfg_file)
+            del move_cfg  # atm only used to check can load.
 
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
