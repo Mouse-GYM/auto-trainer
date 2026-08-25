@@ -1288,6 +1288,7 @@ class AppModel(ObservableObject):
         synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
         did_start = True
 
+        cam_start_timeout = self._hardware.config.camera_start_timeout
         # 1) prepare synced primary camera(s)
         if did_start:
             for camera in synced_cameras:
@@ -1300,7 +1301,8 @@ class AppModel(ObservableObject):
                         break
                     # 1.1) wait it's running or failed
                     if (
-                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                           timeout=cam_start_timeout)
                     ) or camera.video_status != CaptureProcessStatus.RUNNING:
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
@@ -1318,10 +1320,10 @@ class AppModel(ObservableObject):
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
 
-        # 3) wait all synced cameras are running
+        # 3) wait all synced non-primary cameras are running
         if did_start:
             p_before = time.perf_counter()
-            p_timeout = p_before + 10
+            p_timeout = p_before + cam_start_timeout
             for camera in synced_cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera.is_enabled:
@@ -1360,7 +1362,8 @@ class AppModel(ObservableObject):
                               _failed_camera_template(camera.name, camera.last_error))
             else:
                 if (
-                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                       timeout=cam_start_timeout)
                     or camera.video_status != CaptureProcessStatus.RUNNING
                 ):
                     did_start = False
@@ -1618,8 +1621,9 @@ class AppModel(ObservableObject):
         logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
         self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
-        self.inference.load_configuration(configuration.inference)
-        self.behavior.load_configuration(configuration.behavior)
+        self._hardware.load_config(configuration.hardware)
+        self._inference.load_configuration(configuration.inference)
+        self._behavior.load_configuration(configuration.behavior)
 
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
@@ -1639,8 +1643,6 @@ class AppModel(ObservableObject):
         analysis.free_disk_space_detector.start()
         analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
-
-        self._hardware.load_config(configuration.hardware)
 
         self.configuration_loaded_event(configuration)
 
@@ -2124,7 +2126,9 @@ class AppModel(ObservableObject):
         animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
-        hardware_configuration = HardwareConfiguration(tunnel_identifier="CAN", pellet_identifier="CAN")
+        hardware_configuration = self._hardware.config
+        hardware_configuration.tunnel_identifier = "CAN"
+        hardware_configuration.pellet_identifier = "CAN"
 
         cameras = []
         for camera in self._cameras:
