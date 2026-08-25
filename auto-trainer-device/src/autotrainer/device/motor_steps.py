@@ -15,6 +15,17 @@ def validate_int_float(value):
     raise ValueError(f"Invalid value for int/float: {value!r}")
 
 
+def validate_stepper(value):
+    orig_value = value
+    if isinstance(orig_value, str):
+        value = getattr(Motor, orig_value, None)
+        if not isinstance(value, Motor):
+            value = Motor(int(orig_value))
+    if value not in {Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR}:
+        raise ValueError(f"Invalid value for stepper: {orig_value!r}")
+    return value
+
+
 def validate_servo(value):
     if isinstance(value, str):
         attr_val = getattr(Motor, value, None)  # allow reference by full enum member name too
@@ -90,10 +101,11 @@ _compound_steps_validate = dict(
     send_x_rel=validate_int_float,
     send_y_rel=validate_int_float,
     send_z_rel=validate_int_float,
+    x_rel=validate_int_float,
+    y_rel=validate_int_float,
+    z_rel=validate_int_float,
     predefined=validate_predefined,
-    home=lambda v: (
-        v in {Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR}
-    ),
+    home=validate_stepper,
     gate=validate_position_or_pos_velocity,
     magnet=validate_position_or_pos_velocity,
     load_arm=validate_position_or_pos_velocity,
