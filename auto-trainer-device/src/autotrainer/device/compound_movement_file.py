@@ -2,16 +2,19 @@
 Class to manage compound movement configuration YAML file or YAML dictionary.
 
 In either case, the YAML key for contents is "actions".
-It can have 5 subgroups:
+It can have 7 subgroups:
 * "load_pellet" - a sequence of commands for loading a pellet
 * "send_pellet" - a sequence of commands for sending the pellet to the cage
 * "cover_pellet" - a sequence of commands for covering the pellet
 * "release_pellet" - a sequence of commands for uncovering the pellet
 * "move_retract" - a sequence of commands for retracting the pellet
+* "open_tunnel_gate"
+* "close_tunnel_gate"
 """
 import enum
+import typing
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Callable
 
 import yaml
 
@@ -33,17 +36,11 @@ class CompoundMovementKind(str, enum.Enum):
     CLOSE_TUNNEL_GATE = "close_tunnel_gate"
 
 
-CompoundMovementByStringValue = {
-    kind.value: kind
-    for kind in CompoundMovementKind
-}
-
-
-def _make_steps_accessor(kind: CompoundMovementKind) -> MotorSteps:
+def _make_steps_accessor(kind: CompoundMovementKind):
     def wrapper(self: "CompoundMovements") -> MotorSteps:
-        return self._movements[kind] or MotorSteps(kind.value)
+        return self._movements[kind]
     wrapper.__name__ = kind.value
-    return property(wrapper)  # noqa
+    return property(wrapper)
 
 
 class CompoundMovements(CompoundMovementDataSet):
@@ -123,13 +120,11 @@ class CompoundMovements(CompoundMovementDataSet):
             raise TypeError(f"Expected dict for 'actions' in main compound move content, but got {type(actions)}")
 
         for name, value in actions.items():
-            kind = CompoundMovementByStringValue.get(name, None)
-            if kind is None:
-                logger.warning("Unhandled %r in compound movement definition. value=%s", name, value)
-                continue
+            kind = CompoundMovementKind(name)
             if not isinstance(value, (list, tuple)):
-                raise TypeError(f"Expected dict for action {name!r}, got {value!r}")
-            steps = MotorSteps.from_raw(name, list(value))
+                raise TypeError(f"Expected sequence/list for action {name!r}, got {value!r}")
+            value = list(value)
+            steps = MotorSteps.from_raw(name, value)
             self._movements[kind] = steps
             logger.debug("loaded compound move %r: %s", name, steps)
 
@@ -137,10 +132,10 @@ class CompoundMovements(CompoundMovementDataSet):
     Meet the CompoundMovementDataSet Protocol
     '''
 
-    send_pellet = _make_steps_accessor(CompoundMovementKind.SEND_PELLET)
-    load_pellet = _make_steps_accessor(CompoundMovementKind.LOAD_PELLET)
-    cover_pellet = _make_steps_accessor(CompoundMovementKind.COVER_PELLET)
-    release_pellet = _make_steps_accessor(CompoundMovementKind.RELEASE_PELLET)
-    move_retract = _make_steps_accessor(CompoundMovementKind.MOVE_RETRACT)
-    open_tunnel_gate = _make_steps_accessor(CompoundMovementKind.OPEN_TUNNEL_GATE)
-    close_tunnel_gate = _make_steps_accessor(CompoundMovementKind.CLOSE_TUNNEL_GATE)
+    send_pellet: MotorSteps = _make_steps_accessor(CompoundMovementKind.SEND_PELLET)  # noqa
+    load_pellet: MotorSteps = _make_steps_accessor(CompoundMovementKind.LOAD_PELLET)  # noqa
+    cover_pellet: MotorSteps = _make_steps_accessor(CompoundMovementKind.COVER_PELLET)  # noqa
+    release_pellet: MotorSteps = _make_steps_accessor(CompoundMovementKind.RELEASE_PELLET)  # noqa
+    move_retract: MotorSteps = _make_steps_accessor(CompoundMovementKind.MOVE_RETRACT)  # noqa
+    open_tunnel_gate: MotorSteps = _make_steps_accessor(CompoundMovementKind.OPEN_TUNNEL_GATE)  # noqa
+    close_tunnel_gate: MotorSteps = _make_steps_accessor(CompoundMovementKind.CLOSE_TUNNEL_GATE)  # noqa

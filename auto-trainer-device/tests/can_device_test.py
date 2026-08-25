@@ -33,7 +33,7 @@ from autotrainer.device import (
 from autotrainer.device.can_device import (
     default_move_retract,
     default_load_pellet,
-    default_send_pellet,
+    default_send_pellet, mk_step,
 )
 
 
@@ -239,7 +239,7 @@ def test_move_relative(
     expected_tok_event.clear()
     expected_tok.value = ctx
     device.notify_message(SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE,
-                          MotorSteps("custom", [{'y_rel': 20}, {'x_rel': -5}]),
+                          MotorSteps("custom", [mk_step('y_rel', 20), mk_step('x_rel', -5)]),
                           context=ctx)
     expected_tok_event.wait(3)
     assert ctx in tokens_acked

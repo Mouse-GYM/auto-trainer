@@ -24,9 +24,4 @@ def test_multiple_data_in_steps():
     assert isinstance(open_gate, MotorSteps)
     assert len(open_gate.steps) == 1
     assert open_gate.name == "open_tunnel_gate"
-    assert open_gate.steps == [
-        dict(
-            _servo_min_pos=Motor.TUNNEL_GATE_SERVO.value,
-            foobar=42,
-        ),
-    ]
+    assert open_gate.steps == open_gate_steps

@@ -17,6 +17,7 @@ from autotrainer.core import (
     get_perf_now,
 )
 from autotrainer.core.event import post_api_event_content
+from autotrainer.core.message import SystemDataArgsKwargs
 
 import autotrainer.device
 from .can_device import HAVE_CAN_DEVICE
@@ -27,7 +28,6 @@ from .device_interface import DeviceInterface, ServoConfig, StepperConfig
 from .device_connection_protocol import DeviceConnectionProtocol
 from .motor_steps import CompoundMovementDataSet, MotorSteps
 from autotrainer.core.logging import get_verbose_logger
-from ..core.message import SystemDataArgsKwargs
 
 logger = get_verbose_logger(__name__)
 

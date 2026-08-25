@@ -1201,7 +1201,7 @@ class CanInterface(DeviceInterface):
 
         if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
-        elif isinstance(position, tuple) and len(position) == 2:
+        elif isinstance(position, (list, tuple)) and len(position) == 2:
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
