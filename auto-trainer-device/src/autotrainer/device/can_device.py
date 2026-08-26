@@ -677,8 +677,6 @@ class CanDevice(Device):
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = raw
-            if ctx is None:
-                ctx = uuid.uuid4()  # auto-generate
             raw = kind, data, ctx, p_now
             found_board_with_uuid_ack = None
             if kind is _uuid_ack:
