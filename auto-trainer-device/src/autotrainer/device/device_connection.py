@@ -160,12 +160,13 @@ class DeviceConnection(DeviceConnectionProtocol):
     def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True):
         orig_cb = self._api.message_callback
         tokens_acked = []
+        tokens_with_err = {}
         def cb(kind, context):
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
                 tok, perf_c, error = context[:3]
                 if tok in tokens:
                     if error is not None:
-                        raise RuntimeError(f"command token {tok} failed to executed: {error}")
+                        tokens_with_err[tok] = error
                     tokens_acked.append(tok)
                     tokens.remove(tok)
             elif orig_cb is not None:
@@ -184,6 +185,8 @@ class DeviceConnection(DeviceConnectionProtocol):
                 time.sleep(0.001)
             if len(tokens) == 0:
                 logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+                if len(tokens_with_err) > 0:
+                    raise RuntimeError(f"Command(s) failed: {tokens_with_err}")
         finally:
             self._api.message_callback = orig_cb
 
