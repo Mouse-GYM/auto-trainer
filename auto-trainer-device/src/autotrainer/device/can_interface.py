@@ -77,7 +77,8 @@ _debug_path_fake_status_timeout = Path("/tmp/autotrainer_fake_device_timeout")
 
 
 def no_op(msg):
-    None
+    """No operation for some CAN message"""
+    return None
 
 
 class MissingDeviceAddressError(RuntimeError):
@@ -493,6 +494,8 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.GPIO_WRITE: no_op,
             JerryCANCmdType.DELAY: no_op,
             JerryCANCmdType.BOOTLOADER_DATA: no_op,
+            JerryCANCmdType.CFG_READ: no_op,
+            JerryCANCmdType.LOAD_CELL_TARE: no_op,
         }
 
     def __allow_fake_status_time(self, motor):

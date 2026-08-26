@@ -149,6 +149,7 @@ class _BoardPendingContext:
     compound_steps: Optional[List[Dict[str, Any]]] = None
     command_perf_c: float = math.nan  # current main command perf_c
     last_command_is_move_stepper: bool = False
+    last_command_is_tare: bool = False
 
     def clear(self):
         """Clear the board of any currently associated command"""
@@ -157,6 +158,7 @@ class _BoardPendingContext:
         self.command_perf_c = math.nan
         self.prev_command_relative = False
         self.last_command_is_move_stepper = False
+        self.last_command_is_tare = False
 
     def is_available(self):
         return (
@@ -305,6 +307,14 @@ class CanDevice(Device):
         ):
             cache.clear()
         self._prev_tunnel_gate_open_perf_c = (None, -math.inf)
+
+    def _handle_tare(self, data=None):
+        success = self._interface.tare_load_cell()
+        if success:
+            tgt = self._find_command_next_board_target(SystemCommandKind.UPDATE_SCALE_TARE, None)
+            board = self._boards_pending_ctx[tgt]
+            board.last_command_is_tare = True
+        return success
 
     def _init_handlers(self):
 
@@ -463,7 +473,7 @@ class CanDevice(Device):
 
             SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE: set_move_retract_proc,
 
-            SystemCommandKind.UPDATE_SCALE_TARE: lambda _: self._interface.tare_load_cell(),
+            SystemCommandKind.UPDATE_SCALE_TARE: self._handle_tare,
 
             SystemCommandKind.SET_DIGITAL_OUTPUT:
                 lambda data: self._interface.set_digital_output(DigitalOutputs(data[0]), data[1]),
@@ -711,8 +721,11 @@ class CanDevice(Device):
                         and board_ctx.target == Target.PELLET_DEVICE
                         and board_ctx.last_command_is_move_stepper
                     ):
+                        logger.verbose("Received EAGAIN (%s) on stepper move, consider ok", msg_err)
                         msg_err = 0
-                        logger.verbose("Received EAGAIN on stepper move, consider ok")
+                    elif msg_err in (1, 2) and board_ctx.last_command_is_tare:
+                        logger.verbose("Received %s on tare, consider ok", msg_err)
+                        msg_err = 0
                     if msg_err == 0:
                         cur_commands.insert(0, (_uuid_ack, data, ctx, -math.inf))
                         board_ctx.repeated_command_count = 0
@@ -869,6 +882,8 @@ class CanDevice(Device):
             cur_commands.pop(0)  # (kind, data, ctx, perf_c) will be pushed back if command need to eventually retry
             #
             target_board.last_command_is_move_stepper = False
+            target_board.last_command_is_tare = False
+            #
             if target_board.active_error is not None:
                 # if board had already error, refuse/error the new command,
                 # with that same error:
@@ -1006,8 +1021,7 @@ class CanDevice(Device):
                                    kind, target_board.target, ctx, target_board.ctx, target_board.uuid_ack_perf_c)
                     if ctx is not None:
                         self._acknowledge_command(ctx, perf_c=target_board.uuid_ack_perf_c, error=None)
-                        target_board.ctx = None
-                    target_board.kind = None
+                    target_board.clear()
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
