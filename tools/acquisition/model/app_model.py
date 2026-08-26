@@ -578,10 +578,8 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continuous mode and is_from_start is not True, or else it was already recording.
-        if status == AppModelStatus.IDLE:
-            self._analysis.stop()
-        else:
-            self._analysis.restart()
+        #
+        self._analysis.restart()
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
