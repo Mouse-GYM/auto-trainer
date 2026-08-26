@@ -150,8 +150,11 @@ class _BoardPendingContext:
     command_perf_c: float = math.nan  # current main command perf_c
 
     def clear(self):
+        """Clear the board of any currently associated command"""
         self.kind = self.ctx = self.uuid = self.prev_command = self.compound_steps = None
         self.repeated_command_count = 0
+        self.command_perf_c = math.nan
+        self.prev_command_relative = False
 
     def is_available(self):
         return (
