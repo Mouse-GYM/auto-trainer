@@ -543,6 +543,8 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
                 return False
             time.sleep(0.001)
             if vc is None or not vc.is_alive():
+                if CaptureProcessStatus(self._video_status.value) in wait_status:
+                    return True
                 logger.warning("%s: child process not (anymore) alive", self._name)
                 return False
         return True
