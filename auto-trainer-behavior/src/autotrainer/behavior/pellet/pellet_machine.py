@@ -265,17 +265,16 @@ class PelletMachine(StateMachine):
             self._api_status_token = None
             was_api_token = True
             if error is not None:
-                logger.error("command %s failed: %s ; pausing algo", token, error)
-                self._algorithm.algo_paused = True
-                # todo: should probably have some dedicated handling ?
+                logger.error("command %s failed: %s", token, error)
         else:
             was_api_token = False
 
         if token == self._token_pellet_send:
-            self._send_end_perf_c = perf_now
             self._token_pellet_send = None
-            api_evt = ApiEventKind.pelletSendEnd
-            self.events.pellet_sent(perf_c=perf_now)
+            if error is None:
+                self._send_end_perf_c = perf_now
+                api_evt = ApiEventKind.pelletSendEnd
+                self.events.pellet_sent(perf_c=perf_now)
 
         elif token == self._token_pellet_load:
             self._token_pellet_load = None
@@ -288,7 +287,8 @@ class PelletMachine(StateMachine):
         elif token == self._token_release_pellet:
             self._token_release_pellet = None
             api_evt = ApiEventKind.pelletReleaseEnd
-            self.events.pellet_released(perf_c=perf_now)
+            if error is None:
+                self.events.pellet_released(perf_c=perf_now)
 
         elif token == self._token_move_retract:
             self._token_move_retract = None
@@ -305,6 +305,10 @@ class PelletMachine(StateMachine):
                 logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
                              token, self._api_status_token)
                 return
+
+        if error is not None:
+            # don't consider anything else
+            return
 
         if api_evt is not None:
             self.post_event_content(api_evt, data=dict(context=token))
