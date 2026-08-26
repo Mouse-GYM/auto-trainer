@@ -85,9 +85,9 @@ def monitor_message_queue(msg_queue):
         kinds.add(kind)
 
         if kind == SystemStatusMessageKind.ACKNOWLEDGE:
-            tok, perf_c, error = data[:3]
-            if error is not None:
-                logger.error("command acknowledge error: token=%s error=%s", tok, error)
+            tok, perf_c, result = data[:3]
+            if not result.succeeded:
+                logger.error("command acknowledge error: token=%s error=%s", tok, result)
             get_input = True
 
         elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:
@@ -338,6 +338,20 @@ def move_parameter(params):
         return float(params[0]), float(params[1])
 
 
+def parse_board_target(params):
+    if len(params) < 1:
+        logger.warning("expected 1 board target name (magnet or pellet)")
+        return None
+    p0 = params[0]
+    if p0 == "magnet":
+        return Target.MAGNET_DEVICE
+    elif p0 == "pellet":
+        return Target.PELLET_DEVICE
+    else:
+        logger.error("unknown target board: %s", params[0])
+        return None
+
+
 def run_monitor():
     global get_input
     global perf_count
@@ -350,7 +364,10 @@ def run_monitor():
     mon_thread.start()
 
     can_dev = CanDevice()
+
     can_dev.default_max_failed_command_count = 3
+    # required for current FW: the tare function always gives 2 NACKs before giving back a success ACK.
+
     device_connection = DeviceConnection(can_dev, msg_queue)
 
     device_connection.request_connect()
@@ -499,30 +516,14 @@ def run_monitor():
                     device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE, context="close_gate")
 
                 elif cmd == 'board_clear':
-                    if len(params) != 1:
-                        logger.warning("expected 1 board target name (magnet or pellet)")
+                    tgt = parse_board_target(params)
+                    if tgt is None:
                         continue
-                    if params[0] == "magnet":
-                        tgt = Target.MAGNET_DEVICE
-                    elif params[0] == "pellet":
-                        tgt = Target.PELLET_DEVICE
-                    else:
-                        logger.error("unknown target board: %s", params[0])
-                        continue
-                    device_connection.device._boards_pending_ctx[tgt].active_error = None
-                    device_connection.device._boards_pending_ctx[tgt].clear()  # noqa
-                    get_input = True
+                    device_connection.send_message(SystemCommandKind.BOARD_CLEAR_ERROR, tgt, context=f"board_reboot_{tgt}")
 
                 elif cmd == 'board_reboot':
-                    if len(params) != 1:
-                        logger.warning("expected 1 board target name (magnet or pellet)")
-                        continue
-                    if params[0] == "magnet":
-                        tgt = Target.MAGNET_DEVICE
-                    elif params[0] == "pellet":
-                        tgt = Target.PELLET_DEVICE
-                    else:
-                        logger.error("unknown target board: %s", params[0])
+                    tgt = parse_board_target(params)
+                    if tgt is None:
                         continue
                     device_connection.send_message(SystemCommandKind.BOARD_REBOOT, tgt, context=f"board_reboot_{tgt}")
 

@@ -28,6 +28,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo, EventInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.event import event_manager
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer, get_mp_ctx
 from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
@@ -769,7 +770,7 @@ class MockSystemMachine:
             perf_c=autotrainer.core.get_perf_now())
         self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
-            self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
+            self.pellet._pellet_device_ack_received(self.pellet._api_status_token, CommandResult(succeeded=True))
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
@@ -785,7 +786,9 @@ class MockSystemMachine:
                 break
             cur_ack += 1
             self.increment_perf_now(1e-9)
-            self.pellet._pellet_device_ack_received(token)
+            (# self.pellet._pellet_device_ack_received
+            self.msg_handler.ack_received
+             (token, CommandResult(succeeded=True)))
             if not until_none:
                 break
             if cur_ack > max_limit:

@@ -12,15 +12,15 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.message.message_handler import CommandResult
+from autotrainer.core.observable_object import EventHandler
 
-from ..intertrial import IntertrialState
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 from . import PelletState
-from ...core.observable_object import EventHandler
 
 logger = get_verbose_logger(__name__)
 
@@ -255,7 +255,7 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional[Any]=None):
+    def _pellet_device_ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
 
         perf_now = get_perf_now() if perf_c is None else perf_c
@@ -264,14 +264,14 @@ class PelletMachine(StateMachine):
         if token == self._api_status_token:
             self._api_status_token = None
             was_api_token = True
-            if error is not None:
-                logger.error("command %s failed: %s", token, error)
+            if not result.succeeded:
+                logger.error("command %s failed: %s", token, result)
         else:
             was_api_token = False
 
         if token == self._token_pellet_send:
             self._token_pellet_send = None
-            if error is None:
+            if result.succeeded:
                 self._send_end_perf_c = perf_now
                 api_evt = ApiEventKind.pelletSendEnd
                 self.events.pellet_sent(perf_c=perf_now)
@@ -287,7 +287,7 @@ class PelletMachine(StateMachine):
         elif token == self._token_release_pellet:
             self._token_release_pellet = None
             api_evt = ApiEventKind.pelletReleaseEnd
-            if error is None:
+            if result.succeeded:
                 self.events.pellet_released(perf_c=perf_now)
 
         elif token == self._token_move_retract:
@@ -306,7 +306,7 @@ class PelletMachine(StateMachine):
                              token, self._api_status_token)
                 return
 
-        if error is not None:
+        if not result.succeeded:
             # don't consider anything else
             return
 

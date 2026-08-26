@@ -18,6 +18,7 @@ class SystemCommandKind(IntEnum):
     REQUEST_VERSION = 1
 
     BOARD_REBOOT = 10
+    BOARD_CLEAR_ERROR = 15
 
     # Actions nominally considered part of the tunnel/head fixation unit (magnet module in some nomenclature).
     MOVE_MAGNET_SERVO = 101

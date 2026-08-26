@@ -306,6 +306,13 @@ class CanDevice(Device):
 
     def _init_handlers(self):
 
+        def handle_board_clear_error(target: Target):
+            board_ctx = self._boards_pending_ctx[target]
+            board_ctx.active_error = None
+            board_ctx.clear()
+            self.command_nack_engaged = False  # also reset
+            return True
+
         def handle_servo_move(motor: Motor, position):
             steps = self._make_servo_move_steps(motor, position)
             return self._start_sequence(MotorSteps(f"move_servo_{motor.name}", steps))
@@ -370,6 +377,8 @@ class CanDevice(Device):
                 lambda data: self._interface.request_version(),
 
             SystemCommandKind.BOARD_REBOOT: self._interface.board_reboot,
+
+            SystemCommandKind.BOARD_CLEAR_ERROR: handle_board_clear_error,
 
             SystemCommandKind.MOVE_MAGNET_SERVO: partial(handle_servo_move, Motor.TUNNEL_MAGNET_SERVO),
 
@@ -680,6 +689,10 @@ class CanDevice(Device):
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = raw
+            if kind not in {_uuid_ack, _retry_full, _retry_compound, _next_compound, None}:
+                # legit new command
+                # if ctx is not None:
+                self._command_token_2_command_result[ctx] = self.CommandResult()
             raw = kind, data, ctx, p_now
             found_board_with_uuid_ack = None
             if kind is _uuid_ack:
@@ -694,6 +707,10 @@ class CanDevice(Device):
                         cur_commands.insert(0, (_uuid_ack, data, ctx, -math.inf))
                         board_ctx.repeated_command_count = 0
                     else:
+                        # self._command_token_2_command_result[token]
+                        cmd_res = self._command_token_2_command_result.get(ctx)
+                        if cmd_res is not None:
+                            cmd_res.add_nack(msg_err)
                         # command rejected by corresponding motor/element,
                         # eventual todo: depending on command and error: allow or disallow command retry
                         board_ctx.repeated_command_count += 1
@@ -701,7 +718,7 @@ class CanDevice(Device):
                             board_ctx.repeated_command_count >= self.default_max_failed_command_count
                         ):
                             err = (
-                                f"Reached default_repeated_failed_command_count {board_ctx.repeated_command_count} "
+                                f"Reached default_max_failed_command_count {board_ctx.repeated_command_count} "
                                 f"on board {board_ctx.target!r}")
                             self._handle_command_error(board_ctx, ctx, err, perf_c=msg_perf_c)
                             self.command_nack_engaged = True
@@ -709,8 +726,9 @@ class CanDevice(Device):
                         prev_cmd = board_ctx.prev_command
                         logger.debug("prev_cmd=%s", prev_cmd)
                         if prev_cmd is not None:
+                            board_ctx.ctx = None  # ensure cleared
                             cur_commands.insert(0, prev_cmd)  # can be either _retry_compound or _retry_full
-                    board_ctx.ctx = None
+                    # do not reset board_ctx.ctx here.
                     board_ctx.uuid = None
                     board_ctx.prev_command = None
                     # nb: don't use board_ctx.clear(), which also resets the command_repeated_count here
@@ -844,11 +862,10 @@ class CanDevice(Device):
             if target_board.active_error is not None:
                 # if board had already error, refuse/error the new command,
                 # with that same error:
-                logger.error("kind=%s: target board already error: %s", kind, target_board.target)
-                self._handle_command_error(target_board, ctx, target_board.active_error)
-                # todo: allow user to clear board ack error,
-                #  to allow reconfigure of boards/motors, for instance after board power reset
-                continue
+                if kind != SystemCommandKind.BOARD_CLEAR_ERROR:  # but only if not clear-error command
+                    logger.error("kind=%s: target board already error: %s", kind, target_board.target)
+                    self._handle_command_error(target_board, ctx, target_board.active_error)
+                    continue
             #
             # execute command
             logger.verbose("executing command kind: %s with ctx=%s ; target_board: ctx=%s",
@@ -1069,10 +1086,13 @@ class CanDevice(Device):
         move_steps = movements.steps
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
         assert self._compound_movement is None or len(self._compound_movement) == 0
-        self._compound_movement = move_steps
+        self._compound_movement = move_steps  # link
         tgt = self._find_steps_next_board_target("sequence", move_steps)
         board = self._boards_pending_ctx[tgt]
-        return self._perform_next_compound_step(board, move_steps)
+        success = self._perform_next_compound_step(board, move_steps)
+        if not success:
+            self._compound_movement = None  # unlink
+        return success
 
     def _find_step_board(self, step) -> Optional[Target]:
         if 'x' in step or 'x_rel' in step or 'send_x_rel' in step:
@@ -1189,7 +1209,7 @@ class CanDevice(Device):
             motor = data
         elif kind == SystemCommandKind.SERVO_DETACH:
             motor = data
-        elif kind == SystemCommandKind.BOARD_REBOOT:
+        elif kind in {SystemCommandKind.BOARD_REBOOT, SystemCommandKind.BOARD_CLEAR_ERROR}:
             return data
         elif kind == SystemCommandKind.REQUEST_VERSION:
             # it's both boards, but doesn't use uuid, so does not matter, safe to give any:

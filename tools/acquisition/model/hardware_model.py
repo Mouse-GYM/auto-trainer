@@ -16,6 +16,7 @@ from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandle
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
                                 StepperConfig, ServoConfig, Device, ColorLed)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
@@ -746,7 +747,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
             )
 
-    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional=None):
+    def _ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())
@@ -755,8 +756,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             (logger.debug if not self._device_stream_started else logger.warning)(
                 "Received unexpected ack token: %s", token)
         else:
-            if error is not None:
-                logger.error("command token %s failed: %s", token, error)
+            if not result.succeeded:
+                logger.error("command token %s failed: %s", token, result)
                 # what else to do ?
                 # error event callback ?
             self._refresh_cmd_in_progress(commands_in_prog)

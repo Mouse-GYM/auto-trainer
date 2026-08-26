@@ -11,6 +11,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
                               EventManager, Offset3DTuple, MotorConfigurations, SystemStatusMessageKind)
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovements)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
@@ -447,8 +448,8 @@ class AppModel(ObservableObject):
         elif name == MessageHandler.COLOR_LED:
             self.color_led = value
 
-    def reader_ack_received(self, token: UUID, *, perf_c: Optional[float]=None, error: Optional=None):
-        logger.info("ack context received: %s error=%s", token, error)
+    def reader_ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
+        (logger.info if result.succeeded else logger.error)("ack context received: %s result=%s", token, result)
         if self._last_command is not None and token == self._last_command:
             self._last_command = None
             self.command_pending = False

@@ -12,6 +12,7 @@ from unittest import mock
 
 import pytest
 from autotrainer.core import RawValueHolder
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.observable_object import ObservableObject
 
 from autotrainer.core.message import SystemStatusMessageKind, SystemCommandKind
@@ -60,7 +61,7 @@ def expected_tok() -> RawValueHolder:
 def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHolder):
     # print(msg_kind, data)
     if msg_kind == SystemStatusMessageKind.ACKNOWLEDGE:
-        tok, perf_c, error = data[:3]
+        tok, perf_c, result = data[:3]
         tokens_acked.append(tok)
         if tok is not None and tok == expected_tok.value:
             expected_tok.value = None
@@ -435,15 +436,22 @@ def test_command_with_uuid_error(
         device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
         assert expected_tok_event.wait(3)
     assert ack_received is not None, "should have received the ack, even if possibly with error"
-    ack_tok, ack_perf, ack_err = ack_received
-    expected_err = f"Reached default_repeated_failed_command_count {max_command_repeat_count} on board <Target.PELLET_DEVICE: 0>"
-    if fail_all_retries or max_command_repeat_count <= 1:
-        assert ack_err == expected_err
+    ack_tok, ack_perf, result = ack_received  # noqa
+    result: CommandResult
+    expected_err = f"Reached default_max_failed_command_count {max_command_repeat_count} on board <Target.PELLET_DEVICE: 0>"
+    expect_error = fail_all_retries or max_command_repeat_count <= 1
+    if expect_error:
+        assert not result.succeeded
+        assert result.error == expected_err
     else:
-        assert ack_err is None
+        assert result.succeeded
+        assert result.error is None
+    # although command might succeed, the uuid_nacks encountered is still provided:
+    assert result.uuid_nacks == [uuid_ack_err_code] * (max_command_repeat_count if expect_error else 1)
+    # at least once:
     assert f"ctx={ctx} kind={SystemCommandKind.OPEN_TUNNEL_GATE!s} can_error={uuid_ack_err_code} " in caplog.text
 
-    # also ensure that board may remain in error after:
+    # also ensure that board remains in error after, if the error was set:
     ctx = uuid.uuid4()
     expected_tok.value = ctx
     iface.move_servo_motor = orig_move_servo_motor
@@ -451,8 +459,10 @@ def test_command_with_uuid_error(
     ack_received = None
     with caplog.at_level(logging.DEBUG):
         device.notify_message(SystemCommandKind.OPEN_TUNNEL_GATE, None, context=ctx)
-        assert expected_tok_event.wait(3)
+        assert expected_tok_event.wait(0.5)
     assert ack_received is not None, "should have received the ack, with or without error"
-    ack_tok, ack_perf, ack_err = ack_received
-    assert ack_err == (expected_err if fail_all_retries or max_command_repeat_count <= 1 else None)
-    # depending on settings: previous error is reset or kept active
+    ack_tok, ack_perf, result = ack_received  # noqa
+    # depending on settings: previous error is reset or kept active:
+    assert result.error == (expected_err if expect_error else None)
+    assert result.succeeded == (not expect_error)
+    assert result.uuid_nacks is None  # even if error, the uuid_nacks is None given nothing is executed then.

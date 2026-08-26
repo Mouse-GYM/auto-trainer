@@ -1,25 +1,27 @@
 import math
-from typing import Optional, Any, Protocol
+from typing import Optional, Any, Protocol, Dict
 
 from autotrainer.api import ApiEventKind
 
-from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import (
     EventManager,
     SystemStatusMessageKind,
     ObservableObject,
     get_perf_now,
 )
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message.message_handler import CommandResult
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
-
 
 logger = get_verbose_logger(__name__)
 
 
 class Device(ObservableObject):
     """Defines the required methods to represent a device."""
+
+    CommandResult = CommandResult
 
     UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"  # when any of pellet or magnet uuid ack times out
     PELLET_UUID_ACK_TIMEOUT_ENGAGED = "pellet_uuid_ack_timeout_engaged"  # actually unused
@@ -41,6 +43,7 @@ class Device(ObservableObject):
         self._tunnel_status_timeout_engaged = False
         self._pellet_status_timeout_engaged = False
         self._command_nack_engaged = False
+        self._command_token_2_command_result: Dict[Any, CommandResult] = {}
 
     @property
     def connected(self) -> bool:
@@ -76,17 +79,23 @@ class Device(ObservableObject):
         """
 
     def _acknowledge_command(self, token, *, perf_c: Optional[float]=None, error: Optional[Any] = None):
+        cmd_res = self._command_token_2_command_result.pop(token, None)  # always pop
         if token is None:  # if a caller has given a None token, it means it doesn't want to get the ack,
             # so makes that.
             return
         if perf_c is None:
             perf_c = get_perf_now()
-        logger.verbose("sending command ack: %s err=%s perf_c=%.3f", token, error, perf_c)
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
         api = self._api
-        if api is not None:
-            api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, error))
+        if api is None:
+            return
+        logger.verbose("sending command ack: %s perf_c=%.3f result=%s", token, perf_c, cmd_res)
+        if cmd_res is None:  # should not happen but is ok to be liberal here
+            cmd_res = CommandResult()
+        cmd_res.succeeded = error is None
+        cmd_res.error = error
+        api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, cmd_res))
 
     @property
     def api(self):

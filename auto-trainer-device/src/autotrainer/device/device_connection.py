@@ -17,8 +17,10 @@ from autotrainer.core import (
     get_perf_now,
 )
 from autotrainer.core.event import post_api_event_content
+from autotrainer.core.message.message_handler import CommandResult
 
 import autotrainer.device
+
 from .can_device import HAVE_CAN_DEVICE
 from .device import Device
 from .device_api import DeviceApi
@@ -163,10 +165,11 @@ class DeviceConnection(DeviceConnectionProtocol):
         tokens_with_err = {}
         def cb(kind, context):
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, perf_c, error = context[:3]
+                tok, perf_c, result = context[:3]
                 if tok in tokens:
-                    if error is not None:
-                        tokens_with_err[tok] = error
+                    result: CommandResult
+                    if not result.succeeded:
+                        tokens_with_err[tok] = result
                     tokens_acked.append(tok)
                     tokens.remove(tok)
             elif orig_cb is not None:
