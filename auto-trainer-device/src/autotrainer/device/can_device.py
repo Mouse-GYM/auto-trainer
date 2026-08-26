@@ -148,6 +148,7 @@ class _BoardPendingContext:
     repeated_command_count: int = 0
     compound_steps: Optional[List[Dict[str, Any]]] = None
     command_perf_c: float = math.nan  # current main command perf_c
+    last_command_is_move_stepper: bool = False
 
     def clear(self):
         """Clear the board of any currently associated command"""
@@ -155,6 +156,7 @@ class _BoardPendingContext:
         self.repeated_command_count = 0
         self.command_perf_c = math.nan
         self.prev_command_relative = False
+        self.last_command_is_move_stepper = False
 
     def is_available(self):
         return (
@@ -369,6 +371,8 @@ class CanDevice(Device):
                 if cfg.uuid_ack_timeout is not None:
                     self._prev_command_timeout = cfg.uuid_ack_timeout
             self._prev_command_is_relative = is_relative
+            pellet_board_ctx = self._boards_pending_ctx[Target.PELLET_DEVICE]
+            pellet_board_ctx.last_command_is_move_stepper = func.__name__.startswith("move_motor_")
             return func(*args, **kwargs)
 
         # Initialize command handlers lookup table
@@ -703,11 +707,16 @@ class CanDevice(Device):
                     ctx = board_ctx.ctx
                     logger.debug("board=%s ctx=%s kind=%s can_error=%s uuid_ack_perf_c=%.3f",
                                  board_ctx.target, ctx, board_ctx.kind, msg_err, msg_perf_c)
+                    if (msg_err == -11  # temporary: EAGAIN
+                        and board_ctx.target == Target.PELLET_DEVICE
+                        and board_ctx.last_command_is_move_stepper
+                    ):
+                        msg_err = 0
+                        logger.verbose("Received EAGAIN on stepper move, consider ok")
                     if msg_err == 0:
                         cur_commands.insert(0, (_uuid_ack, data, ctx, -math.inf))
                         board_ctx.repeated_command_count = 0
                     else:
-                        # self._command_token_2_command_result[token]
                         cmd_res = self._command_token_2_command_result.get(ctx)
                         if cmd_res is not None:
                             cmd_res.add_nack(msg_err)
@@ -859,6 +868,7 @@ class CanDevice(Device):
             # start processing of cur_commands[0]
             cur_commands.pop(0)  # (kind, data, ctx, perf_c) will be pushed back if command need to eventually retry
             #
+            target_board.last_command_is_move_stepper = False
             if target_board.active_error is not None:
                 # if board had already error, refuse/error the new command,
                 # with that same error:
