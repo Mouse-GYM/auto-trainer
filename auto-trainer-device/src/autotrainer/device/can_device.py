@@ -386,7 +386,7 @@ class CanDevice(Device):
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._start_sequence(MotorSteps(
                     "send_to_limits",
-                    [{"home": d}
+                    [mk_step("home", d)
                      for d in (data if isinstance(data, (list, tuple)) else [data])
                      ]
                 )),
