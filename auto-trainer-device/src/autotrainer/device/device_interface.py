@@ -210,7 +210,8 @@ class StepperConfig(MotorSource):
     _maximum_acceleration: float = 244  # mm/sec^2
     _flip_limit_orientation: bool = False
     _homing_velocity: float = 60  # mm/sec
-    uuid_ack_timeout: Optional[float] = None
+    uuid_ack_timeout: Optional[float] = None  # optional uuid ack timeout to be used for this motor
+        # in seconds. Unless otherwise explicitly set.
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -461,7 +462,7 @@ class DeviceInterface:
     def is_open(self) -> bool:
         return False
 
-    def are_addresses_valid(self):
+    def are_addresses_valid(self) -> bool:
         raise NotImplementedError
 
     def can_read(self) -> bool:
@@ -505,11 +506,15 @@ class DeviceInterface:
                 self._motors_drift = no_drift
         return True
 
-    def fixed_position(self):
+    def delay(self, delay_sec: float) -> bool:
+        """Request a "sleep" delay to the pellet board"""
+        raise NotImplementedError
+
+    def fixed_position(self) -> bool:
         """send-pellet"""
         raise NotImplementedError
 
-    def stepper_home(self, motor: Motor):
+    def stepper_home(self, motor: Motor) -> bool:
         """stepper_home == send-to-limit"""
         raise NotImplementedError
 
@@ -605,10 +610,10 @@ class DeviceInterface:
         self._motors_drift = drifts
         return True
 
-    def servo_attach(self, motor: Motor):
+    def servo_attach(self, motor: Motor) -> bool:
         raise NotImplementedError
 
-    def servo_detach(self, motor: Motor):
+    def servo_detach(self, motor: Motor) -> bool:
         raise NotImplementedError
 
     def set_tunnel_fan_on(self) -> bool:
