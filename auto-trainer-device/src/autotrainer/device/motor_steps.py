@@ -157,7 +157,7 @@ class MotorSteps:
             logger.warning("Empty steps for MotorSteps %s", name)
         return MotorSteps(name, steps)
 
-    def __init__(self, name: str = "NA", steps: List[Dict[str, Any]] = None):
+    def __init__(self, name: str = "NA", steps: Optional[List[Dict[str, Any]]] = None):
         self._name = name
         self._steps = steps
 

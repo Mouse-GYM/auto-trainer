@@ -51,6 +51,7 @@ from autotrainer.core import (
     SensorAnalysis,
     Offset3DTuple,
     get_perf_now,
+    MotorConfigurations,
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
@@ -67,7 +68,7 @@ from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
-from autotrainer.device import CompoundMovements
+from autotrainer.device import CompoundMovements, MotorConfigurationFile
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -271,6 +272,9 @@ class AppModel(ObservableObject):
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
         self._loaded_config_dir_path = Path()
+        self._config_errors = []
+        self._motors_config: Optional[MotorConfigurations] = None
+        self._move_config: Optional[CompoundMovements] = None
 
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
         self._project_info: Optional[ProjectInfo] = None
@@ -468,6 +472,9 @@ class AppModel(ObservableObject):
 
         one_minute_timer_handle_and_reschedule()
 
+    @property
+    def config_errors(self) -> List[str]:
+        return self._config_errors
 
     @property
     def main_watchdog_perf_c(self) -> float:
@@ -1381,7 +1388,11 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
+        hard.connect(
+            self._system_message_handler.input_queue,
+            motors_config=self._motors_config,
+            move_config=self._move_config,
+        )
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
             timeout = 3
@@ -1577,6 +1588,7 @@ class AppModel(ObservableObject):
         return configuration
 
     def load_configuration(self, location: Optional[Path] = None):
+        self._config_errors.clear()
         if location is None:
             location = self.get_config_location()
 
@@ -1629,11 +1641,21 @@ class AppModel(ObservableObject):
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
 
-        # ensure move config file is valid
-        default_move_cfg_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
-        if default_move_cfg_file.exists():
-            move_cfg = CompoundMovements.from_file(default_move_cfg_file)
-            del move_cfg  # atm only used to check can load.
+        # ensure motor and move config files are valid
+        hard = self._hardware
+        #
+        motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+        self._motors_config = None
+        try:
+            self._motors_config = hard.load_default_motor_config(motors_cfg_file)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
+        self._move_config = None  # always preset
+        move_config_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
+        try:
+            self._move_config = CompoundMovements.from_file(move_config_file)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
 
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()

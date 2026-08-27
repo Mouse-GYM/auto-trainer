@@ -164,8 +164,8 @@ class AppModel(ObservableObject):
 
         device_connection.request_connect()
 
-        device_connection.load_default_motor_config()
-        device_connection.load_default_move_config()
+        device_connection.use_motor_configurations()
+        device_connection.use_compound_movements()
 
         device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
 

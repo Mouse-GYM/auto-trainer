@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 from functools import partial
+from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union, List
@@ -12,12 +13,21 @@ from typing import Optional, Tuple, Dict, Union, List
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration,
-                              get_perf_now, SystemStatusMessageKind)
+                              get_perf_now, SystemStatusMessageKind, MotorConfigurations)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
-from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                StepperConfig, ServoConfig, Device, ColorLed)
+from autotrainer.device import (
+    DeviceConnectionProtocol,
+    HAVE_CAN_DEVICE,
+    DeviceConnection,
+    CanDevice,
+    StepperConfig,
+    ServoConfig,
+    Device,
+    ColorLed,
+    CompoundMovements, MotorConfigurationFile,
+)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
@@ -122,6 +132,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
+
+    @staticmethod
+    def load_default_motor_config(config_path: Optional[Path] = None) -> MotorConfigurations:
+        return DeviceConnectionProtocol.load_default_motor_config(config_path)
+
+    @staticmethod
+    def load_default_move_config(config_path: Optional[Path] = None) -> CompoundMovements:
+        return DeviceConnectionProtocol.load_default_move_config(config_path)
 
     @property
     def watchdog_reader_perf_c(self):
@@ -481,7 +499,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         dev = self._device_conn
         return dev is not None and dev.connected
 
-    def connect(self, cmd_queue: Queue, *, force_first_connect: bool=False):
+    def connect(
+        self,
+        cmd_queue: Queue,
+        *,
+        force_first_connect: bool=False,
+        motors_config: Optional[MotorConfigurations] = None,
+        move_config: Optional[CompoundMovements] = None,
+    ):
         logger.notice("%s: connect with %s", self, cmd_queue)
         self._disconnect_event.clear()
 
@@ -518,9 +543,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         # load and set motors and move configs
         # 1)
-        motors_config = device_conn.load_default_motor_config()
+        motors_config = device_conn.use_motor_configurations(motors_config)
         # 2)
-        device_conn.load_default_move_config()
+        device_conn.use_compound_movements(move_config)
         # 3)
         if self._connect_count == 1 or force_first_connect:
             logger.notice("Doing cover attach-release-detach on first connect")

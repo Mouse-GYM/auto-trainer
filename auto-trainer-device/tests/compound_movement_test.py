@@ -79,6 +79,9 @@ def test_uuid_ack_timeout_rejected(step, data):
     dct["uuid_ack_timeout"] = 1
     with pytest.raises(ValueError, match="Unhandled extra data key"):
         MotorSteps.from_raw("name", [dct])
+    # but
+    del dct["uuid_ack_timeout"]
+    assert MotorSteps.from_raw("name", [dct]).steps == [dct]
 
 
 @pytest.mark.parametrize("step,data", [

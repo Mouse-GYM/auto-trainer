@@ -3,6 +3,7 @@ import logging
 import math
 import time
 import uuid
+from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union, Optional, Any, Set
@@ -192,7 +193,9 @@ class DeviceConnection(DeviceConnectionProtocol):
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
-    def use_compound_movements(self, data: CompoundMovementDataSet):
+    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None):
+        if data is None:
+            data = self.load_default_move_config()
         for compound_move in CompoundMovementKind:
             name = compound_move.value
             steps = getattr(data, name)
@@ -201,7 +204,9 @@ class DeviceConnection(DeviceConnectionProtocol):
             else:
                 self.set_steps_procedure(name, steps)
 
-    def use_motor_configurations(self, data: MotorConfigurations):
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None):
+        if data is None:
+            data = self.load_default_motor_config()
         logger.notice("Setting motor configurations")
         tokens = set()
         def make_token():
