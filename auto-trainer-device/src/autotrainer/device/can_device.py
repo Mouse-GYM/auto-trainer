@@ -902,7 +902,7 @@ class CanDevice(Device):
                 target_board.uuid = after_uuid
                 target_board.ack_perf_timeout = t_perf_last_command_with_uuid + self._prev_command_timeout
                 # _prev_command_timeout is always preset to default before cmd execution,
-                # and eventually overriden during cmd execution.
+                # and eventually replaced during cmd execution.
                 target_board.prev_command = tuple(prev_command)
             else:
                 # no uuid generated

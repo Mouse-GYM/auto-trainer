@@ -124,8 +124,7 @@ class CompoundMovements(CompoundMovementDataSet):
             kind = CompoundMovementKind(name)
             if not isinstance(value, (list, tuple)):
                 raise TypeError(f"Expected sequence/list for action {name!r}, got {value!r}")
-            value = list(value)
-            steps = MotorSteps.from_raw(name, value)
+            steps = MotorSteps.from_raw(name, list(value))
             self._movements[kind] = steps
             logger.debug("loaded compound move %r: %s", name, steps)
 

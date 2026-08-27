@@ -92,6 +92,23 @@ def validate_tone(value):
     return freq, validate_int_float(duration)
 
 
+def validate_extra_data(dct):
+    tp = dct["type"]
+    accept_uuid_ack_timeout = tp in {
+        "x", "y", "z", "x_rel", "y_rel", "z_rel", "send_x_rel", "send_y_rel", "send_z_rel",
+        "predefined", "home", "gate", "magnet", "load_arm", "barrier_arm",
+        "_servo_move", "_servo_min_pos", "_servo_max_pos",
+    }
+    for key, value in dct.items():
+        if key in ("type", "value"):
+            continue
+        # at the moment we only support uuid_ack_timeout as eventual extra data
+        if accept_uuid_ack_timeout and key == "uuid_ack_timeout":
+            dct[key] = validate_int_float(value)
+        else:
+            raise ValueError(f"Unhandled extra data key {key}")
+
+
 _compound_steps_validate = dict(
     delay=validate_int_float,
     tone=validate_tone,
@@ -124,17 +141,18 @@ class MotorSteps:
     def from_raw(cls, name: str, data: List[Dict[str, Any]]):
         steps = []
         for step in data:
-            d = copy.deepcopy(step)
-            step_type: Optional[str] = d.get('type', None)
-            step_value = d.get('value', None)
+            dct = copy.deepcopy(step)
+            step_type: Optional[str] = dct.get('type', None)
+            step_value = dct.get('value', None)
             if step_type is None or step_value is None:
                 raise ValueError(f"Missing 'type' or 'value' key for motor steps, got {step}")
             validate = _compound_steps_validate.get(step_type, None)
-            if validate  is None:
+            if validate is None:
                 raise ValueError(f"Unhandled step type: {step_type!r} in {step}")
             step_value = validate(step_value)
-            d['value'] = step_value
-            steps.append(d)
+            dct['value'] = step_value
+            validate_extra_data(dct)
+            steps.append(dct)
         if len(steps) == 0:
             logger.warning("Empty steps for MotorSteps %s", name)
         return MotorSteps(name, steps)

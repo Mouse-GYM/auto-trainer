@@ -16,7 +16,7 @@ def test_load_from_default():
 
 def test_multiple_data_in_steps():
     open_gate_steps = [
-        dict(type="_servo_min_pos", value=Motor.TUNNEL_GATE_SERVO.value, foobar=42),
+        dict(type="_servo_min_pos", value=Motor.TUNNEL_GATE_SERVO.value, uuid_ack_timeout=8),
     ]
     actions = dict(open_tunnel_gate=open_gate_steps)
     movements = CompoundMovements.from_yaml_dict(
@@ -28,7 +28,6 @@ def test_multiple_data_in_steps():
     assert len(open_gate.steps) == 1
     assert open_gate.name == "open_tunnel_gate"
     assert open_gate.steps == open_gate_steps
-
 
 
 @pytest.mark.parametrize("step,xp", [
@@ -64,3 +63,32 @@ def test_valid_steps(step, xp):
 def test_invalid_step_raise(step):
     with pytest.raises((ValueError, TypeError)):
         MotorSteps.from_raw("some_compound", [step])
+
+
+def test_unhandled_extra_data_raise():
+    with pytest.raises(ValueError, match="Unhandled extra data key"):
+        MotorSteps.from_raw("name", [dict(type="x", value=0, invalid_extra="anything")])
+
+
+@pytest.mark.parametrize("step,data", [
+    ("delay", 1),
+    ("tone", (3000, 0.5))
+])
+def test_uuid_ack_timeout_rejected(step, data):
+    dct = dict(type=step, value=data)
+    dct["uuid_ack_timeout"] = 1
+    with pytest.raises(ValueError, match="Unhandled extra data key"):
+        MotorSteps.from_raw("name", [dct])
+
+
+@pytest.mark.parametrize("step,data", [
+    ("x", 0),
+    ("send_x_rel", 0),
+    ("predefined", "home"),
+    ("_servo_min_pos", Motor.TUNNEL_GATE_SERVO),
+    ("_servo_move", (Motor.TUNNEL_GATE_SERVO, 5)),
+])
+def test_uuid_ack_timeout_accepted(step, data):
+    dct = dict(type=step, value=data, uuid_ack_timeout=15)
+    steps = MotorSteps.from_raw("name", [dct])
+    assert steps.steps == [dct]
