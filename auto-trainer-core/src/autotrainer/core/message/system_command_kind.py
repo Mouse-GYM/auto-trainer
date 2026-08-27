@@ -66,8 +66,8 @@ class SystemCommandKind(IntEnum):
     SET_MOVE_RETRACT_PROCEDURE = 232
 
     # General actions.
-    PLAY_TONE = 301
-    SET_RGB_LED = 302
+    PLAY_TONE = 301   # data is (freq_as_int_hz, duration_as_float_seconds)
+    SET_RGB_LED = 302  # data is (R, G, B) with all 3 as integer %
     SET_DIGITAL_OUTPUT = 303
     SET_ANALOG_OUTPUT = 304
 

@@ -410,9 +410,9 @@ class EmulationInterface(DeviceInterface):
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def emit_tone(self, frequency, duration_ms) -> bool:
+    def emit_tone(self, frequency: int, duration: float) -> bool:
         if self._is_open:
-            logger.info(f"play tone f={frequency} d={duration_ms}")
+            logger.info(f"play tone f={frequency} d={duration}")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 

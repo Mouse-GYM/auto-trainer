@@ -511,6 +511,9 @@ class DeviceInterface:
         """Request a "sleep" delay to the pellet board"""
         raise NotImplementedError
 
+    def emit_tone(self, frequency: int, duration: float) -> bool:
+        raise NotImplementedError
+
     def fixed_position(self) -> bool:
         """send-pellet"""
         raise NotImplementedError

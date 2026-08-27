@@ -314,7 +314,7 @@ class CanDevice(Device):
             tgt = self._find_command_next_board_target(SystemCommandKind.UPDATE_SCALE_TARE, None)
             board = self._boards_pending_ctx[tgt]
             board.last_command_is_tare = True
-	return success
+        return success
 
     def _handle_delay(self, duration: float):
         success = self._interface.delay(duration)
@@ -495,7 +495,7 @@ class CanDevice(Device):
             SystemCommandKind.PLAY_TONE:
                 lambda data: (
                     self._interface.emit_tone(data[0], data[1]) if isinstance(data, tuple)
-                    else self._interface.emit_tone(data, 500)  # 500 millisecond
+                    else self._interface.emit_tone(data, 0.5)  # 500 millisecond
                 ),
 
             SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
@@ -1550,7 +1550,7 @@ class CanDevice(Device):
         elif 'tone' in step:
             motor = Motor.TONE
             freq, duration = step['tone'].split(',')  # noqa  # (hz), (sec)
-            success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+            success = self._interface.emit_tone(int(freq), float(duration))
             if success:
                 board.skip_uuid_ack_perf_c = True
 
