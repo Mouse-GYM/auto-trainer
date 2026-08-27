@@ -897,9 +897,9 @@ class CanDevice(Device):
                     prev_command[2] = ctx  # ensure it keeps the context/token as well
                     prev_command[3] = perf_c  # and the perf_c as well.
                 target_board.uuid = after_uuid
-                command_timeout_delay = self._prev_command_timeout or self.default_command_ack_timeout_duration
-                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + command_timeout_delay
-                self._prev_command_timeout = self.default_command_ack_timeout_duration
+                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + self._prev_command_timeout
+                # _prev_command_timeout is always preset to default before cmd execution,
+                # and eventually overriden during cmd execution.
                 target_board.prev_command = tuple(prev_command)
             else:
                 # no uuid generated
