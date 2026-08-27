@@ -1539,6 +1539,8 @@ class CanDevice(Device):
                         motor_cfg = self._motor_configs.get(motor)
                         if motor_cfg is not None:
                             cmd_ack_timeout = motor_cfg.uuid_ack_timeout
+                else:
+                    logger.debug("using step uuid_ack_timeout %s", cmd_ack_timeout)
                 if cmd_ack_timeout is not None:
                     self._prev_command_timeout = cmd_ack_timeout
         else:
