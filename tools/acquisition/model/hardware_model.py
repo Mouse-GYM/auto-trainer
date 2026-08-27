@@ -432,8 +432,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         :param frequency: in Hz (integer)
         :param duration: in seconds (float)
         """
-        duration_ms = int(duration * 1000)
-        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
+        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration))
 
     def delay(self, amount: float) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.DELAY, amount)

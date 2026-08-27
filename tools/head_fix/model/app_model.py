@@ -105,7 +105,7 @@ class AppModel(ObservableObject):
             self._device_connection.send_message(SystemCommandKind.MOVE_GATE_SERVO, value,
                                                  context="set gate")
 
-    def set_tone(self, freq: float, duration: float):
+    def set_tone(self, freq: int, duration: float):
         """
         Args:
             freq: Hz
@@ -113,9 +113,7 @@ class AppModel(ObservableObject):
         """
 
         if self._device_connection is not None:
-            self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (int(freq),
-                                                                               int(duration *
-                                                                                   1000)),
+            self._device_connection.send_message(SystemCommandKind.PLAY_TONE, (freq, duration),
                                                  context="tone")
 
     def open_tunnel_gate(self):

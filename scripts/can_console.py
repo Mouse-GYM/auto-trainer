@@ -433,7 +433,7 @@ def run_monitor():
                 elif cmd == 'a' or cmd == 'audio':
                     device_connection.send_message(SystemCommandKind.PLAY_TONE,
                                                # period from sec to msec
-                                               data=(int(params[0]), int(float(params[1]) * 1000)),
+                                               data=(int(params[0]), float(params[1])),
                                                context="tone")
 
                 elif cmd == 'd' or cmd == 'delay':

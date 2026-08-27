@@ -455,7 +455,7 @@ class CanDevice(Device):
             SystemCommandKind.PLAY_TONE:
                 lambda data: (
                     self._interface.emit_tone(data[0], data[1]) if isinstance(data, tuple)
-                    else self._interface.emit_tone(data, 500)  # 500 millisecond
+                    else self._interface.emit_tone(data, 0.5)  # 500 millisecond
                 ),
 
             SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
