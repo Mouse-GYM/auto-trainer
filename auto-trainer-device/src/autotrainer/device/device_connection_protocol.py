@@ -56,7 +56,7 @@ class DeviceConnectionProtocol(Protocol):
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a message/command to the command writer handler thread"""
 
-    def load_default_motor_config(self) -> MotorConfigurations:
+    def load_default_motor_config(self, *, is_cancelled=lambda: False) -> MotorConfigurations:
         default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
         if default_motors_cfg_file.exists():
             logger.notice("Reading and applying default motors config: %s", default_motors_cfg_file)
@@ -66,10 +66,10 @@ class DeviceConnectionProtocol(Protocol):
                 "Default motor config file %s not present, empty motor config auto-applied, this might be critical",
                 default_motors_cfg_file)
             motors_cfg = MotorConfigurationFile()
-        self.use_motor_configurations(motors_cfg)
+        self.use_motor_configurations(motors_cfg, is_cancelled=is_cancelled)
         return motors_cfg
 
-    def use_motor_configurations(self, data: MotorConfigurations):
+    def use_motor_configurations(self, data: MotorConfigurations, *, is_cancelled=lambda: False) -> None:
         """Apply the given motor configuration"""
         raise NotImplementedError
 

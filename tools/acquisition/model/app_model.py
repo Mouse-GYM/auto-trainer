@@ -1414,7 +1414,9 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue)
+        hard.connect(self._system_message_handler.input_queue, is_cancelled=is_cancelled)
+        if need_cancel():
+            return False
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
             timeout = 3

@@ -482,7 +482,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         dev = self._device_conn
         return dev is not None and dev.connected
 
-    def connect(self, cmd_queue: Queue, *, force_first_connect: bool=False):
+    def connect(self, cmd_queue: Queue, *, force_first_connect: bool=False,
+                is_cancelled=lambda: False):
         logger.notice("%s: connect with %s", self, cmd_queue)
         self._disconnect_event.clear()
 
@@ -512,14 +513,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         send_dev_cmd = partial(self._send_command, device_conn)
         def send_dev_ack_cmd(kind, data=None):
             tok = str(uuid.uuid4())
-            with device_conn.await_acknowledge({tok}):
+            with device_conn.await_acknowledge({tok}, is_cancelled=is_cancelled):
                 send_dev_cmd(kind, data, context=tok)
 
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
 
         # load and set motors and move configs
         # 1)
-        motors_config = device_conn.load_default_motor_config()
+        motors_config = device_conn.load_default_motor_config(is_cancelled=is_cancelled)
+        if is_cancelled():
+            return
         # 2)
         device_conn.load_default_move_config()
         # 3)
@@ -532,6 +535,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             # also need to re-apply the config
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
+        if is_cancelled():
+            return
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 

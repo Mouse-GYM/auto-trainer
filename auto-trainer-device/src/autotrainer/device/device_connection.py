@@ -157,7 +157,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             dev.disconnect()
 
     @contextlib.contextmanager
-    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True):
+    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
+                          is_cancelled=lambda: False):
         orig_cb = self._api.message_callback
         tokens_acked = []
         def cb(kind, context):
@@ -174,6 +175,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.verbose("Now waiting tokens %s", tokens)
             perf_timeout = time.perf_counter() + timeout
             while len(tokens) > 0:
+                if is_cancelled():
+                    break
                 if time.perf_counter() > perf_timeout:
                     if raise_on_timeout:
                         raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
@@ -203,7 +206,7 @@ class DeviceConnection(DeviceConnectionProtocol):
             else:
                 self.send_message(kind, steps)
 
-    def use_motor_configurations(self, data: MotorConfigurations):
+    def use_motor_configurations(self, data: MotorConfigurations, *, is_cancelled=lambda: False):
         logger.notice("Setting motor configurations")
         tokens = set()
         def make_token():
@@ -227,7 +230,9 @@ class DeviceConnection(DeviceConnectionProtocol):
             data.gate_config,
             data.tunnel_fan_config,
         ):
-            with self.await_acknowledge(tokens, timeout=3):
+            if is_cancelled():
+                break
+            with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
 
     def set_load_procedure(self, load_steps: MotorSteps):
