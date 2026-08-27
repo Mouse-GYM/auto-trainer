@@ -16,16 +16,23 @@ import time
 import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
-from multiprocessing.managers import SyncManager
+from multiprocessing.managers import SyncManager, ValueProxy
+from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
 
 import pandas
 import yaml
+
+from autotrainer.api import (
+    RpcService,
+    ApiCommandRequest,
+    ApiCommandRequestResponse,
+    ApiCommandRequestResult,
+    ApiEventKind,
+    build_event,
+)
 from autotrainer.api.event import DayStartedContext
-
-from autotrainer.core.analysis.alarm_detector import AlarmDetector
-
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind, ApiEmergencyStopReason, \
@@ -53,12 +60,13 @@ from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisRe
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
-from autotrainer.core.multiproc import no_op_timer
+from autotrainer.core.multiproc import no_op_timer, make_multiproc_manager
 from autotrainer.core.logging import get_verbose_logger, set_log_location
 from autotrainer.core.multiproc import get_mp_ctx, make_daemon_timer, DaemonTimer
 from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
+from autotrainer.core.analysis.alarm_detector import AlarmDetector
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -78,15 +86,6 @@ from autotrainer.behavior import IntertrialState, BehaviorAlgorithm, TrainingMod
     IntertrialMachine
 
 from autotrainer.training import TrainingPlan, TrainingPhase, PlanRepository, PlanInfo, LoadProgressResult
-
-from autotrainer.api import (
-    RpcService,
-    ApiCommandRequest,
-    ApiCommandRequestResponse,
-    ApiCommandRequestResult,
-    ApiEventKind,
-    build_event,
-)
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.autotrainer_version import __version__ as app_version
@@ -258,7 +257,7 @@ class AppModel(ObservableObject):
         mp_ctx = get_mp_ctx()
         if mp_manager is None:
             self._owns_mp_mgr = True
-            mp_manager = mp_ctx.Manager()
+            mp_manager = make_multiproc_manager()
         else:
             self._owns_mp_mgr = False
         self._mp_manager: Optional[SyncManager] = mp_manager
@@ -282,6 +281,9 @@ class AppModel(ObservableObject):
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None
         self._log_file_path: Optional[Path] = None
+
+        self._main_watchdog_holder: Optional[ValueProxy] = mp_ctx.Value(ctypes.c_float, math.nan)
+        # NB: c_float ok, do not need to be very precise
 
         self.set_log_location()
 
@@ -330,25 +332,28 @@ class AppModel(ObservableObject):
             synced_cam_recording=self._cams_record_enabled,
             record_stop_sema=self._record_stop_sema,
             mp_ctx=mp_ctx,
+            main_watchdog_holder=self._main_watchdog_holder,
         )
 
         right.on_close()
         self._right_camera = VideoCaptureModel(
-            "right",
-            self._preferences,
-            1,
+            "right", self._preferences, 1,
             msg_queue=proc_msg_queue,
             cam_id=CameraId.Right,
             synced_cam_frame_index=self._cams_synced_frame_index,
             synced_cam_recording=self._cams_record_enabled,
             record_stop_sema=self._record_stop_sema,
+            main_watchdog_holder=self._main_watchdog_holder,
         )
 
         self._top_camera_presence_detection = PresenceDetectionAttrs()
-        self._top_camera = VideoCaptureModel("web", self._preferences, -1,
-                                             presence_detection=self._top_camera_presence_detection,
-                                             msg_queue=None,  # not interested to webcam status for now.
-                                             cam_id=CameraId.Web)
+        self._top_camera = VideoCaptureModel(
+            "web", self._preferences, -1,
+            presence_detection=self._top_camera_presence_detection,
+            msg_queue=None,  # not interested to webcam status for now.
+            cam_id=CameraId.Web,
+            main_watchdog_holder=self._main_watchdog_holder,
+        )
 
         self._cameras = [  # must respect camera_idx/inference_index order
             self._left_camera,
@@ -381,13 +386,16 @@ class AppModel(ObservableObject):
         self.reload_calib(calib_dir)
         #
         if inference_model is None:
-            inference_model = InferenceModel(
+            inference = InferenceModel(
                 self._pose_algorithm,
                 calib_dir=calib_dir,
                 mp_manager=self._mp_manager,
                 record_stop_sema=self._record_stop_sema,
+                main_watchdog_holder=self._main_watchdog_holder,
             )
-        inference = self._inference =  inference_model
+        else:
+            inference = inference_model
+        self._inference: InferenceModel = inference
         #
 
         self._training_plans: List[PlanInfo] = []
@@ -458,6 +466,23 @@ class AppModel(ObservableObject):
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
 
         one_minute_timer_handle_and_reschedule()
+
+
+    @property
+    def main_watchdog_perf_c(self) -> float:
+        holder = self._main_watchdog_holder
+        if holder is None:
+            return math.nan
+        return holder.value
+
+    def refresh_main_watchdog(self):
+        holder = self._main_watchdog_holder
+        if holder is not None:
+            holder.value = get_perf_now()
+
+    @property
+    def main_watchdog_holder(self) -> Optional[Synchronized]:
+        return self._main_watchdog_holder
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
@@ -1263,6 +1288,7 @@ class AppModel(ObservableObject):
         synced_cameras = (self._left_camera, self._right_camera)  # normally/usually left cam is primary
         did_start = True
 
+        cam_start_timeout = self._hardware.config.camera_start_timeout
         # 1) prepare synced primary camera(s)
         if did_start:
             for camera in synced_cameras:
@@ -1275,7 +1301,8 @@ class AppModel(ObservableObject):
                         break
                     # 1.1) wait it's running or failed
                     if (
-                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                        not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                           timeout=cam_start_timeout)
                     ) or camera.video_status != CaptureProcessStatus.RUNNING:
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
@@ -1293,10 +1320,10 @@ class AppModel(ObservableObject):
                                       _failed_camera_template(camera.name, camera.last_error))
                         break
 
-        # 3) wait all synced cameras are running
+        # 3) wait all synced non-primary cameras are running
         if did_start:
             p_before = time.perf_counter()
-            p_timeout = p_before + 10
+            p_timeout = p_before + cam_start_timeout
             for camera in synced_cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera.is_enabled:
@@ -1335,7 +1362,8 @@ class AppModel(ObservableObject):
                               _failed_camera_template(camera.name, camera.last_error))
             else:
                 if (
-                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=5)
+                    not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                       timeout=cam_start_timeout)
                     or camera.video_status != CaptureProcessStatus.RUNNING
                 ):
                     did_start = False
@@ -1593,8 +1621,9 @@ class AppModel(ObservableObject):
         logger.verbose("Will use algo record_prebuffer_duration=%.1f seconds", prebuffer_duration)
         self._behavior.algorithm.record_prebuffer_duration = prebuffer_duration
 
-        self.inference.load_configuration(configuration.inference)
-        self.behavior.load_configuration(configuration.behavior)
+        self._hardware.load_config(configuration.hardware)
+        self._inference.load_configuration(configuration.inference)
+        self._behavior.load_configuration(configuration.behavior)
 
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
@@ -1614,8 +1643,6 @@ class AppModel(ObservableObject):
         analysis.free_disk_space_detector.start()
         analysis.free_disk_space_detector.set_persistence_config(configuration.persistence)
         self._refresh_cage_clean_data()
-
-        self._hardware.load_config(configuration.hardware)
 
         self.configuration_loaded_event(configuration)
 
@@ -2099,7 +2126,9 @@ class AppModel(ObservableObject):
         animal.to_file(dst)
 
     def _create_configuration(self) -> SystemConfiguration:
-        hardware_configuration = HardwareConfiguration(tunnel_identifier="CAN", pellet_identifier="CAN")
+        hardware_configuration = self._hardware.config
+        hardware_configuration.tunnel_identifier = "CAN"
+        hardware_configuration.pellet_identifier = "CAN"
 
         cameras = []
         for camera in self._cameras:
