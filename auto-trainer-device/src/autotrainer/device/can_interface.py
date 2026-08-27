@@ -1107,7 +1107,7 @@ class CanInterface(DeviceInterface):
         query(Motor.TUNNEL_GATE_SERVO, ServoConfig)
         query(Motor.TUNNEL_FAN_SERVO, ServoConfig)
 
-    def delay(self, delay_sec) -> bool:
+    def delay(self, delay_sec: float) -> bool:
         """
         Issue a commanded delay at the target
 

@@ -314,6 +314,14 @@ class CanDevice(Device):
             tgt = self._find_command_next_board_target(SystemCommandKind.UPDATE_SCALE_TARE, None)
             board = self._boards_pending_ctx[tgt]
             board.last_command_is_tare = True
+	return success
+
+    def _handle_delay(self, duration: float):
+        success = self._interface.delay(duration)
+        if success:
+            duration += 1
+            logger.debug("setting command timeout to requested duration + 1: (%s)", duration)
+            self._prev_command_timeout = duration
         return success
 
     def _init_handlers(self):
@@ -457,7 +465,7 @@ class CanDevice(Device):
             # digital only allow 2 "position"
             # SystemCommandKind.TUNNEL_FAN_SET: partial(handle_servo_move, Motor.TUNNEL_FAN_SERVO),
 
-            SystemCommandKind.DELAY: self._interface.delay,
+            SystemCommandKind.DELAY: self._handle_delay,
 
             SystemCommandKind.READ_MOTOR_CONFIGURATION: self._interface.request_motor_config,
 
@@ -1007,9 +1015,9 @@ class CanDevice(Device):
                     )
                     t_prev_command[1][0] = kind  # and the original kind
                 target_board.uuid = after_uuid
-                command_timeout_delay = self._prev_command_timeout or self.default_command_ack_timeout_duration
-                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + command_timeout_delay
-                self._prev_command_timeout = self.default_command_ack_timeout_duration
+                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + self._prev_command_timeout
+                # _prev_command_timeout is always preset to default before cmd execution,
+                # and eventually overriden during cmd execution.
                 target_board.prev_command = t_prev_command
             else:
                 # no uuid generated
@@ -1537,8 +1545,7 @@ class CanDevice(Device):
 
         elif 'delay' in step:
             motor = Motor.DELAY
-            duration = step['delay']
-            success = self._interface.delay(duration)
+            success = self._handle_delay(step['delay'])
 
         elif 'tone' in step:
             motor = Motor.TONE
@@ -1643,6 +1650,8 @@ class CanDevice(Device):
                         motor_cfg = self._motor_configs.get(motor)
                         if motor_cfg is not None:
                             cmd_ack_timeout = motor_cfg.uuid_ack_timeout
+                else:
+                    logger.debug("using step uuid_ack_timeout %s", cmd_ack_timeout)
                 if cmd_ack_timeout is not None:
                     self._prev_command_timeout = cmd_ack_timeout
         else:

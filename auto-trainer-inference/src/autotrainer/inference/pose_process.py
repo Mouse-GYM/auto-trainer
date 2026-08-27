@@ -6,6 +6,7 @@ import threading
 import time
 from enum import IntEnum
 from multiprocessing import Process, Queue, synchronize
+from multiprocessing.managers import ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
@@ -22,6 +23,7 @@ from autotrainer.core.logging import (
     setup_logging,
     install_log_exception_hook,
 )
+from autotrainer.core.multiproc import get_mp_ctx, MixinMainWatchdogChecker
 from autotrainer.core.frame_index import FrameIndexCategory
 from . import DlcPoseModel, MemoryPoseModel
 from .pose_model import PoseModel
@@ -56,7 +58,7 @@ class InferenceMode(IntEnum):
     Offline = 1
 
 
-class PoseProcess(Process):
+class PoseProcess(MixinMainWatchdogChecker, Process):
     """
     Defines an independent Process for loading and processing a pose interference model.
 
@@ -87,6 +89,7 @@ class PoseProcess(Process):
         offline_input_event_cb_ack: synchronize.Event,
         watchdog_perf_c: Synchronized,
         record_stop_sema: Optional[SemaphoreType] = None,
+        main_watchdog_holder: Optional[ValueProxy] = None,
     ):
         """
         :param live_queue: a FixedArrayMultiQueue as the default source of input frames
@@ -118,6 +121,7 @@ class PoseProcess(Process):
         self._record_stop_sema = record_stop_sema
         self._process_live_when_ready = False
         self._is_running = True
+        self.main_watchdog_holder = main_watchdog_holder
         self._perf_monitor = PerfMonitor(name="<pose-predict>", units="predict calls/s", report_window=30,
                                          enable_log=False)
         #
@@ -214,6 +218,8 @@ class PoseProcess(Process):
         Wait for Start or Terminate command.
         """
         while True:
+            if not self.check_main_watchdog():
+                return False
             try:
                 cmd, context = self._cmd_queue.get(timeout=1)
             except Empty:
@@ -236,6 +242,10 @@ class PoseProcess(Process):
 
     def _handle_cmd_queue(self, offline_input: OfflineInputProcess):
         while True:
+            if not self.check_main_watchdog():
+                logger.error("main watchdog holder timedout, exiting")
+                self._is_running = False
+                break
             try:
                 cmd, context = self._cmd_queue.get(timeout=1)
             except Empty:

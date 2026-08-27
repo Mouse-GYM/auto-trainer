@@ -26,6 +26,8 @@ from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmCon
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration, \
     AnimalSleepWindow, TimePeriod
+from autotrainer.core.configuration.hardware_configuration import HardwareConfiguration
+
 
 fixtures_path = Path(__file__).parent.joinpath("fixtures")
 
@@ -97,6 +99,7 @@ v0_expected_result_config = {
         "pellet_identifier": "COM28",
         "min_ack_timeout": None,
         "board_status_timeout": None,
+        "camera_start_timeout": HardwareConfiguration.camera_start_timeout,
     },
     "inference": {
         "pose_model_location": "/home/autotrainer/models/current-model-2000-01-02",
@@ -269,7 +272,9 @@ def test_load_version_1():
                      'still_image_capture_interval': 0.0}],
         'hardware': {'pellet_identifier': '/dev/ttyS31',
                      'tunnel_identifier': '/dev/ttyS30',
-                     'min_ack_timeout': None, 'board_status_timeout': None},
+                     'min_ack_timeout': None, 'board_status_timeout': None,
+                     "camera_start_timeout": HardwareConfiguration.camera_start_timeout,
+                     },
         'inference': {'is_enabled': True,
                       'pose_model_location': '/pose_model_path'},
         'persistence': {'output_location': '/output_location_path'},
@@ -489,3 +494,9 @@ def test_v55_renames_are_respected():
     assert isinstance(cfg, SystemConfiguration)
     assert cfg.behavior.animal_sleep_window == TimePeriod(
         start=datetime.time(17, 33, 55), stop=datetime.time(5, 42, 30))
+
+
+@pytest.mark.parametrize("delay", [-1, 0])
+def test_hardware_config_fail_with_zero_or_negative_cam_timeout(delay):
+    with pytest.raises(ValueError, match="camera_start_timeout negative or zero"):
+        HardwareConfiguration(camera_start_timeout=delay)
