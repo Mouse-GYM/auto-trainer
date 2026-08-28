@@ -16,9 +16,26 @@ from typing import List, Optional, Dict, Tuple, Callable, Union, Literal
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination, QTimer
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QFrame, QDialog)
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QStatusBar,
+    QToolBar,
+    QLabel,
+    QMessageBox,
+    QApplication,
+    QSizePolicy,
+    QWidget,
+    QComboBox,
+    QLineEdit,
+    QFileDialog,
+    QPushButton,
+    QHBoxLayout,
+    QSpinBox,
+    QDoubleSpinBox,
+    QFrame,
+    QDialog,
+    QVBoxLayout,
+)
 import qtawesome as qta
 from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason
 
@@ -122,8 +139,8 @@ class MainWindow(QMainWindow):
         self._title = _make_window_title(prefs)
         self._closing = False
         self._closed = False
-        self._close_event = None
         self._start_capture_thread: Optional[threading.Thread] = None
+        self._stopping = False
 
         self.setWindowTitle(self._title)
 
@@ -221,7 +238,7 @@ class MainWindow(QMainWindow):
             except ValueError:
                 pass
             orig_close_event(event)
-            event.accept()
+            # event.accept()
         item.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
@@ -247,7 +264,7 @@ class MainWindow(QMainWindow):
         self,
         is_toggled, *,
         target_status: AppModelStatus = AppModelStatus.ACQUIRING,
-        after_callback=lambda: None,
+        after_callback=lambda: None,  # executed in start/stop dedicated thread
     ):
         app_model = self._app_model
         if is_toggled and self._closing:
@@ -272,6 +289,8 @@ class MainWindow(QMainWindow):
                     logger.exception("app_model.capture_start failed: %s", err)
                     started = False
                 def after_exec_start():
+                    if self._closing:
+                        return
                     if started:
                         self._status_label.setText("")
                     else:
@@ -282,15 +301,19 @@ class MainWindow(QMainWindow):
                     self.animal_in_device_action.setEnabled(True)
                     self.animal_in_training_action.setEnabled(True)
                     self._app_model_status_combo.setEnabled(True)
+                try:
                     after_callback()
-                InvokeMethod(after_exec_start)
+                finally:
+                    InvokeMethod(after_exec_start)
             thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
             thread.start()
         else:
+            if self._stopping:
+                return
+            self._stopping = True
             self._status_label.setText("Stopping acquisition...")
             prev_start = self._start_capture_thread
-            app_model.analysis.stop()
             def exec_stop():
                 if prev_start is not None:
                     if prev_start.is_alive():
@@ -299,8 +322,12 @@ class MainWindow(QMainWindow):
                         logger.success("previous start thread joined")
                     self._start_capture_thread = None
                 logger.info("stopping acquisition")
-                app_model.capture_stop()
-                InvokeMethod(after_exec_stop)
+                try:
+                    app_model.capture_stop()
+                    after_callback()
+                finally:
+                    self._stopping = False
+                    InvokeMethod(after_exec_stop)
 
             def after_exec_stop():
                 self.running_status_changed.emit(False)
@@ -309,9 +336,8 @@ class MainWindow(QMainWindow):
                 self.animal_in_training_action.setEnabled(True)
                 self._app_model_status_combo.setEnabled(True)
                 self._status_label.setText("")
-                after_callback()
 
-            thread = threading.Thread(target=exec_stop, daemon=True)
+            thread = threading.Thread(target=exec_stop, daemon=True, name="stopper_thread")
             thread.start()
 
     def _on_system_mode_combo_changed(self, idx: int):
@@ -785,10 +811,11 @@ class MainWindow(QMainWindow):
         waiter_thread.start()
 
     @invoke_method
-    def _show_msg_box(self, title, text, icon):
+    def _show_msg_box(self, title, text, icon, *, modal: bool=False):
         box = QMessageBox()
         box.setWindowTitle(title)
-        # box.setModal(True)
+        if modal:
+            box.setModal(True)
         box.setText(text)
         box.setIcon(icon)
         box.show()
@@ -809,20 +836,36 @@ class MainWindow(QMainWindow):
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
     def close(self):
-        logger.notice("received close ; event=%s", self._close_event)
+        if self._closed:
+            return
+        logger.notice("received close")
         self._main_ui_watchdog_timer.stop()  # ensure doesn't race
         with self._app_model.app_lock:
-            event = self._close_event
             if self._closing:
-                if event is not None:
-                    event.accept()
-                    self._close_event = None
-                else:
-                    logger.warning("already closing")
+                logger.warning("already closing")
                 return
             self._closing = True
-        self._on_capture_start_stop(False, after_callback=self._on_closed_finished)
+        def after_stop():
+            # time.sleep(5)  debug
+            self._app_model.on_close()
+            self._on_closed_finished()
+        self._on_capture_start_stop(False, after_callback=after_stop)
+        dialog = QDialog(self)
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Closing in progress, please wait ..."))
+        dialog.setLayout(layout)
+        dialog.setModal(True)
+        # nothing will be able to close it, but the main prog exit.
+        dialog.accept = lambda: False
+        dialog.reject = lambda: False
+        dialog.close = lambda: False
+        def close_event(event):
+            event.ignore()
+        dialog.closeEvent = close_event
+        self._add_box_to_open_dialogs(dialog)
+        dialog.show()
 
+    @invoke_method
     def _on_closed_finished(self):
         if self._closed:
             return
@@ -830,34 +873,21 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         app_model.property_changed -= self._on_app_model_property_changed
         self._timer_calibrate_diamond_triangle.cancel()
-        app_model.on_close()
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:
             dialog.close()
-        close_event = self._close_event
         logger.debug("closing super close")
         self._closed = True
         super().close()
-        if close_event is not None:
-            # logger.verbose("accepting close event")
-            # close_event.accept()
-            self._close_event = None
 
     def closeEvent(self, event):
-        close_event = self._close_event
-        if self._closed:
+        if self._closed or self._closing:
             return
-        logger.debug("received closeEvent: %s, prev=%s", event, close_event)
-        if close_event is None:
-            self._close_event = event
-            self.close()
-            event.ignore()
-        else:
-            event.accept()
-            super().closeEvent(event)
-            logger.debug("closeEvent2 done")
+        logger.debug("received closeEvent: %s", event)
+        event.ignore()
+        self.close()
 
     def moveEvent(self, event):
         self._preferences.last_window_x = self.pos().x()

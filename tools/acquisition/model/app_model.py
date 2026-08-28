@@ -1461,6 +1461,9 @@ class AppModel(ObservableObject):
                 return t_end
             watchdog_mon_register("test-watchdog", lambda t=time.perf_counter() + 180: fake_watchdog(t))
 
+        if need_cancel():
+            return False
+
         # we always be/go at home on acquisition start, so:
         self._behavior.system_machine.pellet.move_home(force=True)
 
@@ -1469,6 +1472,8 @@ class AppModel(ObservableObject):
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
+            if need_cancel():
+                return False
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
             watchdog_mon_register(WatchdogItems.POSE_DATA_MONITOR_PROC,

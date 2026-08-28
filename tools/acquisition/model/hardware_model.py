@@ -517,6 +517,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 send_dev_cmd(kind, data, context=tok)
 
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
+        if is_cancelled():
+            return
 
         # load and set motors and move configs
         # 1)
@@ -528,11 +530,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         # 3)
         if self._connect_count == 1 or force_first_connect:
             logger.notice("Doing cover attach-release-detach on first connect")
-            send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
-            send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
-            # also need to re-apply the config
+            for args in (
+                (SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.RELEASE_PELLET,),
+                (SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config),
+                # also need to re-apply the config
+            ):
+                send_dev_ack_cmd(*args)
+                if is_cancelled():
+                    return
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
         if is_cancelled():
@@ -541,6 +548,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_stream_started = True
 
         send_dev_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
+        if is_cancelled():
+            return
 
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():

@@ -193,7 +193,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
-    def use_compound_movements(self, data: CompoundMovementDataSet):
+    def use_compound_movements(self, data: CompoundMovementDataSet, *, is_cancelled=lambda: False):
         for kind, steps in (
             (SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet),
             (SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet),
@@ -201,6 +201,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             (SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet),
             (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, data.move_retract),
         ):
+            if is_cancelled():
+                return
             if steps.is_empty:
                 logger.notice("config compound %s empty, not using. builtin default config will remain.", kind)
             else:
