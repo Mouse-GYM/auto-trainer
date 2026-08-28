@@ -324,6 +324,22 @@ class CanDevice(Device):
             self._prev_command_timeout = duration
         return success
 
+    def _apply_set_or_move(self, func, motor, *args, **kwargs):
+        # used for move/set x/y/z
+        has_relative = "relative" in kwargs
+        is_relative = has_relative and kwargs["relative"]
+        if motor is not None:
+            cfg = self._motor_configs[motor]
+            if cfg.uuid_ack_timeout is not None:
+                self._prev_command_timeout = cfg.uuid_ack_timeout
+        self._prev_command_is_relative = is_relative
+        board_ctx = self._boards_pending_ctx[Target.PELLET_DEVICE]
+        iface = self._interface
+        board_ctx.last_command_is_move_stepper = func in {
+            iface.move_motor_x, iface.move_motor_y, iface.move_motor_z,
+        }
+        return func(*args, **kwargs)
+
     def _init_handlers(self):
 
         def handle_board_clear_error(target: Target):
@@ -381,17 +397,7 @@ class CanDevice(Device):
             logger.verbose("replaced retract proc by %s (prev=%s)", proc, prev)
             return True
 
-        def apply_set_or_move(func, motor, *args, **kwargs):
-            has_relative = "relative" in kwargs
-            is_relative = has_relative and kwargs["relative"]
-            if motor is not None:
-                cfg = self._motor_configs[motor]
-                if cfg.uuid_ack_timeout is not None:
-                    self._prev_command_timeout = cfg.uuid_ack_timeout
-            self._prev_command_is_relative = is_relative
-            pellet_board_ctx = self._boards_pending_ctx[Target.PELLET_DEVICE]
-            pellet_board_ctx.last_command_is_move_stepper = func.__name__.startswith("move_motor_")
-            return func(*args, **kwargs)
+        apply_set_or_move = self._apply_set_or_move
 
         # Initialize command handlers lookup table
         self._command_handlers = {
@@ -1474,7 +1480,7 @@ class CanDevice(Device):
             )
             # or should we move to 0 instead ?
             return motor, True
-        return motor, meth(new_pos)
+        return motor, self._apply_set_or_move(meth, None, new_pos)
 
     def _perform_next_compound_step(self, board: _BoardPendingContext, compound_movements: List[Dict[str, Any]]) -> bool:
         """
