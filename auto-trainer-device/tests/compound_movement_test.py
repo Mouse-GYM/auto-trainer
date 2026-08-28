@@ -111,3 +111,13 @@ def test_uuid_ack_timeout_accepted(step, data):
     dct = dict(type=step, value=data, uuid_ack_timeout=15)
     steps = MotorSteps.from_raw("name", [dct])
     assert steps.steps == [dct]
+
+
+def test_present_but_empty_key_gives_skip_step():
+    dct = dict(actions=dict(load_pellet=[]))
+    move_cfg = CompoundMovements.from_yaml_dict(dct)
+    assert move_cfg.load_pellet.steps == [dict(type="skip", value=None)]
+    assert not move_cfg.load_pellet.is_empty
+    # but:
+    assert not move_cfg.send_pellet.steps
+    assert move_cfg.send_pellet.is_empty
