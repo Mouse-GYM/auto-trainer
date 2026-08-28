@@ -114,11 +114,14 @@ class CompoundMovements(CompoundMovementDataSet):
         if not isinstance(yaml_dict, dict):
             raise TypeError(f"Expected dict for main compound move content, but got {type(yaml_dict)}")
         try:
-            actions = yaml_dict["actions"]
+            actions = yaml_dict.pop("actions")
         except KeyError:
             raise ValueError("Expected an 'actions' key in main compound move content") from None
         if not isinstance(actions, dict):
             raise TypeError(f"Expected dict for 'actions' in main compound move content, but got {type(actions)}")
+
+        if len(yaml_dict) > 0:
+            raise ValueError(f"Unexpected top key(s): {sorted(yaml_dict)}")
 
         for name, value in actions.items():
             kind = CompoundMovementKind(name)

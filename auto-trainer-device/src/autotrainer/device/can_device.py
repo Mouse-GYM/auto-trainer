@@ -15,7 +15,7 @@ import queue
 import threading
 import time
 from functools import partial
-from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
+from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict, Literal
 
 from autotrainer.core import Offset3DTuple, get_perf_now, Motor
 from autotrainer.core.logging import get_verbose_logger
@@ -319,7 +319,8 @@ class CanDevice(Device):
 
         def set_steps_proc(name: str, proc: MotorSteps):
             if name not in self._steps_procedures:
-                raise ValueError(f"unknown step procedure name: {name!r}")
+                logger.error("Unknown step procedure: %r", name)
+                return True
             if isinstance(proc, MotorSteps) and not proc.is_empty:
                 self._steps_procedures[name] = proc
                 logger.verbose("set procedure %r to %s", name, proc)
@@ -1009,7 +1010,7 @@ class CanDevice(Device):
         board = self._boards_pending_ctx[tgt]
         return self._perform_next_compound_step(board, move_steps)
 
-    def _find_step_board(self, step) -> Optional[Target]:
+    def _find_step_board(self, step) -> Union[Literal["unhandled"], Optional[Target]]:
         tp = step["type"]
         val = step["value"]
         if tp in {'x', 'x_rel', 'send_x_rel'}:
@@ -1046,9 +1047,11 @@ class CanDevice(Device):
                 # single one where we don't use motor = ..
                 # but they are all on PELLET board.
                 return Target.PELLET_DEVICE
+            return "unhandled"
+        elif tp == 'skip':
             return None
         else:
-            return None
+            return "unhandled"
         return target_of_motor(motor)
 
     def _find_steps_next_board_target(self, kind, steps) -> Optional[Target]:
@@ -1057,7 +1060,7 @@ class CanDevice(Device):
             return None
         for step in steps:
             tgt = self._find_step_board(step)
-            if tgt is not None:
+            if tgt != "unhandled":
                 return tgt
         raise ValueError(f"Found no target board for kind={kind} steps: {steps}")
 
@@ -1380,7 +1383,11 @@ class CanDevice(Device):
         motor = None
         before_uuid = self._interface.uuid()
 
-        if step_type == 'x':
+        if step_type == "skip":
+            motor = Motor.NONE
+            success = True
+
+        elif step_type == 'x':
             motor = Motor.PELLET_X_MOTOR
             location = step_val
             location: Union[float, Tuple[float, float]]

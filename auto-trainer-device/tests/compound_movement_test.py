@@ -13,6 +13,22 @@ def test_load_from_default():
         assert isinstance(move_steps, MotorSteps)
         assert move_steps.name == kind.value
 
+@pytest.mark.parametrize("bad_actions", [
+    "foobar", [], (), None, 32,
+])
+def test_invalid_actions_type(bad_actions):
+    dct = dict(actions=bad_actions)
+    with pytest.raises(TypeError):
+        CompoundMovements.from_yaml_dict(dct)
+
+
+@pytest.mark.parametrize("invalid_key", ["unknown1", 30])
+def test_invalid_top_key(invalid_key):
+    dct = dict(actions={})
+    dct[invalid_key] = "anything"  # noqa
+    with pytest.raises(ValueError):
+        CompoundMovements.from_yaml_dict(dct)
+
 
 def test_multiple_data_in_steps():
     open_gate_steps = [

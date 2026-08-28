@@ -110,6 +110,7 @@ def validate_extra_data(dct):
 
 
 _compound_steps_validate = dict(
+    skip=lambda _: True,
     delay=validate_int_float,
     tone=validate_tone,
     x=validate_position_or_pos_velocity,
@@ -154,7 +155,8 @@ class MotorSteps:
             validate_extra_data(dct)
             steps.append(dct)
         if len(steps) == 0:
-            logger.warning("Empty steps for MotorSteps %s", name)
+            logger.warning("Empty steps for MotorSteps %s, auto-using 'skip'", name)
+            steps.append(dict(type="skip", value=None))
         return MotorSteps(name, steps)
 
     def __init__(self, name: str = "NA", steps: Optional[List[Dict[str, Any]]] = None):

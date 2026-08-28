@@ -168,13 +168,7 @@ class MainWindow(QMainWindow):
 
         if config_file is None:
             config_file = app_model.get_config_location()
-        try:
-            app_model.load_configuration(config_file)
-        except Exception as err:
-            tb = traceback.format_exc()
-            new_err = (f"\nConfiguration file {config_file} has issue,\n\n"
-               f"please check and fix following error:\n\n{err}\n\n{tb}")
-            app_model.config_errors.append(new_err)
+        app_model.load_configuration(config_file)
 
         app_model.property_changed += self._on_app_model_property_changed
         app_model.current_day_changed += self._on_day_changed

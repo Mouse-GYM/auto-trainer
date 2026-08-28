@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import pickle
+import pprint
 import queue
 import shlex
 import subprocess
@@ -1247,6 +1248,10 @@ class AppModel(ObservableObject):
                 self.on_error("AppModelStatus change error",
                               f"Target status {target_status} not valid for source status {before_status}")
                 return False
+            if len(self._config_errors) > 0:
+                self.on_error("Refusing start-acquisition, configuration error(s)",
+                              f"Errors:\n{pprint.pformat(self._config_errors)}")
+                return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
                 return False
@@ -1587,10 +1592,21 @@ class AppModel(ObservableObject):
             configuration.save_file(location, as_yaml=True)
         return configuration
 
-    def load_configuration(self, location: Optional[Path] = None):
-        self._config_errors.clear()
+    def load_configuration(self, location: Optional[Path] = None) -> bool:
         if location is None:
             location = self.get_config_location()
+        try:
+            return self._load_configuration(location)
+        except Exception as err:
+            new_err = (
+                f"\nConfiguration file {location} has issue,\n\n"
+                f"please check and fix following error:\n\n{err}\n"
+            )
+            self._config_errors.append(new_err)
+            return False
+
+    def _load_configuration(self, location):
+        self._config_errors.clear()
 
         configuration: SystemConfiguration = self.get_config_from_location(location)
 
@@ -1650,13 +1666,14 @@ class AppModel(ObservableObject):
             self._motors_config = hard.load_default_motor_config(motors_cfg_file)
         except Exception as err:
             self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
-        self._move_config = None  # always preset
+        #
+        self._move_config = None
         move_config_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
         try:
-            self._move_config = CompoundMovements.from_file(move_config_file)
+            self._move_config = hard.load_default_move_config(move_config_file)
         except Exception as err:
             self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
-
+        #
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
 
