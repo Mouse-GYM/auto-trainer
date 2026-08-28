@@ -239,7 +239,7 @@ class CanDevice(Device):
 
         self._init_handlers()
 
-        self._prev_command_timeout: float = self.default_command_ack_timeout_duration
+        self._prev_command_timeout: Optional[float] = self.default_command_ack_timeout_duration
         self._prev_command: Optional[List[Any, Any, Optional, Optional]] = None
         self._prev_command_is_relative = False
 
@@ -901,7 +901,10 @@ class CanDevice(Device):
                     prev_command[2] = ctx  # ensure it keeps the context/token as well
                     prev_command[3] = perf_c  # and the perf_c as well.
                 target_board.uuid = after_uuid
-                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + self._prev_command_timeout
+                cmd_timeout = self._prev_command_timeout
+                if cmd_timeout is None:
+                    cmd_timeout = self.default_command_ack_timeout_duration
+                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + cmd_timeout
                 # _prev_command_timeout is always preset to default before cmd execution,
                 # and eventually replaced during cmd execution.
                 target_board.prev_command = tuple(prev_command)
@@ -1382,6 +1385,9 @@ class CanDevice(Device):
 
         motor = None
         before_uuid = self._interface.uuid()
+        before_prev_cmd_timeout = self._prev_command_timeout
+        self._prev_command_timeout = None  # temporary,
+            # used to know if some command/step has overwritten it.
 
         if step_type == "skip":
             motor = Motor.NONE
@@ -1550,17 +1556,22 @@ class CanDevice(Device):
             if after_uuid != before_uuid:
                 # in case need for retry for ack timeout:
                 self._prev_command = [_retry_compound, [None, step, compound_movements], None, None]
-                # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
-                cmd_ack_timeout = step.get('uuid_ack_timeout')
-                if cmd_ack_timeout is None:
-                    if motor is not None:
-                        motor_cfg = self._motor_configs.get(motor)
-                        if motor_cfg is not None:
-                            cmd_ack_timeout = motor_cfg.uuid_ack_timeout
-                else:
-                    logger.debug("using step uuid_ack_timeout %s", cmd_ack_timeout)
-                if cmd_ack_timeout is not None:
-                    self._prev_command_timeout = cmd_ack_timeout
+                # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout,
+                # but only if prev_command_timeout wasn't overwritten during step execution
+                if self._prev_command_timeout is None:
+                    self._prev_command_timeout = before_prev_cmd_timeout
+                    cmd_ack_timeout = step.get('uuid_ack_timeout')
+                    if cmd_ack_timeout is None:
+                        if motor is not None:
+                            motor_cfg = self._motor_configs.get(motor)
+                            if motor_cfg is not None:
+                                cmd_ack_timeout = motor_cfg.uuid_ack_timeout
+                                source = "motor config"
+                    else:
+                        source = "step"
+                    if cmd_ack_timeout is not None:
+                        logger.debug("using %s uuid_ack_timeout %s", source, cmd_ack_timeout)
+                        self._prev_command_timeout = cmd_ack_timeout
         else:
             logger.error("%s write command failed", step_clean)
 
