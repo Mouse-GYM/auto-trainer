@@ -194,19 +194,22 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._device.notify_message(kind, data, context)
 
     def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None):
-        if data is None:
-            data = self.load_default_move_config()
+        move_config = data
+        if move_config is None:
+            move_config = self.load_default_move_config()
         for compound_move in CompoundMovementKind:
             name = compound_move.value
-            steps = getattr(data, name)
+            steps = getattr(move_config, name)
             if steps.is_empty:
                 logger.notice("config compound %s empty, not using. builtin default config will remain.", name)
             else:
                 self.set_steps_procedure(name, steps)
+        return move_config
 
     def use_motor_configurations(self, data: Optional[MotorConfigurations] = None):
+        motor_configs = data
         if data is None:
-            data = self.load_default_motor_config()
+            data = motor_configs = self.load_default_motor_config()
         logger.notice("Setting motor configurations")
         tokens = set()
         def make_token():
@@ -232,6 +235,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             with self.await_acknowledge(tokens, timeout=3):
                 send(conf)
+        return motor_configs
 
     def set_steps_procedure(self, name: str, steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_STEPS_PROCEDURE, SystemDataArgsKwargs(name, steps))
