@@ -179,5 +179,5 @@ class MessageHandler(ObservableObject):
                 input_queue.task_done()
             input_queue.join()
 
-    def message_received(self, msg, _data):
+    def message_received(self, msg, data):
         pass

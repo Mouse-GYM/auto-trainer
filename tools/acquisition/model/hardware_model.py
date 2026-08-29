@@ -762,11 +762,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             (logger.debug if not self._device_stream_started else logger.warning)(
                 "Received unexpected ack token: %s", token)
         else:
-            if not result.succeeded:
-                logger.error("command token %s failed: %s", token, result)
-                # what else to do ?
-                # error event callback ?
             self._refresh_cmd_in_progress(commands_in_prog)
+        # nb: we receive the command result for *any* command initiated from within the application
+        if not result.succeeded:
+            logger.error("command token %s failed: %s", token, result)
+            self._sensor_analysis.device_comm_alarm.is_engaged = True
 
     def wait_pending_command_acked(
         self,
