@@ -1607,6 +1607,7 @@ class AppModel(ObservableObject):
 
     def _load_configuration(self, location):
         self._config_errors.clear()
+        load_ok = True  # preset, is set to False if some sub-config file(s) fail to load
 
         configuration: SystemConfiguration = self.get_config_from_location(location)
 
@@ -1666,6 +1667,7 @@ class AppModel(ObservableObject):
             self._motors_config = hard.load_default_motor_config(motors_cfg_file)
         except Exception as err:
             self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
+            load_ok = False
         #
         self._move_config = None
         move_config_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
@@ -1673,6 +1675,7 @@ class AppModel(ObservableObject):
             self._move_config = hard.load_default_move_config(move_config_file)
         except Exception as err:
             self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
+            load_ok = False
         #
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
@@ -1692,7 +1695,7 @@ class AppModel(ObservableObject):
 
         self.configuration_loaded_event(configuration)
 
-        return True
+        return load_ok
 
     def reload_training_plans(self, *, refresh: bool = False, reraise_on_error: bool = False):
         if self._acquisition_started or self._status != AppModelStatus.IDLE:
