@@ -2518,6 +2518,7 @@ class AppModel(ObservableObject):
         self._update_led_color()
         analysis = self._analysis
         analysis.boards_hardware_reset_detector.restart()
+        # shall we restart other(s) detector(s), or force to disengaged ?
 
     # pellet machine events
 
