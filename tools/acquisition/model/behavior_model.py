@@ -11,6 +11,7 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
+from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 from autotrainer.core.event import post_api_event_content, post_api_event
@@ -321,6 +322,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         if reason_code == ApiEmergencyResumeReason.alarm_monitor_resume:
             self._emergency_engaged_alarms = []
         self._source_emergency = None
+        # ensure emergency alarm detectors are disengaged:
+        def disengage_detectors(det):
+            if isinstance(det, GroupBaseDetector):
+                for sub in det.sub_detectors.values():
+                    disengage_detectors(sub)
+            else:
+                det.is_engaged = False
+        disengage_detectors(self._analysis.emergency_alarm_monitor)
         algo.algo_paused = False
         self.emergency_resumed(source)
 

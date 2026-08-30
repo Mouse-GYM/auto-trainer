@@ -2516,7 +2516,8 @@ class AppModel(ObservableObject):
         self._emergency_source = None
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
-        self._analysis.boards_hardware_reset_detector.restart()
+        analysis = self._analysis
+        analysis.boards_hardware_reset_detector.restart()
 
     # pellet machine events
 
