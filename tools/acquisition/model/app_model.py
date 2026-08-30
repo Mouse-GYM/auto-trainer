@@ -2470,7 +2470,13 @@ class AppModel(ObservableObject):
             SystemFaultReason.BOARDS_HARDWARE_RESET in self._analysis.system_fault_alarm.engaged_reasons
             or self._analysis.boards_hardware_reset_detector.is_engaged
         )
-        do_reconnect_hardware = is_dev_comm_error or is_watchdog or is_board_reset
+        do_reconnect_hardware = (
+            self._status != AppModelStatus.IDLE
+            and (
+                is_dev_comm_error
+                or is_watchdog
+                or is_board_reset
+            ))
 
         # behavior algo thread is supposed always alive,
         # it has protection against exception in the relayed functions which are executed by it.

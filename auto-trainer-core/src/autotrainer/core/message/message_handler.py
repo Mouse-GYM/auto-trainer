@@ -18,6 +18,7 @@ TERMINATE = -1001
 
 @dataclasses.dataclass
 class CommandResult:
+    # kind: SystemStatusMessageKind
     succeeded: bool = False
     error: Optional[str] = None
     uuid_nacks: Optional[List[int]] = None
