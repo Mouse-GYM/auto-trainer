@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from autotrainer.core import Motor
@@ -13,11 +15,52 @@ def test_load_from_default():
         assert isinstance(move_steps, MotorSteps)
         assert move_steps.name == kind.value
 
+
+def test_duplicate_actions_key(tmp_path):
+    dup = """
+    actions:
+      load_pellet:
+        - type: x
+          value: 0
+      load_pellet:
+        - type: x
+          value: 0
+    """
+    cfg_path = tmp_path.joinpath("move_config.yaml")
+    cfg_path.write_text(dup)
+    with pytest.raises(ValueError, match="Duplicate key detected"):
+        CompoundMovements.from_file(cfg_path)
+
+
+def test_duplicate_step_key(tmp_path):
+    dup = """
+    actions:
+      load_pellet:
+        - type: x
+          value: 0
+          value: 3
+    """
+    cfg_path = tmp_path.joinpath("move_config.yaml")
+    cfg_path.write_text(dup)
+    with pytest.raises(ValueError, match="Duplicate key detected"):
+        CompoundMovements.from_file(cfg_path)
+
+
 @pytest.mark.parametrize("bad_actions", [
     "foobar", [], (), None, 32,
 ])
 def test_invalid_actions_type(bad_actions):
     dct = dict(actions=bad_actions)
+    with pytest.raises(TypeError):
+        CompoundMovements.from_yaml_dict(dct)
+
+
+@pytest.mark.parametrize("bad_step", [
+    "foobar", 0, math.inf, None, dict(),
+])
+def test_invalid_step_type(bad_step):
+    actions = dict(load_pellet=bad_step)
+    dct = dict(actions=actions)
     with pytest.raises(TypeError):
         CompoundMovements.from_yaml_dict(dct)
 
@@ -113,11 +156,15 @@ def test_uuid_ack_timeout_accepted(step, data):
     assert steps.steps == [dct]
 
 
-def test_present_but_empty_key_gives_skip_step():
+def test_empty_step_raise():
     dct = dict(actions=dict(load_pellet=[]))
-    move_cfg = CompoundMovements.from_yaml_dict(dct)
-    assert move_cfg.load_pellet.steps == [dict(type="skip", value=None)]
-    assert not move_cfg.load_pellet.is_empty
-    # but:
-    assert not move_cfg.send_pellet.steps
-    assert move_cfg.send_pellet.is_empty
+    with pytest.raises(ValueError, match="Empty steps for MotorSteps load_pellet"):
+        CompoundMovements.from_yaml_dict(dct)
+
+
+@pytest.mark.parametrize("not_finite", [math.nan, math.inf, -math.inf])
+def test_not_finite_value(not_finite):
+    step = dict(type="x", value=not_finite)
+    dct = dict(actions=dict(load_pellet=[step]))
+    with pytest.raises(ValueError, match="Not finite"):
+        CompoundMovements.from_yaml_dict(dct)

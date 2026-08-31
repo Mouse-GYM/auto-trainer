@@ -1,3 +1,4 @@
+import math
 from typing import Protocol, List, Dict, Any, Optional
 import copy
 
@@ -9,10 +10,12 @@ logger = get_verbose_logger(__name__)
 
 def validate_int_float(value):
     if isinstance(value, str):
-        return float(value) if '.' in value else int(value)
-    if isinstance(value, (int, float)):
-        return value
-    raise ValueError(f"Invalid value for int/float: {value!r}")
+        value = float(value) if '.' in value else int(value)
+    elif not isinstance(value, (int, float)):
+        raise ValueError(f"Invalid value for int/float: {value!r}")
+    if not math.isfinite(value):
+        raise ValueError(f"Not finite value not accepted: {value!r}")
+    return value
 
 
 def validate_stepper(value):
@@ -49,13 +52,9 @@ def validate_position_or_pos_velocity(value):
         if "," in value:
             pos, vel = value.split(',')
             return validate_int_float(pos), validate_int_float(vel)
-        else:
-            return validate_int_float(value)
-    elif isinstance(value, (int, float)):
-        return value
     elif isinstance(value, (list, tuple)) and len(value) == 2:
         return validate_int_float(value[0]), validate_int_float(value[1])
-    raise ValueError(f"Invalid value for position_velocity: {value!r}")
+    return validate_int_float(value)
 
 
 def validate_predefined(value):
@@ -92,7 +91,7 @@ def validate_tone(value):
     return freq, validate_int_float(duration)
 
 
-def validate_extra_data(dct):
+def validate_extra_data(dct: Dict[str, Any]):
     tp = dct["type"]
     accept_uuid_ack_timeout = tp in {
         "x", "y", "z", "x_rel", "y_rel", "z_rel", "send_x_rel", "send_y_rel", "send_z_rel",
@@ -142,6 +141,8 @@ class MotorSteps:
     def from_raw(cls, name: str, data: List[Dict[str, Any]]):
         steps = []
         for step in data:
+            if not isinstance(step, dict):
+                raise TypeError(f"Invalid type for a step: {type(step)}. step={step}")
             dct = copy.deepcopy(step)
             step_type: Optional[str] = dct.get('type', None)
             step_value = dct.get('value', None)
@@ -155,8 +156,7 @@ class MotorSteps:
             validate_extra_data(dct)
             steps.append(dct)
         if len(steps) == 0:
-            logger.warning("Empty steps for MotorSteps %s, auto-using 'skip'", name)
-            steps.append(dict(type="skip", value=None))
+            raise ValueError(f"Empty steps for MotorSteps {name}. You can use the step 'skip' if needed.")
         return MotorSteps(name, steps)
 
     def __init__(self, name: str = "NA", steps: Optional[List[Dict[str, Any]]] = None):

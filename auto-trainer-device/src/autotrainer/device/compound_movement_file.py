@@ -27,6 +27,18 @@ from .motor_steps import MotorSteps, CompoundMovementDataSet
 logger = get_verbose_logger(__name__)
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+
+    def construct_mapping(self, node, deep=False):
+        mapping = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise ValueError(f"Duplicate key detected: '{key}' at line {key_node.start_mark.line + 1}")
+            mapping.add(key)
+        return super().construct_mapping(node, deep)
+
+
 class CompoundMovementKind(str, enum.Enum):
     LOAD_PELLET = "load_pellet"
     SEND_PELLET = "send_pellet"
@@ -102,7 +114,7 @@ class CompoundMovements(CompoundMovementDataSet):
         """
         file_path = Path(file_path)
         with file_path.expanduser().open() as fh:
-            self._convert(yaml.safe_load(fh))
+            self._convert(yaml.load(fh, UniqueKeyLoader))
 
     def _convert(self, yaml_dict):
         """
