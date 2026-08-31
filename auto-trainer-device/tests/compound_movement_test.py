@@ -162,7 +162,7 @@ def test_empty_step_raise():
         CompoundMovements.from_yaml_dict(dct)
 
 
-@pytest.mark.parametrize("not_finite", [math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("not_finite", [math.nan, math.inf, -math.inf, "-inf", "nan"])
 def test_not_finite_value(not_finite):
     step = dict(type="x", value=not_finite)
     dct = dict(actions=dict(load_pellet=[step]))
