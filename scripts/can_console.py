@@ -454,6 +454,9 @@ def run_monitor():
                 elif cmd == 'h' or cmd == 'home':
                     device_connection.send_message(SystemCommandKind.SEND_HOME, context="home")
 
+                elif cmd in ('r', 'retract'):
+                    device_connection.send_message(SystemCommandKind.SEND_RETRACT, context="retract")
+
                 elif cmd == 'k' or cmd == 'known':
                     device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
 
@@ -467,7 +470,7 @@ def run_monitor():
                     device_connection.request_disconnect()
                     break
 
-                elif cmd == 'r' or cmd == 'rgb':
+                elif cmd == 'rgb':
                     device_connection.send_message(SystemCommandKind.SET_RGB_LED,
                                                (int(params[0]), int(params[1]), int(params[2])),
                                                context="rgb")
@@ -714,6 +717,8 @@ def print_help():
           " ::Release Pellet Sequence")
     print("p[ellet] s[end]                    "
           " ::Send Pellet Sequence")
+    print("r[etract]                          "
+          "::Retract Pellet Sequence")
     print()
 
     print("a[udio] <freq> <period>            "
@@ -734,7 +739,7 @@ def print_help():
           " ::Set analog output on pellet chan [1] mvolts [0:5000]")
     print("q[uit]                             "
           " ::Quit")
-    print("r[gb] <red> <green> <blue>         "
+    print("rgb <red> <green> <blue>           "
           " ::Set RGB LED. Values in %")
     print("s[tatus]                           "
           " ::Show Status")
