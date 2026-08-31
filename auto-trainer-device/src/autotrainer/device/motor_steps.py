@@ -10,7 +10,11 @@ logger = get_verbose_logger(__name__)
 
 def validate_int_float(value):
     if isinstance(value, str):
-        value = float(value) if '.' in value else int(value)
+        f_value = float(value)
+        if f_value.is_integer() and "." not in value:
+            value = int(f_value)
+        else:
+            value = f_value
     elif not isinstance(value, (int, float)):
         raise ValueError(f"Invalid value for int/float: {value!r}")
     if not math.isfinite(value):
