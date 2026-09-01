@@ -140,6 +140,7 @@ class MainWindow(QMainWindow):
         self._closing = False
         self._closed = False
         self._start_capture_thread: Optional[threading.Thread] = None
+        self._stop_capture_thread: Optional[threading.Thread] = None
         self._stopping = False
 
         self.setWindowTitle(self._title)
@@ -309,18 +310,22 @@ class MainWindow(QMainWindow):
             self._start_capture_thread = thread
             thread.start()
         else:
-            if self._stopping:
-                return
             self._stopping = True
             self._status_label.setText("Stopping acquisition...")
             prev_start = self._start_capture_thread
-            def exec_stop():
+            def exec_stop(prev_stop=self._stop_capture_thread):
                 if prev_start is not None:
                     if prev_start.is_alive():
                         logger.verbose("joining previous start thread")
                         prev_start.join()
                         logger.success("previous start thread joined")
                     self._start_capture_thread = None
+                if prev_stop is not None and threading.current_thread() != prev_stop:
+                    if prev_stop.is_alive():
+                        logger.verbose("joining previous stop thread")
+                        prev_stop.join()
+                        logger.success("previous stop thread joined")
+                    self._stop_capture_thread = None
                 logger.info("stopping acquisition")
                 try:
                     app_model.capture_stop()
@@ -338,6 +343,7 @@ class MainWindow(QMainWindow):
                 self._status_label.setText("")
 
             thread = threading.Thread(target=exec_stop, daemon=True, name="stopper_thread")
+            self._stop_capture_thread = thread
             thread.start()
 
     def _on_system_mode_combo_changed(self, idx: int):
@@ -1035,7 +1041,7 @@ class MainWindow(QMainWindow):
 
         action = self.quit_action = QAction("Quit")
         action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Q))
-        action.triggered.connect(lambda: self._app.quit())
+        action.triggered.connect(self.close)
 
     def _configure_menubar(self):
         menu_bar = self.menuBar()
