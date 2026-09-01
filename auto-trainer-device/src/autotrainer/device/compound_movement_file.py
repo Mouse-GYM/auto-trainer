@@ -22,7 +22,6 @@ from typing_extensions import Self
 from autotrainer.core.logging import get_verbose_logger
 
 from .motor_steps import MotorSteps, CompoundMovementDataSet
-from ..core import Motor
 
 logger = get_verbose_logger(__name__)
 
