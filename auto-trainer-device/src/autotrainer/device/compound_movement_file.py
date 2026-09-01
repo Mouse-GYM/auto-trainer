@@ -22,7 +22,7 @@ from typing_extensions import Self
 from autotrainer.core.logging import get_verbose_logger
 
 from .motor_steps import MotorSteps, CompoundMovementDataSet
-
+from ..core import Motor
 
 logger = get_verbose_logger(__name__)
 
@@ -137,9 +137,18 @@ class CompoundMovements(CompoundMovementDataSet):
 
         for name, value in actions.items():
             kind = CompoundMovementKind(name)
-            if not isinstance(value, (list, tuple)):
+            if value is None:
+                logger.verbose("setting action %s to no-op", name)
+                steps = MotorSteps(name, [
+                    dict(
+                        type="predefined",
+                        value="noop",
+                    )
+                ])
+            elif not isinstance(value, (list, tuple)):
                 raise TypeError(f"Expected sequence/list for action {name!r}, got {value!r}")
-            steps = MotorSteps.from_raw(name, list(value))
+            else:
+                steps = MotorSteps.from_raw(name, list(value))
             self._movements[kind] = steps
             logger.debug("loaded compound move %r: %s", name, steps)
 

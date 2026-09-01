@@ -16,6 +16,14 @@ def test_load_from_default():
         assert move_steps.name == kind.value
 
 
+def test_noop_action():
+    dct = dict(actions=dict(load_pellet=None))
+    moves = CompoundMovements.from_yaml_dict(dct)
+    assert len(moves.load_pellet.steps) == 1
+    step = moves.load_pellet.steps[0]
+    assert step == dict(type="predefined", value="noop")
+
+
 def test_duplicate_actions_key(tmp_path):
     dup = """
     actions:
@@ -56,7 +64,7 @@ def test_invalid_actions_type(bad_actions):
 
 
 @pytest.mark.parametrize("bad_step", [
-    "foobar", 0, math.inf, None, dict(),
+    "foobar", 0, math.inf, dict(),
 ])
 def test_invalid_step_type(bad_step):
     actions = dict(load_pellet=bad_step)

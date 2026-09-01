@@ -425,3 +425,13 @@ def test_delay_doesnt_ack_timeout(
     t_after = get_perf_now()
     # assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
     assert t_after - t_before >= delay
+
+
+def test_noop_action(caplog, device, device_conn, expected_tok, expected_tok_event):
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device_conn.set_steps_procedure("load_pellet", MotorSteps("load_pellet", [dict(type="predefined", value="noop")]))
+    with caplog.at_level(logging.INFO):
+        device.notify_message(SystemCommandKind.LOAD_PELLET, None, context=ctx)
+    assert expected_tok_event.wait(0.5)  # should be almost immediate
+    assert "executed noop for kind" in caplog.text

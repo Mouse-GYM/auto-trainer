@@ -1050,9 +1050,9 @@ class CanDevice(Device):
                 # single one where we don't use motor = ..
                 # but they are all on PELLET board.
                 return Target.PELLET_DEVICE
+            elif predef == "noop":
+                return None
             return "unhandled"
-        elif tp == 'skip':
-            return None
         else:
             return "unhandled"
         return target_of_motor(motor)
@@ -1389,11 +1389,7 @@ class CanDevice(Device):
         self._prev_command_timeout = None  # temporary,
             # used to know if some command/step has overwritten it.
 
-        if step_type == "skip":
-            motor = Motor.NONE
-            success = True
-
-        elif step_type == 'x':
+        if step_type == 'x':
             motor = Motor.PELLET_X_MOTOR
             location = step_val
             location: Union[float, Tuple[float, float]]
@@ -1454,6 +1450,7 @@ class CanDevice(Device):
 
         elif step_type == 'delay':
             motor = Motor.DELAY
+            step_val: float
             success = self._handle_delay(step_val)
 
         elif step_type == 'tone':
@@ -1499,9 +1496,13 @@ class CanDevice(Device):
                 ]
                 logger.debug("initiated home steps: %s", compound_movements)
                 success = self._interface.stepper_home(motor)
+            elif predefined == "noop":
+                motor = Motor.NONE
+                logger.info("executed noop for kind=%s", board.kind)
+                success = True
 
             else:
-                raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
+                raise RuntimeError(f"Received unhandled 'predefined' value: {predefined}")
 
         elif step_type == 'servo_attach':
             motor: Motor = step_val  # noqa

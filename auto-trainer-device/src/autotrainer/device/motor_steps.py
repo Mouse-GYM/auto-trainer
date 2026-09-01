@@ -160,7 +160,7 @@ class MotorSteps:
             validate_extra_data(dct)
             steps.append(dct)
         if len(steps) == 0:
-            raise ValueError(f"Empty steps for MotorSteps {name}. You can use the step 'skip' if needed.")
+            raise ValueError(f"Empty steps for MotorSteps {name}. You can set the action to null to no-op it.")
         return MotorSteps(name, steps)
 
     def __init__(self, name: str = "NA", steps: Optional[List[Dict[str, Any]]] = None):
