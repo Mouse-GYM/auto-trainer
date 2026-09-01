@@ -245,6 +245,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         post_api_detector_event_content(self._event_manager, ApiDetectorKind.deviceAckTimeOut, value, enabled)
 
     @property
+    def device_pellet_status_timeout_engaged(self):
+        return self._device_pellet_status_timeout_engaged
+
+    @device_pellet_status_timeout_engaged.setter
+    def device_pellet_status_timeout_engaged(self, value):
+        prev, self._device_pellet_status_timeout_engaged = self._device_pellet_status_timeout_engaged, value
+        self._on_property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev)
+
+    @property
+    def device_tunnel_status_timeout_engaged(self):
+        return self._device_tunnel_status_timeout_engaged
+
+    @device_tunnel_status_timeout_engaged.setter
+    def device_tunnel_status_timeout_engaged(self, value):
+        prev, self._device_tunnel_status_timeout_engaged = self._device_tunnel_status_timeout_engaged, value
+        self._on_property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev)
+
+    @property
     def send_x(self):
         return self._last_motor_send_coordinates.x
 
@@ -498,6 +516,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
 
+        self.device_ack_timeout_engaged = False
+        self.device_command_nack_engaged = False
+        self.device_tunnel_status_timeout_engaged = False
+        self.device_pellet_status_timeout_engaged = False
+
         self._connect_count += 1
         self._last_motor_coordinates = _nans_offset3dTuple
         self._last_requested_set_coordinates = _nans_offset3dTuple
@@ -592,8 +615,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 value,
                 True,
             )
-            self._device_pellet_status_timeout_engaged = value
-            self.property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            self.device_pellet_status_timeout_engaged = value
             is_dev_comm_err_possible = True
         elif name == props.TUNNEL_STATUS_TIMEOUT_ENGAGED:
             post_api_detector_event_content(
@@ -602,8 +624,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 value,
                 True,
             )
-            self._device_tunnel_status_timeout_engaged = value
-            self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            self.device_tunnel_status_timeout_engaged = value
             is_dev_comm_err_possible = True
         #
         if is_dev_comm_err_possible:
