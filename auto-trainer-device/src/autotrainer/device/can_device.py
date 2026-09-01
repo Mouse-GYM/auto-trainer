@@ -1503,16 +1503,19 @@ class CanDevice(Device):
             motor = Motor.PELLET_X_MOTOR
             location = _to_tuple(step['x'])
             success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
+            board.last_command_is_move_stepper = not save_as_fixed
 
         elif 'y' in step:
             motor = Motor.PELLET_Y_MOTOR
             location = _to_tuple(step['y'])
             success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
+            board.last_command_is_move_stepper = not save_as_fixed
 
         elif 'z' in step:
             motor = Motor.PELLET_Z_MOTOR
             location = _to_tuple(step['z'])
             success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
+            board.last_command_is_move_stepper = not save_as_fixed
 
         elif '_servo_move' in step:  # should be internal only
             motor, position = step['_servo_move']  # noqa
@@ -1567,6 +1570,7 @@ class CanDevice(Device):
             if predefined == 'send':
                 motor = Motor.PELLET_X_MOTOR  # could choose Y or Z
                 success = self._interface.fixed_position()
+                board.last_command_is_move_stepper = True
 
             elif predefined == 'cover':
                 motor = Motor.PELLET_COVER_SERVO
@@ -1596,6 +1600,7 @@ class CanDevice(Device):
                 ]
                 logger.debug("initiated home steps: %s", compound_movements)
                 success = self._interface.stepper_home(motor)
+                board.last_command_is_move_stepper = True
 
             else:
                 raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
@@ -1612,6 +1617,7 @@ class CanDevice(Device):
             # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
             motor: Motor = step['home']  # noqa
             success = self._interface.stepper_home(motor)
+            board.last_command_is_move_stepper = True
 
         elif '_internal_func' in step:
             func = step['_internal_func']
