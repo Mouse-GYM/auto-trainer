@@ -113,7 +113,6 @@ def validate_extra_data(dct: Dict[str, Any]):
 
 
 _compound_steps_validate = dict(
-    skip=lambda _: True,
     delay=validate_int_float,
     tone=validate_tone,
     x=validate_position_or_pos_velocity,
