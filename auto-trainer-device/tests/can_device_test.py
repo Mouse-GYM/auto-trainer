@@ -33,7 +33,7 @@ from autotrainer.device import (
 from autotrainer.device.can_device import (
     default_move_retract,
     default_load_pellet,
-    default_send_pellet,
+    default_send_pellet, mk_step,
 )
 from autotrainer.device.device_interface import Acknowledge
 
@@ -240,7 +240,7 @@ def test_move_relative(
     expected_tok_event.clear()
     expected_tok.value = ctx
     device.notify_message(SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE,
-                          MotorSteps("custom", [{'y_rel': 20}, {'x_rel': -5}]),
+                          MotorSteps("custom", [mk_step('y_rel', 20), mk_step('x_rel', -5)]),
                           context=ctx)
     expected_tok_event.wait(3)
     assert ctx in tokens_acked
@@ -425,3 +425,13 @@ def test_delay_doesnt_ack_timeout(
     t_after = get_perf_now()
     # assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
     assert t_after - t_before >= delay
+
+
+def test_noop_action(caplog, device, device_conn, expected_tok, expected_tok_event):
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    device_conn.set_steps_procedure("load_pellet", MotorSteps("load_pellet", [dict(type="predefined", value="noop")]))
+    with caplog.at_level(logging.INFO):
+        device.notify_message(SystemCommandKind.LOAD_PELLET, None, context=ctx)
+    assert expected_tok_event.wait(0.5)  # should be almost immediate
+    assert "executed noop for kind" in caplog.text

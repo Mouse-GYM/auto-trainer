@@ -1,6 +1,7 @@
 import ctypes
 import os
 import pickle
+import pprint
 import random
 import shutil
 import textwrap
@@ -183,15 +184,9 @@ class MainWindow(QMainWindow):
         app_model.configuration_loaded_event += self._on_app_model_configuration_loaded
         app_model.training_plan_deserialized += self._on_training_plan_deserialized
 
-        try:
-            app_model.load_configuration(config_file)
-        except Exception as err:
-            tb = traceback.format_exc()
-            app_model.on_error("Failed load configuration",
-                               f"\nConfiguration file {config_file} has issue,\n\n"
-                               f"please check and fix following error:\n\n{err}\n\n{tb}")
-            # app_model.on_close()
-            # raise RuntimeError(f"Could not load config: {err}") from err
+        if config_file is None:
+            config_file = app_model.get_config_location()
+        app_model.load_configuration(config_file)
 
         app_model.property_changed += self._on_app_model_property_changed
         app_model.current_day_changed += self._on_day_changed
@@ -697,10 +692,14 @@ class MainWindow(QMainWindow):
     def on_activated(self, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
         logger.success("main window activated")
         self.main_content.on_activated()
-        app_status = self._app_model.status
-        loaded_cfg = self._app_model.loaded_configuration
-        if loaded_cfg is None:
-            logger.verbose("No loaded valid config, skipping auto-start")
+        app_model = self._app_model
+        app_status = app_model.status
+        loaded_cfg = app_model.loaded_configuration
+        if loaded_cfg is None or len(app_model.config_errors) > 0:
+            self._app_model_status_combo.setEnabled(False)
+            self._show_message("No config loaded or invalid config(s) detected. auto-start skipped",
+                               f"You must restart the app after fix the config_errors:\n\n"
+                               f"{pprint.pformat(app_model.config_errors)}")
         else:
             if app_status == AppModelStatus.IDLE:
                 if target_status != AppModelStatus.IDLE:

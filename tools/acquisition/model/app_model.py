@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import pickle
+import pprint
 import queue
 import shlex
 import subprocess
@@ -51,6 +52,7 @@ from autotrainer.core import (
     SensorAnalysis,
     Offset3DTuple,
     get_perf_now,
+    MotorConfigurations,
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
@@ -67,6 +69,7 @@ from autotrainer.core.pose_elements import SceneElement
 from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
+from autotrainer.device import CompoundMovements, MotorConfigurationFile
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -270,6 +273,9 @@ class AppModel(ObservableObject):
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
         self._loaded_config_dir_path = Path()
+        self._config_errors = []
+        self._motors_config: Optional[MotorConfigurations] = None
+        self._move_config: Optional[CompoundMovements] = None
 
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
         self._project_info: Optional[ProjectInfo] = None
@@ -467,6 +473,9 @@ class AppModel(ObservableObject):
 
         one_minute_timer_handle_and_reschedule()
 
+    @property
+    def config_errors(self) -> List[str]:
+        return self._config_errors
 
     @property
     def main_watchdog_perf_c(self) -> float:
@@ -1241,6 +1250,10 @@ class AppModel(ObservableObject):
                 self.on_error("AppModelStatus change error",
                               f"Target status {target_status} not valid for source status {before_status}")
                 return False
+            if len(self._config_errors) > 0:
+                self.on_error("Refusing start-acquisition, configuration error(s)",
+                              f"Errors:\n{pprint.pformat(self._config_errors)}")
+                return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
                 return False
@@ -1414,7 +1427,12 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        hard.connect(self._system_message_handler.input_queue, is_cancelled=is_cancelled)
+        hard.connect(
+            self._system_message_handler.input_queue,
+            motors_config=self._motors_config,
+            move_config=self._move_config,
+            is_cancelled=is_cancelled,
+        )
         if need_cancel():
             return False
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
@@ -1620,9 +1638,22 @@ class AppModel(ObservableObject):
             configuration.save_file(location, as_yaml=True)
         return configuration
 
-    def load_configuration(self, location: Optional[Path] = None):
+    def load_configuration(self, location: Optional[Path] = None) -> bool:
         if location is None:
             location = self.get_config_location()
+        try:
+            return self._load_configuration(location)
+        except Exception as err:
+            new_err = (
+                f"\nConfiguration file {location} has issue,\n\n"
+                f"please check and fix following error:\n\n{err}\n"
+            )
+            self._config_errors.append(new_err)
+            return False
+
+    def _load_configuration(self, location):
+        self._config_errors.clear()
+        load_ok = True  # preset, is set to False if some sub-config file(s) fail to load
 
         configuration: SystemConfiguration = self.get_config_from_location(location)
 
@@ -1673,6 +1704,25 @@ class AppModel(ObservableObject):
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
 
+        # ensure motor and move config files are valid
+        hard = self._hardware
+        #
+        motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+        self._motors_config = None
+        try:
+            self._motors_config = hard.load_default_motor_config(motors_cfg_file)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
+            load_ok = False
+        #
+        self._move_config = None
+        move_config_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
+        try:
+            self._move_config = hard.load_default_move_config(move_config_file)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
+            load_ok = False
+        #
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
 
@@ -1691,7 +1741,7 @@ class AppModel(ObservableObject):
 
         self.configuration_loaded_event(configuration)
 
-        return True
+        return load_ok
 
     def reload_training_plans(self, *, refresh: bool = False, reraise_on_error: bool = False):
         if self._acquisition_started or self._status != AppModelStatus.IDLE:

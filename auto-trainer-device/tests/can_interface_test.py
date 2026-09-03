@@ -178,15 +178,15 @@ def test_write_gpio(interface: CanInterface, stim, state: bool):
         assert data.stimulus_4 == state, f"Failed to set GPIO #4 output"
 
 
-@pytest.mark.parametrize("frequency_hz, duration_ms", [
-    (2000, 400),
-    (5000, 600),
+@pytest.mark.parametrize("frequency_hz, duration", [
+    (2000, 0.400),
+    (5000, 0.600),
 ])
-def test_tone(interface: CanInterface, frequency_hz: int, duration_ms: int):
-    assert interface.emit_tone(frequency_hz, duration_ms), f"Failed to send Emit Tone message"
+def test_tone(interface: CanInterface, frequency_hz: int, duration: float):
+    assert interface.emit_tone(frequency_hz, duration), f"Failed to send Emit Tone message"
 
     tone = _get_response(interface, Tone, Target.PELLET_DEVICE, sleep=0.2)
-    assert tone.time_remaining_ms <= duration_ms, f"Tone generation not functional"
+    assert tone.time_remaining_ms <= 1000*(duration), f"Tone generation not functional"
 
 
 @pytest.mark.parametrize("value_mv", [

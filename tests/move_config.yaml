@@ -1,6 +1,6 @@
 actions:
   move_retract:
-    - type: y_rel
+    - type: send_y_rel
       value: -25
   load_pellet:
     - type: y
