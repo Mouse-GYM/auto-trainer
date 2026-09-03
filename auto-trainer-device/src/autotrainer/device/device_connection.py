@@ -166,7 +166,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             dev.disconnect()
 
     @contextlib.contextmanager
-    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True):
+    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
+                          is_cancelled=lambda: False):
         orig_cb = self._api.message_callback
         tokens_acked = []
         tokens_with_err = {}
@@ -187,6 +188,8 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.verbose("Now waiting tokens %s", tokens)
             perf_timeout = time.perf_counter() + timeout
             while len(tokens) > 0:
+                if is_cancelled():
+                    break
                 if time.perf_counter() > perf_timeout:
                     if raise_on_timeout:
                         raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
@@ -205,11 +208,13 @@ class DeviceConnection(DeviceConnectionProtocol):
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
-    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None):
+    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None, *, is_cancelled=lambda: False):
         move_config = data
         if move_config is None:
             move_config = self.load_default_move_config()
         for compound_move in CompoundMovementKind:
+            if is_cancelled():
+                return
             name = compound_move.value
             steps = getattr(move_config, name)
             if steps.is_empty:
@@ -218,7 +223,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                 self.set_steps_procedure(name, steps)
         return move_config
 
-    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None):
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False):
         motor_configs = data
         if data is None:
             data = motor_configs = self.load_default_motor_config()
@@ -245,7 +250,9 @@ class DeviceConnection(DeviceConnectionProtocol):
             data.gate_config,
             data.tunnel_fan_config,
         ):
-            with self.await_acknowledge(tokens, timeout=3):
+            if is_cancelled():
+                break
+            with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
         return motor_configs
 

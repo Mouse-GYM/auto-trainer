@@ -526,6 +526,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         while True:
             try:
                 raw = self._notif_msg_queue.get(timeout=0.1)
+            except (EOFError, IOError, ValueError):
+                break
             except queue.Empty:
                 continue
             if raw is None:
