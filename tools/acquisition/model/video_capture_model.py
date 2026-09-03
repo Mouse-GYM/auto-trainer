@@ -525,19 +525,28 @@ class VideoCaptureModel(ObservableObject, ProjectDependentProtocol):
         expected: Union[CaptureProcessStatus, Iterable[CaptureProcessStatus]],
         *,
         timeout: float,
+        is_cancelled = lambda: False,
     ) -> bool:
         if isinstance(expected, CaptureProcessStatus):
             expected = (expected,)
         wait_status = set(expected)
         perf_timeout = time.perf_counter() + timeout
         logger.debug("<%s> waiting for %s acknowledgement", self._name, wait_status)
+        vc = self._video_capture
         while (cur_status := CaptureProcessStatus(self._video_status.value)) not in wait_status:
+            if is_cancelled():
+                return False
             if time.perf_counter() > perf_timeout:
                 self._last_error = self._errors.value.decode()
                 logger.error("<%s> failed to receive %s acknowledgement ; current=%s",
                              self._name, expected, cur_status)
                 return False
             time.sleep(0.001)
+            if vc is None or not vc.is_alive():
+                if CaptureProcessStatus(self._video_status.value) in wait_status:
+                    return True
+                logger.warning("%s: child process not (anymore) alive", self._name)
+                return False
         return True
 
     def on_trigger_recording(self, record: bool, *, is_triggered: Optional[bool]=False, is_from_start: bool=False):

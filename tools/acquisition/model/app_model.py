@@ -587,7 +587,8 @@ class AppModel(ObservableObject):
             cam.on_trigger_recording(False, is_triggered=None, is_from_start=is_from_start)
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continuous mode and is_from_start is not True, or else it was already recording.
-        self._analysis.restart()  # always
+        #
+        self._analysis.restart()
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -1232,6 +1233,7 @@ class AppModel(ObservableObject):
         *,
         target_status: AppModelStatus = AppModelStatus.ACQUIRING,
         wait_connected: bool = True,
+        is_cancelled: Callable[[], bool] = lambda: False,
     ) -> bool:
         """Request to start the acquisition"""
         if target_status == AppModelStatus.IDLE:
@@ -1257,10 +1259,16 @@ class AppModel(ObservableObject):
                 return False
             self._acquisition_starting = True
             self._start_count += 1
-            is_first_start = self._start_count == 1
 
         algo = self._behavior.algorithm
         analysis = self._analysis
+
+        def need_cancel():
+            if is_cancelled():
+                logger.warning("Start cancelled, giving up")
+                self.capture_stop(force=True)
+                return True
+            return False
 
         # first:
         self._behavior.system_machine.intertrial.reset_to_idle()
@@ -1305,6 +1313,8 @@ class AppModel(ObservableObject):
         # 1) prepare synced primary camera(s)
         if did_start:
             for camera in synced_cameras:
+                if need_cancel():
+                    return False
                 if camera.is_primary and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
@@ -1315,8 +1325,10 @@ class AppModel(ObservableObject):
                     # 1.1) wait it's running or failed
                     if (
                         not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
-                                                           timeout=cam_start_timeout)
+                                                           timeout=cam_start_timeout, is_cancelled=is_cancelled)
                     ) or camera.video_status != CaptureProcessStatus.RUNNING:
+                        if need_cancel():
+                            return False
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                         break
@@ -1325,6 +1337,8 @@ class AppModel(ObservableObject):
         if did_start:
             time.sleep(0.5)
             for camera in synced_cameras:
+                if need_cancel():
+                    return False
                 if not camera.is_primary and camera.is_enabled:
                     logger.info("Preparing capture on %s", camera.name)
                     did_start = camera.on_prepare_capture(self._inference_queue)
@@ -1340,22 +1354,34 @@ class AppModel(ObservableObject):
             for camera in synced_cameras:
                 p_now = time.perf_counter()
                 if not camera.is_primary and camera.is_enabled:
-                    if (not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED), timeout=p_timeout - p_now)
-                        or camera.video_status != CaptureProcessStatus.RUNNING):
+                    if (not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
+                                                           timeout=p_timeout - p_now, is_cancelled=is_cancelled)
+                        or camera.video_status != CaptureProcessStatus.RUNNING
+                    ):
+                        if need_cancel():
+                            return False
                         did_start = False
                         self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                         break
                     logger.verbose("%s now running", camera.name)
 
+        if need_cancel():
+            return False
+
         # 4) trigger enable capture on synced cameras
         if did_start:
             # 4.1) first on non-primary
             for camera in synced_cameras:
+                if need_cancel():
+                    return False
                 if not camera.is_primary and camera.is_enabled:
                     logger.info("Starting capture on %s", camera.name)
                     camera.on_capture_start()
             # small delay to ensure not-primary cam(s) are waiting on primary:
-            time.sleep(0.5)
+            for _ in range(5):
+                time.sleep(0.1)
+                if need_cancel():
+                    return False
             # 4.2) then on primary
             for camera in synced_cameras:
                 if camera.is_primary and camera.is_enabled:
@@ -1363,7 +1389,10 @@ class AppModel(ObservableObject):
                     camera.on_capture_start()
 
         # sleep, relatively a bit, to give more time to synced cameras to start together
-        time.sleep(1.5)
+        for _ in range(15):
+            time.sleep(0.1)
+            if need_cancel():
+                return False
 
         # 5) remaining non-synced camera(s)
         camera = self._top_camera
@@ -1376,13 +1405,18 @@ class AppModel(ObservableObject):
             else:
                 if (
                     not camera.wait_for_capture_status((CaptureProcessStatus.RUNNING, CaptureProcessStatus.FAILED),
-                                                       timeout=cam_start_timeout)
+                                                       timeout=cam_start_timeout, is_cancelled=is_cancelled)
                     or camera.video_status != CaptureProcessStatus.RUNNING
                 ):
+                    if need_cancel():
+                        return False
                     did_start = False
                     self.on_error("Camera start failed", _failed_camera_template(camera.name, camera.last_error))
                 else:
                     camera.on_capture_start()
+
+        if need_cancel():
+            return False
 
         if not did_start:
             logger.error("failed to start all subprocesses")
@@ -1397,7 +1431,10 @@ class AppModel(ObservableObject):
             self._system_message_handler.input_queue,
             motors_config=self._motors_config,
             move_config=self._move_config,
+            is_cancelled=is_cancelled,
         )
+        if need_cancel():
+            return False
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
             timeout = 3
@@ -1408,14 +1445,18 @@ class AppModel(ObservableObject):
                 for tok in hard.pending_tokens:
                     p0 = time.perf_counter()
                     try:
-                        hard.wait_pending_command_acked(tok, timeout=timeout)
+                        hard.wait_pending_command_acked(tok, timeout=timeout, is_cancelled=is_cancelled)
                     except Exception as err:
                         logger.error("pending token %s not acked: %s", tok, err)
                         self.capture_stop(force=True)
                         return False
+                    if need_cancel():
+                        return False
                     timeout -= time.perf_counter() - p0
                 break
             while True:
+                if need_cancel():
+                    return False
                 if hard.connected:
                     break
                 if time.perf_counter() > p_end:
@@ -1438,6 +1479,9 @@ class AppModel(ObservableObject):
                 return t_end
             watchdog_mon_register("test-watchdog", lambda t=time.perf_counter() + 180: fake_watchdog(t))
 
+        if need_cancel():
+            return False
+
         # we always be/go at home on acquisition start, so:
         self._behavior.system_machine.pellet.move_home(force=True)
 
@@ -1446,6 +1490,8 @@ class AppModel(ObservableObject):
         #
         # Start inference & hardware AFTER cameras started, so we can see the initial eventual motor move.
         if self._inference.is_enabled:
+            if need_cancel():
+                return False
             logger.info("Starting inference ..")
             self._inference.start(self._inference_queue)
             watchdog_mon_register(WatchdogItems.POSE_DATA_MONITOR_PROC,
@@ -1800,12 +1846,14 @@ class AppModel(ObservableObject):
 
         # at this point the related thread reading this queue is already joined.
         if proc_msg_queue is not None:
+            logger.debug("closing process msg queue")
             proc_msg_queue.close()
             proc_msg_queue.join_thread()
             self._multiproc_msg_queue = None
 
         mgr = self._mp_manager
         if self._owns_mp_mgr and mgr is not None:
+            logger.verbose("shutting down %s", mgr)
             mgr.shutdown()
             self._mp_manager = None
 

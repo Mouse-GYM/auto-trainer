@@ -113,11 +113,18 @@ def apply_system_command_with_data_args(func, data):
     return func(*args, **kwargs)
 
 
-MotorStatusCacheT = Dict[
+StepperStatusCacheT = Dict[
     SystemStatusMessageKind,
-    Tuple[float, float],  # data, perf_c
+    Tuple[
+        Tuple[float, float, bool, bool],
+        float
+    ],  # data, perf_c
 ]
 
+ServoStatusCacheT = Dict[
+    SystemStatusMessageKind,
+    Tuple[float, float],  # position, perf_c
+]
 
 @dataclasses.dataclass
 class _BoardPendingContext:
@@ -248,8 +255,8 @@ class CanDevice(Device):
         self._commands_handler_watchdog_perf_c = math.nan
         self._tunnel_pellet_status_check_thread: Optional[threading.Thread] = None
         # internal data cache:
-        self._previous_stepper_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
-        self._previous_servo_status_pos_perf_c: MotorStatusCacheT = {}  # (None, -math.inf)
+        self._previous_stepper_status_pos_perf_c: StepperStatusCacheT = {}  # (None, -math.inf)
+        self._previous_servo_status_pos_perf_c: ServoStatusCacheT = {}  # (None, -math.inf)
         self._prev_tunnel_gate_open_perf_c: Tuple[Optional[bool], float] = (None, -math.inf)
 
         self._boards_pending_ctx: Dict[Optional[Target], _BoardPendingContext] = {
@@ -1290,6 +1297,7 @@ class CanDevice(Device):
             api.send_message(kind, position)
         if motor == Motor.TUNNEL_GATE_SERVO:
             gate_cfg = self._motor_configs[motor]
+            assert isinstance(gate_cfg, ServoConfig)
             new_open = math.isclose(position, gate_cfg.minimum_position, abs_tol=0.5)
             prev_open, prev_perf_c = self._prev_tunnel_gate_open_perf_c
             if new_open != prev_open or perf_now - prev_perf_c > self.same_data_refresh_delay:

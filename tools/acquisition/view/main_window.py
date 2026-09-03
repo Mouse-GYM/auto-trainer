@@ -17,9 +17,26 @@ from typing import List, Optional, Dict, Tuple, Callable, Union, Literal
 
 from PySide6.QtCore import Qt, QCoreApplication, Signal, QSize, QKeyCombination, QTimer
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import (QMainWindow, QStatusBar, QToolBar, QLabel, QMessageBox, QApplication,
-                               QSizePolicy, QWidget, QComboBox, QLineEdit, QFileDialog, QPushButton, QHBoxLayout,
-                               QSpinBox, QDoubleSpinBox, QFrame, QDialog)
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QStatusBar,
+    QToolBar,
+    QLabel,
+    QMessageBox,
+    QApplication,
+    QSizePolicy,
+    QWidget,
+    QComboBox,
+    QLineEdit,
+    QFileDialog,
+    QPushButton,
+    QHBoxLayout,
+    QSpinBox,
+    QDoubleSpinBox,
+    QFrame,
+    QDialog,
+    QVBoxLayout,
+)
 import qtawesome as qta
 from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason
 
@@ -122,9 +139,10 @@ class MainWindow(QMainWindow):
         self._update_log_level(prefs.log_level)
         self._title = _make_window_title(prefs)
         self._closing = False
-        self._close_event = None
-        self._start_capture_thread = None
-        self._stop_capture_thread = None
+        self._closed = False
+        self._start_capture_thread: Optional[threading.Thread] = None
+        self._stop_capture_thread: Optional[threading.Thread] = None
+        self._stopping = False
 
         self.setWindowTitle(self._title)
 
@@ -216,7 +234,7 @@ class MainWindow(QMainWindow):
             except ValueError:
                 pass
             orig_close_event(event)
-            event.accept()
+            # event.accept()
         item.closeEvent = close_event
 
     def _set_start_or_stop(self, started: bool):
@@ -238,8 +256,16 @@ class MainWindow(QMainWindow):
             run_action.setText("Start")
             run_action.setIcon(icon)
 
-    def _on_capture_start_stop(self, is_toggled, *, target_status: AppModelStatus = AppModelStatus.ACQUIRING):
+    def _on_capture_start_stop(
+        self,
+        is_toggled, *,
+        target_status: AppModelStatus = AppModelStatus.ACQUIRING,
+        after_callback=lambda: None,  # executed in start/stop dedicated thread
+    ):
         app_model = self._app_model
+        if is_toggled and self._closing:
+            logger.warning("skipping capture_start_stop: %s", is_toggled)
+            return
         self.run_action.setEnabled(False)
         self.make_3d_calib_action.setEnabled(False)
         self.animal_in_device_action.setEnabled(False)
@@ -249,52 +275,69 @@ class MainWindow(QMainWindow):
         if is_toggled:
             self._check_diamond_triangle_config()
             self._status_label.setText("Starting acquisition...")
-            def exec_start_capture(prev_thread=self._start_capture_thread):
-                if prev_thread is not None:
-                    logger.verbose("joining previous start thread")
-                    prev_thread.join()
-                logger.info("starting subprocesses")
+            def exec_start_capture():
                 try:
-                    started = app_model.capture_start(target_status=target_status)
+                    started = app_model.capture_start(
+                        target_status=target_status,
+                        is_cancelled=lambda: self._closing,
+                    )
                 except Exception as err:
                     logger.exception("app_model.capture_start failed: %s", err)
                     started = False
-                self._start_capture_thread = None
-                # following should normally be executed in main UI thread:
-                if started:
-                    self._status_label.setText("")
-                    self._acquisition_started = True
-                else:
-                    logger.verbose("capture_start failed: %s", app_model.status)
-                    self._status_label.setText("Startup failed")
-                    self.running_status_changed.emit(False)
-                self.run_action.setEnabled(True)
-                self.animal_in_device_action.setEnabled(True)
-                self.animal_in_training_action.setEnabled(True)
-                self._app_model_status_combo.setEnabled(True)
+                def after_exec_start():
+                    if self._closing:
+                        return
+                    if started:
+                        self._status_label.setText("")
+                    else:
+                        logger.verbose("capture_start failed: %s", app_model.status)
+                        self._status_label.setText("Startup failed")
+                        self.running_status_changed.emit(False)
+                    self.run_action.setEnabled(True)
+                    self.animal_in_device_action.setEnabled(True)
+                    self.animal_in_training_action.setEnabled(True)
+                    self._app_model_status_combo.setEnabled(True)
+                try:
+                    after_callback()
+                finally:
+                    InvokeMethod(after_exec_start)
             thread = threading.Thread(target=exec_start_capture, daemon=True, name="StartAcquisition")
             self._start_capture_thread = thread
             thread.start()
         else:
+            self._stopping = True
             self._status_label.setText("Stopping acquisition...")
-            def exec_stop_capture(prev_start=self._start_capture_thread,
-                                  prev_stop=self._stop_capture_thread):
+            prev_start = self._start_capture_thread
+            def exec_stop(prev_stop=self._stop_capture_thread):
                 if prev_start is not None:
-                    logger.verbose("joining previous start thread")
-                    prev_start.join()
-                if prev_stop is not None:
-                    prev_stop.join()
-                logger.info("stopping subprocesses")
-                app_model.capture_stop()
-                # following should normally be executed in main UI thread:
+                    if prev_start.is_alive():
+                        logger.verbose("joining previous start thread")
+                        prev_start.join()
+                        logger.success("previous start thread joined")
+                    self._start_capture_thread = None
+                if prev_stop is not None and threading.current_thread() != prev_stop:
+                    if prev_stop.is_alive():
+                        logger.verbose("joining previous stop thread")
+                        prev_stop.join()
+                        logger.success("previous stop thread joined")
+                    self._stop_capture_thread = None
+                logger.info("stopping acquisition")
+                try:
+                    app_model.capture_stop()
+                    after_callback()
+                finally:
+                    self._stopping = False
+                    InvokeMethod(after_exec_stop)
+
+            def after_exec_stop():
                 self.running_status_changed.emit(False)
                 self.run_action.setEnabled(True)
                 self.animal_in_device_action.setEnabled(True)
                 self.animal_in_training_action.setEnabled(True)
                 self._app_model_status_combo.setEnabled(True)
                 self._status_label.setText("")
-                self._acquisition_started = False
-            thread = threading.Thread(target=exec_stop_capture, daemon=True, name="StopAcquisition")
+
+            thread = threading.Thread(target=exec_stop, daemon=True, name="stopper_thread")
             self._stop_capture_thread = thread
             thread.start()
 
@@ -773,10 +816,11 @@ class MainWindow(QMainWindow):
         waiter_thread.start()
 
     @invoke_method
-    def _show_msg_box(self, title, text, icon):
+    def _show_msg_box(self, title, text, icon, *, modal: bool=False):
         box = QMessageBox()
         box.setWindowTitle(title)
-        # box.setModal(True)
+        if modal:
+            box.setModal(True)
         box.setText(text)
         box.setIcon(icon)
         box.show()
@@ -796,53 +840,64 @@ class MainWindow(QMainWindow):
                 """)
             self._show_msg_box(title, text, QMessageBox.Icon.Warning)
 
-    def _finish_close(self):
+    def close(self):
+        if self._closed:
+            return
+        logger.notice("received close")
+        self._main_ui_watchdog_timer.stop()  # ensure doesn't race
+        with self._app_model.app_lock:
+            if self._closing:
+                logger.warning("already closing")
+                return
+            self._closing = True
+        def after_stop():
+            # time.sleep(5)  debug
+            self._app_model.on_close()
+            self._on_closed_finished()
+        self._on_capture_start_stop(False, after_callback=after_stop)
+        dialog = QDialog(self)
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("Closing in progress, please wait ..."))
+        dialog.setLayout(layout)
+        dialog.setModal(True)
+        # nothing will be able to close it, but the main prog exit.
+        dialog.accept = lambda: False
+        dialog.reject = lambda: False
+        dialog.close = lambda: False
+        def close_event(event):
+            event.ignore()
+        dialog.closeEvent = close_event
+        self._add_box_to_open_dialogs(dialog)
+        dialog.show()
+
+    @invoke_method
+    def _on_closed_finished(self):
+        if self._closed:
+            return
         logger.info("finishing close ..")
+        app_model = self._app_model
+        app_model.property_changed -= self._on_app_model_property_changed
+        self._timer_calibrate_diamond_triangle.cancel()
         self.main_content.close()
         dialogs = self._open_dialogs
         self._open_dialogs = []
         for dialog in dialogs:
             dialog.close()
+        logger.debug("closing super close")
+        self._closed = True
         super().close()
 
-    def close(self):
-        logger.debug("received close")
-        self._main_ui_watchdog_timer.stop()  # ensure doesn't race
-        with self._app_model.app_lock:
-            event = self._close_event
-            if self._closing:
-                if event is not None:
-                    event.accept()
-                    self._close_event = None
-                else:
-                    logger.warning("already closing")
-                return
-            if event is not None:
-                event.ignore()
-                self._close_event = None
-            self._closing = True
-
-        def execute_close():
-            self._on_capture_start_stop(False)
-            stop_thread = self._stop_capture_thread
-            self._timer_calibrate_diamond_triangle.cancel()
-            if stop_thread is not None:
-                logger.debug("joining stop capture thread")
-                stop_thread.join()
-            self._app_model.on_close()
-            InvokeMethod(self._finish_close)
-        close_thread = threading.Thread(target=execute_close)
-        close_thread.start()
-
     def closeEvent(self, event):
+        if self._closed or self._closing:
+            return
         logger.debug("received closeEvent: %s", event)
-        self._close_event = event
+        event.ignore()
         self.close()
 
-    def moveEvent(self, e):
+    def moveEvent(self, event):
         self._preferences.last_window_x = self.pos().x()
         self._preferences.last_window_y = self.pos().y()
-        super(MainWindow, self).moveEvent(e)
+        super(MainWindow, self).moveEvent(event)
 
     def _edit_camera_settings(self):
         # isChecked() has already swapped to the new value by the time this is called
@@ -985,7 +1040,7 @@ class MainWindow(QMainWindow):
 
         action = self.quit_action = QAction("Quit")
         action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Q))
-        action.triggered.connect(lambda: self._app.quit())
+        action.triggered.connect(self.close)
 
     def _configure_menubar(self):
         menu_bar = self.menuBar()
@@ -1278,12 +1333,24 @@ class MainWindow(QMainWindow):
             v.close()
 
     def _show_message(self, title: str, message: str):
+        if self._closing:
+            return
         @invoke_method
         def show_in_gui_thread(title=title, message=message):
+            if self._closing:
+                return
             dlg = QMessageBox(self)
+            self._open_dialogs.append(dlg)
             dlg.setWindowTitle(title)
             dlg.setText(message)
             dlg.exec()
+            def close(orig=dlg.close):
+                orig()
+                try:
+                    self._open_dialogs.remove(dlg)
+                except ValueError:
+                    pass
+            dlg.close = close
         show_in_gui_thread()
 
     @invoke_method

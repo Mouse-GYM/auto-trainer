@@ -506,6 +506,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         force_first_connect: bool=False,
         motors_config: Optional[MotorConfigurations] = None,
         move_config: Optional[CompoundMovements] = None,
+        is_cancelled=lambda: False,
     ):
         logger.notice("%s: connect with %s", self, cmd_queue)
         self._disconnect_event.clear()
@@ -536,30 +537,43 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         send_dev_cmd = partial(self._send_command, device_conn)
         def send_dev_ack_cmd(kind, data=None):
             tok = str(uuid.uuid4())
-            with device_conn.await_acknowledge({tok}):
+            with device_conn.await_acknowledge({tok}, is_cancelled=is_cancelled):
                 send_dev_cmd(kind, data, context=tok)
 
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
+        if is_cancelled():
+            return
 
         # load and set motors and move configs
         # 1)
-        motors_config = device_conn.use_motor_configurations(motors_config)
+        motors_config = device_conn.use_motor_configurations(motors_config, is_cancelled=is_cancelled)
+        if is_cancelled():
+            return
         # 2)
         device_conn.use_compound_movements(move_config)
         # 3)
         if self._connect_count == 1 or force_first_connect:
             logger.notice("Doing cover attach-release-detach on first connect")
-            send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
-            send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
-            # also need to re-apply the config
+            for args in (
+                (SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.RELEASE_PELLET,),
+                (SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config),
+                # also need to re-apply the config
+            ):
+                send_dev_ack_cmd(*args)
+                if is_cancelled():
+                    return
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
+        if is_cancelled():
+            return
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 
         send_dev_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
+        if is_cancelled():
+            return
 
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():
@@ -788,11 +802,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
+        is_cancelled = lambda: False,
     ):
         p_start = time.perf_counter()
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
         while True:
+            if is_cancelled():
+                return
             with self._lock:
                 if token not in self._pending_tokens:
                     logger.debug("Got ack for token=%s ; delay=%.6f",

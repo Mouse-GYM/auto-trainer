@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
     def _configure_actions(self):
         self.quit_action = QAction("Quit")
         self.quit_action.setShortcut(QKeyCombination(Qt.Modifier.CTRL, Qt.Key.Key_Q))
-        self.quit_action.triggered.connect(lambda: self._app.quit())
+        self.quit_action.triggered.connect(self.close)
 
         self.view_diagnostics_action = QAction("Diagnostics", self)
         self.view_diagnostics_action.setToolTip("Show or hide diagnostics panel")
