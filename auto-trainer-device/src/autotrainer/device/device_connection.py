@@ -3,6 +3,7 @@ import logging
 import math
 import time
 import uuid
+from pathlib import Path
 from queue import Queue, Empty
 from threading import Thread
 from typing import Callable, Union, Optional, Any, Set
@@ -18,10 +19,12 @@ from autotrainer.core import (
 )
 from autotrainer.core.event import post_api_event_content
 from autotrainer.core.message.message_handler import CommandResult
+from autotrainer.core.message import SystemDataArgsKwargs
 
 import autotrainer.device
 
 from .can_device import HAVE_CAN_DEVICE
+from .compound_movement_file import CompoundMovementKind
 from .device import Device
 from .device_api import DeviceApi
 from .device_interface import DeviceInterface, ServoConfig, StepperConfig
@@ -202,20 +205,23 @@ class DeviceConnection(DeviceConnectionProtocol):
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
-    def use_compound_movements(self, data: CompoundMovementDataSet):
-        for kind, steps in (
-            (SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, data.load_pellet),
-            (SystemCommandKind.SET_SEND_PELLET_PROCEDURE, data.send_pellet),
-            (SystemCommandKind.SET_COVER_PELLET_PROCEDURE, data.cover_pellet),
-            (SystemCommandKind.SET_RELEASE_PELLET_PROCEDURE, data.release_pellet),
-            (SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, data.move_retract),
-        ):
+    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None):
+        move_config = data
+        if move_config is None:
+            move_config = self.load_default_move_config()
+        for compound_move in CompoundMovementKind:
+            name = compound_move.value
+            steps = getattr(move_config, name)
             if steps.is_empty:
-                logger.notice("config compound %s empty, not using. builtin default config will remain.", kind)
+                logger.notice("config compound %s empty, not using. builtin default config will remain.", name)
             else:
-                self.send_message(kind, steps)
+                self.set_steps_procedure(name, steps)
+        return move_config
 
-    def use_motor_configurations(self, data: MotorConfigurations):
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None):
+        motor_configs = data
+        if data is None:
+            data = motor_configs = self.load_default_motor_config()
         logger.notice("Setting motor configurations")
         tokens = set()
         def make_token():
@@ -241,7 +247,12 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             with self.await_acknowledge(tokens, timeout=3):
                 send(conf)
+        return motor_configs
 
+    def set_steps_procedure(self, name: str, steps: MotorSteps):
+        self.send_message(SystemCommandKind.SET_STEPS_PROCEDURE, SystemDataArgsKwargs(name, steps))
+
+    # begin not anymore used (replaced by set_steps_procedure()):
     def set_load_procedure(self, load_steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_LOAD_PELLET_PROCEDURE, load_steps)
 
@@ -256,6 +267,7 @@ class DeviceConnection(DeviceConnectionProtocol):
 
     def set_retract_procedure(self, steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_MOVE_RETRACT_PROCEDURE, steps)
+    # end not anymore used.
 
     def set_motor_configuration(self, config: Union[ServoConfig, StepperConfig]):
         self.send_message(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, config)

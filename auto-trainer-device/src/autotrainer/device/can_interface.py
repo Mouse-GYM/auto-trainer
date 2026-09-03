@@ -1155,7 +1155,7 @@ class CanInterface(DeviceInterface):
             bool: True if successful else False
         """
 
-        if isinstance(position, float) or isinstance(position, int):
+        if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
         elif isinstance(position, tuple):
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
@@ -1211,7 +1211,7 @@ class CanInterface(DeviceInterface):
 
         if isinstance(position, (float, int)):
             velocity = config.maximum_velocity
-        elif isinstance(position, tuple) and len(position) == 2:
+        elif isinstance(position, (list, tuple)) and len(position) == 2:
             velocity = float(position[1]) / 100.0 * config.maximum_velocity
             position = float(position[0])
         else:
@@ -1610,7 +1610,7 @@ class CanInterface(DeviceInterface):
         Returns:
             bool: True if successful else False
         """
-        duration_ms = int(duration  * 1000)
+        duration_ms = int(duration * 1000)
         addr = self._tgt2addr(Target.PELLET_DEVICE)
         uuid = CanInterface.next_uuid()
         res = self._jc.ToneWrite(addr, 0, frequency, duration_ms, uuid)

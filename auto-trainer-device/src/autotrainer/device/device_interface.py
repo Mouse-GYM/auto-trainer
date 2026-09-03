@@ -512,6 +512,7 @@ class DeviceInterface:
         raise NotImplementedError
 
     def emit_tone(self, frequency: int, duration: float) -> bool:
+        """freq as Hz, duration in seconds"""
         raise NotImplementedError
 
     def fixed_position(self) -> bool:
