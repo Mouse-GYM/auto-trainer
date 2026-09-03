@@ -368,7 +368,7 @@ def run_monitor():
     can_dev.default_max_failed_command_count = 3
     # required for current FW: the tare function always gives 2 NACKs before giving back a success ACK.
 
-    device_connection = DeviceConnection(can_dev, msg_queue)
+    device_connection = DeviceConnection(can_dev, message_queue=msg_queue)
 
     device_connection.request_connect()
 

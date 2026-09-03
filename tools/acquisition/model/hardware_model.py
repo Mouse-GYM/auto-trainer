@@ -7,7 +7,7 @@ import warnings
 from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional, Tuple, Dict, Union, List
+from typing import Optional, Tuple, Dict, Union, List, Set
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
@@ -186,7 +186,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self._refresh_cmd_in_progress(after_commands)
 
     @property
-    def pending_tokens(self) -> List[Union[UUID, str]]:
+    def pending_tokens(self) -> List[UUID]:
         return list(self._pending_tokens)
 
     def _check_dcs_cfg(self, *, return_none: bool=False):
@@ -561,7 +561,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         can_device.property_changed += self._can_device_property_changed
 
-        device_conn = self._device_conn = DeviceConnection(can_device, cmd_queue, name="can-device")
+        device_conn = self._device_conn = DeviceConnection(can_device, message_queue=cmd_queue, name="can-device")
         device_conn.request_connect()
 
         send_dev_cmd = self._send_command
@@ -615,7 +615,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             thread.start()
 
     def disconnect(self):
-        logger.verbose("disconnecting ..")
+        logger.info("disconnecting ..", stack_info=True)
+        logger.verbose("disconnecting ..", stack_info=True)
         self._disconnect_event.set()
         can_dev = self._can_device
         dev = self._device_conn
@@ -829,27 +830,23 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def wait_pending_command_acked(
         self,
-        token,
+        token_or_tokens: Union[UUID, Set[UUID]],
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
-        is_cancelled = lambda: False,
+        raise_on_command_error: bool = True,
+        is_cancelled=lambda: False,
     ):
-        p_start = time.perf_counter()
-        p_timeout = p_start + timeout
-        logger.verbose("Waiting ack pending command %s", token)
-        while True:
-            if is_cancelled():
-                return
-            with self._lock:
-                if token not in self._pending_tokens:
-                    logger.debug("Got ack for token=%s ; delay=%.6f",
-                                 token, time.perf_counter() - p_start)
-                    return
-            p_now = time.perf_counter()
-            if p_now > p_timeout:
-                break
-            time.sleep(0.0025)  # 2.5 ms
-        if raise_on_timeout:
-            raise RuntimeError(f"timeout waiting ack of pending token={token}")
-        logger.warning("timeout waiting ack token %s, but continuing", token)
+        dev_conn = self._device_conn
+        if dev_conn is None:
+            return
+        if not isinstance(token_or_tokens, set):
+            token_or_tokens = {token_or_tokens}
+        with dev_conn.await_acknowledge(
+            token_or_tokens,
+            timeout=timeout,
+            raise_on_timeout=raise_on_timeout,
+            raise_on_command_error=raise_on_command_error,
+            is_cancelled=is_cancelled,
+        ):
+            pass  # NB: only used for the with: side-effect.

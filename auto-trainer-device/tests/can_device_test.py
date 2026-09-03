@@ -115,13 +115,12 @@ def device(
     tokens_acked,
     dev_ack_timeout_ctx
 ) -> CanDevice:  # noqa
-    observable = ObservableObject(event_names=("message_callback",))
-    device = CanDevice(api=DeviceApi(message_callback=observable.message_callback), force_emulation=True)
+    device = CanDevice(api=DeviceApi(), force_emulation=True)
     # unneeded, at least with emulation iface:
     # device._interface.magnet_address = 0x40
     # device._interface.pellet_address = 0x01
     # device.notify_message(_REQUEST_CONNECT)
-    observable.message_callback += partial(
+    device.api.message_callback += partial(
         api_msg_cb,
         tokens_acked=tokens_acked,
         expected_tok=expected_tok,
@@ -437,7 +436,6 @@ def test_command_with_uuid_error(
         return True
     monkeypatch.setattr(iface, "move_servo_motor", mock.MagicMock(spec=iface.move_servo_motor, side_effect=patched))
 
-    orig_api_cb = api.message_callback
     ack_received: Optional[Any] = None
     def recv_cb(kind, data):
         nonlocal ack_received
@@ -445,9 +443,8 @@ def test_command_with_uuid_error(
             # print(kind, data)
             if data[0] == ctx:
                 ack_received = data
-        orig_api_cb(kind, data)
 
-    api.message_callback = recv_cb
+    api.message_callback += recv_cb
 
     ctx = uuid.uuid4()
     expected_tok.value = ctx

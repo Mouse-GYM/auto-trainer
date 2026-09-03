@@ -145,7 +145,7 @@ class BaseTrainingPlan(MockSystemMachine):
                 nullify_attributes(app_model)
 
     def ack_pending_tokens(self, wait_acked: bool=True):
-        tokens = list(self._app_model.hardware._pending_tokens)
+        tokens = self._app_model.hardware.pending_tokens
         logger.info("acking %s pending tokens", len(tokens))
         for tok in tokens:
             self.msg_handler.ack_received(tok, CommandResult(succeeded=True), perf_c=get_perf_now())

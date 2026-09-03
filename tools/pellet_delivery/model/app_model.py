@@ -348,8 +348,9 @@ class AppModel(ObservableObject):
             self._device_connection.use_compound_movements(movements)
 
     def connect_to_device(self):
-        self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
-        self._device_connection.request_connect()
+        dev_conn = DeviceConnection(CanDevice(), message_queue=self._message_handler.input_queue, name="pellet-can")
+        self._device_connection = dev_conn
+        dev_conn.request_connect()
         self._send_command(SystemCommandKind.REQUEST_VERSION)
         #
         if self._hardware_configuration is None:
@@ -385,8 +386,8 @@ class AppModel(ObservableObject):
         # only set it after having loaded motor config
         self.travel_limits = _alogus_travel_limits
 
-        self._device_connection.use_motor_configurations(motors_cfg)
-        self._device_connection.load_default_move_config()
+        dev_conn.use_motor_configurations(motors_cfg)
+        dev_conn.load_default_move_config()
 
         self.is_connected = True
 

@@ -90,11 +90,12 @@ class Device(ObservableObject):
         api = self._api
         if api is None:
             return
-        logger.verbose("sending command ack: %s perf_c=%.3f result=%s", token, perf_c, cmd_res)
         if cmd_res is None:  # should not happen but is ok to be liberal here
             cmd_res = CommandResult()
         cmd_res.succeeded = error is None
         cmd_res.error = error
+        (logger.verbose if cmd_res.succeeded else logger.error)(
+            "sending command ack: %s perf_c=%.3f result=%s", token, perf_c, cmd_res)
         api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, cmd_res))
 
     @property

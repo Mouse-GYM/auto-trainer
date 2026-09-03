@@ -3,13 +3,21 @@ import math
 from queue import Queue
 from typing import Callable, Optional, Any
 
+from events import Events
+
 from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core import ObservableObject
+from autotrainer.core.observable_object import EventHandler
 
 logger = get_verbose_logger(__name__)
 
 
-MessageCallbackT = Optional[Callable[[int, object], None]]
+MessageCallbackT = Callable[[int, object], None]
+
+
+class DeviceApiEvents(Events):
+    message_callback: EventHandler[MessageCallbackT]
 
 
 class DeviceApi:
@@ -21,19 +29,20 @@ class DeviceApi:
     `send_message()`).
     """
 
-    def __init__(self, message_callback: MessageCallbackT = None, message_queue: Queue = None):
-        self._message_callback = message_callback
+    def __init__(self, message_queue: Queue = None):
+        super().__init__()
         self._message_queue = message_queue
         self._prev_perf_c = -math.inf
         self._tot_msgs = 0
+        self._events = DeviceApiEvents()
 
     @property
-    def message_callback(self) -> MessageCallbackT:
-        return self._message_callback
+    def message_callback(self) -> EventHandler[MessageCallbackT]:
+        return self._events.message_callback
 
     @message_callback.setter
-    def message_callback(self, value: MessageCallbackT):
-        self._message_callback = value
+    def message_callback(self, value: EventHandler[MessageCallbackT]):
+        self._events.message_callback = value
 
     def send_message(self, kind: int, data: Optional[Any] = None):
         """Sends a message identifier and optional data to client script or application"""
@@ -42,9 +51,7 @@ class DeviceApi:
             # logger.debug("putting %s", kind)
             msg_q.put((kind, data))
 
-        msg_cb = self._message_callback
-        if msg_cb is not None:
-            msg_cb(kind, data)
+        self._events.message_callback(kind, data)
 
         self._tot_msgs += 1
         p_now = get_perf_now()

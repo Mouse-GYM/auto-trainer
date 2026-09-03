@@ -56,10 +56,9 @@ class DeviceConnection(DeviceConnectionProtocol):
     def __init__(
         self,
         device: Device,
-        message_queue: Queue,
         *,
+        message_queue: Queue,
         api: Optional[DeviceApi] = None,
-        message_callback: Callable[[int, object], None] = None,
         name="device-connection",
     ):
 
@@ -71,11 +70,11 @@ class DeviceConnection(DeviceConnectionProtocol):
         # without explicit import, this allows to have completion working on these instances attributes access:
         self._device: Union[Device, "autotrainer.device.can_device.CanDevice"] = device
         self._interface: Union[DeviceInterface, "autotrainer.device.can_interface.CanInterface"] = device.device_interface
-        self._message_callback = message_callback
+
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue) if api is None else api
+        self._api = DeviceApi(message_queue=message_queue) if api is None else api
         self._device.api = self._api  # ensure same api is used on the device.
 
         self._name = name
@@ -166,9 +165,12 @@ class DeviceConnection(DeviceConnectionProtocol):
             dev.disconnect()
 
     @contextlib.contextmanager
-    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
-                          is_cancelled=lambda: False):
-        orig_cb = self._api.message_callback
+    def await_acknowledge(
+        self, tokens: Set, *,
+        raise_on_command_error: bool = True,
+        timeout: float=1, raise_on_timeout=True,
+        is_cancelled=lambda: False,
+    ):
         tokens_acked = []
         tokens_with_err = {}
         def cb(kind, context):
@@ -180,9 +182,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                         tokens_with_err[tok] = result
                     tokens_acked.append(tok)
                     tokens.remove(tok)
-            elif orig_cb is not None:
-                orig_cb(kind, context)
-        self._api.message_callback = cb
+        self._api.message_callback += cb
         try:
             yield
             logger.verbose("Now waiting tokens %s", tokens)
@@ -198,10 +198,11 @@ class DeviceConnection(DeviceConnectionProtocol):
                 time.sleep(0.001)
             if len(tokens) == 0:
                 logger.info("successfully obtained %s acknowledge", len(tokens_acked))
-                if len(tokens_with_err) > 0:
+                if len(tokens_with_err) > 0 and raise_on_command_error:
                     raise RuntimeError(f"Command(s) failed: {tokens_with_err}")
         finally:
-            self._api.message_callback = orig_cb
+            self._api.message_callback -= cb
+        return tokens_acked, tokens_with_err
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
