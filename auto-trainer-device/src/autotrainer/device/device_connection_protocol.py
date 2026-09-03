@@ -85,10 +85,10 @@ class DeviceConnectionProtocol(Protocol):
                 config_path)
         return move_cfg
 
-    def use_motor_configurations(self, data: MotorConfigurations, *, is_cancelled=lambda: False):
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False):
         """Apply the given motor configuration"""
         raise NotImplementedError
 
-    def use_compound_movements(self, data: CompoundMovementDataSet, *, is_cancelled=lambda: False):
+    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None, *, is_cancelled=lambda: False):
         """Apply the given motor compound movement"""
         raise NotImplementedError
