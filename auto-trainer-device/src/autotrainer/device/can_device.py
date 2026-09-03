@@ -1663,17 +1663,17 @@ class CanDevice(Device):
         elif step_type == 'x_rel':
             motor = Motor.PELLET_X_MOTOR
             step_val: Union[float, Tuple[float, float]]
-            success = self._interface.move_motor_x(step_val, relative=True)
+            success = self._apply_set_or_move(self._interface.move_motor_x, motor, step_val, relative=True)
 
         elif step_type == 'y_rel':
             motor = Motor.PELLET_Y_MOTOR
             step_val: Union[float, Tuple[float, float]]
-            success = self._interface.move_motor_y(step_val, relative=True)
+            success = self._apply_set_or_move(self._interface.move_motor_y, motor, step_val, relative=True)
 
         elif step_type == 'z_rel':
             motor = Motor.PELLET_Z_MOTOR
             step_val: Union[float, Tuple[float, float]]
-            success = self._interface.move_motor_z(step_val, relative=True)
+            success = self._apply_set_or_move(self._interface.move_motor_z, motor, step_val, relative=True)
 
         else:
             raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
