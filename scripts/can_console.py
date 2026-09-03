@@ -368,8 +368,8 @@ def run_monitor():
     # and that before entering its main loop it already reads and assign the devices addresses,
     # and that then it cannot miss any of the commands put into the queue in its main loop,
 
-    device_connection.load_default_motor_config()
-    device_connection.load_default_move_config()
+    device_connection.use_motor_configurations()
+    device_connection.use_compound_movements()
 
     device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE)
 
@@ -433,7 +433,7 @@ def run_monitor():
                 elif cmd == 'a' or cmd == 'audio':
                     device_connection.send_message(SystemCommandKind.PLAY_TONE,
                                                # period from sec to msec
-                                               data=(int(params[0]), int(float(params[1]) * 1000)),
+                                               data=(int(params[0]), float(params[1])),
                                                context="tone")
 
                 elif cmd == 'd' or cmd == 'delay':

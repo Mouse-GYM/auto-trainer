@@ -39,17 +39,20 @@ def _exec_main(args):
     app_model.rpc_service = plugin.service
 
     try:
-        app_model.load_configuration(config_file)
+        config_loaded_ok = app_model.load_configuration(config_file)
     except Exception as err:
         logger.exception("Could not load config: %s", err)
         app_model.on_close()
         return 1
 
-    target_status = args.start_mode
-    if not app_model.capture_start(target_status=target_status):
-        logger.error("failed to start capture")
-        app_model.on_close()
-        return 1
+    if config_loaded_ok:
+        target_status = args.start_mode
+        if not app_model.capture_start(target_status=target_status):
+            logger.error("failed to start capture")
+            app_model.on_close()
+            return 1
+    else:
+        logger.warning("Configuration load failed. errors=%s", app_model.config_errors)
 
     logger.success("App is now running")
 

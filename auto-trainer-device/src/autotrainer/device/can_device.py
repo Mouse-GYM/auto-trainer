@@ -15,7 +15,7 @@ import queue
 import threading
 import time
 from functools import partial
-from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict
+from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict, Literal
 
 from autotrainer.core import Offset3DTuple, get_perf_now, Motor
 from autotrainer.core.logging import get_verbose_logger
@@ -102,16 +102,6 @@ def _no_op_handler(_):
     return True
 
 
-def _to_tuple(value: Union[str, Any]):
-    if not isinstance(value, str):
-        return value
-    if "," in value:
-        parts = value.split(",")
-        return float(parts[0].strip()), float(parts[1].strip())
-    else:
-        return float(value)
-
-
 def unpack_data_arg(data):
     if isinstance(data, SystemDataArgsKwargs):
         return data.args, data.kwargs
@@ -152,6 +142,13 @@ class _BoardPendingContext:
             and self.prev_command is None
             and (self.compound_steps is None or len(self.compound_steps) == 0)
         )
+
+
+def _make_proc_access(name: str):
+    def wrapped(self: "CanDevice"):
+        return self._steps_procedures[name]
+    wrapped.__name__ = f"_{name}"
+    return property(wrapped)
 
 
 class CanDevice(Device):
@@ -242,7 +239,7 @@ class CanDevice(Device):
 
         self._init_handlers()
 
-        self._prev_command_timeout: float = self.default_command_ack_timeout_duration
+        self._prev_command_timeout: Optional[float] = self.default_command_ack_timeout_duration
         self._prev_command: Optional[List[Any, Any, Optional, Optional]] = None
         self._prev_command_is_relative = False
 
@@ -269,14 +266,24 @@ class CanDevice(Device):
             ),
         }
 
+    _load_pellet = _make_proc_access("load_pellet")
+    _send_pellet = _make_proc_access("send_pellet")
+    _cover_pellet = _make_proc_access("cover_pellet")
+    _release_pellet = _make_proc_access("release_pellet")
+    _open_tunnel_gate = _make_proc_access("open_tunnel_gate")
+    _close_tunnel_gate = _make_proc_access("close_tunnel_gate")
+    _move_retract = _make_proc_access("move_retract")
+
     def _init_default_move_configs(self):
-        self._load_pellet = default_load_pellet()
-        self._send_pellet = default_send_pellet()
-        self._cover_pellet = default_cover_pellet()
-        self._release_pellet = default_release_pellet()
-        self._open_tunnel_gate = default_open_gate()
-        self._close_tunnel_gate = default_close_gate()
-        self._move_retract = default_move_retract()
+        self._steps_procedures = dict(
+            load_pellet=default_load_pellet(),
+            send_pellet=default_send_pellet(),
+            cover_pellet=default_cover_pellet(),
+            release_pellet=default_release_pellet(),
+            open_tunnel_gate=default_open_gate(),
+            close_tunnel_gate=default_close_gate(),
+            move_retract=default_move_retract(),
+        )
 
     def _clear_caches(self):
         for cache in (
@@ -302,47 +309,39 @@ class CanDevice(Device):
 
         def handle_servo_sequence(motor: Motor, sequence: MotorSteps):
             step, steps = self._make_servo_steps(motor)
-            for sub_step in sequence.steps:
-                sub_step.update(step)  # eventual uuid_ack_timeout
+            sequence_steps = [{**step, **sub_step} for sub_step in sequence.steps]
             if len(steps) > 1:  # attach/detach
                 step_idx = steps.index(step)
-                steps[step_idx:-1] = sequence.steps
+                steps[step_idx:-1] = sequence_steps
             else:
-                steps = sequence.steps
+                steps = sequence_steps
             return self._start_sequence(MotorSteps(f"{motor.name}_{sequence.name}", steps))
 
-        def set_load_pellet_proc(proc):
+        def set_steps_proc(name: str, proc: MotorSteps):
+            if name not in self._steps_procedures:
+                logger.error("Unknown step procedure: %r", name)
+                return True
             if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._load_pellet = proc
+                self._steps_procedures[name] = proc
+                logger.verbose("set procedure %r to %s", name, proc)
             else:
-                logger.warning("set_load_pellet_proc: empty proc: %s", proc)
+                logger.warning("set_%s_proc: empty proc: %s", name, proc)
             return True
+
+        def set_load_pellet_proc(proc):
+            return set_steps_proc("load_pellet", proc)
 
         def set_send_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._send_pellet = proc
-            else:
-                logger.warning("set_send_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("send_pellet", proc)
 
         def set_cover_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._cover_pellet = proc
-            else:
-                logger.warning("set_cover_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("cover_pellet", proc)
 
         def set_release_pellet_proc(proc):
-            if isinstance(proc, MotorSteps) and not proc.is_empty:
-                self._release_pellet = proc
-            else:
-                logger.warning("set_release_pellet_proc: empty proc: %s", proc)
-            return True
+            return set_steps_proc("release_pellet", proc)
 
         def set_move_retract_proc(proc):
-            prev, self._move_retract = self._move_retract, proc
-            logger.verbose("replaced retract proc by %s (prev=%s)", proc, prev)
-            return True
+            return set_steps_proc("move_retract", proc)
 
         def apply_set_or_move(func, motor, *args, **kwargs):
             has_relative = "relative" in kwargs
@@ -388,7 +387,7 @@ class CanDevice(Device):
             SystemCommandKind.SEND_TO_LIMITS:
                 lambda data: self._start_sequence(MotorSteps(
                     "send_to_limits",
-                    [{"home": d}
+                    [mk_step("home", d)
                      for d in (data if isinstance(data, (list, tuple)) else [data])
                      ]
                 )),
@@ -396,7 +395,8 @@ class CanDevice(Device):
             SystemCommandKind.SEND_HOME:
                 lambda _: self._start_sequence(MotorSteps(
                     "send_home",
-                    [{"home": m} for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
+                    [mk_step("home", m)
+                     for m in (Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR)]
                 )),
 
             # NB: only used by test and can_console, we should always use SEND_PELLET instead.
@@ -430,6 +430,8 @@ class CanDevice(Device):
 
             SystemCommandKind.WRITE_MOTOR_CONFIGURATION: self._handle_write_motor_configuration,
 
+            SystemCommandKind.SET_STEPS_PROCEDURE: set_steps_proc,
+
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE: set_load_pellet_proc,
 
             SystemCommandKind.SET_SEND_PELLET_PROCEDURE: set_send_pellet_proc,
@@ -454,7 +456,7 @@ class CanDevice(Device):
             SystemCommandKind.PLAY_TONE:
                 lambda data: (
                     self._interface.emit_tone(data[0], data[1]) if isinstance(data, tuple)
-                    else self._interface.emit_tone(data, 500)  # 500 millisecond
+                    else self._interface.emit_tone(data, 0.5)  # 500 millisecond
                 ),
 
             SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
@@ -801,7 +803,9 @@ class CanDevice(Device):
             #
             if kind is _retry_compound:
                 kind, step, steps = data
-                logger.verbose("retrying perform next compound with %s", step)
+                step_tp = step["type"]
+                step_val = step["value"]
+                logger.verbose("retrying perform next compound with %s", {step_tp: step_val})
                 steps.insert(0, step)
                 data = kind, steps
                 kind = _next_compound
@@ -897,9 +901,12 @@ class CanDevice(Device):
                     prev_command[2] = ctx  # ensure it keeps the context/token as well
                     prev_command[3] = perf_c  # and the perf_c as well.
                 target_board.uuid = after_uuid
-                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + self._prev_command_timeout
+                cmd_timeout = self._prev_command_timeout
+                if cmd_timeout is None:
+                    cmd_timeout = self.default_command_ack_timeout_duration
+                target_board.ack_perf_timeout = t_perf_last_command_with_uuid + cmd_timeout
                 # _prev_command_timeout is always preset to default before cmd execution,
-                # and eventually overriden during cmd execution.
+                # and eventually replaced during cmd execution.
                 target_board.prev_command = tuple(prev_command)
             else:
                 # no uuid generated
@@ -998,7 +1005,7 @@ class CanDevice(Device):
         Args:
             movements: The motor/device steps to execute
         """
-        move_steps = movements.steps
+        move_steps = copy.deepcopy(movements.steps)
         logger.notice("Starting sequence %s (%s steps): %s", movements.name, len(move_steps), move_steps)
         assert self._compound_movement is None or len(self._compound_movement) == 0
         self._compound_movement = move_steps
@@ -1006,48 +1013,48 @@ class CanDevice(Device):
         board = self._boards_pending_ctx[tgt]
         return self._perform_next_compound_step(board, move_steps)
 
-    def _find_step_board(self, step) -> Optional[Target]:
-        if 'x' in step or 'x_rel' in step or 'send_x_rel' in step:
+    def _find_step_board(self, step) -> Union[Literal["unhandled"], Optional[Target]]:
+        tp = step["type"]
+        val = step["value"]
+        if tp in {'x', 'x_rel', 'send_x_rel'}:
             motor = Motor.PELLET_X_MOTOR
-        elif 'y' in step or 'y_rel' in step or 'send_y_rel' in step:
+        elif tp in {'y',  'y_rel',  'send_y_rel'}:
             motor = Motor.PELLET_Y_MOTOR
-        elif 'z' in step or 'z_rel' in step or 'send_z_rel' in step:
+        elif tp in {'z',  'z_rel',  'send_z_rel'}:
             motor = Motor.PELLET_Z_MOTOR
-        elif 'load_arm' in step:
+        elif tp == 'load_arm':
             motor = Motor.PELLET_LOAD_SERVO
-        elif 'barrier_arm' in step:
+        elif tp == 'barrier_arm':
             motor = Motor.PELLET_COVER_SERVO
-        elif 'gate' in step:
+        elif tp == 'gate':
             motor = Motor.TUNNEL_GATE_SERVO
-        elif 'magnet' in step:
+        elif tp == 'magnet':
             motor = Motor.TUNNEL_MAGNET_SERVO
-        elif '_servo_move' in step:
-            motor = step['_servo_move'][0]
-        elif '_servo_max_pos' in step:
-            motor = step['_servo_max_pos']
-        elif '_servo_min_pos' in step:
-            motor = step['_servo_min_pos']
-        elif 'delay' in step:
+        elif tp == '_servo_move':
+            motor = val[0]
+        elif tp in {'_servo_max_pos', '_servo_min_pos'}:
+            motor = val
+        elif tp == 'delay':
             motor = Motor.DELAY
-        elif 'tone' in step:
+        elif tp == 'tone':
             motor = Motor.TONE
-        elif 'servo_attach' in step:
-            motor = step['servo_attach']
-        elif 'servo_detach' in step:
-            motor = step['servo_detach']
-        elif 'home' in step:
-            motor = step['home']
-        elif '_internal_func_motor' in step:
+        elif tp in {'servo_attach', 'servo_detach'}:
+            motor = val
+        elif tp == 'home':
+            motor = val
+        elif tp == '_internal_func':
             motor = step['_internal_func_motor']
-        elif 'predefined' in step:
-            predef = step['predefined']
+        elif tp == 'predefined':
+            predef = val
             if predef in {'send', 'cover', 'release', 'retrieve', 'home', 'scoop'}:
                 # single one where we don't use motor = ..
                 # but they are all on PELLET board.
                 return Target.PELLET_DEVICE
-            return None
+            elif predef == "noop":
+                return None
+            return "unhandled"
         else:
-            return None
+            return "unhandled"
         return target_of_motor(motor)
 
     def _find_steps_next_board_target(self, kind, steps) -> Optional[Target]:
@@ -1056,7 +1063,7 @@ class CanDevice(Device):
             return None
         for step in steps:
             tgt = self._find_step_board(step)
-            if tgt is not None:
+            if tgt != "unhandled":
                 return tgt
         raise ValueError(f"Found no target board for kind={kind} steps: {steps}")
 
@@ -1130,6 +1137,7 @@ class CanDevice(Device):
             # is no CAN operation
             return None
         elif kind in {
+            SystemCommandKind.SET_STEPS_PROCEDURE,
             SystemCommandKind.SET_LOAD_PELLET_PROCEDURE,
             SystemCommandKind.SET_SEND_PELLET_PROCEDURE,
             SystemCommandKind.SET_COVER_PELLET_PROCEDURE,
@@ -1298,17 +1306,17 @@ class CanDevice(Device):
         if cfg.uuid_ack_timeout is not None:
             step['uuid_ack_timeout'] = cfg.uuid_ack_timeout
         if want_detach:
-            return step, [{'servo_attach': motor}, step, {'servo_detach': motor}]
+            return step, [mk_step('servo_attach', motor), step, mk_step('servo_detach', motor)]
         return step, [step]
 
     def _make_servo_move_steps(self, motor, position):
         step, steps = self._make_servo_steps(motor)
-        step['_servo_move'] = (motor, position)
+        step.update(mk_step('_servo_move', (motor, position)))
         return steps
 
     def _make_servo_iface_func_steps(self, motor, func):
         step, steps = self._make_servo_steps(motor)
-        step['_internal_func'] = func
+        step.update(mk_step('_internal_func', func))
         step['_internal_func_motor'] = motor
         return step, steps
 
@@ -1317,10 +1325,8 @@ class CanDevice(Device):
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_move_compound,
         # by one doing nothing now:
-        compound_movements[0] = {
-            '_internal_func': _no_op,
-            '_internal_func_motor': motor,
-        }  # noqa
+        compound_movements[0] = mk_step('_internal_func', _no_op)
+        compound_movements[0]['_internal_func_motor'] = motor
         compound_movements[1:1] = steps
         logger.verbose("injected steps: new=%s", compound_movements)
         return True
@@ -1330,27 +1336,24 @@ class CanDevice(Device):
         # replace current compound move by this new list of steps:
         # the [0] = : replace whatever previous step leaded to this _handle_servo_iface_cmd_compound,
         # by one doing nothing now:
-        compound_movements[0] = {
-            '_internal_func': _no_op,
-            '_internal_func_motor': motor,
-        }  # noqa
+        compound_movements[0] = mk_step("_internal_func", _no_op)
+        compound_movements[0]["_internal_func_motor"] = motor
         compound_movements[1:1] = steps
         return True
 
     def _perform_send_rel_move(self, step: Dict[str, Any]):
-        if 'send_x_rel' in step:
-            rel_val = step['send_x_rel']
+        tp = step["type"]
+        rel_val = step["value"]
+        if tp == 'send_x_rel':
             motor = Motor.PELLET_X_MOTOR
             meth = self._interface.move_motor_x
             m_idx = 0
-        elif 'send_y_rel' in step:
-            rel_val = step['send_y_rel']
+        elif tp == 'send_y_rel':
             motor = Motor.PELLET_Y_MOTOR
             meth = self._interface.move_motor_y
             m_idx = 1
         else:
-            assert 'send_z_rel' in step
-            rel_val = step['send_z_rel']
+            assert tp == 'send_z_rel'
             motor = Motor.PELLET_Z_MOTOR
             meth = self._interface.move_motor_z
             m_idx = 2
@@ -1370,82 +1373,96 @@ class CanDevice(Device):
         Issue the next step in a multi-step motor sequence.
         """
         step = compound_movements[0]
-        orig_step = step.copy()
+        step_type = step.get("type")
+        step_val = step.get("value")
+        step_clean = {step_type: step_val}
         logger.debug("executing next compound step: %s (remains after=%s)",
-                     step,
-                     len(compound_movements) - 1,  # don't include current one
+                     step_clean, len(compound_movements) - 1,  # don't include current one
                      )
 
         assert isinstance(step, dict)
-        save_as_fixed = step.get("save_as_fixed", False)
+        save_as_fixed: bool = step.get("save_as_fixed", False)
 
         motor = None
         before_uuid = self._interface.uuid()
+        before_prev_cmd_timeout = self._prev_command_timeout
+        self._prev_command_timeout = None  # temporary,
+            # used to know if some command/step has overwritten it.
 
-        if 'x' in step:
+        if step_type == 'x':
             motor = Motor.PELLET_X_MOTOR
-            location = _to_tuple(step['x'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_x(location, save_as_fixed=save_as_fixed)
 
-        elif 'y' in step:
+        elif step_type == 'y':
             motor = Motor.PELLET_Y_MOTOR
-            location = _to_tuple(step['y'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_y(location, save_as_fixed=save_as_fixed)
 
-        elif 'z' in step:
+        elif step_type == 'z':
             motor = Motor.PELLET_Z_MOTOR
-            location = _to_tuple(step['z'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._interface.move_motor_z(location, save_as_fixed=save_as_fixed)
 
-        elif '_servo_move' in step:  # should be internal only
-            motor, position = step['_servo_move']  # noqa
+        elif step_type == '_servo_move':  # should be internal only
+            motor, position = step_val  # noqa
             success = self._interface.move_servo_motor(motor, position)
 
-        elif 'load_arm' in step:
+        elif step_type == 'load_arm':
             motor = Motor.PELLET_LOAD_SERVO
-            location = _to_tuple(step['load_arm'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif 'barrier_arm' in step:
+        elif step_type == 'barrier_arm':
             motor = Motor.PELLET_COVER_SERVO
-            location = _to_tuple(step['barrier_arm'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif 'magnet' in step:
+        elif step_type == 'magnet':
             motor = Motor.TUNNEL_MAGNET_SERVO
-            location = _to_tuple(step['magnet'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._handle_servo_move_compound(compound_movements, motor, location)
 
-        elif 'gate' in step:
+        elif step_type == 'gate':
             motor = Motor.TUNNEL_GATE_SERVO
-            location = _to_tuple(step['gate'])
+            location = step_val
+            location: Union[float, Tuple[float, float]]
             success = self._handle_servo_move_compound(compound_movements, motor, location)
 
         # _servo_max_pos / _servo_max_pos are internal and should not be used from outside.
-        elif '_servo_max_pos' in step:
-            motor: Motor = step['_servo_max_pos']  # noqa
+        elif step_type == '_servo_max_pos':
+            motor: Motor = step_val  # noqa
             cfg = self._motor_configs[motor]
+            assert isinstance(cfg, ServoConfig)
             success = self._interface.move_servo_motor(motor, cfg.maximum_position)
 
-        elif '_servo_min_pos' in step:
-            motor: Motor = step['_servo_min_pos']  # noqa
+        elif step_type == '_servo_min_pos':
+            motor: Motor = step_val  # noqa
             cfg = self._motor_configs[motor]
+            assert isinstance(cfg, ServoConfig)
             success = self._interface.move_servo_motor(motor, cfg.minimum_position)
 
-        elif 'delay' in step:
+        elif step_type == 'delay':
             motor = Motor.DELAY
-            success = self._handle_delay(step['delay'])
+            step_val: float
+            success = self._handle_delay(step_val)
 
-        elif 'tone' in step:
+        elif step_type == 'tone':
             motor = Motor.TONE
-            freq, duration = step['tone'].split(',')  # noqa  # (hz), (sec)
-            success = self._interface.emit_tone(int(freq), int(float(duration) * 1000))
+            freq, duration = step_val  # noqa
+            success = self._interface.emit_tone(freq, duration)
             if success:
                 board.skip_uuid_ack_perf_c = True
 
-        elif 'predefined' in step:
+        elif step_type == 'predefined':
 
-            predefined = step['predefined']
+            predefined = step_val
 
             if predefined == 'send':
                 motor = Motor.PELLET_X_MOTOR  # could choose Y or Z
@@ -1470,51 +1487,59 @@ class CanDevice(Device):
             elif predefined == 'home':
                 # replace by home steps (not predefined->home), 1 for each XYZ :
                 motor = Motor.PELLET_Y_MOTOR
-                step = {'home': motor}  # for possible retry on ack timeout
+                step = mk_step('home', motor)  # for possible retry on ack timeout
                 compound_movements[0] = step
                 # inject at index 1 the steps:
                 compound_movements[1:1] = [
-                    {'home': m}
+                    mk_step('home', m)
                     for m in [Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR]
                 ]
                 logger.debug("initiated home steps: %s", compound_movements)
                 success = self._interface.stepper_home(motor)
+            elif predefined == "noop":
+                motor = Motor.NONE
+                logger.info("executed noop for kind=%s", board.kind)
+                success = True
 
             else:
-                raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
+                raise RuntimeError(f"Received unhandled 'predefined' value: {predefined}")
 
-        elif 'servo_attach' in step:
-            motor: Motor = step['servo_attach']  # noqa
+        elif step_type == 'servo_attach':
+            motor: Motor = step_val  # noqa
             success = self._interface.servo_attach(motor)
 
-        elif 'servo_detach' in step:
-            motor: Motor = step['servo_detach']  # noqa
+        elif step_type == 'servo_detach':
+            motor: Motor = step_val  # noqa
             success = self._interface.servo_detach(motor)
 
-        elif 'home' in step:
+        elif step_type == 'home':
             # NB: to not mix with predefined->home, which is 3 times this home but each with separate stepper.
-            motor: Motor = step['home']  # noqa
+            motor: Motor = step_val  # noqa
             success = self._interface.stepper_home(motor)
 
-        elif '_internal_func' in step:
-            func = step['_internal_func']
+        elif step_type == '_internal_func':
+            func = step_val
             motor: Motor = step['_internal_func_motor']  # noqa
             success = func()  # noqa
 
-        elif 'send_x_rel' in step or 'send_y_rel' in step or 'send_z_rel' in step:
+        elif step_type in {'send_x_rel', 'send_y_rel', 'send_z_rel'}:
             motor, success = self._perform_send_rel_move(step)
 
-        elif 'x_rel' in step:
+        # actually now unused:
+        elif step_type == 'x_rel':
             motor = Motor.PELLET_X_MOTOR
-            success = self._interface.move_motor_x(step['x_rel'], relative=True)
+            step_val: Union[float, Tuple[float, float]]
+            success = self._interface.move_motor_x(step_val, relative=True)
 
-        elif 'y_rel' in step:
+        elif step_type == 'y_rel':
             motor = Motor.PELLET_Y_MOTOR
-            success = self._interface.move_motor_y(step['y_rel'], relative=True)
+            step_val: Union[float, Tuple[float, float]]
+            success = self._interface.move_motor_y(step_val, relative=True)
 
-        elif 'z_rel' in step:
+        elif step_type == 'z_rel':
             motor = Motor.PELLET_Z_MOTOR
-            success = self._interface.move_motor_z(step['z_rel'], relative=True)
+            step_val: Union[float, Tuple[float, float]]
+            success = self._interface.move_motor_z(step_val, relative=True)
 
         else:
             raise RuntimeError(f"Received unknown/unhandled compound step: {step}")
@@ -1522,31 +1547,40 @@ class CanDevice(Device):
         assert motor is not None, "all possible compound steps relate to a specific Motor"
 
         if success:
-            if 'x_rel' in step or 'y_rel' in step or 'z_rel' in step:
+            if step_type in {'x_rel', 'y_rel', 'z_rel'}:
                 self._prev_command_is_relative = True
 
             after_uuid = self._interface.uuid()
             compound_movements.pop(0)  # remove the one that was just executed successfully
             logger.debug("executed %s write command ; uuid: before=%s after=%s",
-                         orig_step, before_uuid, after_uuid)
+                         step_clean, before_uuid, after_uuid)
             if after_uuid != before_uuid:
                 # in case need for retry for ack timeout:
                 self._prev_command = [_retry_compound, [None, step, compound_movements], None, None]
-                # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout:
-                cmd_ack_timeout = step.get('uuid_ack_timeout')
-                if cmd_ack_timeout is None:
-                    if motor is not None:
-                        motor_cfg = self._motor_configs.get(motor)
-                        if motor_cfg is not None:
-                            cmd_ack_timeout = motor_cfg.uuid_ack_timeout
-                else:
-                    logger.debug("using step uuid_ack_timeout %s", cmd_ack_timeout)
-                if cmd_ack_timeout is not None:
-                    self._prev_command_timeout = cmd_ack_timeout
+                # prefer eventual step.uuid_ack_timeout over motor_config.uuid_ack_timeout,
+                # but only if prev_command_timeout wasn't overwritten during step execution
+                if self._prev_command_timeout is None:
+                    self._prev_command_timeout = before_prev_cmd_timeout
+                    cmd_ack_timeout = step.get('uuid_ack_timeout')
+                    if cmd_ack_timeout is None:
+                        if motor is not None:
+                            motor_cfg = self._motor_configs.get(motor)
+                            if motor_cfg is not None:
+                                cmd_ack_timeout = motor_cfg.uuid_ack_timeout
+                                source = "motor config"
+                    else:
+                        source = "step"
+                    if cmd_ack_timeout is not None:
+                        logger.debug("using %s uuid_ack_timeout %s", source, cmd_ack_timeout)
+                        self._prev_command_timeout = cmd_ack_timeout
         else:
-            logger.error("%s write command failed", step)
+            logger.error("%s write command failed", step_clean)
 
         return success
+
+
+def mk_step(tp, val):
+    return dict(type=tp, value=val)
 
 
 def default_load_pellet() -> MotorSteps:
@@ -1558,15 +1592,14 @@ def default_load_pellet() -> MotorSteps:
     """
     return MotorSteps("load_pellet",
                       [
-                          {'x': 0.0},
-                          {'predefined': 'retrieve'},
-                          {'delay': 1.0},  # in sec
-                          {'z': 5.0},
-                          {'predefined': 'scoop'},
-                          {'delay': 1.0},
-                          {'z': 0.0},  # in mm
-                          {'delay': 1.0},
-                      ]
+                          mk_step('x', 0.0),
+                          mk_step('predefined', 'retrieve'),
+                          mk_step('delay', 1.0),  # in sec
+                          mk_step('z', 5.0),
+                          mk_step('predefined', 'scoop'),
+                          mk_step('delay', 1.0),
+                          mk_step('z', 0.0),  # in mm
+                          mk_step('delay', 1.0),                      ]
                       )
 
 
@@ -1579,7 +1612,7 @@ def default_send_pellet() -> MotorSteps:
     """
     return MotorSteps("send_pellet",
                       [
-                          {'predefined': 'send'},
+                          mk_step('predefined', 'send'),
                       ]
                       )
 
@@ -1593,7 +1626,7 @@ def default_cover_pellet() -> MotorSteps:
     """
     return MotorSteps("cover_pellet",
                       [
-                          {'predefined': 'cover'},
+                          mk_step('predefined', 'cover'),
                       ]
                       )
 
@@ -1607,7 +1640,7 @@ def default_release_pellet() -> MotorSteps:
     """
     return MotorSteps("release_pellet",
                       [
-                          {'predefined': 'release'},
+                          mk_step('predefined', 'release'),
                       ]
                       )
 
@@ -1619,7 +1652,7 @@ def default_open_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the open gate sequence
     """
-    return MotorSteps("open_gate", [{'_servo_min_pos': Motor.TUNNEL_GATE_SERVO}])
+    return MotorSteps("open_gate", [mk_step('_servo_min_pos', Motor.TUNNEL_GATE_SERVO)])
 
 
 def default_close_gate() -> MotorSteps:
@@ -1629,7 +1662,7 @@ def default_close_gate() -> MotorSteps:
     Returns:
         A MotorSteps object containing the close gate sequence
     """
-    return MotorSteps("close_gate", [{'_servo_max_pos': Motor.TUNNEL_GATE_SERVO}])
+    return MotorSteps("close_gate", [mk_step('_servo_max_pos', Motor.TUNNEL_GATE_SERVO)])
 
 
 def default_move_retract() -> MotorSteps:
@@ -1642,8 +1675,8 @@ def default_move_retract() -> MotorSteps:
     return MotorSteps("move_retract", [
         # NB: need to have each one, even if 0 relative,
         # to make the corresponding axis move to the desired send axis position.
-            {"send_z_rel": 0},  # move up/down first
-            {"send_x_rel": 0},  # then left/right
-            {"send_y_rel": -15},  # then forward/backward
+            mk_step("send_z_rel", 0),  # move up/down first
+            mk_step("send_x_rel", 0),  # then left/right
+            mk_step("send_y_rel", -15),  # then forward/backward
         ],
     )

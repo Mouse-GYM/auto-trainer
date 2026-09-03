@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Protocol, Any, Optional
 
 
@@ -56,33 +57,37 @@ class DeviceConnectionProtocol(Protocol):
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a message/command to the command writer handler thread"""
 
-    def load_default_motor_config(self) -> MotorConfigurations:
-        default_motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
-        if default_motors_cfg_file.exists():
-            logger.notice("Reading and applying default motors config: %s", default_motors_cfg_file)
-            motors_cfg = MotorConfigurationFile.from_file(default_motors_cfg_file)
+    @staticmethod
+    def load_default_motor_config(config_path: Optional[Path] = None) -> MotorConfigurations:
+        if config_path is None:
+            config_path = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+        if config_path.exists():
+            logger.notice("Reading and applying default motors config: %s", config_path)
+            motors_cfg = MotorConfigurationFile.from_file(config_path)
         else:
             logger.warning(
                 "Default motor config file %s not present, empty motor config auto-applied, this might be critical",
-                default_motors_cfg_file)
+                config_path)
             motors_cfg = MotorConfigurationFile()
-        self.use_motor_configurations(motors_cfg)
         return motors_cfg
+
+    @staticmethod
+    def load_default_move_config(config_path: Optional[Path] = None) -> CompoundMovements:
+        if config_path is None:
+            config_path = CompoundMovements.DEFAULT_LOCATION.expanduser()
+        if config_path.exists():
+            logger.notice("Reading and applying default move config: %s", config_path)
+            move_cfg = CompoundMovements.from_file(config_path)
+        else:
+            move_cfg = CompoundMovements()
+            logger.warning(
+                "Default move config file %s not present, builtin default move will be used",
+                config_path)
+        return move_cfg
 
     def use_motor_configurations(self, data: MotorConfigurations):
         """Apply the given motor configuration"""
         raise NotImplementedError
-
-    def load_default_move_config(self):
-        default_move_cfg_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
-        if default_move_cfg_file.exists():
-            logger.notice("Reading and applying default move config: %s", default_move_cfg_file)
-            move_cfg = CompoundMovements.from_file(default_move_cfg_file)
-            self.use_compound_movements(move_cfg)
-        else:
-            logger.warning(
-                "Default move config file %s not present, no move config auto-applied, this might be critical",
-                default_move_cfg_file)
 
     def use_compound_movements(self, data: CompoundMovementDataSet):
         """Apply the given motor compound movement"""
