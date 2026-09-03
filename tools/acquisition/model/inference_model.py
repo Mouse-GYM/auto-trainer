@@ -321,7 +321,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         proc = self._pose_process
         if proc is not None:
             if proc.is_alive():
-                self._send_message(InferenceCommandMessageKind.Terminate)
+                self.send_message(InferenceCommandMessageKind.Terminate)
             logger.debug("<inference> waiting for process termination: %s", proc)
             t_timeout_sigint = time.perf_counter() + 30
             t_timeout_sigterm = time.perf_counter() + 60
@@ -443,15 +443,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             is_enabled=self.is_enabled,
         )
 
-    def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
-        self._send_message(kind, context)
-
-    def _send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
+    def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
         cmd_queue = self._cmd_queue
         # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
         with self._cmd_queue_lock:
             self._cmd_queue_ack.clear()
-            cmd_queue.put((kind, context))
+            cmd_queue.put((kind, data))
             logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
             pose_proc = self._pose_process
             if pose_proc is not None and pose_proc.is_alive():
@@ -547,7 +544,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                     pose_algo.initialize(context)
                     self._data_monitor_cmd_queue.put(
                         (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (pose_algo,), None))
-                    self._send_message(InferenceCommandMessageKind.Start)
+                    self.send_message(InferenceCommandMessageKind.Start)
                 elif msg == InferenceStatusMessageKind.Loading:
                     self._set_status(InferenceStatus.loading)
                 elif msg == InferenceStatusMessageKind.Performance:

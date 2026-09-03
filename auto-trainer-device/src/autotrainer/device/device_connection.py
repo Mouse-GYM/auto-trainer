@@ -50,11 +50,15 @@ class DeviceConnection(DeviceConnectionProtocol):
     arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self,
-                 device: Device,
-                 message_queue: Queue,
-                 message_callback: Callable[[int, object], None] = None,
-                 name="device-connection"):
+    def __init__(
+        self,
+        device: Device,
+        message_queue: Queue,
+        *,
+        api: Optional[DeviceApi] = None,
+        message_callback: Callable[[int, object], None] = None,
+        name="device-connection",
+    ):
 
         super().__init__()
 
@@ -68,8 +72,8 @@ class DeviceConnection(DeviceConnectionProtocol):
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
-        self._device.api = self._api
+        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue) if api is None else api
+        self._device.api = self._api  # ensure same api is used on the device.
 
         self._name = name
 

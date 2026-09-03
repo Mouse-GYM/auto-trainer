@@ -66,7 +66,7 @@ class _InferenceProtocol(Protocol):
     def perform_live(self):  # unused
         """Perform live"""
 
-    def send_message(self, kind: InferenceCommandMessageKind, context: Any = None):
+    def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
         """Send an InferenceCommandMessageKind to the inference process"""
 
 

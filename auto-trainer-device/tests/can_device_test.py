@@ -89,10 +89,8 @@ def expected_tok_event():
 @pytest.fixture
 def device_conn(device):
     msg_q = queue.Queue()
-    msg_cb = device.api.message_callback
-    dc = DeviceConnection(device, message_queue=msg_q)
+    dc = DeviceConnection(device, message_queue=msg_q, api=device.api)
     dc.request_connect()
-    device.api.message_callback = msg_cb
     try:
         yield dc
     finally:
@@ -111,7 +109,12 @@ def dev_ack_timeout_ctx():
 
 
 @pytest.fixture
-def device(expected_tok_event, expected_tok, tokens_acked, dev_ack_timeout_ctx) -> CanDevice:  # noqa
+def device(
+    expected_tok_event,
+    expected_tok,
+    tokens_acked,
+    dev_ack_timeout_ctx
+) -> CanDevice:  # noqa
     observable = ObservableObject(event_names=("message_callback",))
     device = CanDevice(api=DeviceApi(message_callback=observable.message_callback), force_emulation=True)
     # unneeded, at least with emulation iface:
@@ -139,6 +142,35 @@ def device(expected_tok_event, expected_tok, tokens_acked, dev_ack_timeout_ctx) 
         yield device  # noqa
     finally:
         device.disconnect()
+
+
+@pytest.mark.parametrize("data, xp_kind", [
+    (LoadCellReading(target=Target.MAGNET_DEVICE, load=13), None),
+    (PressureReading(Target.MAGNET_DEVICE, pressure=14), None),
+    (SensorStatus(Target.PELLET_DEVICE, temperature_c=27.3, humidity_percent=64.2), None),
+    (MagnetDigitalInputs(Target.MAGNET_DEVICE, continuity_0=False, continuity_1=True), None),
+    (StepperStatus(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 10, 2.0, False),
+     SystemStatusMessageKind.PELLET_MOTOR_X),
+    (ServoStatus(Target.PELLET_DEVICE, Motor.PELLET_LOAD_SERVO, 40),
+     SystemStatusMessageKind.PELLET_LOAD),
+    (ServoConfig(Target.MAGNET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0, 0, 0, 0),
+     SystemStatusMessageKind.MOTOR_CONFIGURATION),
+    (StepperConfig(Target.PELLET_DEVICE, Motor.PELLET_X_MOTOR, 0, 0, 0, 0, False),
+     SystemStatusMessageKind.MOTOR_CONFIGURATION),
+])
+def test_notify_data(
+    device,
+    data,
+    xp_kind,
+):
+    received_kind = None
+    def msg_cb(kind, data):
+        nonlocal received_kind
+        received_kind = kind
+
+    device.api.message_callback += msg_cb
+    device.notify_data([data])
+    assert received_kind == xp_kind
 
 
 @pytest.mark.parametrize("kind,data", (

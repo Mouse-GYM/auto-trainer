@@ -1,7 +1,7 @@
 import math
 
 from queue import Queue
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 from autotrainer.core import get_perf_now
 from autotrainer.core.logging import get_verbose_logger
@@ -35,16 +35,16 @@ class DeviceApi:
     def message_callback(self, value: MessageCallbackT):
         self._message_callback = value
 
-    def send_message(self, kind: int, context: object):
+    def send_message(self, kind: int, data: Optional[Any] = None):
         """Sends a message identifier and optional data to client script or application"""
         msg_q = self._message_queue
         if msg_q is not None:
             # logger.debug("putting %s", kind)
-            msg_q.put((kind, context))
+            msg_q.put((kind, data))
 
         msg_cb = self._message_callback
         if msg_cb is not None:
-            msg_cb(kind, context)
+            msg_cb(kind, data)
 
         self._tot_msgs += 1
         p_now = get_perf_now()
