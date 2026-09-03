@@ -337,7 +337,7 @@ class TestWithBatch(BaseTrainingPlan):
         max_batch_size = algo.batch_trial_recording_config.maximum_batch_size = 3
         algo.update_pellet_seen(True)
 
-        self.ack_pending_tokens()
+        # self.ack_pending_tokens()
 
         self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
@@ -353,7 +353,7 @@ class TestWithBatch(BaseTrainingPlan):
             logger.info("acked pellet_seen=False")
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
-            self.ack_pending_tokens()
+            # self.ack_pending_tokens()
             logger.info("after pellet_seen=True")
 
         with FifoExitStack() as stack:

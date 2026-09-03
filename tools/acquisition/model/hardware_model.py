@@ -615,8 +615,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             thread.start()
 
     def disconnect(self):
-        logger.info("disconnecting ..", stack_info=True)
-        logger.verbose("disconnecting ..", stack_info=True)
+        logger.verbose("disconnecting ..")
         self._disconnect_event.set()
         can_dev = self._can_device
         dev = self._device_conn
