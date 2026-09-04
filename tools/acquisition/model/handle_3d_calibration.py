@@ -19,48 +19,48 @@ x, y, z = 'xyz'
 
 start = (
     (x, -9.4),
-    (y, 10.0),
+    (y, 5.0),
     (z, -35.0),
 )
 
 moves = [
     (z, -30.0),
     (x, -5.0),
-    (y, 15.0),
+    (y, 10.0),
     (z, -35.0),
     (x, -1.0),
     (z, -27.0),
     (x, -9.0),
-    (y, 20.0),
+    (y, 15.0),
     (z, -35.0),
     (x, 0.0),
     (z, -25.0),
-    (y, 25.0),
+    (y, 20.0),
     (x, -9.0),
     (z, -35.0),
     (z, -30.0),
     (x, 5.0),
     (z, -25.0),
-    (y, 30.0),
+    (y, 25.0),
     (x, -7.0),
     (z, -35.0),
     (z, -27.0),
-    (y, 35.0),
+    (y, 30.0),
     (x, 10.0),
     (z, -22.0),
     (x, -5.0),
     # move through center:
     (z, -27.0),
     (x, -3.0),
-    (y, 30.0),
-    (z, -30.0),
-    (x, -5.0),
     (y, 25.0),
     (z, -30.0),
-    (x, -9.0),
+    (x, -5.0),
     (y, 20.0),
-    (z, -35.0),
+    (z, -30.0),
+    (x, -9.0),
     (y, 15.0),
+    (z, -35.0),
+    (y, 10.0),
 ]
 
 
@@ -99,7 +99,7 @@ def process_capture(src_dir):
     calibrate = True
     # Of no consequence??
     alpha = 1
-    # Threshold for qutomatic corner-finding quality assessment, between 0 and 1
+    # Threshold for automatic corner-finding quality assessment, between 0 and 1
     quality = 0.925
     # Gamma correction can improve chessboard corner finding
     gamma = 2
