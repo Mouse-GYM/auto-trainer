@@ -126,8 +126,10 @@ def process_capture(src_dir):
 def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
-    record_mode: VideoRecordMode = VideoRecordMode.START_CONTINUOUS,
+    # record_mode: VideoRecordMode = VideoRecordMode.TRIGGER,
 ) -> Path:
+    record_mode: VideoRecordMode = VideoRecordMode.TRIGGER  # only working with this one for now,
+    # given/because of bad paths otherwise used by the recording side.
     if cam_params is None:
         cam_params = default_params
     left = app_model.left_camera
@@ -143,7 +145,7 @@ def make_3d_calib(
     hard = app_model.hardware
     diamond_triangle_cfg = app_model.behavior.algorithm.diamond_triangle_config
     if diamond_triangle_cfg is None:
-        raise RuntimeError(f"Please first calibrate diamond-triangle by starting the acquisition")
+        raise RuntimeError("Please first calibrate diamond-triangle by starting the acquisition")
     d_to_m = diamond_triangle_cfg.diamond_to_motor
     def m_x(v):
         return hard.move_x(d_to_m(Offset3DTuple(v, 0, 0)).x)
@@ -161,6 +163,7 @@ def make_3d_calib(
     project.calculate_next_trial_index()
     #
     sess_path = project.get_trial_path()
+    logger.info("Using session path: %s", sess_path)
     #
     square_size = 4  # in millimeters
     row_ct = 6
