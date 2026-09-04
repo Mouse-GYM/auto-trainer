@@ -2,6 +2,7 @@ import copy
 import dataclasses
 import datetime
 import io
+import math
 import shutil
 from pathlib import Path
 
@@ -496,7 +497,7 @@ def test_v55_renames_are_respected():
         start=datetime.time(17, 33, 55), stop=datetime.time(5, 42, 30))
 
 
-@pytest.mark.parametrize("delay", [-1, 0])
-def test_hardware_config_fail_with_zero_or_negative_cam_timeout(delay):
+@pytest.mark.parametrize("delay", [-1, 0, math.nan, math.inf, -math.inf])
+def test_hardware_config_fail_with_not_finite_or_zero_or_negative_cam_timeout(delay):
     with pytest.raises(ValueError, match="camera_start_timeout"):
         HardwareConfiguration(camera_start_timeout=delay)
