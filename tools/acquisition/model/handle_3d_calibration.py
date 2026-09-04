@@ -175,7 +175,8 @@ def make_3d_calib(
         p_before = time.perf_counter()
         p_timeout = p_before + timeout
         for cam in cameras:
-            cam.wait_for_capture_status(capture_status, timeout=p_timeout - time.perf_counter())
+            if not cam.wait_for_capture_status(capture_status, timeout=p_timeout - time.perf_counter()):
+                raise RuntimeError(f"cam={cam.name}: failed to wait for status={capture_status}")
             logger.info("%s: got %s", cam.name, capture_status)
 
     def prepare():
@@ -214,7 +215,8 @@ def make_3d_calib(
                 logger.info("%s: prepare capture ..", cam.name)
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
-                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=hard.config.camera_start_timeout)
+                if not cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=hard.config.camera_start_timeout):
+                    raise RuntimeError(f"{cam.name} failed to go to RUNNING")
 
         for cam in cameras:
             if not cam.is_primary:
@@ -268,6 +270,7 @@ def make_3d_calib(
                 cam.on_trigger_recording(False)
             wait_cams_capture_status(CaptureProcessStatus.RUNNING, 15)
 
+    failed = "miss-execution"
     try:
         prepare()
         run()
@@ -284,7 +287,10 @@ def make_3d_calib(
             logger.info("%s: stopping cam", camera.name)
             camera.on_capture_stop()
         hard.disconnect()
-        wait_cams_capture_status(CaptureProcessStatus.TERMINATED, 5)
+        try:
+            wait_cams_capture_status(CaptureProcessStatus.TERMINATED, 5)
+        except Exception as err:
+            logger.warning("Cameras not TERMINATED: %s ; but continuing", err)
         logger.verbose("Resetting cams to previous config")
         for camera, cam_cfg in zip(cameras, cams_before_cfg):
             camera.load_configuration(cam_cfg)
