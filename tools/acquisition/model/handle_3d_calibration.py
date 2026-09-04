@@ -183,14 +183,17 @@ def make_3d_calib(
         #
         logger.info("Connecting to HW ..")
         hard.connect(app_model.message_handler.input_queue)
-        token = hard.send_home()
-        hard.wait_pending_command_acked(token)
+        tokens = set()
+        with hard.wait_pending_command_acked(tokens):
+            token = hard.send_home()
+            tokens.add(token)
         #
         logger.verbose("Setting start position")
-        key = None
-        for coord, value in start:
-            key = coord2m[coord](value)
-        hard.wait_pending_command_acked(key)
+        tokens.clear()
+        with hard.wait_pending_command_acked(tokens):
+            for coord, value in start:
+                key = coord2m[coord](value)
+                tokens.add(key)
         #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
@@ -245,20 +248,22 @@ def make_3d_calib(
         logger.notice("Running 3d calib ..")
 
         max_requests = 1
-        cur_requests = collections.deque(maxlen=max_requests)
+        cur_requests = []
         #
         time.sleep(0.05)
         logger.info("Now executing calib moves ..")
 
         for coord, value in moves:
             if len(cur_requests) >= max_requests:
-                hard.wait_pending_command_acked(cur_requests.popleft())
+                front = cur_requests.pop(0)
+                with hard.wait_pending_command_acked({front}):
+                    pass
             logger.verbose("coord-%s -> %s", coord, value)
             key = coord2m[coord](value)
             cur_requests.append(key)
 
-        while len(cur_requests) > 0:
-            hard.wait_pending_command_acked(cur_requests.popleft())
+        with hard.wait_pending_command_acked(set(cur_requests)):
+            logger.info("Waiting remaining move requests acked ...")
 
         logger.success("executed %s moves", len(moves))
 

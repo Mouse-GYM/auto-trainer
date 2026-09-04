@@ -1,3 +1,4 @@
+import contextlib
 import math
 import re
 import threading
@@ -486,7 +487,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def set_tunnel_fan_off(self) -> Optional[UUID]:
         return self._send_with_token(SystemCommandKind.TUNNEL_FAN_OFF)
 
-    def set_color_led(self, r: int, g: int, b: int):
+    def set_color_led(self, r: int, g: int, b: int) -> Optional[UUID]:
         """0 -> 100"""
         return self._send_with_token(SystemCommandKind.SET_RGB_LED, (r, g, b))
 
@@ -827,25 +828,27 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.error("command token %s failed: %s", token, result)
             self._sensor_analysis.device_comm_alarm.is_engaged = True
 
+    @contextlib.contextmanager
     def wait_pending_command_acked(
         self,
-        token_or_tokens: Union[UUID, Set[UUID]],
+        tokens: Set[UUID],
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
         raise_on_command_error: bool = True,
         is_cancelled=lambda: False,
     ):
+        """Forwarded to DeviceConnection.await_acknowledge"""
         dev_conn = self._device_conn
         if dev_conn is None:
+            yield
+            logger.warning("Skipping wait tokens given device is None. tokens: %s", tokens)
             return
-        if not isinstance(token_or_tokens, set):
-            token_or_tokens = {token_or_tokens}
         with dev_conn.await_acknowledge(
-            token_or_tokens,
+            tokens,
             timeout=timeout,
             raise_on_timeout=raise_on_timeout,
             raise_on_command_error=raise_on_command_error,
             is_cancelled=is_cancelled,
         ):
-            pass  # NB: only used for the with: side-effect.
+            yield

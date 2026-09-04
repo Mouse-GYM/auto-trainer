@@ -1442,7 +1442,8 @@ class AppModel(ObservableObject):
             # ensure all pending tokens are acked:
             tokens = set(hard.pending_tokens)
             try:
-                hard.wait_pending_command_acked(tokens, timeout=10, is_cancelled=is_cancelled)
+                with hard.wait_pending_command_acked(tokens, timeout=10, is_cancelled=is_cancelled):
+                    pass
             except Exception as err:
                 logger.error("Failed to wait pending tokens: %s", err)
                 self.capture_stop(force=True)
@@ -1563,9 +1564,13 @@ class AppModel(ObservableObject):
 
     def _capture_stop(self, *, update_led: bool=True):
         if update_led:
-            tok = self._hardware.set_color_led(0, 0, 0)
-            self._hardware.wait_pending_command_acked(tok, timeout=1,
-                                                      raise_on_timeout=False, raise_on_command_error=False)
+            tokens = set()
+            with self._hardware.wait_pending_command_acked(
+                tokens, timeout=1, raise_on_timeout=False, raise_on_command_error=False
+            ):
+                tok = self._hardware.set_color_led(0, 0, 0)
+                if tok is not None:
+                    tokens.add(tok)
 
         self._detach_training_plan()  # always
 

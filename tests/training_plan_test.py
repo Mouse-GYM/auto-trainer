@@ -150,9 +150,9 @@ class BaseTrainingPlan(MockSystemMachine):
         for tok in tokens:
             self.msg_handler.ack_received(tok, CommandResult(succeeded=True), perf_c=get_perf_now())
         if wait_acked:
-            for tok in tokens:
-                logger.debug("waiting tock %s", tok)
-                self._app_model.hardware.wait_pending_command_acked(tok)
+            logger.debug("waiting tokens %s", tokens)
+            with self._app_model.hardware.wait_pending_command_acked(set(tokens)):
+                pass
 
 
 class TestTrainingPlan(BaseTrainingPlan):
