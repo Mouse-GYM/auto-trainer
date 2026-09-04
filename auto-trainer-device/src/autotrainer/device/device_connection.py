@@ -171,23 +171,29 @@ class DeviceConnection(DeviceConnectionProtocol):
         timeout: float=1, raise_on_timeout=True,
         is_cancelled=lambda: False,
     ):
-        tokens_acked = []
-        tokens_with_err = {}
+        tokens_acked = {}
         def cb(kind, context):
+            # NB: this is executed in whatever thread which is handling this ack message:
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
                 tok, perf_c, result = context[:3]
-                if tok in tokens:
-                    result: CommandResult
-                    if not result.succeeded:
-                        tokens_with_err[tok] = result
-                    tokens_acked.append(tok)
-                    tokens.remove(tok)
+                tokens_acked[tok] = result
         self._api.message_callback += cb
         try:
             yield
             logger.verbose("Now waiting tokens %s", tokens)
             perf_timeout = time.perf_counter() + timeout
-            while len(tokens) > 0:
+            l_tokens = list(tokens)
+            tokens_with_err = []
+            while len(l_tokens) > 0:
+                for token in list(l_tokens):
+                    cmd_res = tokens_acked.get(token)
+                    if cmd_res is not None:
+                        cmd_res: CommandResult
+                        l_tokens.remove(token)
+                        if not cmd_res.succeeded:
+                            tokens_with_err.append(token)
+                if len(l_tokens) == 0:
+                    break
                 if is_cancelled():
                     break
                 if time.perf_counter() > perf_timeout:
@@ -196,13 +202,12 @@ class DeviceConnection(DeviceConnectionProtocol):
                     logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
                     break
                 time.sleep(0.001)
-            if len(tokens) == 0:
-                logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+            if len(l_tokens) == 0:
+                logger.info("successfully obtained %s acknowledge", len(tokens))
                 if len(tokens_with_err) > 0 and raise_on_command_error:
                     raise RuntimeError(f"Command(s) failed: {tokens_with_err}")
         finally:
             self._api.message_callback -= cb
-        return tokens_acked, tokens_with_err
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
@@ -253,6 +258,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             if is_cancelled():
                 break
+            tokens.clear()  # ensure only next command token will be in it, via send() defined above
             with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
         return motor_configs

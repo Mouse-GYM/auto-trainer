@@ -247,23 +247,17 @@ def make_3d_calib(
     def run():
         logger.notice("Running 3d calib ..")
 
-        max_requests = 1
-        cur_requests = []
-        #
         time.sleep(0.05)
         logger.info("Now executing calib moves ..")
 
+        tokens = set()
+        # execute each move and wait it's acked before going next
         for coord, value in moves:
-            if len(cur_requests) >= max_requests:
-                front = cur_requests.pop(0)
-                with hard.wait_pending_command_acked({front}):
-                    pass
             logger.verbose("coord-%s -> %s", coord, value)
-            key = coord2m[coord](value)
-            cur_requests.append(key)
-
-        with hard.wait_pending_command_acked(set(cur_requests)):
-            logger.info("Waiting remaining move requests acked ...")
+            tokens.clear()
+            with hard.wait_pending_command_acked(tokens):
+                key = coord2m[coord](value)
+                tokens.add(key)
 
         logger.success("executed %s moves", len(moves))
 

@@ -144,16 +144,6 @@ class BaseTrainingPlan(MockSystemMachine):
             finally:
                 nullify_attributes(app_model)
 
-    def ack_pending_tokens(self, wait_acked: bool=True):
-        tokens = self._app_model.hardware.pending_tokens
-        logger.info("acking %s pending tokens", len(tokens))
-        for tok in tokens:
-            self.msg_handler.ack_received(tok, CommandResult(succeeded=True), perf_c=get_perf_now())
-        if wait_acked:
-            logger.debug("waiting tokens %s", tokens)
-            with self._app_model.hardware.wait_pending_command_acked(set(tokens)):
-                pass
-
 
 class TestTrainingPlan(BaseTrainingPlan):
 
@@ -337,8 +327,6 @@ class TestWithBatch(BaseTrainingPlan):
         max_batch_size = algo.batch_trial_recording_config.maximum_batch_size = 3
         algo.update_pellet_seen(True)
 
-        # self.ack_pending_tokens()
-
         self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         self.mock_pellet_ack(until_none=True)
@@ -353,7 +341,6 @@ class TestWithBatch(BaseTrainingPlan):
             logger.info("acked pellet_seen=False")
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
-            # self.ack_pending_tokens()
             logger.info("after pellet_seen=True")
 
         with FifoExitStack() as stack:

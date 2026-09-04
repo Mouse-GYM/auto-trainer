@@ -1440,10 +1440,11 @@ class AppModel(ObservableObject):
             # full establishment of connection to/from device should be very fast actually, but not immediate,
             # so using timeouts.
             # ensure all pending tokens are acked:
-            tokens = set(hard.pending_tokens)
+            tokens = set()
             try:
                 with hard.wait_pending_command_acked(tokens, timeout=10, is_cancelled=is_cancelled):
-                    pass
+                    for tok in hard.pending_tokens:
+                        tokens.add(tok)
             except Exception as err:
                 logger.error("Failed to wait pending tokens: %s", err)
                 self.capture_stop(force=True)
