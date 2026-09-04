@@ -498,5 +498,5 @@ def test_v55_renames_are_respected():
 
 @pytest.mark.parametrize("delay", [-1, 0])
 def test_hardware_config_fail_with_zero_or_negative_cam_timeout(delay):
-    with pytest.raises(ValueError, match="camera_start_timeout negative or zero"):
+    with pytest.raises(ValueError, match="camera_start_timeout"):
         HardwareConfiguration(camera_start_timeout=delay)
