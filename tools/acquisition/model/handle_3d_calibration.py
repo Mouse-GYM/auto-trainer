@@ -214,7 +214,7 @@ def make_3d_calib(
                 logger.info("%s: prepare capture ..", cam.name)
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
-                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+                cam.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=hard.config.camera_start_timeout)
 
         for cam in cameras:
             if not cam.is_primary:
@@ -222,7 +222,7 @@ def make_3d_calib(
                 if not cam.on_prepare_capture():
                     raise RuntimeError(f"{cam.name}.on_prepare_capture() failed")
 
-        wait_cams_capture_status(CaptureProcessStatus.RUNNING, timeout=5)
+        wait_cams_capture_status(CaptureProcessStatus.RUNNING, timeout=hard.config.camera_start_timeout)
 
         for cam in cameras:
             if not cam.is_primary:
