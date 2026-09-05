@@ -11,7 +11,9 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
+from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 from autotrainer.core.event import post_api_event_content, post_api_event
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.observable_object import EventHandler
@@ -331,12 +333,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         if alarm_mon.is_engaged or algo.algo_paused:
             color = (100, 0, 0)  # red
         else:
-            is_warn = any(
-                det.is_engaged and det.config.use
-                    # only alarm detector config with is_emerg_cond == False:
+            def _is_warn(det):
+                det_cfg = det.config
+                return (
+                    det.is_engaged
+                    and (not isinstance(det_cfg, GroupSubDetectorConfig) or det_cfg.use)
                     and (isinstance(det.config, AlarmDetectorConfig) and not det.config.is_emergency_condition)
-                for det in alarm_mon.sub_detectors.values()
-            )
+                )
+            is_warn = any(filter(_is_warn, alarm_mon.sub_detectors.values()))
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
             cur_time = now.time()

@@ -182,10 +182,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # NB: not using lock on purpose
         return self._checking_state
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self) -> Optional[float]: ...
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self, *, force: bool) -> Optional[float]: ...
 
     def _check_state(self, *, force: bool=False) -> Optional[float]:

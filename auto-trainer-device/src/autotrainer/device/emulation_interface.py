@@ -62,7 +62,7 @@ class EmulationInterface(DeviceInterface):
     def __init__(self):
         super().__init__()
 
-        self._thread_lock = threading.Lock()
+        self._thread_lock = threading.RLock()
         self._is_open = False
 
         self._last_status_message = 0.0
@@ -410,7 +410,7 @@ class EmulationInterface(DeviceInterface):
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def emit_tone(self, frequency, duration) -> bool:
+    def emit_tone(self, frequency: int, duration: float) -> bool:
         if self._is_open:
             logger.info(f"play tone f={frequency} d={duration}")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))

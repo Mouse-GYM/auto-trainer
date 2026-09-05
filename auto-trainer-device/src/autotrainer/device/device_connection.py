@@ -18,9 +18,11 @@ from autotrainer.core import (
     get_perf_now,
 )
 from autotrainer.core.event import post_api_event_content
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.message import SystemDataArgsKwargs
 
 import autotrainer.device
+
 from .can_device import HAVE_CAN_DEVICE
 from .compound_movement_file import CompoundMovementKind
 from .device import Device
@@ -51,11 +53,14 @@ class DeviceConnection(DeviceConnectionProtocol):
     arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self,
-                 device: Device,
-                 message_queue: Queue,
-                 message_callback: Callable[[int, object], None] = None,
-                 name="device-connection"):
+    def __init__(
+        self,
+        device: Device,
+        *,
+        message_queue: Queue,
+        api: Optional[DeviceApi] = None,
+        name="device-connection",
+    ):
 
         super().__init__()
 
@@ -65,12 +70,12 @@ class DeviceConnection(DeviceConnectionProtocol):
         # without explicit import, this allows to have completion working on these instances attributes access:
         self._device: Union[Device, "autotrainer.device.can_device.CanDevice"] = device
         self._interface: Union[DeviceInterface, "autotrainer.device.can_interface.CanInterface"] = device.device_interface
-        self._message_callback = message_callback
+
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
-        self._device.api = self._api
+        self._api = DeviceApi(message_queue=message_queue) if api is None else api
+        self._device.api = self._api  # ensure same api is used on the device.
 
         self._name = name
 
@@ -160,24 +165,35 @@ class DeviceConnection(DeviceConnectionProtocol):
             dev.disconnect()
 
     @contextlib.contextmanager
-    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
-                          is_cancelled=lambda: False):
-        orig_cb = self._api.message_callback
-        tokens_acked = []
+    def await_acknowledge(
+        self, tokens: Set, *,
+        raise_on_command_error: bool = True,
+        timeout: float=1, raise_on_timeout=True,
+        is_cancelled=lambda: False,
+    ):
+        tokens_acked = {}
         def cb(kind, context):
+            # NB: this is executed in whatever thread which is handling this ack message:
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, *r_args = context
-                if tok in tokens:
-                    tokens_acked.append(tok)
-                    tokens.remove(tok)
-            elif orig_cb is not None:
-                orig_cb(kind, context)
-        self._api.message_callback = cb
+                tok, perf_c, result = context[:3]
+                tokens_acked[tok] = result
+        self._api.message_callback += cb
         try:
             yield
             logger.verbose("Now waiting tokens %s", tokens)
             perf_timeout = time.perf_counter() + timeout
-            while len(tokens) > 0:
+            l_tokens = list(tokens)
+            tokens_with_err = []
+            while len(l_tokens) > 0:
+                for token in list(l_tokens):
+                    cmd_res = tokens_acked.get(token)
+                    if cmd_res is not None:
+                        cmd_res: CommandResult
+                        l_tokens.remove(token)
+                        if not cmd_res.succeeded:
+                            tokens_with_err.append(token)
+                if len(l_tokens) == 0:
+                    break
                 if is_cancelled():
                     break
                 if time.perf_counter() > perf_timeout:
@@ -186,10 +202,12 @@ class DeviceConnection(DeviceConnectionProtocol):
                     logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
                     break
                 time.sleep(0.001)
-            if len(tokens) == 0:
-                logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+            if len(l_tokens) == 0:
+                logger.info("successfully obtained %s acknowledge", len(tokens))
+                if len(tokens_with_err) > 0 and raise_on_command_error:
+                    raise RuntimeError(f"Command(s) failed: {tokens_with_err}")
         finally:
-            self._api.message_callback = orig_cb
+            self._api.message_callback -= cb
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
@@ -240,6 +258,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             if is_cancelled():
                 break
+            tokens.clear()  # ensure only next command token will be in it, via send() defined above
             with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
         return motor_configs

@@ -17,6 +17,7 @@ from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import Offset3DTuple, EventManager, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntertrialResponse
@@ -142,16 +143,6 @@ class BaseTrainingPlan(MockSystemMachine):
                 app_model.on_close()
             finally:
                 nullify_attributes(app_model)
-
-    def ack_pending_tokens(self, wait_acked: bool=True):
-        tokens = list(self._app_model.hardware._pending_tokens)
-        logger.info("acking %s pending tokens", len(tokens))
-        for tok in tokens:
-            self.msg_handler.ack_received(tok, perf_c=get_perf_now())
-        if wait_acked:
-            for tok in tokens:
-                logger.debug("waiting tock %s", tok)
-                self._app_model.hardware.wait_pending_command_acked(tok)
 
 
 class TestTrainingPlan(BaseTrainingPlan):
@@ -336,8 +327,6 @@ class TestWithBatch(BaseTrainingPlan):
         max_batch_size = algo.batch_trial_recording_config.maximum_batch_size = 3
         algo.update_pellet_seen(True)
 
-        self.ack_pending_tokens()
-
         self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         self.mock_pellet_ack(until_none=True)
@@ -352,7 +341,6 @@ class TestWithBatch(BaseTrainingPlan):
             logger.info("acked pellet_seen=False")
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
-            self.ack_pending_tokens()
             logger.info("after pellet_seen=True")
 
         with FifoExitStack() as stack:

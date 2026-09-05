@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Protocol, Any, Optional
+from typing import Protocol, Any, Optional, Set
 
 
 from autotrainer.core import MotorConfigurations, Offset3DTuple, Motor
@@ -56,6 +56,10 @@ class DeviceConnectionProtocol(Protocol):
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a message/command to the command writer handler thread"""
+
+    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
+                          raise_on_command_error: bool = True, is_cancelled=lambda: False):
+        """Await a set of tokens to be acknowledged"""
 
     @staticmethod
     def load_default_motor_config(config_path: Optional[Path] = None) -> MotorConfigurations:

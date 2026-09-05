@@ -11,6 +11,7 @@ from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core import (ObservableObject, SystemMessageHandler, SystemCommandKind, MessageHandler, Motor,
                               EventManager, Offset3DTuple, MotorConfigurations, SystemStatusMessageKind)
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import (CanDevice, MotorConfigurationFile, DeviceConnection, CompoundMovements)
 
 from tools.pellet_delivery.model.user_settings import UserSettings
@@ -347,8 +348,9 @@ class AppModel(ObservableObject):
             self._device_connection.use_compound_movements(movements)
 
     def connect_to_device(self):
-        self._device_connection = DeviceConnection(CanDevice(), self._message_handler.input_queue, name="pellet-can")
-        self._device_connection.request_connect()
+        dev_conn = DeviceConnection(CanDevice(), message_queue=self._message_handler.input_queue, name="pellet-can")
+        self._device_connection = dev_conn
+        dev_conn.request_connect()
         self._send_command(SystemCommandKind.REQUEST_VERSION)
         #
         if self._hardware_configuration is None:
@@ -384,8 +386,8 @@ class AppModel(ObservableObject):
         # only set it after having loaded motor config
         self.travel_limits = _alogus_travel_limits
 
-        self._device_connection.use_motor_configurations(motors_cfg)
-        self._device_connection.load_default_move_config()
+        dev_conn.use_motor_configurations(motors_cfg)
+        dev_conn.load_default_move_config()
 
         self.is_connected = True
 
@@ -447,8 +449,8 @@ class AppModel(ObservableObject):
         elif name == MessageHandler.COLOR_LED:
             self.color_led = value
 
-    def reader_ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
-        logger.info("ack context received: %s", token)
+    def reader_ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
+        (logger.info if result.succeeded else logger.error)("ack context received: %s result=%s", token, result)
         if self._last_command is not None and token == self._last_command:
             self._last_command = None
             self.command_pending = False

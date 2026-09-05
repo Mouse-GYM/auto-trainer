@@ -1,13 +1,9 @@
-import functools
-import logging
+import dataclasses
 import queue
-import threading
-import math
 import time
-from functools import partial
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union, Any, Optional, Protocol
+from typing import Callable, Union, Any, Optional, Protocol, List
 from uuid import UUID
 
 from autotrainer.core.logging import get_verbose_logger
@@ -20,10 +16,29 @@ logger = get_verbose_logger(__name__)
 TERMINATE = -1001
 
 
+@dataclasses.dataclass
+class CommandResult:
+    # kind: SystemStatusMessageKind
+    succeeded: bool = False
+    error: Optional[str] = None
+    uuid_nacks: Optional[List[int]] = None
+
+    def __str__(self) -> str:
+        return f"succeeded={self.succeeded}, uuid_nacks={self.uuid_nacks}, error={self.error}"
+
+    def __bool__(self):
+        return self.succeeded
+
+    def add_nack(self, nack: int):
+        nacks = self.uuid_nacks
+        if nacks is None:
+            nacks = self.uuid_nacks = []
+        nacks.append(nack)
+
 
 class AckReceivedHandlerT(Protocol):
 
-    def __call__(self, token: UUID, *, perf_c: Optional[float]=None):
+    def __call__(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
         """Acknowledge of given token"""
 
 
@@ -122,9 +137,9 @@ class MessageHandler(ObservableObject):
                 break
             #
             if msg == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, perf_c = data
+                tok, perf_c, result = data[:3]
                 try:
-                    self.ack_received(tok, perf_c=perf_c)
+                    self.ack_received(tok, result, perf_c=perf_c)
                 except Exception as err:
                     logger.exception("Error during ack_received callback: %s", err)
             elif msg == SystemStatusMessageKind.FIRMWARE_VERSION:
@@ -165,5 +180,5 @@ class MessageHandler(ObservableObject):
                 input_queue.task_done()
             input_queue.join()
 
-    def message_received(self, msg, _data):
+    def message_received(self, msg, data):
         pass

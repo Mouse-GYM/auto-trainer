@@ -4,6 +4,7 @@ import logging
 import queue
 import sys
 import time
+import uuid
 from threading import Thread
 from copy import copy
 from enum import IntEnum
@@ -77,14 +78,16 @@ def monitor_message_queue(msg_queue):
                 next_perf_log += 600
 
         try:
-            kind, data = msg_queue.get_nowait()
+            kind, data = msg_queue.get(timeout=0.1)
         except queue.Empty:
-            time.sleep(0.001)
             continue
 
         kinds.add(kind)
 
         if kind == SystemStatusMessageKind.ACKNOWLEDGE:
+            tok, perf_c, result = data[:3]
+            if not result.succeeded:
+                logger.error("command acknowledge error: token=%s error=%s", tok, result)
             get_input = True
 
         elif kind == SystemStatusMessageKind.FIRMWARE_VERSION:
@@ -335,6 +338,20 @@ def move_parameter(params):
         return float(params[0]), float(params[1])
 
 
+def parse_board_target(params):
+    if len(params) < 1:
+        logger.warning("expected 1 board target name (magnet or pellet)")
+        return None
+    p0 = params[0]
+    if p0 == "magnet":
+        return Target.MAGNET_DEVICE
+    elif p0 == "pellet":
+        return Target.PELLET_DEVICE
+    else:
+        logger.error("unknown target board: %s", params[0])
+        return None
+
+
 def run_monitor():
     global get_input
     global perf_count
@@ -347,7 +364,11 @@ def run_monitor():
     mon_thread.start()
 
     can_dev = CanDevice()
-    device_connection = DeviceConnection(can_dev, msg_queue)
+
+    can_dev.default_max_failed_command_count = 3
+    # required for current FW: the tare function always gives 2 NACKs before giving back a success ACK.
+
+    device_connection = DeviceConnection(can_dev, message_queue=msg_queue)
 
     device_connection.request_connect()
 
@@ -432,7 +453,6 @@ def run_monitor():
 
                 elif cmd == 'a' or cmd == 'audio':
                     device_connection.send_message(SystemCommandKind.PLAY_TONE,
-                                               # period from sec to msec
                                                data=(int(params[0]), float(params[1])),
                                                context="tone")
 
@@ -477,6 +497,7 @@ def run_monitor():
 
                 elif cmd == 't' or cmd == 'tare':
                     device_connection.send_message(SystemCommandKind.UPDATE_SCALE_TARE, context="tare")
+                    get_input = True  # force
 
                 elif cmd == 'v' or cmd == 'version':
                     device_connection.send_message(SystemCommandKind.REQUEST_VERSION)
@@ -493,16 +514,15 @@ def run_monitor():
                 elif cmd == 'close_gate':
                     device_connection.send_message(SystemCommandKind.CLOSE_TUNNEL_GATE, context="close_gate")
 
-                elif cmd == 'board_reboot':
-                    if len(params) != 1:
-                        logger.warning("expected 1 board target name (magnet or pellet)")
+                elif cmd == 'board_clear':
+                    tgt = parse_board_target(params)
+                    if tgt is None:
                         continue
-                    if params[0] == "magnet":
-                        tgt = Target.MAGNET_DEVICE
-                    elif params[0] == "pellet":
-                        tgt = Target.PELLET_DEVICE
-                    else:
-                        logger.error("unknown target board: %s", params[0])
+                    device_connection.send_message(SystemCommandKind.BOARD_CLEAR_ERROR, tgt, context=f"board_reboot_{tgt}")
+
+                elif cmd == 'board_reboot':
+                    tgt = parse_board_target(params)
+                    if tgt is None:
                         continue
                     device_connection.send_message(SystemCommandKind.BOARD_REBOOT, tgt, context=f"board_reboot_{tgt}")
 
@@ -616,8 +636,9 @@ def handle_motor_command(motor: Motor, params, device_connection):
     # read or write configuration
     elif params[0] == 'config':
         if params[1] == 'read':
+            logger.verbose("sending command READ_MOTOR_CONFIGURATION to %s", motor)
             device_connection.send_message(SystemCommandKind.READ_MOTOR_CONFIGURATION, data=motor,
-                                           context="motor read")
+                                           context=f"motor_read_{motor}_{uuid.uuid4()}")
         elif params[1] == 'write':
             write_config(motor, device_connection)
         else:
@@ -750,6 +771,8 @@ def print_help():
           " ::Set tunnel fan OFF")
     print("board_reboot <board>               "
           " ::Reboot the given board, either magnet or pellet")
+    print("board_clear <board>                "
+          " ::clear the internal board context. to allow new commands")
     print("v[ersion]                          "
           " ::Version")
     print("logger [<name>] <level>            "

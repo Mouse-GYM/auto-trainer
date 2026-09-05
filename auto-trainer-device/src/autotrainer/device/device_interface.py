@@ -400,6 +400,7 @@ class Version(Source):
 @dataclass
 class Acknowledge(Source):
     uuid: int = 0
+    error: int = 0
 
 
 _zero_position = Offset3DTuple(0, 0, 0)
@@ -510,6 +511,10 @@ class DeviceInterface:
         """Request a "sleep" delay to the pellet board"""
         raise NotImplementedError
 
+    def emit_tone(self, frequency: int, duration: float) -> bool:
+        """freq as Hz, duration in seconds"""
+        raise NotImplementedError
+
     def fixed_position(self) -> bool:
         """send-pellet"""
         raise NotImplementedError
@@ -518,8 +523,8 @@ class DeviceInterface:
         """stepper_home == send-to-limit"""
         raise NotImplementedError
 
-    def emit_tone(self, frequency: int, duration: float) -> bool:
-        """freq as Hz, duration in seconds"""
+    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+        """Move given motor to given absolute position"""
         raise NotImplementedError
 
     def move_motor_x(

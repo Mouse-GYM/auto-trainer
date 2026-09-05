@@ -1,14 +1,14 @@
+import contextlib
 import math
 import re
 import threading
 import time
 import uuid
 import warnings
-from functools import partial
 from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
-from typing import Optional, Tuple, Dict, Union, List
+from typing import Optional, Tuple, Dict, Union, List, Set
 
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
@@ -17,6 +17,7 @@ from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandle
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import (
     DeviceConnectionProtocol,
     HAVE_CAN_DEVICE,
@@ -54,8 +55,8 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     SLIDE_DOOR_PROPERTY = "slide_door"
 
     DEVICE_ACK_TIMEOUT_ENGAGED = "device_ack_timeout_engaged"
-    DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"
-    DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"
+    DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED = "device_pellet_status_timeout_engaged"  # unused
+    DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED = "device_tunnel_status_timeout_engaged"  # unused
 
     # POS_X = "pos_x"
     # POS_Y = "pos_y"
@@ -92,11 +93,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._event_manager = EventManager.default()
         self._board_status_timeout: Optional[float] = None
+        self._device_ack_timeout_engaged = False
+        self._device_command_nack_engaged = False
         self._device_ack_timeout_delay: Optional[float] = None
         self._device_conn: Optional[DeviceConnectionProtocol] = None
         self._can_device: Optional[CanDevice] = None
         self._sensor_analysis = sensor_analysis
-        self._device_uuid_ack_timeout_engaged = False
         self._device_pellet_status_timeout_engaged = False
         self._device_tunnel_status_timeout_engaged = False
         self._device_stream_started = False
@@ -129,7 +131,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         self._color_led: Optional[ColorLed] = None
 
-        self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
 
@@ -186,7 +187,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 self._refresh_cmd_in_progress(after_commands)
 
     @property
-    def pending_tokens(self) -> List[Union[UUID, str]]:
+    def pending_tokens(self) -> List[UUID]:
         return list(self._pending_tokens)
 
     def _check_dcs_cfg(self, *, return_none: bool=False):
@@ -234,7 +235,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return cfg.motor_to_diamond(value)
 
     @property
-    def device_ack_timeout_engaged(self):
+    def device_command_nack_engaged(self) -> bool:
+        return self._device_command_nack_engaged
+
+    @device_command_nack_engaged.setter
+    def device_command_nack_engaged(self, value: bool):
+        self._device_command_nack_engaged = value
+
+    @property
+    def device_ack_timeout_engaged(self) -> bool:
         return self._device_ack_timeout_engaged
 
     @device_ack_timeout_engaged.setter
@@ -252,6 +261,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 enabled = iface is not None and iface.is_open
         # could be in app_model or system_machine, in react property changed, but ok here too:
         post_api_detector_event_content(self._event_manager, ApiDetectorKind.deviceAckTimeOut, value, enabled)
+
+    @property
+    def device_pellet_status_timeout_engaged(self):
+        return self._device_pellet_status_timeout_engaged
+
+    @device_pellet_status_timeout_engaged.setter
+    def device_pellet_status_timeout_engaged(self, value):
+        prev, self._device_pellet_status_timeout_engaged = self._device_pellet_status_timeout_engaged, value
+        self._on_property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev)
+
+    @property
+    def device_tunnel_status_timeout_engaged(self):
+        return self._device_tunnel_status_timeout_engaged
+
+    @device_tunnel_status_timeout_engaged.setter
+    def device_tunnel_status_timeout_engaged(self, value):
+        prev, self._device_tunnel_status_timeout_engaged = self._device_tunnel_status_timeout_engaged, value
+        self._on_property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev)
 
     @property
     def send_x(self):
@@ -324,7 +351,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if position != self._head_magnet_position:
             logger.verbose("sending move magnet to %.3f", position)
             # self._head_magnet_position = value  # this is set from reading the hardware status
-            return self._send_with_token(self._device_conn, SystemCommandKind.MOVE_MAGNET_SERVO, position)
+            return self._send_with_token(SystemCommandKind.MOVE_MAGNET_SERVO, position)
         logger.debug("head magnet currently already at pos %.3f", position)
         return None
 
@@ -333,13 +360,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._tunnel_gate_open_status
 
     def open_tunnel_gate(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.OPEN_TUNNEL_GATE)
+        return self._send_with_token(SystemCommandKind.OPEN_TUNNEL_GATE)
 
     def close_tunnel_gate(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.CLOSE_TUNNEL_GATE)
+        return self._send_with_token(SystemCommandKind.CLOSE_TUNNEL_GATE)
 
     def tare_load_cell(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.UPDATE_SCALE_TARE)
+        return self._send_with_token(SystemCommandKind.UPDATE_SCALE_TARE)
 
     def _set_axis(self, value: float, *, absolute: bool = True,
                   system_set_cmd: SystemCommandKind, coord_idx: int, sender: str="NA") -> Optional[UUID]:
@@ -361,8 +388,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             new_value = 0
             logger.verbose("Axis-%s: limited move to 0 ; value=%.3f absolute=%s",
                          coord.upper(), value, absolute)
-        res = self._send_with_token(self._device_conn, system_set_cmd,
-                                    SystemDataArgsKwargs(value, relative=not absolute))
+        res = self._send_with_token(system_set_cmd, SystemDataArgsKwargs(value, relative=not absolute))
         if res is not None:
             prev_set_xyz, self._last_requested_set_coordinates = self._last_requested_set_coordinates, self._last_requested_set_coordinates.replace(**{coord: new_value})
             prop_name = (self.SET_X, self.SET_Y, self.SET_Z)[coord_idx]
@@ -405,7 +431,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                                "XYZ"[coord_idx])
                 return None
             value += prev_value
-        res = self._send_with_token(self._device_conn, system_move_cmd, value)
+        res = self._send_with_token(system_move_cmd, value)
         return res
 
     def move_x(self, value: float, *, absolute: bool = True) -> Optional[UUID]:
@@ -418,52 +444,52 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         return self._move_axis(value, absolute=absolute, system_move_cmd=SystemCommandKind.MOVE_Z, coord_idx=2)
 
     def send_to_limits(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_TO_LIMITS,
+        return self._send_with_token(SystemCommandKind.SEND_TO_LIMITS,
                                      [Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR, Motor.PELLET_X_MOTOR])
 
     def send_retract(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_RETRACT)
+        return self._send_with_token(SystemCommandKind.SEND_RETRACT)
 
     def send_home(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_HOME)
+        return self._send_with_token(SystemCommandKind.SEND_HOME)
 
     def load_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.LOAD_PELLET)
+        return self._send_with_token(SystemCommandKind.LOAD_PELLET)
 
     def send_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SEND_PELLET)
+        return self._send_with_token(SystemCommandKind.SEND_PELLET)
 
     def release_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.RELEASE_PELLET)
+        return self._send_with_token(SystemCommandKind.RELEASE_PELLET)
 
     def cover_pellet(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.COVER_PELLET)
+        return self._send_with_token(SystemCommandKind.COVER_PELLET)
 
     def attach_servo(self, servo: Motor) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_ATTACH, servo)
+        return self._send_with_token(SystemCommandKind.SERVO_ATTACH, servo)
 
     def detach_servo(self, servo: Motor) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.SERVO_DETACH, servo)
+        return self._send_with_token(SystemCommandKind.SERVO_DETACH, servo)
 
     def play_tone(self, frequency: int, duration: float) -> Optional[UUID]:
         """Play a tone
         :param frequency: in Hz (integer)
         :param duration: in seconds (float)
         """
-        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration))
+        return self._send_with_token(SystemCommandKind.PLAY_TONE, (frequency, duration))
 
     def delay(self, amount: float) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.DELAY, amount)
+        return self._send_with_token(SystemCommandKind.DELAY, amount)
 
     def set_tunnel_fan_on(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_ON)
+        return self._send_with_token(SystemCommandKind.TUNNEL_FAN_ON)
 
     def set_tunnel_fan_off(self) -> Optional[UUID]:
-        return self._send_with_token(self._device_conn, SystemCommandKind.TUNNEL_FAN_OFF)
+        return self._send_with_token(SystemCommandKind.TUNNEL_FAN_OFF)
 
-    def set_color_led(self, r: int, g: int, b: int):
+    def set_color_led(self, r: int, g: int, b: int) -> Optional[UUID]:
         """0 -> 100"""
-        return self._send_with_token(self._device_conn, SystemCommandKind.SET_RGB_LED, (r, g, b))
+        return self._send_with_token(SystemCommandKind.SET_RGB_LED, (r, g, b))
 
     @property
     def config(self) -> HardwareConfiguration:
@@ -516,6 +542,11 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
 
+        self.device_ack_timeout_engaged = False
+        self.device_command_nack_engaged = False
+        self.device_tunnel_status_timeout_engaged = False
+        self.device_pellet_status_timeout_engaged = False
+
         self._connect_count += 1
         self._last_motor_coordinates = _nans_offset3dTuple
         self._last_requested_set_coordinates = _nans_offset3dTuple
@@ -531,10 +562,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
         can_device.property_changed += self._can_device_property_changed
 
-        device_conn = self._device_conn = DeviceConnection(can_device, cmd_queue, name="can-device")
+        device_conn = self._device_conn = DeviceConnection(can_device, message_queue=cmd_queue, name="can-device")
         device_conn.request_connect()
 
-        send_dev_cmd = partial(self._send_command, device_conn)
+        send_dev_cmd = self._send_command
         def send_dev_ack_cmd(kind, data=None):
             tok = str(uuid.uuid4())
             with device_conn.await_acknowledge({tok}, is_cancelled=is_cancelled):
@@ -613,6 +644,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if name == props.UUID_ACK_TIMEOUT_ENGAGED:
             self.device_ack_timeout_engaged = value
             is_dev_comm_err_possible = True
+        elif name == props.COMMAND_NACK_ENGAGED:
+            self.device_command_nack_engaged = value
+            is_dev_comm_err_possible = True
         elif name == props.PELLET_STATUS_TIMEOUT_ENGAGED:
             post_api_detector_event_content(
                 self._event_manager,
@@ -620,8 +654,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 value,
                 True,
             )
-            self._device_pellet_status_timeout_engaged = value
-            self.property_changed(self.DEVICE_PELLET_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            self.device_pellet_status_timeout_engaged = value
             is_dev_comm_err_possible = True
         elif name == props.TUNNEL_STATUS_TIMEOUT_ENGAGED:
             post_api_detector_event_content(
@@ -630,23 +663,20 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 value,
                 True,
             )
-            self._device_tunnel_status_timeout_engaged = value
-            self.property_changed(self.DEVICE_TUNNEL_STATUS_TIMEOUT_ENGAGED, value, prev_value)
+            self.device_tunnel_status_timeout_engaged = value
             is_dev_comm_err_possible = True
         #
         if is_dev_comm_err_possible:
-            engaged = any((
-                self._device_uuid_ack_timeout_engaged,
-                self._device_tunnel_status_timeout_engaged,
-                self._device_pellet_status_timeout_engaged,
-            ))
+            possible_sources_engaged = dict(
+                command_nack=self._device_command_nack_engaged,
+                ack_timeout=self._device_ack_timeout_engaged,
+                tunnel_status_timeout=self._device_tunnel_status_timeout_engaged,
+                pellet_status_timeout=self._device_pellet_status_timeout_engaged,
+            )
+            engaged = any(possible_sources_engaged.values())
             prev, self._sensor_analysis.device_comm_alarm.is_engaged = self._sensor_analysis.device_comm_alarm.is_engaged, engaged
             if engaged and prev != engaged:
-                logger.error("Device Comm Alarm engaged: uuid_ack_timeout=%s tunnel_status_timeout=%s pellet_status_timeout=%s",
-                             self._device_uuid_ack_timeout_engaged,
-                             self._device_tunnel_status_timeout_engaged,
-                             self._device_pellet_status_timeout_engaged,
-                             )
+                logger.error("Device Comm Alarm engaged: %s", possible_sources_engaged)
 
     def _message_handler_property_changed(self, name: str, value, old_value):
         props = MessageHandler
@@ -718,26 +748,24 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         elif name == props.COLOR_LED:
             self._color_led = value
 
-    def _send_with_token(self, device: Optional[DeviceConnectionProtocol], cmd: SystemCommandKind, data=None) -> Optional[UUID]:
-        if device is None:
-            return None
+    def _send_with_token(self, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         with self._lock:
             # ensure only 1 command can be sent at the same time
             # NB: there are multiple threads which can act on this instance,
             # and we don't want to try to send 2 messages at the same time,
             # or the pending command token might be overwritten.
-            tok = self.__send_with_token(device, cmd, data)
+            tok = self.__send_with_token(cmd, data)
             commands_tuple = list(self._pending_tokens.values())
         if tok is not None:
             self._refresh_cmd_in_progress(commands_tuple)
         return tok
 
-    def __send_with_token(self, device: DeviceConnectionProtocol, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
+    def __send_with_token(self, cmd: SystemCommandKind, data=None) -> Optional[UUID]:
         token = uuid4()
         perf_now = get_perf_now()
         pending = self._pending_tokens
         logger.debug("send_command cmd=%s token=%s nbr=%s", cmd, token, len(pending))
-        if self._send_command(device, cmd, data, token):
+        if self._send_command(cmd, data, token):
             pending[token] = (cmd, perf_now)
             return token
         else:
@@ -746,10 +774,10 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     # noinspection PyMethodMayBeStatic
     def _send_command(self,
-                      device: Optional[DeviceConnectionProtocol],
                       cmd: SystemCommandKind,
                       data=None,
                       context=None) -> bool:
+        device = self._device_conn
         if device is not None:
             device.send_message(cmd, data, context)
             return True
@@ -785,7 +813,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 HardwareModel.PENDING_COMMAND_PROPERTY, " - ".join(list_after), None
             )
 
-    def _ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
+    def _ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
         with self._lock:
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())
@@ -795,30 +823,32 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 "Received unexpected ack token: %s", token)
         else:
             self._refresh_cmd_in_progress(commands_in_prog)
+        # nb: we receive the command result for *any* command initiated from within the application
+        if not result.succeeded:
+            logger.error("command token %s failed: %s", token, result)
+            self._sensor_analysis.device_comm_alarm.is_engaged = True
 
+    @contextlib.contextmanager
     def wait_pending_command_acked(
         self,
-        token,
+        tokens: Set[UUID],
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
-        is_cancelled = lambda: False,
+        raise_on_command_error: bool = True,
+        is_cancelled=lambda: False,
     ):
-        p_start = time.perf_counter()
-        p_timeout = p_start + timeout
-        logger.verbose("Waiting ack pending command %s", token)
-        while True:
-            if is_cancelled():
-                return
-            with self._lock:
-                if token not in self._pending_tokens:
-                    logger.debug("Got ack for token=%s ; delay=%.6f",
-                                 token, time.perf_counter() - p_start)
-                    return
-            p_now = time.perf_counter()
-            if p_now > p_timeout:
-                break
-            time.sleep(0.0025)  # 2.5 ms
-        if raise_on_timeout:
-            raise RuntimeError(f"timeout waiting ack of pending token={token}")
-        logger.warning("timeout waiting ack token %s, but continuing", token)
+        """Forwarded to DeviceConnection.await_acknowledge"""
+        dev_conn = self._device_conn
+        if dev_conn is None:
+            yield
+            logger.warning("Skipping wait tokens given device is None. tokens: %s", tokens)
+            return
+        with dev_conn.await_acknowledge(
+            tokens,
+            timeout=timeout,
+            raise_on_timeout=raise_on_timeout,
+            raise_on_command_error=raise_on_command_error,
+            is_cancelled=is_cancelled,
+        ):
+            yield

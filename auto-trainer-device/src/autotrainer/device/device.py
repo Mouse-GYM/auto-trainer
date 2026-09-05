@@ -1,14 +1,19 @@
 import math
-from typing import Optional, Any
+from typing import Optional, Any, Protocol, Dict
 
 from autotrainer.api import ApiEventKind
 
+from autotrainer.core import (
+    EventManager,
+    SystemStatusMessageKind,
+    ObservableObject,
+    get_perf_now,
+)
 from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core import EventManager, SystemStatusMessageKind, ObservableObject
+from autotrainer.core.message.message_handler import CommandResult
 
 from .device_interface import DeviceInterface
 from .device_api import DeviceApi
-
 
 logger = get_verbose_logger(__name__)
 
@@ -16,11 +21,14 @@ logger = get_verbose_logger(__name__)
 class Device(ObservableObject):
     """Defines the required methods to represent a device."""
 
-    UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"
+    CommandResult = CommandResult
+
+    UUID_ACK_TIMEOUT_ENGAGED = "uuid_ack_timeout_engaged"  # when any of pellet or magnet uuid ack times out
     PELLET_UUID_ACK_TIMEOUT_ENGAGED = "pellet_uuid_ack_timeout_engaged"  # actually unused
     MAGNET_UUID_ACK_TIMEOUT_ENGAGED = "magnet_uuid_ack_timeout_engaged"  # actually unused
-    PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"
-    TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"
+    PELLET_STATUS_TIMEOUT_ENGAGED = "pellet_status_timeout_engaged"  # all pellet board status messages
+    TUNNEL_STATUS_TIMEOUT_ENGAGED = "tunnel_status_timeout_engaged"  # all magnet board status messages
+    COMMAND_NACK_ENGAGED = "command_nack_engaged"  # when any command with uuid is NACKed
 
     def __init__(
         self,
@@ -34,6 +42,8 @@ class Device(ObservableObject):
         self._interface = dev_interface
         self._tunnel_status_timeout_engaged = False
         self._pellet_status_timeout_engaged = False
+        self._command_nack_engaged = False
+        self._command_token_2_command_result: Dict[Any, CommandResult] = {}
 
     @property
     def connected(self) -> bool:
@@ -55,7 +65,7 @@ class Device(ObservableObject):
         :param data: one or more bytes received from the device to be handled/interpreted by this Device instance
         """
 
-    def notify_message(self, kind: int, data: object, context: object = None) -> None:
+    def notify_message(self, kind: int, data: Any, context: Optional[Any] = None) -> None:
         """Notification for messages received from the client script or application
 
         A set of message kind values and any expected associated data are typically defined by specific Device subclass
@@ -68,12 +78,25 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token: object, *, perf_c: float=math.nan):
-        logger.verbose("sending command ack: %s perf_c=%.3f", token, perf_c)
+    def _acknowledge_command(self, token, *, perf_c: Optional[float]=None, error: Optional[Any] = None):
+        cmd_res = self._command_token_2_command_result.pop(token, None)  # always pop
+        if token is None:  # if a caller has given a None token, it means it doesn't want to get the ack,
+            # so makes that.
+            return
+        if perf_c is None:
+            perf_c = get_perf_now()
         EventManager.default().post_event_content(
             ApiEventKind.deviceCommandAcknowledge, data=dict(context=token))
-        if self._api is not None:
-            self._api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c))
+        api = self._api
+        if api is None:
+            return
+        if cmd_res is None:  # should not happen but is ok to be liberal here
+            cmd_res = CommandResult()
+        cmd_res.succeeded = error is None
+        cmd_res.error = error
+        (logger.verbose if cmd_res.succeeded else logger.error)(
+            "sending command ack: %s perf_c=%.3f result=%s", token, perf_c, cmd_res)
+        api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, cmd_res))
 
     @property
     def api(self):
@@ -108,3 +131,12 @@ class Device(ObservableObject):
         if prev != value:
             (logger.notice if prev else logger.error)("pellet_status_timeout=%s", value)
         self._on_property_changed(self.PELLET_STATUS_TIMEOUT_ENGAGED, value, prev)
+
+    @property
+    def command_nack_engaged(self) -> bool:
+        return self._command_nack_engaged
+
+    @command_nack_engaged.setter
+    def command_nack_engaged(self, value):
+        prev, self._command_nack_engaged = self._command_nack_engaged, value
+        self._on_property_changed(self.COMMAND_NACK_ENGAGED, value, prev)

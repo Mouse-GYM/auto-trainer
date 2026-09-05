@@ -1437,33 +1437,27 @@ class AppModel(ObservableObject):
             return False
         # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
         if wait_connected:
-            timeout = 3
             # full establishment of connection to/from device should be very fast actually, but not immediate,
-            # so this timeout.
-            p_end = time.perf_counter() + timeout
-            while True:
-                for tok in hard.pending_tokens:
-                    p0 = time.perf_counter()
-                    try:
-                        hard.wait_pending_command_acked(tok, timeout=timeout, is_cancelled=is_cancelled)
-                    except Exception as err:
-                        logger.error("pending token %s not acked: %s", tok, err)
-                        self.capture_stop(force=True)
-                        return False
-                    if need_cancel():
-                        return False
-                    timeout -= time.perf_counter() - p0
-                break
-            while True:
+            # so using timeouts.
+            # ensure all pending tokens are acked:
+            tokens = set()
+            try:
+                with hard.wait_pending_command_acked(tokens, timeout=10, is_cancelled=is_cancelled):
+                    for tok in hard.pending_tokens:
+                        tokens.add(tok)
+            except Exception as err:
+                logger.error("Failed to wait pending tokens: %s", err)
+                self.capture_stop(force=True)
+                return False
+            p_end = get_perf_now() + 3
+            while not hard.connected:
                 if need_cancel():
                     return False
-                if hard.connected:
-                    break
-                if time.perf_counter() > p_end:
+                if get_perf_now() > p_end:
                     logger.error("timeout waiting hardware connected")
                     self.capture_stop(force=True)
                     return False
-                time.sleep(0.05)
+                time.sleep(0.01)
         logger.info("finished connecting hardware")
         #
         watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog
@@ -1570,10 +1564,14 @@ class AppModel(ObservableObject):
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
     def _capture_stop(self, *, update_led: bool=True):
-
         if update_led:
-            tok = self._hardware.set_color_led(0, 0, 0)
-            self._hardware.wait_pending_command_acked(tok, timeout=1, raise_on_timeout=False)
+            tokens = set()
+            with self._hardware.wait_pending_command_acked(
+                tokens, timeout=1, raise_on_timeout=False, raise_on_command_error=False
+            ):
+                tok = self._hardware.set_color_led(0, 0, 0)
+                if tok is not None:
+                    tokens.add(tok)
 
         self._detach_training_plan()  # always
 
@@ -2567,7 +2565,13 @@ class AppModel(ObservableObject):
             SystemFaultReason.BOARDS_HARDWARE_RESET in self._analysis.system_fault_alarm.engaged_reasons
             or self._analysis.boards_hardware_reset_detector.is_engaged
         )
-        do_reconnect_hardware = is_dev_comm_error or is_watchdog or is_board_reset
+        do_reconnect_hardware = (
+            self._status != AppModelStatus.IDLE
+            and (
+                is_dev_comm_error
+                or is_watchdog
+                or is_board_reset
+            ))
 
         # behavior algo thread is supposed always alive,
         # it has protection against exception in the relayed functions which are executed by it.
@@ -2607,7 +2611,9 @@ class AppModel(ObservableObject):
         self._emergency_source = None
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
-        self._analysis.boards_hardware_reset_detector.restart()
+        analysis = self._analysis
+        analysis.boards_hardware_reset_detector.restart()
+        # shall we restart other(s) detector(s), or force to disengaged ?
 
     # pellet machine events
 
