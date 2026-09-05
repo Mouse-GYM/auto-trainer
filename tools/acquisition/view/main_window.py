@@ -762,7 +762,7 @@ class MainWindow(QMainWindow):
                 error = None
 
         @invoke_method
-        def show_result():
+        def show_result(error):
             self.run_action.setEnabled(True)
             self.make_3d_calib_action.setChecked(False)
             self.make_3d_calib_action.setEnabled(True)
@@ -797,7 +797,7 @@ class MainWindow(QMainWindow):
                 prev_cam_offsets = backup_path.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
                 new_cam_offsets = target_calib_dir.joinpath(DEFAULT_CAM_OFFSET_FILE_NAME)
                 if prev_cam_offsets.exists() and not new_cam_offsets.exists():
-                    shutil.copyfile(prev_cam_offsets, target_calib_dir)
+                    shutil.copyfile(prev_cam_offsets, new_cam_offsets)
                     logger.verbose("copied previous %s given no new one", DEFAULT_CAM_OFFSET_FILE_NAME)
             self._app_model.reload_calib(target_calib_dir)
             QMessageBox.information(
@@ -806,7 +806,7 @@ class MainWindow(QMainWindow):
 
         def wait_3d_calib_done(thread):
             thread.join()
-            show_result()
+            show_result(error)
 
         executor_thread = threading.Thread(target=handle_3d_calib, name="3d-calibration", daemon=True)
         executor_thread.start()
