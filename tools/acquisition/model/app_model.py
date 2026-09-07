@@ -1427,37 +1427,36 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        hard.connect(
-            self._system_message_handler.input_queue,
-            motors_config=self._motors_config,
-            move_config=self._move_config,
-            is_cancelled=is_cancelled,
-        )
-        if need_cancel():
-            return False
-        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
-        if wait_connected:
-            # full establishment of connection to/from device should be very fast actually, but not immediate,
-            # so using timeouts.
-            # ensure all pending tokens are acked:
-            tokens = set()
-            try:
-                with hard.wait_pending_command_acked(tokens, timeout=10, is_cancelled=is_cancelled):
-                    for tok in hard.pending_tokens:
-                        tokens.add(tok)
-            except Exception as err:
-                logger.error("Failed to wait pending tokens: %s", err)
-                self.capture_stop(force=True)
-                return False
-            p_end = get_perf_now() + 3
-            while not hard.connected:
+        pending_tokens = set()
+        try:
+            with hard.wait_pending_command_acked(pending_tokens):
+                hard.connect(
+                    self._system_message_handler.input_queue,
+                    motors_config=self._motors_config,
+                    move_config=self._move_config,
+                    is_cancelled=is_cancelled,
+                )
                 if need_cancel():
                     return False
-                if get_perf_now() > p_end:
-                    logger.error("timeout waiting hardware connected")
-                    self.capture_stop(force=True)
-                    return False
-                time.sleep(0.01)
+                # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+                if wait_connected:
+                    # full establishment of connection to/from device should be very fast actually, but not immediate,
+                    # so using timeouts.
+                    # ensure all pending tokens are acked:
+                    pending_tokens.update(hard.pending_tokens)
+        except Exception as err:
+            logger.error("Failed to connect/wait pending tokens: %s", err)
+            self.capture_stop(force=True)
+            return False
+        p_end = get_perf_now() + 3
+        while not hard.connected:
+            if need_cancel():
+                return False
+            if get_perf_now() > p_end:
+                logger.error("timeout waiting hardware connected")
+                self.capture_stop(force=True)
+                return False
+            time.sleep(0.01)
         logger.info("finished connecting hardware")
         #
         watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog
@@ -1477,7 +1476,10 @@ class AppModel(ObservableObject):
             return False
 
         # we always be/go at home on acquisition start, so:
-        self._behavior.system_machine.pellet.move_home(force=True)
+        pending_tokens.clear()
+        with hard.wait_pending_command_acked(pending_tokens):
+            self._behavior.system_machine.pellet.move_home(force=True)
+            pending_tokens.update(hard.pending_tokens)
 
         # once cameras successfully started:
         self._save_project_metadata(project_info, when=datetime.now(), trial=None, caller="capture_start")

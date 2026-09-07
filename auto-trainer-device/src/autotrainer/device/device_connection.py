@@ -181,11 +181,15 @@ class DeviceConnection(DeviceConnectionProtocol):
         try:
             yield
             logger.verbose("Now waiting tokens %s", tokens)
-            perf_timeout = time.perf_counter() + timeout
+            perf_timeout = get_perf_now() + timeout
             l_tokens = list(tokens)
             tokens_with_err = []
             while len(l_tokens) > 0:
                 for token in list(l_tokens):
+                    if token is None:
+                        logger.warning("await_acknowledge: filtered None token")
+                        l_tokens.remove(None)
+                        continue
                     cmd_res = tokens_acked.get(token)
                     if cmd_res is not None:
                         cmd_res: CommandResult
@@ -196,7 +200,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                     break
                 if is_cancelled():
                     break
-                if time.perf_counter() > perf_timeout:
+                if get_perf_now() > perf_timeout:
                     if raise_on_timeout:
                         raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
                     logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
@@ -204,8 +208,10 @@ class DeviceConnection(DeviceConnectionProtocol):
                 time.sleep(0.001)
             if len(l_tokens) == 0:
                 logger.info("successfully obtained %s acknowledge", len(tokens))
-                if len(tokens_with_err) > 0 and raise_on_command_error:
-                    raise RuntimeError(f"Command(s) failed: {tokens_with_err}")
+                if len(tokens_with_err) > 0:
+                    if raise_on_command_error:
+                        raise RuntimeError(f"Command(s) token failed: {tokens_with_err}")
+                    logger.error("Commands token failed: %s", tokens_with_err)
         finally:
             self._api.message_callback -= cb
 

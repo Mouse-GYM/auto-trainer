@@ -4,7 +4,12 @@ import dataclasses
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
-from autotrainer.core import Offset3DTuple, get_verbose_logger, ProjectInterval
+from autotrainer.core import (
+    Offset3DTuple,
+    get_verbose_logger,
+    ProjectInterval,
+    get_perf_now,
+)
 from autotrainer.inference import calibration_FLIR
 from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.video import VideoRecordMode
@@ -175,10 +180,10 @@ def make_3d_calib(
         calibration_FLIR.make_new_calibration(square_size, row_ct, col_ct, oversample, sess_path.location))
 
     def wait_cams_capture_status(capture_status: CaptureProcessStatus, timeout: float = 3):
-        p_before = time.perf_counter()
+        p_before = get_perf_now()
         p_timeout = p_before + timeout
         for cam in cameras:
-            if not cam.wait_for_capture_status(capture_status, timeout=p_timeout - time.perf_counter()):
+            if not cam.wait_for_capture_status(capture_status, timeout=p_timeout - get_perf_now()):
                 raise RuntimeError(f"cam={cam.name}: failed to wait for status={capture_status}")
             logger.info("%s: got %s", cam.name, capture_status)
 
@@ -190,14 +195,18 @@ def make_3d_calib(
         tokens = set()
         with hard.wait_pending_command_acked(tokens):
             token = hard.send_home()
+            if token is None:
+                raise RuntimeError("Failed to send home command")
             tokens.add(token)
         #
         logger.verbose("Setting start position")
-        tokens.clear()
-        with hard.wait_pending_command_acked(tokens):
-            for coord, value in start:
-                key = coord2m[coord](value)
-                tokens.add(key)
+        for coord, value in start:
+            tokens.clear()
+            with hard.wait_pending_command_acked(tokens):
+                token = coord2m[coord](value)
+                if token is None:
+                    raise RuntimeError(f"Failed to execute move: {coord} -> {value}.")
+                tokens.add(token)
         #
         for cam, cfg in zip(cameras, cams_before_cfg):
             params = cam_params.copy()
