@@ -362,7 +362,7 @@ class CanDevice(Device):
             uuid_ack_timeout_before = self._boards_has_ack_timeout_engaged()
             board_ctx.uuid_ack_timeout_engaged = False
             board_ctx.clear()
-            self.command_nack_engaged = False  # also reset
+            self.command_nack_engaged = any(b.active_error is not None for b in self._boards_pending_ctx.values())
             self.property_changed(self.UUID_ACK_TIMEOUT_ENGAGED, self._boards_has_ack_timeout_engaged(), uuid_ack_timeout_before)
             return True
 
