@@ -602,7 +602,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 
-        send_dev_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
+        send_dev_ack_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
         if is_cancelled():
             return
 

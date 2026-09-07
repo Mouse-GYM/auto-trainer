@@ -2579,14 +2579,14 @@ class AppModel(ObservableObject):
         # it has protection against exception in the relayed functions which are executed by it.
         @algo.relay_func
         def execute_emergency_proc():
-            hardware = self._hardware
+            hard = self._hardware
             system_m = self._behavior.system_machine
             self._analysis.boards_hardware_reset_detector.stop()  # always
             self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             if do_reconnect_hardware:
-                hardware.disconnect()
+                hard.disconnect()
                 try:
-                    hardware.connect(self._system_message_handler.input_queue, force_first_connect=True)
+                    hard.connect(self._system_message_handler.input_queue, force_first_connect=True)
                 except BaseException as err:
                     logger.critical("Could not reconnect to hardware: %s", err)
                     self.capture_stop(force=True, update_led=False)
