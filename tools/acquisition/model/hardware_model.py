@@ -542,11 +542,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
 
-        self.device_ack_timeout_engaged = False
-        self.device_command_nack_engaged = False
-        self.device_tunnel_status_timeout_engaged = False
-        self.device_pellet_status_timeout_engaged = False
-
         self._connect_count += 1
         self._last_motor_coordinates = _nans_offset3dTuple
         self._last_requested_set_coordinates = _nans_offset3dTuple
@@ -614,6 +609,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 name="check-timedout-commands",
             )
             thread.start()
+
+        # only reset after connection made
+        self.device_ack_timeout_engaged = False
+        self.device_command_nack_engaged = False
+        self.device_tunnel_status_timeout_engaged = False
+        self.device_pellet_status_timeout_engaged = False
+        self._sensor_analysis.device_comm_alarm.is_engaged = False
 
     def disconnect(self):
         logger.verbose("disconnecting ..")
