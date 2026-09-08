@@ -190,7 +190,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
     def pending_tokens(self) -> List[UUID]:
         return list(self._pending_tokens)
 
-    def _check_dcs_cfg(self, *, return_none: bool=False):
+    def _check_dcs_cfg(self, *, return_none: bool=False) -> DiamondTriangleOffsetConfig:
         cfg = self._dcs_config
         if cfg is None or not cfg.fully_valid:
             if return_none:

@@ -315,6 +315,40 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             logger.verbose("Refusing resume from emergency %s given was set by %s",
                           source, current)
             return
+        #
+        if self._system_machine.algorithm.status != BehaviorAlgoStatus.IDLE:
+            # verify hardware status is still good:
+            hard = self._hardware_model
+            tokens = set()
+            try:
+                with hard.wait_pending_command_acked(tokens, timeout=8):
+                    tok1 = hard.send_home()  # pellet board
+                    tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
+                    if tok1 is None or tok2 is None:
+                        raise RuntimeError("hardware not connected")
+                    tokens.add(tok1)
+                    tokens.add(tok2)
+            except Exception as err:
+                logger.error("hardware seems off, reconnecting")
+                save_err = err
+            else:
+                save_err = None
+            if save_err is not None:
+                hard.disconnect()
+                self._analysis.stop()
+                try:
+                    hard.connect(
+                        self._system_message_handler.input_queue,
+                        motors_config=self._motors_config,
+                        move_config=self._move_config,
+                        force_first_connect=True,
+                    )
+                except Exception as err:
+                    logger.error("failed reconnect to hardware: %s", err)
+                    return
+                finally:
+                    self._analysis.start()
+        #
         post_api_event(build_event(ApiEventKind.emergencyResume,
             EmergencyResumeContext(
                 reason=source, reason_code=reason_code, resumed_alarms=resumed_alarms)))

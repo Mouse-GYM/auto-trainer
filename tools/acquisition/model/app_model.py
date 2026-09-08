@@ -1819,7 +1819,6 @@ class AppModel(ObservableObject):
             timer.cancel()
 
         self._analysis.stop()
-        self._hardware.disconnect()
 
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
         self.capture_stop()
@@ -2596,12 +2595,15 @@ class AppModel(ObservableObject):
             self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             if do_reconnect_hardware:
                 hard.disconnect()
+                self._analysis.stop()
                 try:
                     hard.connect(self._system_message_handler.input_queue, force_first_connect=True)
                 except BaseException as err:
                     logger.critical("Could not reconnect to hardware: %s", err)
                     self.capture_stop(force=True, update_led=False)
                     return
+                finally:
+                    self._analysis.start()
                 # in case of it was not good with previous:
                 self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             tunnel_dev = system_m.tunnel_device
@@ -2621,32 +2623,6 @@ class AppModel(ObservableObject):
         execute_emergency_proc()
 
     def _on_emergency_resumed(self, source: str):
-        hard = self._hardware
-        if self._status != AppModelStatus.IDLE:
-            tokens = set()
-            try:
-                with hard.wait_pending_command_acked(tokens):
-                    tok = hard.delay(0.01)
-                    if tok is None:
-                        raise RuntimeError("hardware not connected")
-                    tokens.add(tok)
-            except Exception as err:
-                logger.error("hardware seems off, reconnecting")
-                save_err = err
-            else:
-                save_err = None
-            if save_err is not None:
-                hard.disconnect()
-                try:
-                    hard.connect(
-                        self._system_message_handler.input_queue,
-                        motors_config=self._motors_config,
-                        move_config=self._move_config,
-                        force_first_connect=True)
-                except Exception as err:
-                    logger.error("failed reconnect to hardware: %s", err)
-                    return
-
         self._emergency_source = None
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
