@@ -352,39 +352,40 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _run_connected(self) -> bool:
         logger.info("running connected")
         t_next_cmd_queue_read = time.perf_counter()
+        iface = self._interface
+        dev = self._device
+        cmd_q = self._cmd_queue
         while True:
             self._current_thread_watchdog_perf_c = get_perf_now()
-
             # Data from the device for the device listener to process.
-            if self._interface.can_read():
-                messages = self._interface.read(self._read_limit, collect_ms=self._collect_ms)
+            if iface.can_read():
+                messages = iface.read(self._read_limit, collect_ms=self._collect_ms)
                 if len(messages) > 0:
-                    self._device.notify_data(messages)
+                    dev.notify_data(messages)
 
             perf_now = get_perf_now()
-            if perf_now > t_next_cmd_queue_read:
+            if perf_now > t_next_cmd_queue_read:  #  or not cmd_q.empty():
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
-                    cmd, data, context = self._cmd_queue.get_nowait()
+                    cmd, data, context = cmd_q.get_nowait()
                 except Empty:
                     # no need check too often for request disconnect only
                     t_next_cmd_queue_read = perf_now + 0.25
                 else:
                     if cmd == _REQUEST_DISCONNECT:
-                        self._cmd_queue.task_done()
+                        cmd_q.task_done()
                         logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
                         break
                     else:
                         assert False,  f"should not be needed anymore but got unknown {cmd}"
                         # we should simply make the request disconnect be handled differently,
                         # and have the senders of these cmd/data/context directly put to the device
-                        self._device.notify_message(cmd, data, context)
-                        self._cmd_queue.task_done()
+                        dev.notify_message(cmd, data, context)
+                        cmd_q.task_done()
 
-        if self._interface.is_open:
-            self._device.disconnect()
-            self._interface.close()
-
+        if iface.is_open:
+            dev.disconnect()
+            iface.close()
             logger.debug(f"<{self._name}> interface closed")
         else:
             logger.warning(f"<{self._name} DISCONNECT cmd while device already disconnected")
