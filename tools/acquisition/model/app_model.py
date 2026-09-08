@@ -2597,7 +2597,13 @@ class AppModel(ObservableObject):
                 hard.disconnect()
                 self._analysis.stop()
                 try:
-                    hard.connect(self._system_message_handler.input_queue, force_first_connect=True)
+                    hard.connect(
+                        self._system_message_handler.input_queue,
+                        force_first_connect=True,
+                        motors_config=self._motors_config,
+                        move_config=self._move_config,
+                        is_cancelled=lambda: self._acquisition_stopping,
+                    )
                 except BaseException as err:
                     logger.critical("Could not reconnect to hardware: %s", err)
                     self.capture_stop(force=True, update_led=False)
@@ -2649,6 +2655,7 @@ class AppModel(ObservableObject):
                         motors_config=self._motors_config,
                         move_config=self._move_config,
                         force_first_connect=True,
+                        is_cancelled=lambda: self._acquisition_stopping
                     )
                 except Exception as err:
                     logger.exception("Could not connect to hardware: %s", err)
