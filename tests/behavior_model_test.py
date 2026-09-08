@@ -1,5 +1,7 @@
 import math
 import datetime as dtm
+import threading
+import time
 from unittest import mock
 
 import pytest
@@ -192,7 +194,7 @@ mid_night = dtm.datetime(2026, 1, 1, 0, 0)
 class TestColorLed:
 
     @pytest.fixture()
-    def app_model(self, app_model) -> AppModel:
+    def app_model(self, app_model, mock_get_perf_now) -> AppModel:  # noqa
         self._app_model = app_model
         app_model.status = AppModelStatus.ACQUIRING  # force
         fault_alarm = self.fault_alarm = app_model.analysis.system_fault_alarm
@@ -204,7 +206,22 @@ class TestColorLed:
         # force not use daemon, so that below set of is_engaged are all handled in this thread.
         alarm_mon.use_daemon = False
         alarm_mon.restart()
-        return app_model
+        try:
+            yield app_model  # noqa
+        finally:
+            # NB: we use mock get_perf_now,
+            # but device-connection is checking its queue only after X duration.
+            # so spawn a thread to keep increasing fake perf now:
+            is_done = threading.Event()
+            def increase_fake_perf_now():
+                while not is_done.is_set():
+                    mock_get_perf_now.increase_simulate_perf_now(1)
+                    # time.sleep(0.001)
+            th = threading.Thread(target=increase_fake_perf_now, daemon=True)
+            th.start()
+            app_model.on_close()
+            is_done.set()
+            th.join()
 
     @property
     def get_color(self):

@@ -26,7 +26,12 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
-from top_fixtures import MockSystemMachine, FifoExitStack, nullify_attributes
+from top_fixtures import (
+    MockSystemMachine,
+    FifoExitStack,
+    nullify_attributes,
+    increase_simulate_perf_now,
+)
 
 this_dir = Path(__file__).parent.resolve()
 
@@ -138,11 +143,23 @@ class BaseTrainingPlan(MockSystemMachine):
         try:
             yield app_model
         finally:
+            # NB: we use mock get_perf_now,
+            # but device-connection is checking its queue only after X duration.
+            # so spawn a thread to keep increasing fake perf now:
+            is_done = threading.Event()
+            def increase_fake_perf_now():
+                while not is_done.is_set():
+                    increase_simulate_perf_now(1)
+                    # time.sleep(0.001)
+            th = threading.Thread(target=increase_fake_perf_now, daemon=True)
+            th.start()
             try:
                 app_model.capture_stop()
                 app_model.on_close()
             finally:
                 nullify_attributes(app_model)
+                is_done.set()
+                th.join()
 
 
 class TestTrainingPlan(BaseTrainingPlan):
