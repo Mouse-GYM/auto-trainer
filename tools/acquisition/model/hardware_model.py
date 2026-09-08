@@ -630,6 +630,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             dev.join()
             self._device_conn = None
         if can_dev is not None:
+            can_dev.disconnect()
             can_dev.property_changed -= self._can_device_property_changed
             self._can_device = None
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
