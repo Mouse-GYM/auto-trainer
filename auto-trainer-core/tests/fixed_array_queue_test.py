@@ -49,10 +49,10 @@ def test_buffer():
     check_buffer(buffer, shape, frames_per_camera, 0)
 
 
-def _consume_queue(buffer: FixedArrayMultiQueue):
+def _consume_queue(buffer: FixedArrayMultiQueue, stop_evt: threading.Event):
     frames = numpy.ndarray((buffer.batch_size, *buffer.shape, 3), dtype=numpy.uint8)
     frame_indices = numpy.ndarray((buffer.camera_count, buffer.frames_per_camera), dtype=numpy.int64)
-    while True:
+    while not stop_evt.is_set():
         res = buffer.get_output(frames, frames_indices=frame_indices)
         if res:
             pass
@@ -61,7 +61,7 @@ def _consume_queue(buffer: FixedArrayMultiQueue):
             time.sleep(0.002)
 
 
-def test_get_cam_missing_frames():
+def test_get_cam_missing_frames(request):
     shape = (100, 100)
     frames_per_batch_per_cam = 3
     queue_batch_depth = 16  # need big enough for all below puts,
@@ -92,8 +92,13 @@ def test_get_cam_missing_frames():
         buffer.set_cam_tot_frames(0, tot_put_cam0)
         buffer.set_cam_tot_frames(1, tot_put_cam0)
 
-    consumer = threading.Thread(target=_consume_queue, args=(buffer,), daemon=True)
+    stop_evt = threading.Event()
+    consumer = threading.Thread(target=_consume_queue, args=(buffer, stop_evt), daemon=True)
     consumer.start()
+    def stop_join_consume():
+        stop_evt.set()
+        consumer.join()
+    request.addfinalizer(stop_join_consume)
 
     for outer_loop_idx in range(1024):
         # this "big" loop allows to stress test a bit the implementation,
