@@ -1430,15 +1430,16 @@ class AppModel(ObservableObject):
         hard = self._hardware
         pending_tokens = set()
         try:
+            hard.connect(
+                self._system_message_handler.input_queue,
+                motors_config=self._motors_config,
+                move_config=self._move_config,
+                is_cancelled=is_cancelled,
+            )
+            if need_cancel():
+                return False
+            # optionally wait any eventual remaining pending token(s), although there should none eventually:
             with hard.wait_pending_command_acked(pending_tokens):
-                hard.connect(
-                    self._system_message_handler.input_queue,
-                    motors_config=self._motors_config,
-                    move_config=self._move_config,
-                    is_cancelled=is_cancelled,
-                )
-                if need_cancel():
-                    return False
                 # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
                 if wait_connected:
                     # full establishment of connection to/from device should be very fast actually, but not immediate,
@@ -1449,6 +1450,7 @@ class AppModel(ObservableObject):
             logger.error("Failed to connect/wait pending tokens: %s", err)
             self.capture_stop(force=True)
             return False
+        # always wait up till "connected":
         p_end = get_perf_now() + 3
         while not hard.connected:
             if need_cancel():
