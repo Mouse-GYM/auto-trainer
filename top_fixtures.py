@@ -104,15 +104,15 @@ def _make_del_shm_sem_count():
 
 @pytest.fixture(autouse=True)
 def _check_threads(request):
-    if os.getenv("AUTOTRAINER_TEST_CHECK_NO_REMAINING_THREAD") != "1":
+    if os.getenv("AUTOTRAINER_TEST_CHECK_NO_REMAINING_THREAD") == "0":
         yield
         return
     before = list(threading.enumerate())
-    print(" .. enter _check_threads")
+    # print(" .. enter _check_threads")
     try:
         yield
     finally:
-        print(" .. finalize _check_threads")
+        # print(" .. finalize _check_threads")
         after = list(threading.enumerate())
         if len(after) > 1:
             raise RuntimeError(f"detected remaining threads: {after} // before={before}")
