@@ -589,7 +589,6 @@ class AppModel(ObservableObject):
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continuous mode and is_from_start is not True, or else it was already recording.
         #
-        self._analysis.restart()
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -1588,7 +1587,7 @@ class AppModel(ObservableObject):
 
         self._detach_training_plan()  # always
 
-        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_sub_detector
+        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
         for item in WatchdogItems:
             if item is not WatchdogItems.MAIN_UI_THREAD:
                 watchdog_mon_unregister(item)
