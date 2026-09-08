@@ -1800,15 +1800,15 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
-
         for timer in (
-                self._timer_one_minute_repeat,
-                self._timer_daily,
+            self._timer_one_minute_repeat,
+            self._timer_daily,
         ):
             logger.debug("stopping timer %s", timer)
             timer.cancel()
 
         self._analysis.stop()
+        self._hardware.disconnect()
 
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
         self.capture_stop()
