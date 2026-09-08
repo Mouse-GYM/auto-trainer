@@ -1576,15 +1576,18 @@ class AppModel(ObservableObject):
             )
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
+    def _update_led_for_stop(self):
+        tokens = set()
+        with self._hardware.wait_pending_command_acked(
+            tokens, timeout=1, raise_on_timeout=False, raise_on_command_error=False
+        ):
+            tok = self._hardware.set_color_led(0, 0, 0)
+            if tok is not None:
+                tokens.add(tok)
+
     def _capture_stop(self, *, update_led: bool=True):
         if update_led:
-            tokens = set()
-            with self._hardware.wait_pending_command_acked(
-                tokens, timeout=1, raise_on_timeout=False, raise_on_command_error=False
-            ):
-                tok = self._hardware.set_color_led(0, 0, 0)
-                if tok is not None:
-                    tokens.add(tok)
+            self._update_led_for_stop()
 
         self._detach_training_plan()  # always
 
@@ -1820,8 +1823,11 @@ class AppModel(ObservableObject):
 
         self._analysis.stop()
 
+        self._update_led_for_stop()
+        self._hardware.disconnect()
+
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
-        self.capture_stop()
+        self.capture_stop(update_led=False)
 
         if self._inference is not None:
             # fully terminate inference, which keeps a background process alive between different stop/start
