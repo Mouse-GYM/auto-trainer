@@ -215,8 +215,8 @@ class TestColorLed:
             is_done = threading.Event()
             def increase_fake_perf_now():
                 while not is_done.is_set():
-                    mock_get_perf_now.increase_simulate_perf_now(1)
-                    # time.sleep(0.001)
+                    mock_get_perf_now.increase_simulate_perf_now(0.5)
+                    time.sleep(0.01)
             th = threading.Thread(target=increase_fake_perf_now, daemon=True)
             th.start()
             app_model.on_close()
