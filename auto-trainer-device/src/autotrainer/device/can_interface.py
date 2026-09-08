@@ -67,6 +67,7 @@ from .device_interface import (
     ServoStatus,
     StepperStatus,
     Version,
+    PositionOrPosVelocityT,
 )
 from .stepper_motor import mm_to_turns, turns_to_mm
 
@@ -1136,13 +1137,13 @@ class CanInterface(DeviceInterface):
         logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
         return res == 0
 
-    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+    def move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT):
         config = self._servo_configs.get(motor)
         if config is None:
             raise RuntimeError(f"Unhandled servo: {motor}")
         return self._move_servo_motor(motor, position, config)
 
-    def _move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):
+    def _move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT, config: ServoConfig):
         """
         Move a servo motor.
 
@@ -1189,7 +1190,7 @@ class CanInterface(DeviceInterface):
     def _move_stepper_motor(
         self,
         motor: Motor,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         config: StepperConfig,
         save_as_fixed: bool,
         relative: bool = False,
@@ -1287,7 +1288,7 @@ class CanInterface(DeviceInterface):
         logger.debug("%s: StepperMove res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
-    def move_magnet_servo(self, position) -> bool:
+    def move_magnet_servo(self, position: PositionOrPosVelocityT) -> bool:
         """
         Move the magnet motor
 
@@ -1299,7 +1300,7 @@ class CanInterface(DeviceInterface):
         """
         return self._move_servo_motor(Motor.TUNNEL_MAGNET_SERVO, position, self.magnet_config)
 
-    def move_gate_servo(self, position) -> bool:
+    def move_gate_servo(self, position: PositionOrPosVelocityT) -> bool:
         """
         Move the gate motor
 
@@ -1317,7 +1318,7 @@ class CanInterface(DeviceInterface):
 
     def move_motor_x(
         self,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         save_as_fixed: bool = False,
         *,
         relative: bool = False,
@@ -1337,10 +1338,10 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+    def set_motor_y(self, position: float, *, relative: bool = False) -> bool:
         return self.move_motor_y(position, save_as_fixed=True, relative=relative)
 
-    def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
+    def move_motor_y(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Y-direction motor
 
@@ -1356,10 +1357,10 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_z(self, position, *, relative: bool = False) -> bool:
+    def set_motor_z(self, position: float, *, relative: bool = False) -> bool:
         return self.move_motor_z(position, save_as_fixed=True, relative=relative)
 
-    def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
+    def move_motor_z(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Z-direction motor
 

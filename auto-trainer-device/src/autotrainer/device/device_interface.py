@@ -22,11 +22,16 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import List, Union, Optional, Dict, Any, Tuple
 
+import typing_extensions
+
 from autotrainer.core import Offset3DTuple, get_verbose_logger
 from autotrainer.core.message import Motor
 from autotrainer.core.message.system_status_message import StepperStatusMessage
 
 logger = get_verbose_logger(__name__)
+
+
+PositionOrPosVelocityT: typing_extensions.TypeAlias = Union[float, Tuple[float, float]]
 
 
 _map_idx_motors = {
@@ -507,6 +512,10 @@ class DeviceInterface:
                 self._motors_drift = no_drift
         return True
 
+    def board_reboot(self, target: Target):
+        """Request given board target to reboot"""
+        raise NotImplementedError
+
     def delay(self, delay_sec: float) -> bool:
         """Request a "sleep" delay to the pellet board"""
         raise NotImplementedError
@@ -523,13 +532,13 @@ class DeviceInterface:
         """stepper_home == send-to-limit"""
         raise NotImplementedError
 
-    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+    def move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT):
         """Move given motor to given absolute position"""
         raise NotImplementedError
 
     def move_motor_x(
         self,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         save_as_fixed: bool = False,
         *,
         relative: bool = False,
@@ -550,7 +559,7 @@ class DeviceInterface:
 
     def move_motor_y(
         self,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         save_as_fixed: bool = False,
         *,
         relative: bool = False,
@@ -571,7 +580,7 @@ class DeviceInterface:
 
     def move_motor_z(
         self,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         save_as_fixed: bool = False,
         *,
         relative: bool = False,

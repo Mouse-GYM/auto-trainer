@@ -27,7 +27,7 @@ from autotrainer.device import (
     ServoConfig,
     Device,
     ColorLed,
-    CompoundMovements, MotorConfigurationFile,
+    CompoundMovements, MotorConfigurationFile, Target,
 )
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
@@ -616,6 +616,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self.device_tunnel_status_timeout_engaged = False
         self.device_pellet_status_timeout_engaged = False
         self._sensor_analysis.device_comm_alarm.is_engaged = False
+
+    def board_reboot(self, target: Target) -> Optional[UUID]:
+        return self._send_with_token(SystemCommandKind.BOARD_REBOOT, target)
 
     def disconnect(self):
         logger.verbose("disconnecting ..")
