@@ -1822,10 +1822,10 @@ class MainWindow(QMainWindow):
         }
         for plan_index, plan in enumerate(plans):
             combo.addItem(plan.name, userData=plan.plan_id)
-            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+            combo.setItemData(plan_index, plan.description, Qt.ItemDataRole.ToolTipRole)
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
-        combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)
+        combo.setItemData(len(plans), tooltip_txt, Qt.ItemDataRole.ToolTipRole)
         combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:
