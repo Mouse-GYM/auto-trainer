@@ -844,8 +844,12 @@ def mock_system(machine, request) -> MockSystemMachine:
 
 
 @pytest.fixture
-def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:
-    return HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
+def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:  # noqa
+    hard = HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
+    try:
+        yield hard  # noqa
+    finally:
+        hard.disconnect()
 
 
 @pytest.fixture
