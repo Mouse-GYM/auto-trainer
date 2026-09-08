@@ -183,7 +183,7 @@ class DeviceConnection(DeviceConnectionProtocol):
             logger.verbose("Now waiting tokens %s", tokens)
             perf_timeout = get_perf_now() + timeout
             l_tokens = list(tokens)
-            tokens_with_err = []
+            tokens_with_err = {}
             while len(l_tokens) > 0:
                 for token in list(l_tokens):
                     if token is None:
@@ -195,7 +195,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                         cmd_res: CommandResult
                         l_tokens.remove(token)
                         if not cmd_res.succeeded:
-                            tokens_with_err.append(token)
+                            tokens_with_err[token] = cmd_res
                 if len(l_tokens) == 0:
                     break
                 if is_cancelled():
