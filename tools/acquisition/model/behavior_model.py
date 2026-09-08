@@ -57,6 +57,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
 
     # events type hint
     emergency_stopped: EventHandler[Callable[[str], None]]
+    before_emergency_resumed: EventHandler[Callable[[], None]]
     emergency_resumed: EventHandler[Callable[[str], None]]
 
     def __init__(
@@ -69,7 +70,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
-        super().__init__(("emergency_stopped", "emergency_resumed"))
+        super().__init__(("emergency_stopped", "emergency_resumed", "before_emergency_resumed"))
 
         self._project = ProjectInfo.get_null_project()
 
@@ -88,6 +89,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         #
         self._source_emergency: Optional[str] = None
         self._emergency_engaged_alarms: List[ApiAlarmKind] = []
+        self._message_handler = msg_handler
         #
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
 
@@ -316,38 +318,11 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
                           source, current)
             return
         #
-        if self._system_machine.algorithm.status != BehaviorAlgoStatus.IDLE:
-            # verify hardware status is still good:
-            hard = self._hardware_model
-            tokens = set()
-            try:
-                with hard.wait_pending_command_acked(tokens, timeout=8):
-                    tok1 = hard.send_home()  # pellet board
-                    tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
-                    if tok1 is None or tok2 is None:
-                        raise RuntimeError("hardware not connected")
-                    tokens.add(tok1)
-                    tokens.add(tok2)
-            except Exception as err:
-                logger.error("hardware seems off, reconnecting")
-                save_err = err
-            else:
-                save_err = None
-            if save_err is not None:
-                hard.disconnect()
-                self._analysis.stop()
-                try:
-                    hard.connect(
-                        self._system_message_handler.input_queue,
-                        motors_config=self._motors_config,
-                        move_config=self._move_config,
-                        force_first_connect=True,
-                    )
-                except Exception as err:
-                    logger.error("failed reconnect to hardware: %s", err)
-                    return
-                finally:
-                    self._analysis.start()
+        try:
+            self.before_emergency_resumed()
+        except Exception:
+            logger.error("before_emergency_resumed failed, skipping emergency_resume")
+            return
         #
         post_api_event(build_event(ApiEventKind.emergencyResume,
             EmergencyResumeContext(

@@ -448,6 +448,7 @@ class AppModel(ObservableObject):
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
+        behavior_model.before_emergency_resumed += self._on_before_emergency_resumed
         self._emergency_source: Optional[str] = None  # if None: not engaged
 
         intertrial = system_machine.intertrial
@@ -2620,6 +2621,40 @@ class AppModel(ObservableObject):
                             logger.warning("execute_emergency_proc: %s failed: %s, but continuing",
                                            action_func, err)
         execute_emergency_proc()
+
+    def _on_before_emergency_resumed(self):
+        if self._status != AppModelStatus.IDLE:
+            # verify hardware status is still good:
+            hard = self._hardware
+            tokens = set()
+            try:
+                with hard.wait_pending_command_acked(tokens, timeout=8):
+                    tok1 = hard.send_home()  # pellet board
+                    tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
+                    if tok1 is None or tok2 is None:
+                        raise RuntimeError("hardware not connected")
+                    tokens.add(tok1)
+                    tokens.add(tok2)
+            except Exception as err:
+                logger.error("hardware seems off, reconnecting")
+                save_err = err
+            else:
+                save_err = None
+            if save_err is not None:
+                hard.disconnect()
+                self._analysis.stop()
+                try:
+                    hard.connect(
+                        self._system_message_handler.input_queue,
+                        motors_config=self._motors_config,
+                        move_config=self._move_config,
+                        force_first_connect=True,
+                    )
+                except Exception as err:
+                    logger.exception("Could not connect to hardware: %s", err)
+                    raise RuntimeError("failed reconnect to hardware") from None
+                finally:
+                    self._analysis.start()
 
     def _on_emergency_resumed(self, source: str):
         self._emergency_source = None
