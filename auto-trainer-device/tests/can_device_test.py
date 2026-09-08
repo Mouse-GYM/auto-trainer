@@ -95,6 +95,7 @@ def device_conn(device):
         yield dc
     finally:
         dc.request_disconnect()
+        dc.join()
 
 
 @dataclasses.dataclass()
