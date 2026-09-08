@@ -130,7 +130,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         thread = self._current_thread
         if thread is not None:
             logger.debug("joining %s", thread)
-            thread.join(3)
+            thread.join(5)
             if thread.is_alive():
                 logger.warning("thread %s still alive, but continuing", thread)
             self._current_thread = None
@@ -364,7 +364,8 @@ class DeviceConnection(DeviceConnectionProtocol):
                     dev.notify_data(messages)
 
             perf_now = get_perf_now()
-            if perf_now > t_next_cmd_queue_read:  #  or not cmd_q.empty():
+            # logger.debug("HERE p_now=%.3f next=%.3f", perf_now, t_next_cmd_queue_read)
+            if perf_now > t_next_cmd_queue_read or not cmd_q.empty():
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
                     cmd, data, context = cmd_q.get_nowait()

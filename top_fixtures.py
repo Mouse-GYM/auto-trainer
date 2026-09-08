@@ -113,9 +113,14 @@ def _check_threads(request):
         yield
     finally:
         # print(" .. finalize _check_threads")
-        after = list(threading.enumerate())
+        after = [thread for thread in threading.enumerate() if thread.is_alive()]
         if len(after) > 1:
-            raise RuntimeError(f"detected remaining threads: {after} // before={before}")
+            # time.sleep(0.5)
+            # import gc
+            # gc.collect()
+            after = [thread for thread in threading.enumerate() if thread.is_alive()]
+            if len(after) > 1:
+                raise RuntimeError(f"detected remaining threads: {after} // before={before}")
 
 
 _cnt_shm_sem_del_prev_before = 0
