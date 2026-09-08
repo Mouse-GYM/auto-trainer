@@ -40,6 +40,7 @@ from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, 
     ApiEmergencyResumeReason
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
+from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import (
     ObservableObject,
     EventManager,
@@ -1477,9 +1478,17 @@ class AppModel(ObservableObject):
 
         # we always be/go at home on acquisition start, so:
         pending_tokens.clear()
-        with hard.wait_pending_command_acked(pending_tokens):
-            self._behavior.system_machine.pellet.move_home(force=True)
-            pending_tokens.update(hard.pending_tokens)
+        try:
+            with hard.wait_pending_command_acked(pending_tokens):
+                tok = hard.send_home()
+                if tok is None:
+                    raise RuntimeError("could not request send-home")
+                pending_tokens.add(tok)
+            self._behavior.system_machine.pellet.state = PelletState.home
+        except Exception as err:
+            logger.error("Failed to move home: %s", err)
+            self.capture_stop(force=True)
+            return False
 
         # once cameras successfully started:
         self._save_project_metadata(project_info, when=datetime.now(), trial=None, caller="capture_start")
