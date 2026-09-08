@@ -1118,7 +1118,9 @@ class CanDevice(Device):
         cmd_thread, cmd_queue = self._commands_handler_thread, self._commands_queue
         if cmd_thread is not None:
             if cmd_thread.is_alive():
+                logger.verbose("requesting commands handler thread to exit")
                 cmd_queue.put(None)
+            logger.debug("joining commands handler thread")
             cmd_thread.join(3)
             if cmd_thread.is_alive():
                 logger.warning("CanCommand handler thread still alive: %s", cmd_thread)
