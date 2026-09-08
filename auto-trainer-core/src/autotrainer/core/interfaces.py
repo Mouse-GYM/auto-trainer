@@ -197,12 +197,13 @@ class TunnelHardwareProtocol(Protocol):
         Return the current head magnet position.
         """
 
-    def update_head_magnet_intensity(self, position: float) -> Optional[UUID]:
+    def update_head_magnet_intensity(self, position: float, *, force: bool=False) -> Optional[UUID]:
         """
         Request an update to the head magnet position.
 
         Args:
             position: The % position [0, 100] to set the head magnet.
+            force: force or not the command, even if already at requested position
 
         Returns:
             A token to expect from the device message handler when the request is complete.

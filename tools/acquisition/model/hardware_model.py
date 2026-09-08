@@ -342,13 +342,13 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """
         return self._head_magnet_position
 
-    def update_head_magnet_intensity(self, position: Optional[float]) -> Optional[UUID]:
+    def update_head_magnet_intensity(self, position: Optional[float], *, force: bool=False) -> Optional[UUID]:
         if position is None:  # caller should not call instead eventually
             return None
         if isinstance(position, str):
             warnings.warn("Received str for update_head_magnet_intensity, please update your code", UserWarning)
             position = float(position)
-        if position != self._head_magnet_position:
+        if position != self._head_magnet_position or force:
             logger.verbose("sending move magnet to %.3f", position)
             # self._head_magnet_position = value  # this is set from reading the hardware status
             return self._send_with_token(SystemCommandKind.MOVE_MAGNET_SERVO, position)
