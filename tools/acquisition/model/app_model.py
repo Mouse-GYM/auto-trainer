@@ -1478,10 +1478,21 @@ class AppModel(ObservableObject):
         if need_cancel():
             return False
 
-        # we always be/go at home on acquisition start, so:
+        # we want always be/go at home on acquisition start, so:
+        can_dev = hard.can_device
         pending_tokens.clear()
+        timeout = min(
+            9,
+            (
+                can_dev.default_command_ack_timeout_duration
+                # there can be custom for ~anything,
+                # but it should be good enough, given also :
+                * can_dev.default_command_ack_timeout_repeat_count
+                * 3  # X/Y/Z
+            ),
+        )
         try:
-            with hard.wait_pending_command_acked(pending_tokens):
+            with hard.wait_pending_command_acked(pending_tokens, timeout=timeout):
                 tok = hard.send_home()
                 if tok is None:
                     raise RuntimeError("could not request send-home")
