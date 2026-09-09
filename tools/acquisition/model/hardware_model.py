@@ -134,6 +134,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._disconnect_event = threading.Event()
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
 
+    @property
+    def device_connection(self) -> DeviceConnection:
+        return self._device_conn
+
+    @property
+    def can_device(self) -> CanDevice:
+        return self._can_device
+
     @staticmethod
     def load_default_motor_config(config_path: Optional[Path] = None) -> MotorConfigurations:
         return DeviceConnectionProtocol.load_default_motor_config(config_path)
@@ -641,6 +649,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             prev_thread.join()
         self._device_stream_started = False
         self._color_led = None
+        self._pending_tokens.clear()
 
     def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
