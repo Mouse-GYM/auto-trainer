@@ -193,7 +193,7 @@ def make_3d_calib(
         logger.info("Connecting to HW ..")
         hard.connect(app_model.message_handler.input_queue)
         tokens = set()
-        with hard.wait_pending_command_acked(tokens):
+        with hard.wait_pending_command_acked(tokens, timeout=hard.send_home_timeout):
             token = hard.send_home()
             if token is None:
                 raise RuntimeError("Failed to send home command")

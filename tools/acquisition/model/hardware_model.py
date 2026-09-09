@@ -135,6 +135,23 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
 
     @property
+    def send_home_timeout(self):
+        min_default = 9  # don't think we need that much though.
+        can_dev = self._can_device
+        if can_dev is None:
+            return min_default
+        return min(
+            min_default,
+            (
+                can_dev.default_command_ack_timeout_duration
+                # there can be custom for ~anything,
+                # but it should be good enough, given also :
+                * can_dev.default_command_ack_timeout_repeat_count
+                * 3  # X/Y/Z
+            ),
+        )
+
+    @property
     def device_connection(self) -> DeviceConnection:
         return self._device_conn
 

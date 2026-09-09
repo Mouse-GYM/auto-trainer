@@ -1439,7 +1439,7 @@ class AppModel(ObservableObject):
             if need_cancel():
                 return False
             # optionally wait any eventual remaining pending token(s), although there should none eventually:
-            with hard.wait_pending_command_acked(pending_tokens):
+            with hard.wait_pending_command_acked(pending_tokens, is_cancelled=is_cancelled, timeout=5):
                 # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
                 if wait_connected:
                     # full establishment of connection to/from device should be very fast actually, but not immediate,
@@ -1449,6 +1449,8 @@ class AppModel(ObservableObject):
         except Exception as err:
             logger.error("Failed to connect/wait pending tokens: %s", err)
             self.capture_stop(force=True)
+            return False
+        if need_cancel():
             return False
         # always wait up till "connected":
         p_end = get_perf_now() + 3
@@ -1479,20 +1481,9 @@ class AppModel(ObservableObject):
             return False
 
         # we want always be/go at home on acquisition start, so:
-        can_dev = hard.can_device
         pending_tokens.clear()
-        timeout = min(
-            9,
-            (
-                can_dev.default_command_ack_timeout_duration
-                # there can be custom for ~anything,
-                # but it should be good enough, given also :
-                * can_dev.default_command_ack_timeout_repeat_count
-                * 3  # X/Y/Z
-            ),
-        )
         try:
-            with hard.wait_pending_command_acked(pending_tokens, timeout=timeout):
+            with hard.wait_pending_command_acked(pending_tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
                 tok = hard.send_home()
                 if tok is None:
                     raise RuntimeError("could not request send-home")
@@ -1501,6 +1492,9 @@ class AppModel(ObservableObject):
         except Exception as err:
             logger.error("Failed to move home: %s", err)
             self.capture_stop(force=True)
+            return False
+
+        if need_cancel():
             return False
 
         # once cameras successfully started:
@@ -2651,8 +2645,8 @@ class AppModel(ObservableObject):
             hard = self._hardware
             tokens = set()
             try:
-                with hard.wait_pending_command_acked(tokens, timeout=8):
-                    tok1 = hard.send_home()  # pellet board
+                with hard.wait_pending_command_acked(tokens, timeout=5):
+                    tok1 = hard.delay(0.1)  # pellet board
                     tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
                     if tok1 is None or tok2 is None:
                         raise RuntimeError("hardware not connected")
@@ -2672,7 +2666,7 @@ class AppModel(ObservableObject):
                         motors_config=self._motors_config,
                         move_config=self._move_config,
                         force_first_connect=True,
-                        is_cancelled=lambda: self._acquisition_stopping
+                        is_cancelled=lambda: self._acquisition_stopping,
                     )
                 except Exception as err:
                     logger.exception("Could not connect to hardware: %s", err)
