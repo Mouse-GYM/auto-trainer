@@ -73,6 +73,7 @@ class AppModel(ObservableObject):
 
         self._command_pending = False
         self._last_command = None
+        self._last_command_error: Optional[str] = None
 
         self._travel_limits = None  # _alogus_travel_limits
 
@@ -231,8 +232,17 @@ class AppModel(ObservableObject):
 
     @command_pending.setter
     def command_pending(self, value):
-        self._command_pending = self._on_property_changed("command_pending", value,
-                                                          self._command_pending)
+        prev, self._command_pending = self._command_pending, value
+        self._on_property_changed("command_pending", value, prev)
+
+    @property
+    def last_command_error(self):
+        return self._last_command_error
+
+    @last_command_error.setter
+    def last_command_error(self, value):
+        prev, self._last_command_error = self._last_command_error, value
+        self._on_property_changed("last_command_error", value, prev)
 
     @property
     def front_door(self):
@@ -454,6 +464,7 @@ class AppModel(ObservableObject):
         if self._last_command is not None and token == self._last_command:
             self._last_command = None
             self.command_pending = False
+            self.last_command_error = None if result.succeeded else result.error
 
     def _send_command(self, message, data=None, *, context=None, force: bool=False):
         if self._last_command is not None and not force:
