@@ -57,6 +57,7 @@ from autotrainer.core import (
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
+from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
@@ -2682,7 +2683,12 @@ class AppModel(ObservableObject):
         analysis.boards_hardware_reset_detector.restart()
         # ensure emergency monitor is back to disengaged,
         # so we can get back new transition to engaged:
-        analysis.emergency_alarm_monitor.set_is_engaged(False)
+        def disengage_det_or_group(det):
+            det.is_engaged = False
+            if isinstance(det, GroupBaseDetector):
+                for sub in det.sub_detectors.values():
+                    disengage_det_or_group(sub)
+        disengage_det_or_group(analysis.emergency_alarm_monitor)
         # assert analysis.emergency_alarm_monitor.engaged_reasons == []
         # shall we restart other(s) detector(s), or force to disengaged ?
 
