@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from autotrainer.pyside import Separator
+from autotrainer.pyside.content_widget import invoke_method
 
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.main_content import MainContent
@@ -105,6 +106,7 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
+    @invoke_method
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "hardware_configuration":
             self.update_status(value)
@@ -114,5 +116,5 @@ class MainWindow(QMainWindow):
                     self,
                     "Last Command Error",
                     f"\nThe last command failed with:\n\n{value}\n\n"
-                    f"Connection shall be restablished.",
+                    f"Connection shall be reestablished.",
                 )
