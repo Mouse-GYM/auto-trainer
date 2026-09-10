@@ -13,7 +13,11 @@ from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.behavior_model import EmergencyControlSource
-from top_fixtures import MockSystemMachine, has_api_event_kind
+from top_fixtures import (
+    MockSystemMachine,
+    has_api_event_kind,
+    increase_simulate_perf_now,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -201,6 +205,9 @@ class TestColorLed:
         # ensure used as emergency condition:
         fault_alarm.config.use = True
         fault_alarm.config.is_emergency_condition = True
+        free_disk = app_model.analysis.free_disk_space_detector
+        free_disk.use_daemon = False
+        free_disk.restart()
         self.ignore_window = app_model.behavior.algorithm.active_config.animal_sleep_window
         alarm_mon = app_model.analysis.emergency_alarm_monitor
         # force not use daemon, so that below set of is_engaged are all handled in this thread.
@@ -230,38 +237,49 @@ class TestColorLed:
     def test_start_stop_same_day(self, app_model):
         get_color = self.get_color
         fault_alarm = self.fault_alarm
+        free_disk_det = app_model.analysis.free_disk_space_detector
         #
         assert get_color(now=mid_day) == (0, 0, 0)
         assert get_color(now=mid_night) == (0, 100, 0)
         #
-        app_model.analysis.free_disk_space_detector.config.min_limit_mb = math.inf
-        app_model.analysis.free_disk_space_detector.set_persistence_config(
-            PersistenceConfiguration(output_location="/"))
+        free_disk_det.config.min_limit_mb = math.inf
+        free_disk_det.set_persistence_config(PersistenceConfiguration(output_location="/"))
         assert get_color(now=mid_day) == (100, 0, 0)
         assert get_color(now=mid_night) == (100, 0, 0)
         #
         fault_alarm.config.is_emergency_condition = False
-        fault_alarm.property_changed(fault_alarm.CONFIG, fault_alarm.config, None)
+        fault_alarm.update_config()
+        # this trigger an emergency_resume, which disengage the emergency monitor detectors/sub-detectors.
+        # so re-check its state:
+        free_disk_det.check_state(force=True)
         assert get_color(now=mid_day) == (0, 0, 0)
         assert get_color(now=mid_night) == (100, 100, 0)
 
     def test_start_stop_not_same_day(self, app_model: AppModel):
         get_color = self.get_color
         fault_alarm = self.fault_alarm
+        free_disk_det = app_model.analysis.free_disk_space_detector
+        emergency_mon = app_model.analysis.emergency_alarm_monitor
         #
         self.ignore_window.start = dtm.time(22, 0)
         self.ignore_window.stop = dtm.time(10, 0)
         #
         assert get_color(now=mid_night) == (0, 0, 0)
         assert get_color(now=mid_day) == (0, 100, 0)
+        assert not emergency_mon.is_engaged
         #
-        app_model.analysis.free_disk_space_detector.config.min_limit_mb = math.inf
-        app_model.analysis.free_disk_space_detector.set_persistence_config(
-            PersistenceConfiguration(output_location="/"))
+        free_disk_det.config.min_limit_mb = math.inf
+        free_disk_det.set_persistence_config(PersistenceConfiguration(output_location="/"))
+        # this trigger an emergency_stop
+        assert emergency_mon.is_engaged
         assert get_color(now=mid_day) == (100, 0, 0)
         assert get_color(now=mid_night) == (100, 0, 0)
         #
         fault_alarm.config.is_emergency_condition = False
-        fault_alarm.property_changed(fault_alarm.CONFIG, fault_alarm.config, None)
+        fault_alarm.update_config()
+        # this trigger an emergency_resume, which disengage the emergency monitor detectors/sub-detectors.
+        # so re-check its state:
+        free_disk_det.check_state(force=True)
         assert get_color(now=mid_night) == (0, 0, 0)
         assert get_color(now=mid_day) == (100, 100, 0)
+        assert not emergency_mon.is_engaged
