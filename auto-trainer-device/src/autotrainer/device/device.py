@@ -32,7 +32,7 @@ class Device(ObservableObject):
 
     def __init__(
         self,
-        dev_interface: DeviceInterface = None,
+        dev_interface: DeviceInterface,
         api: Optional[DeviceApi] = None,
         *,
         event_names=(),

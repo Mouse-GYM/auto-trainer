@@ -1,3 +1,5 @@
+import threading
+import time
 
 import pytest
 
@@ -75,7 +77,19 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
     try:
         yield app
     finally:
+        # NB: we use mock get_perf_now,
+        # but device-connection is checking its queue only after X duration.
+        # so spawn a thread to keep increasing fake perf now:
+        is_done = threading.Event()
+        def increase_fake_perf_now():
+            while not is_done.is_set():
+                top_fixtures.increase_simulate_perf_now(0.5)
+                time.sleep(0.01)
+        th = threading.Thread(target=increase_fake_perf_now, daemon=True)
+        th.start()
         try:
             app.on_close()
         finally:
             nullify_attributes(app)
+            is_done.set()
+            th.join()

@@ -406,6 +406,11 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
         self._thread_local = _GroupThreadLocals()
 
+    def set_is_engaged(self, engaged: bool):
+        super().set_is_engaged(engaged)
+        if not engaged:
+            self._engaged_reasons.clear()
+
     @property
     def engaged_reasons(self) -> List[str]:
         """Gives list of name/key of the engaged detectors"""

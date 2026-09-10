@@ -2680,6 +2680,10 @@ class AppModel(ObservableObject):
         self._update_led_color()
         analysis = self._analysis
         analysis.boards_hardware_reset_detector.restart()
+        # ensure emergency monitor is back to disengaged,
+        # so we can get back new transition to engaged:
+        analysis.emergency_alarm_monitor.set_is_engaged(False)
+        # assert analysis.emergency_alarm_monitor.engaged_reasons == []
         # shall we restart other(s) detector(s), or force to disengaged ?
 
     # pellet machine events
