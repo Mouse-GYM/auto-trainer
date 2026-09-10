@@ -381,7 +381,6 @@ class GroupSubDetectorContext:
     property_changed_callback: Callable
 
 
-
 GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
@@ -419,7 +418,6 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
 
     def _start(self):
         super()._start()
-        self._engaged_reasons.clear()
         for sub in self._sub_detectors.values():
             sub.detector.start()
 
