@@ -96,7 +96,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_ack_timeout_engaged = False
         self._device_command_nack_engaged = False
         self._device_ack_timeout_delay: Optional[float] = None
-        self._device_conn: Optional[DeviceConnectionProtocol] = None
+        self._device_conn: Optional[DeviceConnectionProtocol | DeviceConnection] = None
         self._can_device: Optional[CanDevice] = None
         self._sensor_analysis = sensor_analysis
         self._device_pellet_status_timeout_engaged = False
