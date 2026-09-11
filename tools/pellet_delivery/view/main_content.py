@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QPlainTextEdit, QVBoxLayout
 from PySide6.QtCore import Qt, QMetaObject, Q_ARG
 
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.pyside.content_widget import invoke_method
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.pellet_control import PelletControl
 from tools.pellet_delivery.view.pellet_status import PelletStatus
@@ -94,16 +95,11 @@ class MainContent(QWidget):
     def on_disconnect(self, method):
         self._connection_panel.disconnected.connect(method)
 
+    @invoke_method
     def _model_property_changed(self, name: str, value: object, _: object):
         if name == "command_pending":
             logger.debug("command_pending: %s", value)
             # Cannot call setEnabled directly, as this is being called from a different
             # thread context.
             enabled_state = (not value) and self._app_view_model.is_connected
-
-            QMetaObject.invokeMethod(
-                self._pellet_control,
-                "setEnabled",
-                Qt.ConnectionType.QueuedConnection,
-                Q_ARG(bool, enabled_state)
-            )
+            self._pellet_control.setEnabled(enabled_state)

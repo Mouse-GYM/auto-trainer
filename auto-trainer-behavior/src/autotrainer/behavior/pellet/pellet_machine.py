@@ -2,7 +2,7 @@ import math
 import os
 import uuid
 from functools import partial
-from typing import Callable, Optional, get_type_hints, Protocol
+from typing import Callable, Optional, get_type_hints, Protocol, Any
 from uuid import UUID
 
 from transitions import Machine
@@ -12,15 +12,15 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import transitions_allow_functions, SystemMessageHandler, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.pose_elements import SceneElement
+from autotrainer.core.message.message_handler import CommandResult
+from autotrainer.core.observable_object import EventHandler
 
-from ..intertrial import IntertrialState
 from ..behavior_algorithm import BehaviorAlgorithm
 from ..pellet_device_protocol import PelletDeviceProtocol
 from ..state_machine import StateMachine, StateMachineEvents
 from ..system_machine_state import SystemState
 
 from . import PelletState
-from ...core.observable_object import EventHandler
 
 logger = get_verbose_logger(__name__)
 
@@ -255,7 +255,7 @@ class PelletMachine(StateMachine):
         self._load_retract_current_count += 1
 
     @BehaviorAlgorithm.relay_func(wait=False)
-    def _pellet_device_ack_received(self, token: UUID, *, perf_c: Optional[float]=None):
+    def _pellet_device_ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float]=None):
         logger.debug("pellet_ack_received: %s perf_c=%.3f", token, math.nan if perf_c is None else perf_c)
 
         perf_now = get_perf_now() if perf_c is None else perf_c
@@ -264,14 +264,17 @@ class PelletMachine(StateMachine):
         if token == self._api_status_token:
             self._api_status_token = None
             was_api_token = True
+            if not result.succeeded:
+                logger.error("command %s failed: %s", token, result)
         else:
             was_api_token = False
 
         if token == self._token_pellet_send:
-            self._send_end_perf_c = perf_now
             self._token_pellet_send = None
-            api_evt = ApiEventKind.pelletSendEnd
-            self.events.pellet_sent(perf_c=perf_now)
+            if result.succeeded:
+                self._send_end_perf_c = perf_now
+                api_evt = ApiEventKind.pelletSendEnd
+                self.events.pellet_sent(perf_c=perf_now)
 
         elif token == self._token_pellet_load:
             self._token_pellet_load = None
@@ -284,7 +287,8 @@ class PelletMachine(StateMachine):
         elif token == self._token_release_pellet:
             self._token_release_pellet = None
             api_evt = ApiEventKind.pelletReleaseEnd
-            self.events.pellet_released(perf_c=perf_now)
+            if result.succeeded:
+                self.events.pellet_released(perf_c=perf_now)
 
         elif token == self._token_move_retract:
             self._token_move_retract = None
@@ -301,6 +305,10 @@ class PelletMachine(StateMachine):
                 logger.debug("ignoring pellet delivery token from external command. token=%r api_status=%r",
                              token, self._api_status_token)
                 return
+
+        if not result.succeeded:
+            # don't consider anything else
+            return
 
         if api_evt is not None:
             self.post_event_content(api_evt, data=dict(context=token))
@@ -365,7 +373,8 @@ class PelletMachine(StateMachine):
                                   caller=caller, is_from_inference=is_from_inference)
 
     def _check_cover_or_release(self):
-        action = reason = None
+        action = None
+        reason = ""
         can_release = self.can_release_pellet()
         can_cover = self.can_cover_pellet()
         if can_release:
@@ -492,7 +501,7 @@ class PelletMachine(StateMachine):
                 action()
                 if self._state in {PelletState.covering, PelletState.releasing}:
                     self.state = cur_state
-                    # put back immediatelly cur_state after cover/release,
+                    # put back immediately cur_state after cover/release,
 
     # region State Machine Requirements
     # Methods required for model_override=True to work.

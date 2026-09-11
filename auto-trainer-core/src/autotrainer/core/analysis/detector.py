@@ -182,10 +182,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # NB: not using lock on purpose
         return self._checking_state
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self) -> Optional[float]: ...
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self, *, force: bool) -> Optional[float]: ...
 
     def _check_state(self, *, force: bool=False) -> Optional[float]:
@@ -381,7 +381,6 @@ class GroupSubDetectorContext:
     property_changed_callback: Callable
 
 
-
 GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
@@ -406,6 +405,11 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
         self._thread_local = _GroupThreadLocals()
 
+    def set_is_engaged(self, engaged: bool):
+        super().set_is_engaged(engaged)
+        if not engaged:
+            self._engaged_reasons.clear()
+
     @property
     def engaged_reasons(self) -> List[str]:
         """Gives list of name/key of the engaged detectors"""
@@ -414,7 +418,6 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
 
     def _start(self):
         super()._start()
-        self._engaged_reasons.clear()
         for sub in self._sub_detectors.values():
             sub.detector.start()
 

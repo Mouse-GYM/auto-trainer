@@ -158,7 +158,7 @@ class AppModel(ObservableObject):
         # configured to generate messages as frequently as the real device.
         buffer_size = 10 if HAVE_CAN_DEVICE else 1
         device_connection = self._device_connection = DeviceConnection(CanDevice(buffer_size=buffer_size),
-                                                                       self._message_handler.input_queue)
+                                                                       message_queue=self._message_handler.input_queue)
 
         device_connection.name = "head-fix"
 

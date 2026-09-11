@@ -18,9 +18,11 @@ from autotrainer.core import (
     get_perf_now,
 )
 from autotrainer.core.event import post_api_event_content
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.message import SystemDataArgsKwargs
 
 import autotrainer.device
+
 from .can_device import HAVE_CAN_DEVICE
 from .compound_movement_file import CompoundMovementKind
 from .device import Device
@@ -51,11 +53,14 @@ class DeviceConnection(DeviceConnectionProtocol):
     arguments provided, in a non-blocking fashion.
     """
 
-    def __init__(self,
-                 device: Device,
-                 message_queue: Queue,
-                 message_callback: Callable[[int, object], None] = None,
-                 name="device-connection"):
+    def __init__(
+        self,
+        device: Device,
+        *,
+        message_queue: Queue,
+        api: Optional[DeviceApi] = None,
+        name="device-connection",
+    ):
 
         super().__init__()
 
@@ -65,12 +70,12 @@ class DeviceConnection(DeviceConnectionProtocol):
         # without explicit import, this allows to have completion working on these instances attributes access:
         self._device: Union[Device, "autotrainer.device.can_device.CanDevice"] = device
         self._interface: Union[DeviceInterface, "autotrainer.device.can_interface.CanInterface"] = device.device_interface
-        self._message_callback = message_callback
+
         self._message_queue = message_queue
         self._cmd_queue: Queue = Queue()
 
-        self._api = DeviceApi(message_callback=message_callback, message_queue=message_queue)
-        self._device.api = self._api
+        self._api = DeviceApi(message_queue=message_queue) if api is None else api
+        self._device.api = self._api  # ensure same api is used on the device.
 
         self._name = name
 
@@ -125,7 +130,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         thread = self._current_thread
         if thread is not None:
             logger.debug("joining %s", thread)
-            thread.join(3)
+            thread.join(5)
             if thread.is_alive():
                 logger.warning("thread %s still alive, but continuing", thread)
             self._current_thread = None
@@ -160,36 +165,55 @@ class DeviceConnection(DeviceConnectionProtocol):
             dev.disconnect()
 
     @contextlib.contextmanager
-    def await_acknowledge(self, tokens: Set, *, timeout: float=1, raise_on_timeout=True,
-                          is_cancelled=lambda: False):
-        orig_cb = self._api.message_callback
-        tokens_acked = []
+    def await_acknowledge(
+        self, tokens: Set, *,
+        raise_on_command_error: bool = True,
+        timeout: float=1, raise_on_timeout=True,
+        is_cancelled=lambda: False,
+    ):
+        tokens_acked = {}
         def cb(kind, context):
+            # NB: this is executed in whatever thread which is handling this ack message:
             if kind == SystemStatusMessageKind.ACKNOWLEDGE:
-                tok, *r_args = context
-                if tok in tokens:
-                    tokens_acked.append(tok)
-                    tokens.remove(tok)
-            elif orig_cb is not None:
-                orig_cb(kind, context)
-        self._api.message_callback = cb
+                tok, perf_c, result = context[:3]
+                tokens_acked[tok] = result
+        self._api.message_callback += cb
         try:
             yield
             logger.verbose("Now waiting tokens %s", tokens)
-            perf_timeout = time.perf_counter() + timeout
-            while len(tokens) > 0:
+            perf_timeout = get_perf_now() + timeout
+            l_tokens = list(tokens)
+            tokens_with_err = {}
+            while len(l_tokens) > 0:
+                for token in list(l_tokens):
+                    if token is None:
+                        logger.warning("await_acknowledge: filtered None token")
+                        l_tokens.remove(None)
+                        continue
+                    cmd_res = tokens_acked.get(token)
+                    if cmd_res is not None:
+                        cmd_res: CommandResult
+                        l_tokens.remove(token)
+                        if not cmd_res.succeeded:
+                            tokens_with_err[token] = cmd_res
+                if len(l_tokens) == 0:
+                    break
                 if is_cancelled():
                     break
-                if time.perf_counter() > perf_timeout:
+                if get_perf_now() > perf_timeout:
                     if raise_on_timeout:
                         raise RuntimeError(f"timeout waiting tokens acknowledge: {tokens}")
                     logger.warning("timeout waiting tokens acknowledge, but continuing. tokens: %s", tokens)
                     break
                 time.sleep(0.001)
-            if len(tokens) == 0:
-                logger.info("successfully obtained %s acknowledge", len(tokens_acked))
+            if len(l_tokens) == 0:
+                logger.info("successfully obtained %s acknowledge", len(tokens))
+                if len(tokens_with_err) > 0:
+                    if raise_on_command_error:
+                        raise RuntimeError(f"Command(s) token failed: {tokens_with_err}")
+                    logger.error("Commands token failed: %s", tokens_with_err)
         finally:
-            self._api.message_callback = orig_cb
+            self._api.message_callback -= cb
 
     def send_message(self, kind: int, data: Optional[Any] = None, context: Optional[Any] = None):
         """Send a command/message to the device (writer-thread)"""
@@ -240,6 +264,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         ):
             if is_cancelled():
                 break
+            tokens.clear()  # ensure only next command token will be in it, via send() defined above
             with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
         return motor_configs
@@ -327,39 +352,41 @@ class DeviceConnection(DeviceConnectionProtocol):
     def _run_connected(self) -> bool:
         logger.info("running connected")
         t_next_cmd_queue_read = time.perf_counter()
+        iface = self._interface
+        dev = self._device
+        cmd_q = self._cmd_queue
         while True:
             self._current_thread_watchdog_perf_c = get_perf_now()
-
             # Data from the device for the device listener to process.
-            if self._interface.can_read():
-                messages = self._interface.read(self._read_limit, collect_ms=self._collect_ms)
+            if iface.can_read():
+                messages = iface.read(self._read_limit, collect_ms=self._collect_ms)
                 if len(messages) > 0:
-                    self._device.notify_data(messages)
+                    dev.notify_data(messages)
 
             perf_now = get_perf_now()
-            if perf_now > t_next_cmd_queue_read:
+            # logger.debug("HERE p_now=%.3f next=%.3f", perf_now, t_next_cmd_queue_read)
+            if perf_now > t_next_cmd_queue_read or not cmd_q.empty():
                 # Messages from the client of this class to control the device listener (or this class, such as TERMINATE).
                 try:
-                    cmd, data, context = self._cmd_queue.get_nowait()
+                    cmd, data, context = cmd_q.get_nowait()
                 except Empty:
                     # no need check too often for request disconnect only
                     t_next_cmd_queue_read = perf_now + 0.25
                 else:
                     if cmd == _REQUEST_DISCONNECT:
-                        self._cmd_queue.task_done()
+                        cmd_q.task_done()
                         logger.debug(f"<{self._name}> message: _REQUEST_DISCONNECT")
                         break
                     else:
                         assert False,  f"should not be needed anymore but got unknown {cmd}"
                         # we should simply make the request disconnect be handled differently,
                         # and have the senders of these cmd/data/context directly put to the device
-                        self._device.notify_message(cmd, data, context)
-                        self._cmd_queue.task_done()
+                        dev.notify_message(cmd, data, context)
+                        cmd_q.task_done()
 
-        if self._interface.is_open:
-            self._device.disconnect()
-            self._interface.close()
-
+        if iface.is_open:
+            dev.disconnect()
+            iface.close()
             logger.debug(f"<{self._name}> interface closed")
         else:
             logger.warning(f"<{self._name} DISCONNECT cmd while device already disconnected")

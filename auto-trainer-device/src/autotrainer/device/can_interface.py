@@ -67,6 +67,7 @@ from .device_interface import (
     ServoStatus,
     StepperStatus,
     Version,
+    PositionOrPosVelocityT,
 )
 from .stepper_motor import mm_to_turns, turns_to_mm
 
@@ -74,6 +75,11 @@ from .stepper_motor import mm_to_turns, turns_to_mm
 logger = get_verbose_logger(__name__)
 
 _debug_path_fake_status_timeout = Path("/tmp/autotrainer_fake_device_timeout")
+
+
+def no_op(msg):
+    """No operation for some CAN message"""
+    return None
 
 
 class MissingDeviceAddressError(RuntimeError):
@@ -432,13 +438,16 @@ class CanInterface(DeviceInterface):
 
         self._load_cell_factor = 21053.0
 
-        no_op = lambda msg: None
-
         self._last_positions = Offset3DTuple.get_nan()
         self._prev_send_pos = Offset3DTuple.get_nan()
 
         self._last_gpio_status_perf: Dict[int, Tuple[
             Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
+
+        def handle_ack(msg):
+            logger.verbose("Received ack message: dst_id=%s uuid=%s error=%s",
+                           msg.dst_id, msg.uuid, msg.ack.error)
+            return Acknowledge(uuid=msg.uuid, error=msg.ack.error)
 
         # Simple handlers implemented as lambdas
         self._handlers = {
@@ -477,7 +486,7 @@ class CanInterface(DeviceInterface):
                 temperature_c=self.round_float(float(msg.temp_hum_read.temperature) / 100.0),
                 humidity_percent=self.round_float(float(msg.temp_hum_read.humidity) / 100.0),
             ),
-            JerryCANCmdType.ACKNOWLEDGE: lambda msg: Acknowledge(uuid=msg.uuid),
+            JerryCANCmdType.ACKNOWLEDGE: handle_ack,
             # no-op handlers, to silence the warning if unknown message type
             JerryCANCmdType.STEPPER_HOME: no_op,
             JerryCANCmdType.STEPPER_MOVE: no_op,
@@ -486,6 +495,8 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.GPIO_WRITE: no_op,
             JerryCANCmdType.DELAY: no_op,
             JerryCANCmdType.BOOTLOADER_DATA: no_op,
+            JerryCANCmdType.CFG_READ: no_op,
+            JerryCANCmdType.LOAD_CELL_TARE: no_op,
         }
 
     def __allow_fake_status_time(self, motor):
@@ -1126,13 +1137,13 @@ class CanInterface(DeviceInterface):
         logger.debug("LoadCellTare addr=%s res=%s uuid=%s", addr, res, uuid)
         return res == 0
 
-    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+    def move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT):
         config = self._servo_configs.get(motor)
         if config is None:
             raise RuntimeError(f"Unhandled servo: {motor}")
         return self._move_servo_motor(motor, position, config)
 
-    def _move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]], config: ServoConfig):
+    def _move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT, config: ServoConfig):
         """
         Move a servo motor.
 
@@ -1179,7 +1190,7 @@ class CanInterface(DeviceInterface):
     def _move_stepper_motor(
         self,
         motor: Motor,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         config: StepperConfig,
         save_as_fixed: bool,
         relative: bool = False,
@@ -1277,7 +1288,7 @@ class CanInterface(DeviceInterface):
         logger.debug("%s: StepperMove res=%s uuid=%s", motor, res, uuid)
         return res == 0
 
-    def move_magnet_servo(self, position) -> bool:
+    def move_magnet_servo(self, position: PositionOrPosVelocityT) -> bool:
         """
         Move the magnet motor
 
@@ -1289,7 +1300,7 @@ class CanInterface(DeviceInterface):
         """
         return self._move_servo_motor(Motor.TUNNEL_MAGNET_SERVO, position, self.magnet_config)
 
-    def move_gate_servo(self, position) -> bool:
+    def move_gate_servo(self, position: PositionOrPosVelocityT) -> bool:
         """
         Move the gate motor
 
@@ -1307,7 +1318,7 @@ class CanInterface(DeviceInterface):
 
     def move_motor_x(
         self,
-        position: Union[float, Tuple[float, float]],
+        position: PositionOrPosVelocityT,
         save_as_fixed: bool = False,
         *,
         relative: bool = False,
@@ -1327,10 +1338,10 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_X_MOTOR, position, self.x_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+    def set_motor_y(self, position: float, *, relative: bool = False) -> bool:
         return self.move_motor_y(position, save_as_fixed=True, relative=relative)
 
-    def move_motor_y(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
+    def move_motor_y(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Y-direction motor
 
@@ -1346,10 +1357,10 @@ class CanInterface(DeviceInterface):
         return self._move_stepper_motor(Motor.PELLET_Y_MOTOR, position, self.y_config,
                                         save_as_fixed=save_as_fixed, relative=relative)
 
-    def set_motor_z(self, position, *, relative: bool = False) -> bool:
+    def set_motor_z(self, position: float, *, relative: bool = False) -> bool:
         return self.move_motor_z(position, save_as_fixed=True, relative=relative)
 
-    def move_motor_z(self, position, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
+    def move_motor_z(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool = False) -> bool:
         """
          Move the Z-direction motor
 

@@ -40,6 +40,7 @@ from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, 
     ApiEmergencyResumeReason
 from autotrainer.api.api_system_status import ApiBehaviorStatus, ApiReachStatus
 
+from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import (
     ObservableObject,
     EventManager,
@@ -56,6 +57,7 @@ from autotrainer.core import (
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
+from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
@@ -447,6 +449,7 @@ class AppModel(ObservableObject):
 
         behavior_model.emergency_stopped += self._on_emergency_stopped
         behavior_model.emergency_resumed += self._on_emergency_resumed
+        behavior_model.before_emergency_resumed += self._on_before_emergency_resumed
         self._emergency_source: Optional[str] = None  # if None: not engaged
 
         intertrial = system_machine.intertrial
@@ -588,7 +591,6 @@ class AppModel(ObservableObject):
             # kind of strangely, this can actually start the recording on the camera,
             # if it's continuous mode and is_from_start is not True, or else it was already recording.
         #
-        self._analysis.restart()
         # reload training plans:
         self.reload_training_plans()
         if status == AppModelStatus.ANIMAL_IN_TRAINING:
@@ -1427,43 +1429,40 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        hard.connect(
-            self._system_message_handler.input_queue,
-            motors_config=self._motors_config,
-            move_config=self._move_config,
-            is_cancelled=is_cancelled,
-        )
+        pending_tokens = set()
+        try:
+            hard.connect(
+                self._system_message_handler.input_queue,
+                motors_config=self._motors_config,
+                move_config=self._move_config,
+                is_cancelled=is_cancelled,
+            )
+            if need_cancel():
+                return False
+            # optionally wait any eventual remaining pending token(s), although there should none eventually:
+            with hard.wait_pending_command_acked(pending_tokens, is_cancelled=is_cancelled, timeout=5):
+                # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
+                if wait_connected:
+                    # full establishment of connection to/from device should be very fast actually, but not immediate,
+                    # so using timeouts.
+                    # ensure all pending tokens are acked:
+                    pending_tokens.update(hard.pending_tokens)
+        except Exception as err:
+            logger.error("Failed to connect/wait pending tokens: %s", err)
+            self.capture_stop(force=True)
+            return False
         if need_cancel():
             return False
-        # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
-        if wait_connected:
-            timeout = 3
-            # full establishment of connection to/from device should be very fast actually, but not immediate,
-            # so this timeout.
-            p_end = time.perf_counter() + timeout
-            while True:
-                for tok in hard.pending_tokens:
-                    p0 = time.perf_counter()
-                    try:
-                        hard.wait_pending_command_acked(tok, timeout=timeout, is_cancelled=is_cancelled)
-                    except Exception as err:
-                        logger.error("pending token %s not acked: %s", tok, err)
-                        self.capture_stop(force=True)
-                        return False
-                    if need_cancel():
-                        return False
-                    timeout -= time.perf_counter() - p0
-                break
-            while True:
-                if need_cancel():
-                    return False
-                if hard.connected:
-                    break
-                if time.perf_counter() > p_end:
-                    logger.error("timeout waiting hardware connected")
-                    self.capture_stop(force=True)
-                    return False
-                time.sleep(0.05)
+        # always wait up till "connected":
+        p_end = get_perf_now() + 3
+        while not hard.connected:
+            if need_cancel():
+                return False
+            if get_perf_now() > p_end:
+                logger.error("timeout waiting hardware connected")
+                self.capture_stop(force=True)
+                return False
+            time.sleep(0.01)
         logger.info("finished connecting hardware")
         #
         watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog
@@ -1482,8 +1481,22 @@ class AppModel(ObservableObject):
         if need_cancel():
             return False
 
-        # we always be/go at home on acquisition start, so:
-        self._behavior.system_machine.pellet.move_home(force=True)
+        # we want always be/go at home on acquisition start, so:
+        pending_tokens.clear()
+        try:
+            with hard.wait_pending_command_acked(pending_tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
+                tok = hard.send_home()
+                if tok is None:
+                    raise RuntimeError("could not request send-home")
+                pending_tokens.add(tok)
+            self._behavior.system_machine.pellet.state = PelletState.home
+        except Exception as err:
+            logger.error("Failed to move home: %s", err)
+            self.capture_stop(force=True)
+            return False
+
+        if need_cancel():
+            return False
 
         # once cameras successfully started:
         self._save_project_metadata(project_info, when=datetime.now(), trial=None, caller="capture_start")
@@ -1569,15 +1582,22 @@ class AppModel(ObservableObject):
             )
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
-    def _capture_stop(self, *, update_led: bool=True):
-
-        if update_led:
+    def _update_led_for_stop(self):
+        tokens = set()
+        with self._hardware.wait_pending_command_acked(
+            tokens, timeout=1, raise_on_timeout=False, raise_on_command_error=False
+        ):
             tok = self._hardware.set_color_led(0, 0, 0)
-            self._hardware.wait_pending_command_acked(tok, timeout=1, raise_on_timeout=False)
+            if tok is not None:
+                tokens.add(tok)
+
+    def _capture_stop(self, *, update_led: bool=True):
+        if update_led:
+            self._update_led_for_stop()
 
         self._detach_training_plan()  # always
 
-        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_sub_detector
+        watchdog_mon_unregister = self._analysis.watchdog_monitor.unregister_watchdog
         for item in WatchdogItems:
             if item is not WatchdogItems.MAIN_UI_THREAD:
                 watchdog_mon_unregister(item)
@@ -1800,18 +1820,20 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
-
         for timer in (
-                self._timer_one_minute_repeat,
-                self._timer_daily,
+            self._timer_one_minute_repeat,
+            self._timer_daily,
         ):
             logger.debug("stopping timer %s", timer)
             timer.cancel()
 
         self._analysis.stop()
 
+        self._update_led_for_stop()
+        self._hardware.disconnect()
+
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
-        self.capture_stop()
+        self.capture_stop(update_led=False)
 
         if self._inference is not None:
             # fully terminate inference, which keeps a background process alive between different stop/start
@@ -2567,24 +2589,39 @@ class AppModel(ObservableObject):
             SystemFaultReason.BOARDS_HARDWARE_RESET in self._analysis.system_fault_alarm.engaged_reasons
             or self._analysis.boards_hardware_reset_detector.is_engaged
         )
-        do_reconnect_hardware = is_dev_comm_error or is_watchdog or is_board_reset
+        do_reconnect_hardware = (
+            self._status != AppModelStatus.IDLE
+            and (
+                is_dev_comm_error
+                or is_watchdog
+                or is_board_reset
+            ))
 
         # behavior algo thread is supposed always alive,
         # it has protection against exception in the relayed functions which are executed by it.
-        @algo.relay_func
+        @algo.relay_func(wait=False)
         def execute_emergency_proc():
-            hardware = self._hardware
+            hard = self._hardware
             system_m = self._behavior.system_machine
             self._analysis.boards_hardware_reset_detector.stop()  # always
             self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             if do_reconnect_hardware:
-                hardware.disconnect()
+                hard.disconnect()
+                self._analysis.stop()
                 try:
-                    hardware.connect(self._system_message_handler.input_queue, force_first_connect=True)
+                    hard.connect(
+                        self._system_message_handler.input_queue,
+                        force_first_connect=True,
+                        motors_config=self._motors_config,
+                        move_config=self._move_config,
+                        is_cancelled=lambda: self._acquisition_stopping,
+                    )
                 except BaseException as err:
                     logger.critical("Could not reconnect to hardware: %s", err)
                     self.capture_stop(force=True, update_led=False)
                     return
+                finally:
+                    self._analysis.start()
                 # in case of it was not good with previous:
                 self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             tunnel_dev = system_m.tunnel_device
@@ -2603,11 +2640,57 @@ class AppModel(ObservableObject):
                                            action_func, err)
         execute_emergency_proc()
 
+    def _on_before_emergency_resumed(self):
+        if self._status != AppModelStatus.IDLE:
+            # verify hardware status is still good:
+            hard = self._hardware
+            tokens = set()
+            try:
+                with hard.wait_pending_command_acked(tokens, timeout=5):
+                    tok1 = hard.delay(0.1)  # pellet board
+                    tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
+                    if tok1 is None or tok2 is None:
+                        raise RuntimeError("hardware not connected")
+                    tokens.add(tok1)
+                    tokens.add(tok2)
+            except Exception as err:
+                logger.error("hardware seems off, reconnecting")
+                save_err = err
+            else:
+                save_err = None
+            if save_err is not None:
+                hard.disconnect()
+                self._analysis.stop()
+                try:
+                    hard.connect(
+                        self._system_message_handler.input_queue,
+                        motors_config=self._motors_config,
+                        move_config=self._move_config,
+                        force_first_connect=True,
+                        is_cancelled=lambda: self._acquisition_stopping,
+                    )
+                except Exception as err:
+                    logger.exception("Could not connect to hardware: %s", err)
+                    raise RuntimeError("failed reconnect to hardware") from None
+                finally:
+                    self._analysis.start()
+
     def _on_emergency_resumed(self, source: str):
         self._emergency_source = None
         self._right_camera.set_text_overlay(None)
         self._update_led_color()
-        self._analysis.boards_hardware_reset_detector.restart()
+        analysis = self._analysis
+        analysis.boards_hardware_reset_detector.restart()
+        # ensure emergency monitor is back to disengaged,
+        # so we can get back new transition to engaged:
+        def disengage_det_or_group(det):
+            det.is_engaged = False
+            if isinstance(det, GroupBaseDetector):
+                for sub in det.sub_detectors.values():
+                    disengage_det_or_group(sub)
+        disengage_det_or_group(analysis.emergency_alarm_monitor)
+        # assert analysis.emergency_alarm_monitor.engaged_reasons == []
+        # shall we restart other(s) detector(s), or force to disengaged ?
 
     # pellet machine events
 

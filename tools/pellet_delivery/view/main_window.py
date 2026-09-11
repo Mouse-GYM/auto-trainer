@@ -1,7 +1,16 @@
 from PySide6.QtCore import QSize, Qt, QKeyCombination
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QWidget, QVBoxLayout, QApplication
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QStatusBar,
+    QWidget,
+    QVBoxLayout,
+    QApplication,
+    QMessageBox,
+)
+
 from autotrainer.pyside import Separator
+from autotrainer.pyside.content_widget import invoke_method
 
 from tools.pellet_delivery.model.app_model import AppModel
 from tools.pellet_delivery.view.main_content import MainContent
@@ -58,7 +67,6 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._app_view_model.on_close()
-
         event.accept()
 
     def _configure_actions(self):
@@ -98,6 +106,15 @@ class MainWindow(QMainWindow):
         self.main_content.set_diagnostics_visible(not self.main_content.is_diagnostics_visible)
         self.view_diagnostics_action.setChecked(self.main_content.is_diagnostics_visible)
 
+    @invoke_method
     def _model_property_changed(self, name: str, value, _old_value):
         if name == "hardware_configuration":
             self.update_status(value)
+        elif name == "last_command_error":
+            if value is not None:
+                QMessageBox.warning(
+                    self,
+                    "Last Command Error",
+                    f"\nThe last command failed with:\n\n{value}\n\n"
+                    f"Connection shall be reestablished.",
+                )
