@@ -270,7 +270,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     @BehaviorAlgorithm.relay_func()
     def emergency_stop(self, source: str, *, reason_code: ApiEmergencyStopReason=ApiEmergencyStopReason.unknown):
         algo = self._system_machine.algorithm
-        logger.info("emergency_stop called: %s", source)
+        logger.notice("emergency_stop called: %s ; reason=%s", source, reason_code)
         if algo.algo_paused and source == self._source_emergency:
             # double emergency_stop ?
             return

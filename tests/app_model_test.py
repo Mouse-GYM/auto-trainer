@@ -1,4 +1,5 @@
 import logging
+import random
 import threading
 import time
 from unittest import mock
@@ -41,7 +42,6 @@ def test_it_drain_record_stop_sema_on_session_recording_start(app_model):
     assert app_model._record_stop_sema.acquire(block=False) is False, "cannot acquire after: it should be back to 0"
 
 
-
 def test_resume_fails_if_hard_reconnect_fails(
     app_model,
     monkeypatch,
@@ -51,16 +51,22 @@ def test_resume_fails_if_hard_reconnect_fails(
     app_model.capture_start(target_status=AppModelStatus.ACQUIRING)
     algo = app_model.behavior.algorithm
     hard = app_model.hardware
+    analysis = app_model.analysis
     can_dev = hard.can_device
     dev_conn = hard.device_connection
     iface = can_dev.device_interface
-    emergency_mon = app_model.analysis.emergency_alarm_monitor
     assert isinstance(iface, EmulationInterface)
+    emergency_mon = analysis.emergency_alarm_monitor
+    # analysis
+    # put some randomness:
+    uuid_nack_errno = random.getrandbits(32)
+    if uuid_nack_errno == 0:
+        uuid_nack_errno = -42
     def bad_delay(delay_sec):
-        iface._messages.append(Acknowledge(uuid=iface.next_uuid(), error=-1))
+        iface._messages.append(Acknowledge(uuid=iface.next_uuid(), error=uuid_nack_errno))
         return True
     monkeypatch.setattr(iface, iface.delay.__name__, bad_delay)
-    with pytest.raises(RuntimeError, match=r"uuid_nacks=\[-1\]"):
+    with pytest.raises(RuntimeError, match=rf"uuid_nacks=\[{uuid_nack_errno}\]"):
         tokens = set()
         with dev_conn.await_acknowledge(tokens):
             tokens.add(hard.delay(1))
@@ -70,12 +76,16 @@ def test_resume_fails_if_hard_reconnect_fails(
         if algo.algo_paused:
             break
     assert algo.algo_paused
+    assert emergency_mon.is_engaged
+    assert analysis.device_comm_alarm.is_engaged
     # now try resume, for that we need keep increase simulate perf now
     stop_increase = threading.Event()
     def increase_perf_now():
+        # NB: give some time for background threads to process the probe from emergency_resume,
+        # and/but
         while not stop_increase.is_set():
-            mock_get_perf_now.increase_simulate_perf_now(0.5)
-            time.sleep(0.001)
+            mock_get_perf_now.increase_simulate_perf_now(0.1)
+            time.sleep(0.05)
     th = threading.Thread(target=increase_perf_now, daemon=True)
     th.start()
     orig_connect = hard.connect

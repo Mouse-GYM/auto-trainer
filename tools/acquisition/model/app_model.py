@@ -2599,7 +2599,7 @@ class AppModel(ObservableObject):
 
         # behavior algo thread is supposed always alive,
         # it has protection against exception in the relayed functions which are executed by it.
-        @algo.relay_func
+        @algo.relay_func(wait=False)
         def execute_emergency_proc():
             hard = self._hardware
             system_m = self._behavior.system_machine

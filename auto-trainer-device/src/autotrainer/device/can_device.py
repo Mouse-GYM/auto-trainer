@@ -1120,12 +1120,17 @@ class CanDevice(Device):
             if cmd_thread.is_alive():
                 logger.verbose("requesting commands handler thread to exit")
                 cmd_queue.put(None)
-            if cmd_thread != threading.current_thread():
+            if cmd_thread == threading.current_thread():
+                logger.warning("disconnect from commands handler thread")
+            else:
                 logger.debug("joining commands handler thread")
                 cmd_thread.join(3)
                 if cmd_thread.is_alive():
                     logger.warning("CanCommand handler thread still alive: %s", cmd_thread)
-            self._commands_handler_thread = None
+                else:
+                    self._commands_handler_thread = None
+                    # NB: only set to None when joined,
+                    # allows it to be eventually joined after many disconnect.
             # cmd_queue.join()  # not totally necessary here
         thread = self._tunnel_pellet_status_check_thread
         if thread is not None:

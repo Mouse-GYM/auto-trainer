@@ -29,7 +29,11 @@ from autotrainer.device import (
     ColorLed,
     CompoundMovements, MotorConfigurationFile, Target,
 )
-from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
+from autotrainer.behavior import (
+    TunnelDeviceProtocol,
+    PelletDeviceProtocol,
+    BehaviorAlgorithm,
+)
 
 logger = get_verbose_logger(__name__)
 
@@ -668,6 +672,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._color_led = None
         self._pending_tokens.clear()
 
+    @BehaviorAlgorithm.relay_func(wait=False)
     def _can_device_property_changed(self, name: str, value, prev_value):
         logger.debug("_device_property_changed: %s : %s -> %s", name, prev_value, value)
         props = Device
