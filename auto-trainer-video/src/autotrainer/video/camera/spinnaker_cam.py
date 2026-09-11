@@ -113,7 +113,6 @@ class SpinCam(CameraBase):
 
         self._node_map = None
         self._node_map_tl_device = None
-        self._start_frames = []
         self._current_cam_frame_2_perf_offset = math.nan
         self._current_cam_frame_2_time_offset = math.nan
         self._consecutive_late_acquire = 0
@@ -444,7 +443,7 @@ class SpinCam(CameraBase):
         self._last_frame_time = frame_time
         self._last_frame_id = image_result.GetFrameID()
 
-        frame = orig_frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
+        frame = image_result.GetNDArray()  # get the frame/array as acquired by hardware itself
         # image_converted = self._image_processor.Convert(image_result, PySpin.PixelFormat_Mono8)
         # frame = image_converted.GetNDArray()
         # reminder: the frame we get directly from camera is already in our desired format (shape + dtype).
@@ -463,23 +462,6 @@ class SpinCam(CameraBase):
 
         if frame.shape != expected_shape:
             frame = frame.reshape(expected_shape)
-
-        if __debug__:
-            # ensure no frame in the first 150, shares its internal buffer with any of the other first 150 of them:
-            if self._frame_count < 150:
-                logger.spam("frame-%s: shape=%s dtype=%s",
-                             self._frame_count, orig_frame.shape, orig_frame.dtype)
-                self._start_frames.append((orig_frame, orig_frame.copy()))
-                for prev_idx, (prev_frame, prev_frame_copy) in enumerate(self._start_frames):
-                    if (prev_frame != prev_frame_copy).any():
-                        logger.critical("Detected prev frame (idx=%s) got corrupted", prev_idx)
-                    if prev_idx == self._frame_count:
-                        break
-                    if (orig_frame == prev_frame).all() and (orig_frame != prev_frame_copy).any():
-                        logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
-                                        self._frame_count, prev_idx)
-                if self._frame_count >= 149:
-                    self._start_frames.clear()  # don't keep unnecessarily all that
 
         self._frame_count += 1
 
