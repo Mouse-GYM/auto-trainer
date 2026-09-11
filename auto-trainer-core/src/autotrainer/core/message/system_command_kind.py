@@ -25,6 +25,9 @@ class SystemCommandKind(IntEnum):
     OPEN_TUNNEL_GATE = 103
     CLOSE_TUNNEL_GATE = 104
 
+    #
+    SET_STEPS_PROCEDURE = 190
+
     # Actions nominally considered part of the pellet delivery unit.
     READ_MOTOR_CONFIGURATION = 201
     WRITE_MOTOR_CONFIGURATION = 202

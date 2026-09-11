@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 from typing import Optional
@@ -26,8 +27,8 @@ class HardwareConfiguration:
     """
 
     def __post_init__(self):
-        if self.camera_start_timeout <= 0:
-            raise ValueError(f"camera_start_timeout negative or zero: {self.camera_start_timeout}")
+        if not math.isfinite(self.camera_start_timeout) or self.camera_start_timeout <= 0:
+            raise ValueError(f"camera_start_timeout not finite or negative or zero: {self.camera_start_timeout}")
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:

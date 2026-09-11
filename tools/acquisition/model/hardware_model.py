@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 from functools import partial
+from pathlib import Path
 from queue import Queue
 from uuid import UUID, uuid4
 from typing import Optional, Tuple, Dict, Union, List
@@ -12,12 +13,21 @@ from typing import Optional, Tuple, Dict, Union, List
 from autotrainer.api import ApiEventKind, ApiDetectorKind
 from autotrainer.core import (ObservableObject, SystemCommandKind, MessageHandler, AnimalSubject, Offset3DTuple,
                               get_verbose_logger, Motor, SensorAnalysis, EventManager, HardwareConfiguration,
-                              get_perf_now, SystemStatusMessageKind)
+                              get_perf_now, SystemStatusMessageKind, MotorConfigurations)
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.message import SystemDataArgsKwargs
-from autotrainer.device import (DeviceConnectionProtocol, HAVE_CAN_DEVICE, DeviceConnection, CanDevice,
-                                StepperConfig, ServoConfig, Device, ColorLed)
+from autotrainer.device import (
+    DeviceConnectionProtocol,
+    HAVE_CAN_DEVICE,
+    DeviceConnection,
+    CanDevice,
+    StepperConfig,
+    ServoConfig,
+    Device,
+    ColorLed,
+    CompoundMovements, MotorConfigurationFile,
+)
 from autotrainer.behavior import TunnelDeviceProtocol, PelletDeviceProtocol
 
 logger = get_verbose_logger(__name__)
@@ -122,6 +132,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._device_ack_timeout_engaged = False
         self._disconnect_event = threading.Event()
         self._check_timedout_commands_thread: Optional[threading.Thread] = None
+
+    @staticmethod
+    def load_default_motor_config(config_path: Optional[Path] = None) -> MotorConfigurations:
+        return DeviceConnectionProtocol.load_default_motor_config(config_path)
+
+    @staticmethod
+    def load_default_move_config(config_path: Optional[Path] = None) -> CompoundMovements:
+        return DeviceConnectionProtocol.load_default_move_config(config_path)
 
     @property
     def watchdog_reader_perf_c(self):
@@ -432,8 +450,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         :param frequency: in Hz (integer)
         :param duration: in seconds (float)
         """
-        duration_ms = int(duration * 1000)
-        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration_ms))
+        return self._send_with_token(self._device_conn, SystemCommandKind.PLAY_TONE, (frequency, duration))
 
     def delay(self, amount: float) -> Optional[UUID]:
         return self._send_with_token(self._device_conn, SystemCommandKind.DELAY, amount)
@@ -482,7 +499,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         dev = self._device_conn
         return dev is not None and dev.connected
 
-    def connect(self, cmd_queue: Queue, *, force_first_connect: bool=False):
+    def connect(
+        self,
+        cmd_queue: Queue,
+        *,
+        force_first_connect: bool=False,
+        motors_config: Optional[MotorConfigurations] = None,
+        move_config: Optional[CompoundMovements] = None,
+        is_cancelled=lambda: False,
+    ):
         logger.notice("%s: connect with %s", self, cmd_queue)
         self._disconnect_event.clear()
 
@@ -512,30 +537,43 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         send_dev_cmd = partial(self._send_command, device_conn)
         def send_dev_ack_cmd(kind, data=None):
             tok = str(uuid.uuid4())
-            with device_conn.await_acknowledge({tok}):
+            with device_conn.await_acknowledge({tok}, is_cancelled=is_cancelled):
                 send_dev_cmd(kind, data, context=tok)
 
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
+        if is_cancelled():
+            return
 
         # load and set motors and move configs
         # 1)
-        motors_config = device_conn.load_default_motor_config()
+        motors_config = device_conn.use_motor_configurations(motors_config, is_cancelled=is_cancelled)
+        if is_cancelled():
+            return
         # 2)
-        device_conn.load_default_move_config()
+        device_conn.use_compound_movements(move_config)
         # 3)
         if self._connect_count == 1 or force_first_connect:
             logger.notice("Doing cover attach-release-detach on first connect")
-            send_dev_ack_cmd(SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.RELEASE_PELLET)
-            send_dev_ack_cmd(SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO)
-            send_dev_ack_cmd(SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config)
-            # also need to re-apply the config
+            for args in (
+                (SystemCommandKind.SERVO_ATTACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.RELEASE_PELLET,),
+                (SystemCommandKind.SERVO_DETACH, Motor.PELLET_COVER_SERVO),
+                (SystemCommandKind.WRITE_MOTOR_CONFIGURATION, motors_config.cover_config),
+                # also need to re-apply the config
+            ):
+                send_dev_ack_cmd(*args)
+                if is_cancelled():
+                    return
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
+        if is_cancelled():
+            return
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 
         send_dev_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
+        if is_cancelled():
+            return
 
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():
@@ -764,11 +802,14 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         *,
         timeout: float = 3,
         raise_on_timeout: bool = True,
+        is_cancelled = lambda: False,
     ):
         p_start = time.perf_counter()
         p_timeout = p_start + timeout
         logger.verbose("Waiting ack pending command %s", token)
         while True:
+            if is_cancelled():
+                return
             with self._lock:
                 if token not in self._pending_tokens:
                     logger.debug("Got ack for token=%s ; delay=%.6f",
