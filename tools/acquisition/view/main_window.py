@@ -1202,7 +1202,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        emergency_button = QPushButton("Emergency")
+        emergency_button = self._emergency_button = QPushButton("Emergency")
         emergency_button.setCheckable(True)
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
@@ -1218,6 +1218,11 @@ class MainWindow(QMainWindow):
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
+            emergency_button.blockSignals(True)
+            # keep button as it was (engaged/not-engaged),
+            # we will set as desired, via callbacks, if the action succeed
+            emergency_button.setChecked(not is_toggled)
+            emergency_button.blockSignals(False)
             if is_toggled:
                 behavior.emergency_stop(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyStopReason.user_button)
             else:
@@ -1226,6 +1231,7 @@ class MainWindow(QMainWindow):
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)
         behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
+        behavior.emergency_resumed_failed += lambda reason: app_model.on_error("Emergency resume failed", f"Reason: {reason}")
 
         toolbar.addWidget(emergency_button)
 
