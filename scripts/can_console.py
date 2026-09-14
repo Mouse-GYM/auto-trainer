@@ -456,7 +456,11 @@ def run_monitor():
                     device_connection.send_message(SystemCommandKind.SEND_HOME, context="home")
 
                 elif cmd in ('r', 'retract'):
-                    device_connection.send_message(SystemCommandKind.SEND_RETRACT, context="retract")
+                    if len(params) > 0:
+                        logger.error("[r]etract command don't take parameters. Did you mean rgb command ?")
+                        get_input = True
+                    else:
+                        device_connection.send_message(SystemCommandKind.SEND_RETRACT, context="retract")
 
                 elif cmd == 'k' or cmd == 'known':
                     device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
