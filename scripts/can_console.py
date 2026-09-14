@@ -415,7 +415,8 @@ def run_monitor():
             # 'm' - magnet servo
             # 'o' - set output
             # 'p' - pellet move commands
-            # 'r' - RGB LED
+            # 'r' - move retract
+            # 'rgb' - RGB LED
             # 's' - System status
             # 't' - Tare scales
             # 'v' - version
@@ -454,6 +455,13 @@ def run_monitor():
                 elif cmd == 'h' or cmd == 'home':
                     device_connection.send_message(SystemCommandKind.SEND_HOME, context="home")
 
+                elif cmd in ('r', 'retract'):
+                    if len(params) > 0:
+                        logger.error("The [r]etract command does not take parameters. Did you mean the 'rgb' command?")
+                        get_input = True
+                    else:
+                        device_connection.send_message(SystemCommandKind.SEND_RETRACT, context="retract")
+
                 elif cmd == 'k' or cmd == 'known':
                     device_connection.send_message(SystemCommandKind.SEND_FIXED_XYZ, context="known")
 
@@ -467,7 +475,11 @@ def run_monitor():
                     device_connection.request_disconnect()
                     break
 
-                elif cmd == 'r' or cmd == 'rgb':
+                elif cmd == 'rgb':
+                    if len(params) != 3:
+                        logger.error("expected R G B % values")
+                        get_input = True
+                        continue
                     device_connection.send_message(SystemCommandKind.SET_RGB_LED,
                                                (int(params[0]), int(params[1]), int(params[2])),
                                                context="rgb")
@@ -495,7 +507,8 @@ def run_monitor():
 
                 elif cmd == 'board_reboot':
                     if len(params) != 1:
-                        logger.warning("expected 1 board target name (magnet or pellet)")
+                        logger.error("expected 1 board target name (magnet or pellet)")
+                        get_input = True
                         continue
                     if params[0] == "magnet":
                         tgt = Target.MAGNET_DEVICE
@@ -503,6 +516,7 @@ def run_monitor():
                         tgt = Target.PELLET_DEVICE
                     else:
                         logger.error("unknown target board: %s", params[0])
+                        get_input = True
                         continue
                     device_connection.send_message(SystemCommandKind.BOARD_REBOOT, tgt, context=f"board_reboot_{tgt}")
 
@@ -724,6 +738,8 @@ def print_help():
           " ::Go to Home Position (0, 0, 0)")
     print("k[nown]                            "
           " ::Go to Known/Send Position (X, Y, Z)")
+    print("r[etract]                          "
+          " ::Retract Pellet Sequence")
     print("f[ile] motor <file>                "
           " ::Load Motor Configuration")
     print("f[ile] move <file>                 "
@@ -734,7 +750,7 @@ def print_help():
           " ::Set analog output on pellet chan [1] mvolts [0:5000]")
     print("q[uit]                             "
           " ::Quit")
-    print("r[gb] <red> <green> <blue>         "
+    print("rgb <red> <green> <blue>           "
           " ::Set RGB LED. Values in %")
     print("s[tatus]                           "
           " ::Show Status")
