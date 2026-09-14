@@ -144,7 +144,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         can_dev = self._can_device
         if can_dev is None:
             return min_default
-        return min(
+        return max(
             min_default,
             (
                 can_dev.default_command_ack_timeout_duration
