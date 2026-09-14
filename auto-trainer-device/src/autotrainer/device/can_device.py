@@ -1053,6 +1053,20 @@ class CanDevice(Device):
                     if ctx is not None:
                         self._acknowledge_command(ctx, perf_c=target_board.uuid_ack_perf_c, error=None)
                     target_board.clear()
+        # end while True  # main loop
+        # ensure all pending commands are NACKed:
+        tokens_acked = set()
+        nack_quit_err = "CAN device exiting"
+        for board_ctx in self._boards_pending_ctx.items():
+            tok = board_ctx.ctx
+            if tok is not None and tok not in tokens_acked:
+                self._acknowledge_command(tok, error=nack_quit_err)
+                tokens_acked.add(tok)
+        for cmd in cur_commands:
+            k, d, tok, r_perf_c = cmd  # kind data ctx perf
+            if tok is not None and tok not in tokens_acked:
+                self._acknowledge_command(tok, error=nack_quit_err)
+                tokens_acked.add(tok)
 
     def _handle_ack(self, msg: Acknowledge):
         cur_can_uuid = self._interface.uuid()
