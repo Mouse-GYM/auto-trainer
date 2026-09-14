@@ -652,9 +652,12 @@ class CanDevice(Device):
                 return True
         return False
 
-    def _handle_command_error(self, board: _BoardPendingContext, ctx, error, *, perf_c: Optional[float]=None):
+    def _handle_command_error(
+        self, board: _BoardPendingContext, ctx, error,
+        *, perf_c: Optional[float]=None, set_error_to_board: bool=True):
         board.clear()
-        board.active_error = error
+        if set_error_to_board:
+            board.active_error = error
         if perf_c is None:
             perf_c = get_perf_now()
         self._acknowledge_command(ctx, perf_c=perf_c, error=error)
@@ -915,7 +918,9 @@ class CanDevice(Device):
                 # with that same error:
                 if kind != SystemCommandKind.BOARD_CLEAR_ERROR:  # but only if not clear-error command
                     logger.error("kind=%s: target board already error: %s", kind, target_board.target)
-                    self._handle_command_error(target_board, ctx, target_board.active_error)
+                    self._handle_command_error(target_board, ctx,
+                                               f"Board {target_board.target} has an active error not cleared: {target_board.active_error}",
+                                               set_error_to_board=False)
                     continue
             #
             # execute command
