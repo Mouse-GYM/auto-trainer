@@ -5,7 +5,7 @@ import glob
 import pickle
 import time
 from collections import OrderedDict
-from typing import Tuple, Dict, Union, List
+from typing import Tuple, Dict, Optional, Union, List
 
 import numpy as np
 import pandas as pd
@@ -47,6 +47,31 @@ def get_ln():
     return inspect.currentframe().f_back.f_lineno
 
 
+def _closest_segment_max(segments: List[Dict], dist_hvpp_R: np.ndarray) -> Optional[int]:
+    """Max frame of the accepted segment whose hand came closest to the pellet.
+
+    None when the presentation produced no accepted segment. segments must hold only that presentation's
+    segments; the caller slices reach_events from its own watermark.
+    """
+    if not segments:
+        return None
+    closest = min(segments, key=lambda segment: dist_hvpp_R[segment["max"]])
+    return closest["max"]
+
+
+def _stamp_segment_max(pellet_event: Dict, segments: List[Dict], dist_hvpp_R: np.ndarray) -> None:
+    """Record this presentation's reach maximum on it, when one applies.
+
+    Segmentation and dist_hvpp_R are right-hand only, so a segment says nothing about a left-hand
+    presentation's own trajectory; leaving the key absent yields max=None rather than a wrong frame.
+    """
+    if pellet_event["method"] != ReachEventMethod.RIGHT_HAND:
+        return
+    segment_max = _closest_segment_max(segments, dist_hvpp_R)
+    if segment_max is not None:
+        pellet_event["max"] = segment_max
+
+
 def segment_reaches(
     *,
     project_info: ProjectInfo,
@@ -66,6 +91,7 @@ def segment_reaches(
         'rh_max_vp_list': [],
         'reach_events': [],
         'other_events': [],
+        "hand_events": [],
     }
     if df_3d is None:
         return results_dict
@@ -191,8 +217,11 @@ def segment_reaches(
     results_dict['rh_max_vp_list'] = rh_max_vp_list
     results_dict['reach_events'] = reach_events
     other_events = results_dict['other_events'] = []
+    hand_events = results_dict["hand_events"] = []
     for pellet_event in pellet_events[:-1]:
-        if pellet_event['method'] not in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}:
+        if pellet_event["method"] in {ReachEventMethod.RIGHT_HAND, ReachEventMethod.LEFT_HAND}:
+            hand_events.append(pellet_event)
+        else:
             other_events.append(pellet_event)
     return results_dict
 
@@ -342,6 +371,7 @@ def segment_reaches_f2(
         # NB: pellet_events is same size/length than frames_on_found, actually both could be merged.
         # also use directly pellet_event instead of find_last_placement(..) below.
         pellet_event = pellet_events[frmindex]
+        reach_events_start = len(reach_events)
 
         search_status = 1
         food_was_dropped = False
@@ -500,6 +530,8 @@ def segment_reaches_f2(
                 if not keep_looking:
                     break
             frame += 1
+
+        _stamp_segment_max(pellet_event, reach_events[reach_events_start:], dist_hvpp_R)
 
     pellet_file_path = os.path.join(vid_dir, vid_name_base + '_pelletHistory.pickle')
     with open(pellet_file_path, 'wb') as f:
