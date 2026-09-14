@@ -2397,6 +2397,7 @@ class AppModel(ObservableObject):
         Union[bool, ApiCommandRequestResponse, ApiCommandRequestResult, Any]]:
         cmd = request.command
         rsp = None  # let caller handle it
+        algo = self._behavior.algorithm
         if cmd == ApiCommand.START_ACQUISITION:
             return self._handle_rpc_async_command(request, self.capture_start)
 
@@ -2404,11 +2405,15 @@ class AppModel(ObservableObject):
             return self._handle_rpc_async_command(request, self.capture_stop)
 
         elif cmd == ApiCommand.EMERGENCY_STOP:
-            self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyStopReason.rpc_service)
+            with algo.set_force_wait_mode(True):
+                self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE,
+                                              reason_code=ApiEmergencyStopReason.rpc_service)
             return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.EMERGENCY_RESUME:
-            self._behavior.emergency_resume(EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyResumeReason.rpc_service)
+            with algo.set_force_wait_mode(True):
+                self._behavior.emergency_resume(EmergencyControlSource.RPC_SERVICE,
+                                                reason_code=ApiEmergencyResumeReason.rpc_service)
             return dict(reason=EmergencyControlSource.RPC_SERVICE)
 
         elif cmd == ApiCommand.USER_DEFINED:
