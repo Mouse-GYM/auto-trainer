@@ -89,7 +89,12 @@ class DeviceConnectionProtocol(Protocol):
                 config_path)
         return move_cfg
 
-    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False):
+    def use_motor_configurations(
+        self,
+        data: Optional[MotorConfigurations] = None,
+        *,
+        is_cancelled=lambda: False,
+    ) -> MotorConfigurations:
         """Apply the given motor configuration"""
         raise NotImplementedError
 

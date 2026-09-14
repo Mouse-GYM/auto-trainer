@@ -1437,32 +1437,26 @@ class AppModel(ObservableObject):
                 move_config=self._move_config,
                 is_cancelled=is_cancelled,
             )
-            if need_cancel():
-                return False
-            # optionally wait any eventual remaining pending token(s), although there should none eventually:
-            with hard.wait_pending_command_acked(pending_tokens, is_cancelled=is_cancelled, timeout=5):
-                # hard.set_auto_correct_motor_drift(algo.auto_correct_motors_drift)  # disabled
-                if wait_connected:
-                    # full establishment of connection to/from device should be very fast actually, but not immediate,
-                    # so using timeouts.
-                    # ensure all pending tokens are acked:
-                    pending_tokens.update(hard.pending_tokens)
         except Exception as err:
             logger.error("Failed to connect/wait pending tokens: %s", err)
             self.capture_stop(force=True)
             return False
         if need_cancel():
             return False
-        # always wait up till "connected":
-        p_end = get_perf_now() + 3
-        while not hard.connected:
-            if need_cancel():
-                return False
-            if get_perf_now() > p_end:
-                logger.error("timeout waiting hardware connected")
-                self.capture_stop(force=True)
-                return False
-            time.sleep(0.01)
+        # optionally wait up till "connected":
+        if wait_connected:
+            # doesn't look needed at all anymore, given all commands executed during connect have been acknowledged,
+            # which means we are connected, already. The `while not hard.connected` actually only ensures
+            # that the device thread is alive. Which it must be given all connect commands acknowledged.
+            p_end = get_perf_now() + 3
+            while not hard.connected:
+                if need_cancel():
+                    return False
+                if get_perf_now() > p_end:
+                    logger.error("timeout waiting hardware connected")
+                    self.capture_stop(force=True)
+                    return False
+                time.sleep(0.01)
         logger.info("finished connecting hardware")
         #
         watchdog_mon_register = self._analysis.watchdog_monitor.register_watchdog

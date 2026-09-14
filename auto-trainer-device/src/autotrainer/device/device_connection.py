@@ -226,7 +226,7 @@ class DeviceConnection(DeviceConnectionProtocol):
             move_config = self.load_default_move_config()
         for compound_move in CompoundMovementKind:
             if is_cancelled():
-                return
+                return move_config
             name = compound_move.value
             steps = getattr(move_config, name)
             if steps.is_empty:
@@ -235,10 +235,10 @@ class DeviceConnection(DeviceConnectionProtocol):
                 self.set_steps_procedure(name, steps)
         return move_config
 
-    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False):
-        motor_configs = data
-        if data is None:
-            data = motor_configs = self.load_default_motor_config()
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False) -> MotorConfigurations:
+        cfgs = data
+        if cfgs is None:
+            cfgs = self.load_default_motor_config()
         logger.notice("Setting motor configurations")
         tokens = set()
         def make_token():
@@ -253,21 +253,21 @@ class DeviceConnection(DeviceConnectionProtocol):
             )
 
         for conf in (
-            data.x_config,
-            data.y_config,
-            data.z_config,
-            data.load_config,
-            data.magnet_config,
-            data.cover_config,
-            data.gate_config,
-            data.tunnel_fan_config,
+            cfgs.x_config,
+            cfgs.y_config,
+            cfgs.z_config,
+            cfgs.load_config,
+            cfgs.magnet_config,
+            cfgs.cover_config,
+            cfgs.gate_config,
+            cfgs.tunnel_fan_config,
         ):
             if is_cancelled():
                 break
             tokens.clear()  # ensure only next command token will be in it, via send() defined above
             with self.await_acknowledge(tokens, timeout=2, is_cancelled=is_cancelled):
                 send(conf)
-        return motor_configs
+        return cfgs
 
     def set_steps_procedure(self, name: str, steps: MotorSteps):
         self.send_message(SystemCommandKind.SET_STEPS_PROCEDURE, SystemDataArgsKwargs(name, steps))
