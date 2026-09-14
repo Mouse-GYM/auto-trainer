@@ -1483,7 +1483,8 @@ class AppModel(ObservableObject):
                 if tok is None:
                     raise RuntimeError("could not request send-home")
                 pending_tokens.add(tok)
-            self._behavior.system_machine.pellet.state = PelletState.home
+            self._behavior.system_machine.pellet.move_home()  # still request it on pellet machine too,
+                # to get the desired "side effects" of it (basically fully initialize the pellet machine).
         except Exception as err:
             logger.error("Failed to move home: %s", err)
             self.capture_stop(force=True)
