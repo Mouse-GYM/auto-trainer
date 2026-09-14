@@ -42,6 +42,6 @@ class AlarmDetector(BaseDetector[AlarmDetectorConfigT], Generic[AlarmDetectorCon
                 is_auto_resume_enabled=allow_resume,
             )))
 
-    def _custom_set_is_engaged(self):
-        super()._custom_set_is_engaged()
+    def _custom_set_is_engaged(self, engaged: bool):
+        super()._custom_set_is_engaged(engaged)
         self.post_alarm_event()
