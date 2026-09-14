@@ -457,7 +457,7 @@ def run_monitor():
 
                 elif cmd in ('r', 'retract'):
                     if len(params) > 0:
-                        logger.error("[r]etract command don't take parameters. Did you mean rgb command ?")
+                        logger.error("The [r]etract command does not take parameters. Did you mean the 'rgb' command?")
                         get_input = True
                     else:
                         device_connection.send_message(SystemCommandKind.SEND_RETRACT, context="retract")
@@ -477,7 +477,7 @@ def run_monitor():
 
                 elif cmd == 'rgb':
                     if len(params) != 3:
-                        logger.warning("expected R G B % values")
+                        logger.error("expected R G B % values")
                         get_input = True
                         continue
                     device_connection.send_message(SystemCommandKind.SET_RGB_LED,
@@ -507,7 +507,7 @@ def run_monitor():
 
                 elif cmd == 'board_reboot':
                     if len(params) != 1:
-                        logger.warning("expected 1 board target name (magnet or pellet)")
+                        logger.error("expected 1 board target name (magnet or pellet)")
                         get_input = True
                         continue
                     if params[0] == "magnet":
