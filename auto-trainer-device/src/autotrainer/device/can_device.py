@@ -1104,12 +1104,13 @@ class CanDevice(Device):
     def connect(self):
         # only start the command handler thread on connect,
         # which means we have already obtained the addr of desired devices.
-        self._want_exit.clear()
         self._prev_command_timeout = self.default_command_ack_timeout_duration
+
         if self._commands_handler_thread is not None:
             logger.verbose("CAN command Handler thread already alive")
             self.disconnect()
 
+        self._want_exit.clear()
         self._clear_caches()
         self._init_default_move_configs()
 
@@ -1129,6 +1130,13 @@ class CanDevice(Device):
 
     def disconnect(self):
         self._want_exit.set()
+        thread = self._tunnel_pellet_status_check_thread
+        if thread is not None:
+            thread.join(3)
+            if thread.is_alive():  # very unlikely
+                logger.warning("PelletTunnel check thread still alive but continuing")
+            self._tunnel_pellet_status_check_thread = None
+        #
         cmd_thread, cmd_queue = self._commands_handler_thread, self._commands_queue
         if cmd_thread is not None:
             if cmd_thread.is_alive():
@@ -1140,18 +1148,13 @@ class CanDevice(Device):
                 logger.debug("joining commands handler thread")
                 cmd_thread.join(3)
                 if cmd_thread.is_alive():
+                    # should be very unlikely too
                     logger.warning("CanCommand handler thread still alive: %s", cmd_thread)
                 else:
                     self._commands_handler_thread = None
                     # NB: only set to None when joined,
                     # allows it to be eventually joined after many disconnect.
             # cmd_queue.join()  # not totally necessary here
-        thread = self._tunnel_pellet_status_check_thread
-        if thread is not None:
-            thread.join(3)
-            if thread.is_alive():
-                logger.warning("PelletTunnel check thread still alive")
-            self._tunnel_pellet_status_check_thread = None
 
     def _start_sequence(self, movements: MotorSteps) -> bool:
         """

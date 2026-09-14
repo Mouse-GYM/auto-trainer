@@ -564,13 +564,18 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         is_cancelled=lambda: False,
     ):
         logger.notice("%s: connect with %s", self, cmd_queue)
-        self._disconnect_event.clear()
+
+        def check_need_cancel():
+            if is_cancelled():
+                self.disconnect()
+                raise RuntimeError("connection cancelled")
 
         prev_device = self._device_conn
         if prev_device is not None:
             logger.warning("auto-disconnecting from device before (re-)connect")
             self.disconnect()
 
+        self._disconnect_event.clear()
         self._connect_count += 1
         self._last_motor_coordinates = _nans_offset3dTuple
         self._last_requested_set_coordinates = _nans_offset3dTuple
@@ -596,14 +601,12 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 send_dev_cmd(kind, data, context=tok)
 
         send_dev_ack_cmd(SystemCommandKind.REQUEST_VERSION)
-        if is_cancelled():
-            return
+        check_need_cancel()
 
         # load and set motors and move configs
         # 1)
         motors_config = device_conn.use_motor_configurations(motors_config, is_cancelled=is_cancelled)
-        if is_cancelled():
-            return
+        check_need_cancel()
         # 2)
         device_conn.use_compound_movements(move_config)
         # 3)
@@ -617,18 +620,15 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
                 # also need to re-apply the config
             ):
                 send_dev_ack_cmd(*args)
-                if is_cancelled():
-                    return
+                check_need_cancel()
 
         send_dev_ack_cmd(SystemCommandKind.STREAM_START)
-        if is_cancelled():
-            return
+        check_need_cancel()
         logger.success("STREAM_START acknowledged")
         self._device_stream_started = True
 
         send_dev_ack_cmd(SystemCommandKind.UPDATE_SCALE_TARE)
-        if is_cancelled():
-            return
+        check_need_cancel()
 
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is None or not prev_thread.is_alive():
@@ -651,7 +651,6 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
 
     def disconnect(self):
         logger.verbose("disconnecting ..")
-        self._disconnect_event.set()
         can_dev = self._can_device
         dev = self._device_conn
         if dev is not None:
@@ -666,6 +665,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
         prev_thread = self._check_timedout_commands_thread
         if prev_thread is not None:
+            self._disconnect_event.set()  # for _check_timedout_commands_thread
             logger.debug("joining checktimedout commands thread")
             prev_thread.join()
         self._device_stream_started = False
