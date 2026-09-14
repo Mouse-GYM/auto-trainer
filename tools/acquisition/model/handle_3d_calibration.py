@@ -1,4 +1,5 @@
 import collections
+import os
 import time
 import dataclasses
 from typing import Dict, Any, Optional, List
@@ -6,7 +7,6 @@ from pathlib import Path
 
 from autotrainer.core import Offset3DTuple, get_verbose_logger, ProjectInterval
 from autotrainer.inference import calibration_FLIR
-from autotrainer.pyside.content_widget import InvokeMethod
 from autotrainer.video import VideoRecordMode
 from autotrainer.core.capture import CaptureProcessStatus
 
@@ -14,6 +14,10 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
+
+
+SCALE_MOTOR_COORDS = float(os.getenv("AUTOTRAINER_3D_CALIB_SCALE_MOTOR_COORDS", "1"))
+
 
 x, y, z = 'xyz'
 
@@ -82,10 +86,10 @@ moves = [
 default_params = dict(
     vbin=1,
     hbin=1,
-    width=1440,
-    height=1080,
+    width=int(os.getenv("AUTOTRAINER_3D_CALIB_WIDTH", "1440")),
+    height=int(os.getenv("AUTOTRAINER_3D_CALIB_HEIGHT", "1080")),
     exposure=4500,
-    fps=40,
+    fps=float(os.getenv("AUTOTRAINER_3D_CALIB_FPS", "40")),
     # primary=cam is left,
     offsetx=0,
     offsety=0,
@@ -99,7 +103,7 @@ def process_capture(src_dir):
     calibrate = True
     # Of no consequence??
     alpha = 1
-    # Threshold for qutomatic corner-finding quality assessment, between 0 and 1
+    # Threshold for automatic corner-finding quality assessment, between 0 and 1
     quality = 0.925
     # Gamma correction can improve chessboard corner finding
     gamma = 2
@@ -127,6 +131,8 @@ def make_3d_calib(
     app_model: AppModel,
     cam_params: Optional[Dict[str, Any]] = None,
     # record_mode: VideoRecordMode = VideoRecordMode.TRIGGER,
+    *,
+    scale_motor_coords: float = SCALE_MOTOR_COORDS,
 ) -> Path:
     record_mode: VideoRecordMode = VideoRecordMode.TRIGGER  # only working with this one for now,
     # given/because of bad paths otherwise used by the recording side.
@@ -146,7 +152,11 @@ def make_3d_calib(
     diamond_triangle_cfg = app_model.behavior.algorithm.diamond_triangle_config
     if diamond_triangle_cfg is None:
         raise RuntimeError("Please first calibrate diamond-triangle by starting the acquisition")
-    d_to_m = diamond_triangle_cfg.diamond_to_motor
+    orig_d_to_m = diamond_triangle_cfg.diamond_to_motor
+    # diamond_to_motor:
+    def d_to_m(v: Offset3DTuple):
+        return orig_d_to_m(v) * scale_motor_coords
+    # moves:
     def m_x(v):
         return hard.move_x(d_to_m(Offset3DTuple(v, 0, 0)).x)
     def m_y(v):
@@ -261,6 +271,7 @@ def make_3d_calib(
             logger.verbose("coord-%s -> %s", coord, value)
             key = coord2m[coord](value)
             cur_requests.append(key)
+            time.sleep(0.5)  # wait a bit at current coord
 
         while len(cur_requests) > 0:
             hard.wait_pending_command_acked(cur_requests.popleft())

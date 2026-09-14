@@ -3,6 +3,7 @@ import atexit
 import dataclasses
 import logging
 import math
+import os
 import statistics
 import time
 from enum import IntEnum
@@ -17,6 +18,9 @@ from autotrainer.core.logging import get_verbose_logger
 from .camera_base import CameraBase
 
 logger = get_verbose_logger(__name__)
+
+
+CHECK_N_FIRST_FRAMES = int(os.getenv("AUTOTRAINER_CAMERA_CHECK_N_FIRST_FRAMES", 0))
 
 
 def is_truthy_str_value(value: str):
@@ -464,9 +468,9 @@ class SpinCam(CameraBase):
         if frame.shape != expected_shape:
             frame = frame.reshape(expected_shape)
 
-        if __debug__:
+        if __debug__ and CHECK_N_FIRST_FRAMES > 0:
             # ensure no frame in the first 150, shares its internal buffer with any of the other first 150 of them:
-            if self._frame_count < 150:
+            if self._frame_count < CHECK_N_FIRST_FRAMES:
                 logger.spam("frame-%s: shape=%s dtype=%s",
                              self._frame_count, orig_frame.shape, orig_frame.dtype)
                 self._start_frames.append((orig_frame, orig_frame.copy()))
@@ -478,7 +482,7 @@ class SpinCam(CameraBase):
                     if (orig_frame == prev_frame).all() and (orig_frame != prev_frame_copy).any():
                         logger.critical("Detected frame (idx=%s) shares internal buffer with prev frame idx=%s",
                                         self._frame_count, prev_idx)
-                if self._frame_count >= 149:
+                if self._frame_count >= CHECK_N_FIRST_FRAMES - 1:
                     self._start_frames.clear()  # don't keep unnecessarily all that
 
         self._frame_count += 1
