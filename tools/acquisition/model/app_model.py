@@ -2622,6 +2622,8 @@ class AppModel(ObservableObject):
                     return
                 finally:
                     self._analysis.start()
+                if self._acquisition_stopping:
+                    return
                 # in case of it was not good with previous:
                 self._update_led_color(force_color=(100, 0, 0))  # RGB, as %
             tunnel_dev = system_m.tunnel_device
