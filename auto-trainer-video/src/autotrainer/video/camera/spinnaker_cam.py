@@ -336,9 +336,10 @@ class SpinCam(CameraBase):
             (cam.Width, self._width),
             (cam.Height, self._height),
         ):
+            name = prop.GetDisplayName()
             set_value = prop.GetValue()
             if set_value != req_value:
-                raise RuntimeError(f"Failed configure as requested {prop}: request_value={req_value} set_value={set_value}")
+                raise RuntimeError(f"Failed configure {name} as requested: request_value={req_value} set_value={set_value}")
 
         gain = self._gain
         if gain is not None:
