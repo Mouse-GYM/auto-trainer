@@ -1062,7 +1062,7 @@ class CanDevice(Device):
         # ensure all pending commands are NACKed:
         tokens_acked = set()
         nack_quit_err = "CAN device exiting"
-        for board_ctx in self._boards_pending_ctx.items():
+        for board_ctx in self._boards_pending_ctx.values():
             tok = board_ctx.ctx
             if tok is not None and tok not in tokens_acked:
                 self._acknowledge_command(tok, error=nack_quit_err)
