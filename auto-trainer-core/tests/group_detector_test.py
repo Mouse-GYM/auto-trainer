@@ -1,8 +1,10 @@
+
 import logging
 import threading
 from functools import partial
 from typing import Optional
 
+import pytest
 
 from autotrainer.core.analysis.detector import GroupBaseDetector, BaseDetector
 
@@ -22,10 +24,19 @@ class Detector(BaseDetector):
         pass
 
 
-def test_does_not_check_checking_sub_detector(caplog):
+@pytest.fixture()
+def group():
+    g = Group()
+    try:
+        yield g
+    finally:
+        g.stop()
 
-    group = Group()
+
+def test_does_not_check_checking_sub_detector(request, caplog, group):
+
     det = Detector()
+    request.addfinalizer(det.stop)
     group.register_sub_detector("sub", det)
 
     group.start()
@@ -60,11 +71,12 @@ def test_does_not_check_checking_sub_detector(caplog):
     group.check_done.clear()
 
 
-def test_need_explicit_check(caplog):
+def test_need_explicit_check(group, caplog, request):
 
-    group = Group()
     det1 = Detector()
+    request.addfinalizer(det1.stop)
     det2 = Detector()
+    request.addfinalizer(det2.stop)
     group.register_sub_detector("det1", det1)
     group.register_sub_detector("det2", det2)
 

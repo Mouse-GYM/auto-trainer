@@ -196,8 +196,9 @@ def test_is_emergency_cond(mon, use_daemon, update_method):
     det.config.is_emergency_condition = True
     mon.check_done.clear()
     mon.check_state()
-    assert mon.check_done.wait(0.2)
+    assert mon.engaged_event.wait(0.2)
     mon.check_done.clear()
+    mon.engaged_event.clear()
     det.check_attempted.clear()
     assert det.is_engaged and mon.is_engaged
     det.desired_set_value = False

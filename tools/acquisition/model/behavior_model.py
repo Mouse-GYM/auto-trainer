@@ -11,7 +11,9 @@ from autotrainer.api import ApiEventKind
 from autotrainer.core import (ObservableObject, ProjectInfo, SensorAnalysis, BehaviorConfiguration,
                               SystemMessageHandler)
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason, emergency_reason_2_api_alarm_kind
+from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 from autotrainer.core.event import post_api_event_content, post_api_event
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.observable_object import EventHandler
@@ -42,6 +44,15 @@ class EmergencyControlSource(str, enum.Enum):
         return self is self.USER_BUTTON or self is self.RPC_SERVICE
 
 
+class BehaviorModelEvents:
+
+    emergency_stopped = EventHandler[Callable[[str], None]]
+    before_emergency_resumed = EventHandler[Callable[[], None]]
+    emergency_resumed = EventHandler[Callable[[str], None]]
+    emergency_resumed_failed = EventHandler[Callable[[str], None]]
+
+
+
 class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     """
     Encapsulation of the Behavior Module (autotrainer-behavior) for the application layer.  This model class manages
@@ -54,8 +65,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     """
 
     # events type hint
-    emergency_stopped: EventHandler[Callable[[str], None]]
-    emergency_resumed: EventHandler[Callable[[str], None]]
+    emergency_stopped: BehaviorModelEvents.emergency_stopped
+    before_emergency_resumed: BehaviorModelEvents.before_emergency_resumed
+    emergency_resumed: BehaviorModelEvents.emergency_resumed
+    emergency_resumed_failed: BehaviorModelEvents.emergency_resumed_failed
 
     def __init__(
         self,
@@ -67,7 +80,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         topcam_presence: Optional[PresenceDetectionAttrs] = None,
         system_machine: Optional[SystemMachine] = None,
     ):
-        super().__init__(("emergency_stopped", "emergency_resumed"))
+        super().__init__(event_names=tuple(attr for attr in dir(BehaviorModelEvents) if not attr.startswith("_")))
 
         self._project = ProjectInfo.get_null_project()
 
@@ -86,6 +99,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         #
         self._source_emergency: Optional[str] = None
         self._emergency_engaged_alarms: List[ApiAlarmKind] = []
+        self._message_handler = msg_handler
         #
         analysis.emergency_alarm_monitor.property_changed += self._alarm_monitor_property_changed
 
@@ -263,10 +277,10 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def source_emergency(self) -> Optional[str]:
         return self._source_emergency
 
-    @BehaviorAlgorithm.relay_func()
+    @BehaviorAlgorithm.relay_func(wait=False)
     def emergency_stop(self, source: str, *, reason_code: ApiEmergencyStopReason=ApiEmergencyStopReason.unknown):
         algo = self._system_machine.algorithm
-        logger.info("emergency_stop called: %s", source)
+        logger.notice("emergency_stop called: %s ; reason=%s", source, reason_code)
         if algo.algo_paused and source == self._source_emergency:
             # double emergency_stop ?
             return
@@ -292,7 +306,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         algo.algo_paused = True
         self.emergency_stopped(source)
 
-    @BehaviorAlgorithm.relay_func()
+    @BehaviorAlgorithm.relay_func(wait=False)
     def emergency_resume(
         self,
         source: str,
@@ -313,6 +327,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             logger.verbose("Refusing resume from emergency %s given was set by %s",
                           source, current)
             return
+        #
+        try:
+            self.before_emergency_resumed()
+        except Exception as err:
+            logger.error("before_emergency_resumed failed, skipping emergency_resume. error=%s", err)
+            self.emergency_resumed_failed(str(err))
+            return
+        #
         post_api_event(build_event(ApiEventKind.emergencyResume,
             EmergencyResumeContext(
                 reason=source, reason_code=reason_code, resumed_alarms=resumed_alarms)))
@@ -331,12 +353,14 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         if alarm_mon.is_engaged or algo.algo_paused:
             color = (100, 0, 0)  # red
         else:
-            is_warn = any(
-                det.is_engaged and det.config.use
-                    # only alarm detector config with is_emerg_cond == False:
+            def _is_warn(det):
+                det_cfg = det.config
+                return (
+                    det.is_engaged
+                    and (not isinstance(det_cfg, GroupSubDetectorConfig) or det_cfg.use)
                     and (isinstance(det.config, AlarmDetectorConfig) and not det.config.is_emergency_condition)
-                for det in alarm_mon.sub_detectors.values()
-            )
+                )
+            is_warn = any(filter(_is_warn, alarm_mon.sub_detectors.values()))
             color = (100, 100, 0) if is_warn else (0, 100, 0)
             # yellow or green
             cur_time = now.time()
