@@ -2532,14 +2532,24 @@ class AppModel(ObservableObject):
                 dcs_send_z=dcs_send_xyz.z,
                 load_arm=hard.load_arm_position,
                 barrier_arm=hard.cover_arm_position,
+                is_home_on_excessive_drift_enabled=algo.home_on_excessive_drift_distance_config.enabled,
+                is_tunnel_sweep_enabled=analysis.auto_tunnel_sweep_monitor.config.enabled,
             ),
             tunnel_device=ApiTunnelDeviceStatus(
                 magnet_intensity=magnet_intensity,
-                gate_open=hard.tunnel_gate_open_status,
+                is_gate_open=hard.tunnel_gate_open_status,
             ),
             behavior=ApiBehaviorStatus(
                 baseline_magnet_intensity=algo.baseline_intensity,
                 reaches=reach_status,
+                is_live_analysis_enabled=self._inference.is_enabled,
+                is_pellet_delivery_enabled=algo.pellet_delivery_enabled,
+                is_pellet_cover_enabled=algo.pellet_cover_enabled,
+                is_intertrial_pellet_shift_enabled=algo.intertrial_pellet_shift_enabled,
+                is_triangle_pellet_distance_detection_enabled=algo.use_triangle_pellet_distance_too_far,
+                is_auto_close_gate_on_intertrial_enabled=algo.auto_close_gate_on_intertrial_config.enabled,
+                is_auto_clamp_enabled=algo.head_fixation_enabled,
+                is_batch_trials_enabled=algo.batch_trial_recording_config.enabled,
             )
         )
         return system_status
