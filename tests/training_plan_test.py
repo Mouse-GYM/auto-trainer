@@ -111,7 +111,7 @@ class BaseTrainingPlan(MockSystemMachine):
 
         assert app_model.loaded_configuration is None
         # NB: load_config -> reload_training_plan require IDLE
-        assert app_model.load_configuration() is True
+        assert app_model.load_configuration() is True, app_model.config_errors
         assert app_model.loaded_configuration is not None
 
         assert algo.intertrial_enabled is True  # required

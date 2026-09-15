@@ -404,6 +404,7 @@ class VoidInference(InferenceProtocol):
     def __init__(self):
         super().__init__()
         self._stop_recorded_event = threading.Event()  # noqa
+        self.pose_parts = []
 
     @property
     def stop_recorded_event(self) -> synchronize.Event:
