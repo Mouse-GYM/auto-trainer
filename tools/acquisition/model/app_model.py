@@ -53,6 +53,7 @@ from autotrainer.core import (
     Offset3DTuple,
     get_perf_now,
     MotorConfigurations,
+    InferenceConfiguration,
 )
 from autotrainer.core import AnimalSubject, FixedArrayMultiQueue
 from autotrainer.core.analysis.alarm_monitor import EmergencyReason
@@ -281,8 +282,11 @@ class AppModel(ObservableObject):
         self._project_info: Optional[ProjectInfo] = None
         self._animal_name = ""
         self._notes = ""
+
+        self._frame_rate: Optional[float] = None  # optional "main" frame rate, used for inference too
         left = self._left_camera = VideoCaptureModel("left", mp_ctx=mp_ctx)
         right = self._right_camera = VideoCaptureModel("right", mp_ctx=mp_ctx)
+
 
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None
@@ -386,14 +390,11 @@ class AppModel(ObservableObject):
         self._hardware = HardwareModel(self._system_message_handler, sensor_analysis=analysis)
 
         self._inference_queue = None
+        self._calib_dir = calib_dir
 
-        self._pose_algorithm: PoseAlgorithm = None
-        self._inference: InferenceModel = None  # noqa. needed before reload_calib
-        self.reload_calib(calib_dir)
-        #
         if inference_model is None:
             inference = InferenceModel(
-                self._pose_algorithm,
+                PoseAlgorithm(),
                 calib_dir=calib_dir,
                 mp_manager=self._mp_manager,
                 record_stop_sema=self._record_stop_sema,
@@ -401,7 +402,9 @@ class AppModel(ObservableObject):
             )
         else:
             inference = inference_model
-        self._inference: InferenceModel = inference
+        self._inference: Union[InferenceProtocol, InferenceModel] = inference
+        self._pose_algorithm: Optional[PoseAlgorithm] = None
+
         #
 
         self._training_plans: List[PlanInfo] = []
@@ -607,7 +610,7 @@ class AppModel(ObservableObject):
             with status_file_path.open("w") as fh:
                 print(f"status={status.value!r}", file=fh)
 
-    def reload_calib(self, calib_dir: Optional[Path]):
+    def reload_calib(self, calib_dir: Optional[Path]) -> PoseAlgorithm:
         calib_src_dir = (
             Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None
             else calib_dir
@@ -633,18 +636,23 @@ class AppModel(ObservableObject):
             cam_offsets = None
             logger.warning("calib_src_dir=%r does not exist", calib_src_dir.as_posix())
 
-        pose_algo = PoseAlgorithm(
+        inference = self._inference
+        cfg = self._loaded_configuration
+        infe_cfg = InferenceConfiguration if cfg is None else cfg.inference
+        pose_algo = self._pose_algorithm = PoseAlgorithm(
             stereo_params=stereo_params,
             calib_metadata=calib_metadata,
             cam_names=cam_names,
             square_size=square_size,
             cam_offsets=cam_offsets,
+            min_confidence_plot_threshold=infe_cfg.min_confidence_plot_threshold,
+            min_confidence_presence_threshold=infe_cfg.min_confidence_presence_threshold,
+            frame_rate=self._frame_rate,
         )
-        inference = self._inference
         if inference is not None:
             pose_algo.initialize(inference.pose_parts)
             inference.pose_algorithm = pose_algo
-        self._pose_algorithm = pose_algo
+        return pose_algo
 
     def _identify_primary_main_cam_idx(self):
         for idx, cam in enumerate(self._cameras):
@@ -1663,12 +1671,13 @@ class AppModel(ObservableObject):
         if (left_cam_cfg := configuration.get_camera(CameraId.Left)) is not None:
             prebuffer_duration = left_cam_cfg.record_prebuffer_duration
             frame_rate = left_cam_cfg.params.get("fps")
+            if frame_rate is None:
+                logger.warning("left camera don't have FPS")
+                # self._config_errors.append("The left camera is missing an FPS")
+                # load_ok = False
 
-        pose_algo = self._pose_algorithm
-        pose_algo.frame_rate = frame_rate
-        # also reset it to inference:
-        self._inference.pose_algorithm = pose_algo
-        # which force a sync to pose-result process.
+        self._frame_rate = frame_rate
+
         self._behavior.system_machine.intertrial.frame_rate = frame_rate
 
         if (right_cam_cfg := configuration.get_camera(CameraId.Right)) is not None:
@@ -1729,10 +1738,25 @@ class AppModel(ObservableObject):
         # only at the end:
         self.output_location = configuration.persistence.output_location
 
-        self.reload_training_plans(reraise_on_error=True)
+        # now some extra config to read:
+        try:
+            self.reload_training_plans(reraise_on_error=True)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load training plans config: {err}")
+            load_ok = False
+
+        try:
+            self.reload_calib(self._calib_dir)
+        except Exception as err:
+            self._config_errors.append(f"Cannot load calibration config from {self._calib_dir}: {err}")
+            load_ok = False
 
         # and:
-        self._load_animals()
+        try:
+            self._load_animals()
+        except Exception as err:
+            self._config_errors.append(f"Cannot load animals: {err}")
+            load_ok = False
 
         analysis = self._analysis
         analysis.free_disk_space_detector.start()
@@ -1863,7 +1887,7 @@ class AppModel(ObservableObject):
 
         if animals_dir_path.is_dir():
             files = list(animals_dir_path.glob("*.json"))
-            animals: Dict[Path, AnimalSubject] = {
+            animals_dct: Dict[Path, AnimalSubject] = {
                 path: animal
                 for path, animal in (
                     (path, AnimalSubject.from_file(path))
@@ -1872,7 +1896,7 @@ class AppModel(ObservableObject):
                 if animal is not None
             }
 
-            for path, animal in animals.items():
+            for path, animal in animals_dct.items():
                 prev_day_date = animal.pellet_counts_day_date
                 prev_counts = animal.pellet_counts_day
                 animal.check_today_date()
@@ -1880,7 +1904,7 @@ class AppModel(ObservableObject):
                     logger.info("Reset animal day count to 0 given saved before today: %s ; prev counts=%s",
                                 prev_day_date, prev_counts)
                     animal.to_file(path)
-            animals = sorted(animals.values(), key=lambda a: a.name)
+            animals = sorted(animals_dct.values(), key=lambda a: a.name)
 
         pref_animal = self._preferences.selected_animal
         for animal in animals:

@@ -9,6 +9,8 @@ from autotrainer.core import build_kwargs_apply_mapping, make_camelize_represent
 class _InferenceConfiguration:
     pose_model_location: str = ""
     is_enabled: bool = False
+    min_confidence_plot_threshold: float = 0.9
+    min_confidence_presence_threshold: float = 0.9
 
     @classmethod
     def from_version_zero(cls, content: dict) -> Self:
