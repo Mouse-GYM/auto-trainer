@@ -481,6 +481,8 @@ def test_command_with_uuid_error(
     assert ack_received is not None, "should have received the ack, with or without error"
     ack_tok, ack_perf, result = ack_received  # noqa
     # depending on settings: previous error is reset or kept active:
+    if expect_error:
+        expected_err = f"Board 0 has an active error not cleared: {expected_err}"
     assert result.error == (expected_err if expect_error else None)
     assert result.succeeded == (not expect_error)
     assert result.uuid_nacks is None  # even if error, the uuid_nacks is None given nothing is executed then.
