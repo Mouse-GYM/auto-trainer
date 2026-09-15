@@ -1231,7 +1231,9 @@ class MainWindow(QMainWindow):
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)
         behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
-        behavior.emergency_resumed_failed += lambda reason: app_model.on_error("Emergency resume failed", f"Reason: {reason}")
+        behavior.emergency_resumed_failed += lambda reason: app_model.on_error(
+            "Emergency resume failed",
+            f"Reason: {reason}\n\nYou can try acquisition stop then start, or restart the application.")
 
         toolbar.addWidget(emergency_button)
 
