@@ -628,6 +628,8 @@ class CanDevice(Device):
 
     def _check_tunnel_pellet_status_age(self):
         logger.verbose("running")
+        self.pellet_status_timeout_engaged = False
+        self.tunnel_status_timeout_engaged = False
         while not self._want_exit.wait(1):  # no need check more often
             p_now = get_perf_now()
             boards_timeout = self.default_board_status_timeout_delay  # re-read

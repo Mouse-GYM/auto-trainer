@@ -408,12 +408,12 @@ class CanInterface(DeviceInterface):
         self._is_open = False
 
         self._next_status_log_perf_c = -math.inf
-        self._magnet_board_last_status_perf_c = {
+        self._magnet_board_last_status_perf_c: Dict[Motor, float] = {
             motor: math.nan
             for motor in Motor
             if motor in _magnet_board_motors
         }
-        self._pellet_board_last_status_perf_c = {
+        self._pellet_board_last_status_perf_c: Dict[Motor, float] = {
             motor: math.nan
             for motor in Motor
             if motor in _pellet_board_motors
