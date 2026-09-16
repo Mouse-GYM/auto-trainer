@@ -21,6 +21,9 @@ logger = get_verbose_logger(__name__)
 
 
 CHECK_N_FIRST_FRAMES = int(os.getenv("AUTOTRAINER_CAMERA_CHECK_N_FIRST_FRAMES", 0))
+# NB: depending on cam settings (resolution/fps): that is if high resolution and/or fps:
+# this was making apparently camera to output black frames somehow (during the time the check was active),
+# while no other sign of issue/problem is visible (logs, etc...)
 
 
 def is_truthy_str_value(value: str):
