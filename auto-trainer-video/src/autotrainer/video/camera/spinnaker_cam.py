@@ -81,7 +81,7 @@ class SpinCamDefaultParams:
     offsetx: int = 52
     offsety: int = 6
     gain: float = 1
-    gamma: float = 0.7
+    gamma: Optional[float] = 0.7
 
 
 GetDefT = TypeVar("GetDefT")
@@ -141,7 +141,7 @@ class SpinCam(CameraBase):
         self._offset_y: int = get_def("offsety", int)
 
         self._gain: float = get_def("gain", float)
-        self._gamma: float = get_def("gamma", float)
+        self._gamma: Optional[float] = get_def("gamma", Optional[float])
 
         self._is_primary = False
         self._is_secondary = True
@@ -317,6 +317,12 @@ class SpinCam(CameraBase):
         self._set_bounded_int_property_node(cam.BinningHorizontal, self._horizontal_binning)
         self._set_bounded_int_property_node(cam.BinningVertical, self._vertical_binning)
 
+        # pre-set offset x/y to 0, to allow any desired size after:
+        self._set_bounded_int_property_node(cam.OffsetX, 0)
+        self._set_bounded_int_property_node(cam.OffsetY, 0)
+        # effectively offsetX/Y could be pre-set to some > 0 value,
+        # preventing set of full width/height.
+
         # then size:
         self._set_bounded_int_property_node(cam.Width, self._width)
         self._set_bounded_int_property_node(cam.Height, self._height)
@@ -324,6 +330,20 @@ class SpinCam(CameraBase):
         # then offset:
         self._set_bounded_int_property_node(cam.OffsetX, self._offset_x)
         self._set_bounded_int_property_node(cam.OffsetY, self._offset_y)
+
+        # verify binning + size + offsets are as requested:
+        for prop, req_value in (
+            (cam.BinningHorizontal, self._horizontal_binning),
+            (cam.BinningVertical, self._vertical_binning),
+            (cam.OffsetX, self._offset_x),
+            (cam.OffsetY, self._offset_y),
+            (cam.Width, self._width),
+            (cam.Height, self._height),
+        ):
+            name = prop.GetDisplayName()
+            set_value = prop.GetValue()
+            if set_value != req_value:
+                raise RuntimeError(f"Failed configure {name} as requested: request_value={req_value} set_value={set_value}")
 
         gain = self._gain
         if gain is not None:

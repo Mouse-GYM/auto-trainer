@@ -78,7 +78,7 @@ def app_model(
         yield app  # noqa
     finally:
         try:
-            app.capture_stop(force=True)
+            app.capture_stop(force=True, update_led=False)
             app.on_close()
         finally:
             nullify_attributes(app)

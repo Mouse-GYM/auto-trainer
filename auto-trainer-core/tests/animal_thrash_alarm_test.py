@@ -26,12 +26,24 @@ class AnimalThrash(AnimalThrashAlarm):
     ):
         super().__init__(*args, **kwargs)
         self.event_check_done = threading.Event()
+        self.event_engaged = threading.Event()
+        self.event_disengaged = threading.Event()
+        (self.event_engaged if self.is_engaged else self.event_disengaged).set()
 
     def _check_state(self):
         super()._check_state()
         self.event_check_done.set()
         # force very small next delay on purpose:
         return 0.000_000_001  # relying on mocked get_perf_now.
+
+    def set_is_engaged(self, engaged: bool):
+        super().set_is_engaged(engaged)
+        if engaged:
+            self.event_disengaged.clear()
+            self.event_engaged.set()
+        else:
+            self.event_engaged.clear()
+            self.event_disengaged.set()
 
 
 @pytest.fixture()
@@ -86,7 +98,8 @@ def test_it_engages_disengages_with_aggr_delay(
     assert not mon.is_engaged
     mock_get_perf_now.increase_simulate_perf_now(aggr_delay / 4 + 0.05)
     mon.event_check_done.clear()
-    assert mon.event_check_done.wait(5)
+    assert mon.event_engaged.wait(5)
+    mon.event_engaged.clear()
     tot_dur = get_perf_now() - start_p
     assert mon.is_engaged
     assert tot_dur == AlmostEqualFloat(aggr_delay / 2), "duration before animal thrash engage"
@@ -96,11 +109,12 @@ def test_it_engages_disengages_with_aggr_delay(
     mock_event_manager.reset_mock()
     assert not has_api_event_kind(ApiEventKind.alarmChanged)
     # now disable load-cell thrash:
+    mon.event_disengaged.clear()
     load_cell.thrashing_detected = False
     while mon.is_engaged:
         assert not has_api_event_kind(ApiEventKind.alarmChanged)
-        mock_get_perf_now.increase_simulate_perf_now(1)
         mon.event_check_done.clear()
+        mock_get_perf_now.increase_simulate_perf_now(1)
         assert mon.event_check_done.wait(5)
     assert not mon.is_engaged
     time.sleep(0.001)  # give small extra time to daemon thread: it sets is_engaged before sending the API event,

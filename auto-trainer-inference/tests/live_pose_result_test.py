@@ -30,7 +30,7 @@ zero_pose_data = np.zeros((2, 42, 3), dtype=float)
 
 
 @pytest.fixture()
-def inference_data_proc(pose_algo, capture_multiprocess_logs, monkeypatch, caplog) -> InferenceMonitorDataProc:  # noqa
+def inference_data_proc(mp_manager, pose_algo, capture_multiprocess_logs, monkeypatch, caplog) -> InferenceMonitorDataProc:  # noqa
     pairs_offset = [
         (SceneElement.Diamond, SceneElement.Triangle),
         (SceneElement.Star, SceneElement.Triangle),
@@ -63,28 +63,34 @@ def inference_data_proc(pose_algo, capture_multiprocess_logs, monkeypatch, caplo
         'loggers': copy.deepcopy(autotrainer.core.logging._limit_loggers_level),  # noqa
     })
 
+    cmd_q = multiprocessing.Queue()
+    pose_data_q = multiprocessing.Queue()
+    msg_q = multiprocessing.Queue()
     proc = InferenceMonitorDataProc(
         project=ProjectInfo(),
-        pose_data_queue=multiprocessing.Queue(),
-        cmd_queue=multiprocessing.Queue(),
-        msg_queue=multiprocessing.Queue(),
+        pose_data_queue=pose_data_q,
+        cmd_queue=cmd_q,
+        msg_queue=msg_q,
         cmd_ack_event=multiprocessing.Event(),
         frames_per_cam=3,
         watchdog_perf_c=multiprocessing.Value(ctypes.c_double),
         monitored_parts_offsets=pairs_offset,
         tot_live_workers=1,  # ensure always sequential
     )
-    proc._cmd_queue.put(
+    cmd_q.put(
         (proc.Msg.SET_POSE_ALGO, (pose_algo,), None)
     )
     try:
         yield proc  # noqa
     finally:
-        proc._cmd_queue.put(None)  # ensure clean stop
+        cmd_q.put(None)  # ensure clean stop
         proc.join(15)  # give large amount for allow coverage to write to disk
         proc.terminate()
         proc.join(5)
         proc.on_close()
+        cmd_q.close()
+        msg_q.close()
+        pose_data_q.close()
 
 
 def test_live_no_recording(inference_data_proc, caplog, pose_algo):

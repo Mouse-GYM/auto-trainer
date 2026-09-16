@@ -1,7 +1,7 @@
 import math
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy
 
@@ -24,6 +24,44 @@ AvailableShiftXYZ = numpy.array([[-5, 5], [-5, 5], [-5, 5]])
 
 
 _segment_reach_debug: int = int(os.getenv("AUTOTRAINER_SEGMENT_REACH_DEBUG", 0))
+
+
+def _to_reach_event(pellet_event: dict, *, frame_rate: int, t_presented: float,
+                    max_frame: Optional[int]) -> ReachEvent:
+    """Convert a pellet-presentation record into a ReachEvent.
+
+    max_frame is -1 for other_events, which have no reach segment, and the closest accepted segment's max
+    frame for hand_events. None means unknown: either the presentation produced no accepted segment, or it
+    was left-handed and the right-hand segmentation has nothing to say about it.
+    """
+    placed = pellet_event["placed"]
+    return ReachEvent(
+        init=placed,
+        end=pellet_event["lost"],
+        max=max_frame,
+        method=pellet_event["method"],
+        outcome=pellet_event["outcome"],
+        delay_since_presented=placed / frame_rate - t_presented,
+    )
+
+
+def _to_hand_reach_events(pellet_events: List[dict], *, frame_rate: int,
+                          t_presented: float) -> List[ReachEvent]:
+    """Convert hand-attributed presentations, taking max from the segment stamped during segmentation."""
+    return [
+        _to_reach_event(pellet_event, frame_rate=frame_rate, t_presented=t_presented,
+                        max_frame=pellet_event.get("max"))
+        for pellet_event in pellet_events
+    ]
+
+
+def _to_other_reach_events(pellet_events: List[dict], *, frame_rate: int,
+                           t_presented: float) -> List[ReachEvent]:
+    """Convert non-hand presentations, which have no reach segment and take the -1 placeholder."""
+    return [
+        _to_reach_event(pellet_event, frame_rate=frame_rate, t_presented=t_presented, max_frame=-1)
+        for pellet_event in pellet_events
+    ]
 
 
 def intertrial_process(
@@ -75,15 +113,10 @@ def intertrial_process(
     # all others keys are same than IntersessionResponse fields
     # convert to ReachEvent instances:
     results_dict["reach_events"] = [ReachEvent(**d) for d in results_dict["reach_events"]]
-    results_dict["other_events"] = [
-        # other events are pellet_events not associated with reach (by hand)
-        ReachEvent(
-            init=d['placed'],
-            end=d['lost'],
-            max=-1,
-            method=d['method'],
-            outcome=d['outcome'],
-            delay_since_presented=d['placed'] / frame_rate - project.get_t_pellet_presented_or_default(),
-        ) for d in results_dict["other_events"]
-    ]
+    t_presented = project.get_t_pellet_presented_or_default()
+    # other events are pellet_events not associated with reach (by hand)
+    results_dict["other_events"] = _to_other_reach_events(
+        results_dict["other_events"], frame_rate=frame_rate, t_presented=t_presented)
+    results_dict["hand_events"] = _to_hand_reach_events(
+        results_dict["hand_events"], frame_rate=frame_rate, t_presented=t_presented)
     return IntertrialResponse(**results_dict)
