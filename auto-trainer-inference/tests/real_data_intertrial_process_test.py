@@ -192,6 +192,7 @@ def test_fp_and_xp_not_same(project_info, caplog):
     assert res.total_reaches == 0
     assert len(res.reach_events) == len(res.rh_max_vp_list) == 0
     assert len(res.other_events) == 1
+    assert len(res.hand_events) == 0
     event = res.other_events[0]
     assert event.method == 'other'
     assert event.outcome == 'dropped'
@@ -223,6 +224,16 @@ def test_agx001_20250806_59(project_info, caplog):
                 delay_since_presented=AEF(0.746),
             )
         ],
+        hand_events=[
+            ReachEvent(
+                init=0,
+                end=131,
+                max=129,
+                method="right_hand",
+                outcome="dropped",
+                delay_since_presented=0.0,
+            )
+        ],
         food_consumed=0,
         successful_reaches=0,
         pellets_presented=1,
@@ -243,7 +254,17 @@ agx001_20251015_15_expected_result = IntertrialResponse(
             outcome='dropped',
             method='right_hand',
         ),
-    ]
+    ],
+    hand_events=[
+        ReachEvent(
+            init=0,
+            end=163,
+            max=147,
+            method="right_hand",
+            outcome="dropped",
+            delay_since_presented=0.0,
+        ),
+    ],
 )
 
 
@@ -262,6 +283,17 @@ def test_intertrial_process_agx001_20251015_15(agx001_20251015_15):
         calib_dir=calib_dir,
     )
     assert_deep_almost_equal(res, agx001_20251015_15_expected_result)
+
+
+def test_hand_event_max_agrees_with_its_reach_segment(agx001_20251015_15):
+    res = intertrial_process(
+        agx001_20251015_15,
+        calib_dir=calib_dir,
+    )
+    assert len(res.hand_events) == 1
+    assert len(res.reach_events) == 1
+    # the hand event carries the max frame of the accepted segment it was associated with
+    assert res.hand_events[0].max == res.reach_events[0].max
 
 
 @pytest.mark.bench
@@ -283,6 +315,13 @@ agx001_20260205_11_expected_result = IntertrialResponse(
         max=17,
         method='right_hand',
         outcome='dropped')],
+    hand_events=[ReachEvent(
+        delay_since_presented=0.0,
+        end=50,
+        init=0,
+        max=17,
+        method="right_hand",
+        outcome="dropped")],
 )
 
 

@@ -23,6 +23,10 @@ class IntertrialResponse:
     other_events: List[ReachEvent] = dataclasses.field(default_factory=list)
     # include other, non-hand based, events
 
+    hand_events: List[ReachEvent] = dataclasses.field(default_factory=list)
+    # include right and left hand based events. max is the real reach maximum for right-hand events;
+    # it stays None for left-hand ones until left-hand reach segmentation exists.
+
     food_consumed: int = 0  # total pellets consumed during session/trial
     successful_reaches: int = 0  # whose these are successful reaches (Right-Hand)
     pellets_presented: int = 0  # there were that many total pellets presented.
