@@ -137,7 +137,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def is_engaged(self, value):
         self.set_is_engaged(value)
 
-    def _custom_set_is_engaged(self):
+    def _custom_set_is_engaged(self, engaged: bool):
         """this is for subclass to customize their logic on is_engaged changed"""
 
     def set_is_engaged(self, engaged: bool):
@@ -153,12 +153,13 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 self._engaged_perf_c = perf_now
             else:
                 self._disengaged_perf_c = perf_now
-        self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
-                            engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
-        kind = self.detector_api_kind
-        if kind is not None:
-            self.post_detector_event(kind, engaged, self.default_detector_enabled)
-        self._custom_set_is_engaged()  # before the property changed event
+            self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
+                                engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
+            kind = self.detector_api_kind
+            if kind is not None:
+                self.post_detector_event(kind, engaged, self.default_detector_enabled)
+            self._custom_set_is_engaged(engaged)  # before the property changed event
+        # deliver the event without the lock acquired:
         self.property_changed(self.IS_ENGAGED, engaged, prev)
 
     @property
@@ -182,10 +183,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # NB: not using lock on purpose
         return self._checking_state
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self) -> Optional[float]: ...
 
-    @typing_extensions.override
+    @typing_extensions.overload
     def _check_state(self, *, force: bool) -> Optional[float]: ...
 
     def _check_state(self, *, force: bool=False) -> Optional[float]:
@@ -381,7 +382,6 @@ class GroupSubDetectorContext:
     property_changed_callback: Callable
 
 
-
 GroupSubDetectorT = TypeVar("GroupSubDetectorT", bound=BaseDetector[DetectorConfig])
 
 
@@ -406,6 +406,10 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         self._sub_detectors: Dict[str, GroupSubDetectorContext] = {}
         self._thread_local = _GroupThreadLocals()
 
+    def _custom_set_is_engaged(self, engaged: bool):
+        if not engaged:
+            self._engaged_reasons.clear()
+
     @property
     def engaged_reasons(self) -> List[str]:
         """Gives list of name/key of the engaged detectors"""
@@ -414,7 +418,6 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
 
     def _start(self):
         super()._start()
-        self._engaged_reasons.clear()
         for sub in self._sub_detectors.values():
             sub.detector.start()
 

@@ -10,6 +10,6 @@ class DeviceCommAlarm(AlarmDetector[DeviceCommAlarmConfig]):
     config_cls = DeviceCommAlarmConfig
     alarm_api_kind = ApiAlarmKind.deviceCommunication
 
-    def _check_state(self) -> Optional[float]:
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         pass
         # is_engaged is set/handled externally via hardware_model

@@ -417,6 +417,18 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 logger.spam("relaying transition %s -> %s", trig, wrapped)
                 setattr(machine_transitions, trig, wrapped)
 
+    @staticmethod
+    @contextlib.contextmanager
+    def set_force_wait_mode(force_wait: bool):
+        """Allow to set the force_wait flag of algo handler thread, which is None by default"""
+        t_locals = BehaviorAlgorithm._thread_locals
+        prev = getattr(t_locals, "force_wait", None)
+        t_locals.force_wait = force_wait
+        try:
+            yield
+        finally:
+            t_locals.force_wait = prev
+
     @classmethod
     def put_func_call(
         cls,
@@ -431,6 +443,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         """
         cur_thread = threading.current_thread()
         handler_thread, handler_queue, reentrant_list = BehaviorAlgorithm._handler_thread_queue
+        t_force_wait = getattr(cls._thread_locals, "force_wait", None)
+        if t_force_wait is not None:
+            wait = t_force_wait
         t_allow_reentrant = getattr(cls._thread_locals, "allow_reentrant", False)
         event = getattr(cls._thread_locals, "event", None)
         is_handler_thread_allow_reentrant = (cur_thread is handler_thread and t_allow_reentrant)

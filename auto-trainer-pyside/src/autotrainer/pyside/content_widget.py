@@ -59,13 +59,13 @@ class ContentWidget(QWidget):
         self.setContentsMargins(0, 0, 0, 0)
 
     def set_is_editable(self, is_editable: bool):
-        pass
+        """Set widget as editable"""
 
     def set_is_capture_active(self, is_active: bool):
-        pass
+        """Set capture as active"""
 
     def on_activated(self):
-        pass
+        """On activated"""
 
     def on_close(self):
-        pass
+        """On close"""

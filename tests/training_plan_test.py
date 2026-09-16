@@ -17,6 +17,7 @@ from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet_shift import ShiftXYZBufferHandler
 from autotrainer.core import Offset3DTuple, EventManager, get_perf_now
 from autotrainer.core.configuration.behavior_configuration import ShiftXYZBufferHandlerConfig
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.device import CanDevice
 from autotrainer.inference import InferenceStatus
 from autotrainer.inference.analysis import IntertrialResponse
@@ -25,7 +26,12 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
-from top_fixtures import MockSystemMachine, FifoExitStack, nullify_attributes
+from top_fixtures import (
+    MockSystemMachine,
+    FifoExitStack,
+    nullify_attributes,
+    increase_simulate_perf_now,
+)
 
 this_dir = Path(__file__).parent.resolve()
 
@@ -137,21 +143,23 @@ class BaseTrainingPlan(MockSystemMachine):
         try:
             yield app_model
         finally:
+            # NB: we use mock get_perf_now,
+            # but device-connection is checking its queue only after X duration.
+            # so spawn a thread to keep increasing fake perf now:
+            is_done = threading.Event()
+            def increase_fake_perf_now():
+                while not is_done.is_set():
+                    increase_simulate_perf_now(0.5)
+                    time.sleep(0.01)
+            th = threading.Thread(target=increase_fake_perf_now, daemon=True)
+            th.start()
             try:
                 app_model.capture_stop()
                 app_model.on_close()
             finally:
                 nullify_attributes(app_model)
-
-    def ack_pending_tokens(self, wait_acked: bool=True):
-        tokens = list(self._app_model.hardware._pending_tokens)
-        logger.info("acking %s pending tokens", len(tokens))
-        for tok in tokens:
-            self.msg_handler.ack_received(tok, perf_c=get_perf_now())
-        if wait_acked:
-            for tok in tokens:
-                logger.debug("waiting tock %s", tok)
-                self._app_model.hardware.wait_pending_command_acked(tok)
+                is_done.set()
+                th.join()
 
 
 class TestTrainingPlan(BaseTrainingPlan):
@@ -336,8 +344,6 @@ class TestWithBatch(BaseTrainingPlan):
         max_batch_size = algo.batch_trial_recording_config.maximum_batch_size = 3
         algo.update_pellet_seen(True)
 
-        self.ack_pending_tokens()
-
         self.start_trial_in_tunnel(set_recording_status=True)
         self.mock_pose_response(pellet_seen=True, mouse_seen=True)
         self.mock_pellet_ack(until_none=True)
@@ -352,7 +358,6 @@ class TestWithBatch(BaseTrainingPlan):
             logger.info("acked pellet_seen=False")
             self.mock_pose_response(pellet_seen=True, mouse_seen=True)
             self.mock_pellet_ack(until_none=True)
-            self.ack_pending_tokens()
             logger.info("after pellet_seen=True")
 
         with FifoExitStack() as stack:
