@@ -28,6 +28,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import EventManager, SensorAnalysis, MessageHandler, SystemMessageHandler, ProjectInfo, EventInfo
 from autotrainer.core.analysis import detector
 from autotrainer.core.event import event_manager
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.multiproc import make_daemon_timer, DaemonTimer, get_mp_ctx
 from autotrainer.device import MotorConfigurationFile, CompoundMovements, can_device
 from autotrainer.inference.analysis import IntertrialResponse
@@ -101,11 +102,28 @@ def _make_del_shm_sem_count():
     return len(out)
 
 
+@pytest.fixture(autouse=True)
+def _check_threads(request):
+    if os.getenv("AUTOTRAINER_TEST_CHECK_NO_REMAINING_THREAD") == "0":
+        yield
+        return
+    before = list(threading.enumerate())
+    # print(" .. enter _check_threads")
+    try:
+        yield
+    finally:
+        # print(" .. finalize _check_threads")
+        after = [thread for thread in threading.enumerate() if thread.is_alive()]
+        new = list(set(after) - set(before))
+        if len(new) > 0:
+            raise RuntimeError(f"detected remaining threads after test: {new} // before={before}")
+
+
 _cnt_shm_sem_del_prev_before = 0
 _cnt_shm_sem_del_prev_after = 0
 
 @pytest.fixture(autouse=True)
-def _lsof_del_shm(request):
+def _lsof_del_shm(request, _check_threads):
     global _cnt_shm_sem_del_prev_before, _cnt_shm_sem_del_prev_after
     if not os.getenv("AUTOTRAINER_TEST_PROFILE_SHM_SEM"):
         yield
@@ -129,7 +147,7 @@ def _lsof_del_shm(request):
 
 
 @pytest.fixture(autouse=True)
-def force_use_emulation_iface(monkeypatch):
+def force_use_emulation_iface(monkeypatch, _check_threads):
     # NB: this is used in conjunction of conftest:os.environ.setdefault('AUTOTRAINER_FORCE_CAN_EMULATION_IFACE' ..)
     # for current process:
     assert hasattr(can_device, "HAVE_CAN_DEVICE")
@@ -159,7 +177,7 @@ _m_event_mgr: Optional[mock.MagicMock] = None
 
 
 @pytest.fixture()
-def mock_event_manager(monkeypatch):
+def mock_event_manager(monkeypatch, _check_threads):
     real_manager = event_manager.EventManager
     real_post_api_event = real_manager.post_api_event
     real_post_event_content = real_manager.post_event_content
@@ -202,7 +220,7 @@ def get_api_event_context(kind) -> Optional[Mapping[str, Any]]:
 
 
 @pytest.fixture(autouse=True)
-def auto_close_event_manager():
+def auto_close_event_manager(_check_threads):
     # allow to close the EventManager and have its worker thread exits gracefully (on each end of test case)
     try:
         yield
@@ -225,7 +243,7 @@ def motor_config(monkeypatch):
 
 
 @pytest.fixture(scope="function")
-def mp_manager(_lsof_del_shm):
+def mp_manager(_lsof_del_shm, _check_threads):
     mgr = get_mp_ctx().Manager()
     try:
         with mgr:
@@ -769,7 +787,7 @@ class MockSystemMachine:
             perf_c=autotrainer.core.get_perf_now())
         self.inference.pose_response_ready(response)
         if self.pellet._api_status_token is not None and ack_pellet:
-            self.pellet._pellet_device_ack_received(self.pellet._api_status_token)
+            self.pellet._pellet_device_ack_received(self.pellet._api_status_token, CommandResult(succeeded=True))
 
     def expect_cover_command(self):
         # An explicit cover command should have been set.  Should be in covering state and have an ack from the command.
@@ -785,7 +803,9 @@ class MockSystemMachine:
                 break
             cur_ack += 1
             self.increment_perf_now(1e-9)
-            self.pellet._pellet_device_ack_received(token)
+            (# self.pellet._pellet_device_ack_received
+            self.msg_handler.ack_received
+             (token, CommandResult(succeeded=True)))
             if not until_none:
                 break
             if cur_ack > max_limit:
@@ -841,8 +861,12 @@ def mock_system(machine, request) -> MockSystemMachine:
 
 
 @pytest.fixture
-def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:
-    return HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
+def hardware_model(fake_system_msg_handler, sensor_analysis) -> HardwareModel:  # noqa
+    hard = HardwareModel(fake_system_msg_handler, sensor_analysis=sensor_analysis)
+    try:
+        yield hard  # noqa
+    finally:
+        hard.disconnect()
 
 
 @pytest.fixture

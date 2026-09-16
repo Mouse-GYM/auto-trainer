@@ -843,17 +843,23 @@ class MainWindow(QMainWindow):
     def close(self):
         if self._closed:
             return
+        app_model = self._app_model
         logger.notice("received close")
         self._main_ui_watchdog_timer.stop()  # ensure doesn't race
-        with self._app_model.app_lock:
+        with app_model.app_lock:
             if self._closing:
                 logger.warning("already closing")
                 return
             self._closing = True
         def after_stop():
             # time.sleep(5)  debug
-            self._app_model.on_close()
+            app_model.on_close()
             self._on_closed_finished()
+        # ensure watchdog stays off:
+        app_model.analysis.watchdog_monitor.stop()
+        app_model.analysis.watchdog_monitor.unregister_watchdog(WatchdogItems.MAIN_UI_THREAD)
+        # ensure any other emergency source also does not trigger:
+        app_model.analysis.emergency_alarm_monitor.stop()
         self._on_capture_start_stop(False, after_callback=after_stop)
         dialog = QDialog(self)
         layout = QVBoxLayout()
@@ -1196,7 +1202,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        emergency_button = QPushButton("Emergency")
+        emergency_button = self._emergency_button = QPushButton("Emergency")
         emergency_button.setCheckable(True)
         emergency_button.setObjectName("EmergencyButton")
         emergency_button.setStyleSheet("#EmergencyButton {background-color: red; color: white; min-width: 100px}")
@@ -1212,6 +1218,11 @@ class MainWindow(QMainWindow):
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
+            emergency_button.blockSignals(True)
+            # keep button as it was (engaged/not-engaged),
+            # we will set as desired, via callbacks, if the action succeed
+            emergency_button.setChecked(not is_toggled)
+            emergency_button.blockSignals(False)
             if is_toggled:
                 behavior.emergency_stop(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyStopReason.user_button)
             else:
@@ -1220,6 +1231,9 @@ class MainWindow(QMainWindow):
         emergency_button.toggled.connect(emergency_stop_triggered)
         behavior.emergency_stopped += lambda src: update_emergency_ui(True, source=src)
         behavior.emergency_resumed += lambda src: update_emergency_ui(False, source=src)
+        behavior.emergency_resumed_failed += lambda reason: app_model.on_error(
+            "Emergency resume failed",
+            f"Reason: {reason}\n\nYou can try acquisition stop then start, or restart the application.")
 
         toolbar.addWidget(emergency_button)
 
@@ -1822,10 +1836,10 @@ class MainWindow(QMainWindow):
         }
         for plan_index, plan in enumerate(plans):
             combo.addItem(plan.name, userData=plan.plan_id)
-            combo.setItemData(plan_index, plan.description, Qt.ToolTipRole)
+            combo.setItemData(plan_index, plan.description, Qt.ItemDataRole.ToolTipRole)
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
-        combo.setItemData(len(plans), tooltip_txt, Qt.ToolTipRole)
+        combo.setItemData(len(plans), tooltip_txt, Qt.ItemDataRole.ToolTipRole)
         combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:

@@ -9,12 +9,28 @@ from typing import Union, Tuple
 from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
 
-from .device_interface import (DeviceInterface, ServoConfig, StepperConfig,
-                               StepperStatus, ServoStatus, Target, DigitalOutputs,
-                               Motor, AnalogOutputs, SensorStatus, MagnetDigitalInputs,
-                               AudioData, PressureReading, LoadCellReading, Version,
-                               PelletDigitalInputs, DoorData, Acknowledge, ColorLed
-                               )
+from .device_interface import (
+    DeviceInterface,
+    ServoConfig,
+    StepperConfig,
+    StepperStatus,
+    ServoStatus,
+    Target,
+    DigitalOutputs,
+    Motor,
+    AnalogOutputs,
+    SensorStatus,
+    MagnetDigitalInputs,
+    AudioData,
+    PressureReading,
+    LoadCellReading,
+    Version,
+    PelletDigitalInputs,
+    DoorData,
+    Acknowledge,
+    ColorLed,
+    PositionOrPosVelocityT,
+)
 from .can_interface import motor_to_str
 
 logger = get_verbose_logger(__name__)
@@ -62,7 +78,7 @@ class EmulationInterface(DeviceInterface):
     def __init__(self):
         super().__init__()
 
-        self._thread_lock = threading.Lock()
+        self._thread_lock = threading.RLock()
         self._is_open = False
 
         self._last_status_message = 0.0
@@ -276,43 +292,60 @@ class EmulationInterface(DeviceInterface):
 
     def set_motor_configuration(self, motor: Motor, config, _write_to_remote: bool = True) -> bool:
         if self._is_open:
-            logger.info(f"Set motor configuration %s", motor)
+            logger.info("Set motor configuration %s", motor)
             self._configs[motor] = config
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
+    def board_reboot(self, target: Target):
+        if self._is_open:
+            logger.notice("rebooting board %s", target)
+            for motor in self._send_pos:
+                self._send_pos[motor] = 0.0
+            for motor in (Motor.PELLET_X_MOTOR, Motor.PELLET_Y_MOTOR, Motor.PELLET_Z_MOTOR):
+                self._messages.append(
+                    StepperStatus(Target.PELLET_DEVICE, motor,
+                                  self._positions[motor],
+                                  self._send_pos[motor],
+                                  self._positions[motor] == 0))
+        return self._is_open
+
     def tare_load_cell(self) -> bool:
         if self._is_open:
-            logger.info(f"tare load cell")
+            logger.info("tare load cell")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def tare_pressure_sensor(self) -> bool:
         if self._is_open:
-            logger.info(f"tare pressure sensor")
+            logger.info("tare pressure sensor")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
     def move_magnet_servo(self, position: float) -> bool:
         if self._is_open:
-            logger.info(f"set magnet position {position}")
+            logger.info("set magnet position %s", position)
             self._positions[Motor.TUNNEL_MAGNET_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def move_gate_servo(self, position: float) -> bool:
+    def move_gate_servo(self, position: PositionOrPosVelocityT) -> bool:
         if self._is_open:
-            logger.info(f"set gate position {position}")
+            logger.info("set gate position %s", position)
+            if isinstance(position, tuple):
+                position, velocity = position
             self._positions[Motor.TUNNEL_GATE_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_x(self, position, *, relative: bool=False) -> bool:
+    def set_motor_x(self, position: float, *, relative: bool=False) -> bool:
         return self.move_motor_x(position, True, relative=relative)
 
-    def move_motor_x(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
+    def move_motor_x(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s x %s", ("absolute", "relative")[relative], position)
+            if isinstance(position, tuple):
+                position, velocity = position
             if save_as_fixed:
                 if relative:
                     position += self._send_pos[Motor.PELLET_X_MOTOR]
@@ -324,12 +357,14 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_y(self, position, *, relative: bool = False) -> bool:
+    def set_motor_y(self, position: float, *, relative: bool = False) -> bool:
         return self.move_motor_y(position, True, relative=relative)
 
-    def move_motor_y(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
+    def move_motor_y(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s y %s", ("absolute", "relative")[relative], position)
+            if isinstance(position, tuple):
+                position, velocity = position
             if save_as_fixed:
                 if relative:
                     position += self._send_pos[Motor.PELLET_Y_MOTOR]
@@ -341,12 +376,14 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def set_motor_z(self, position, *, relative: bool=False) -> bool:
+    def set_motor_z(self, position: float, *, relative: bool=False) -> bool:
         return self.move_motor_z(position, True, relative=relative)
 
-    def move_motor_z(self, position: float, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
+    def move_motor_z(self, position: PositionOrPosVelocityT, save_as_fixed: bool = False, *, relative: bool=False) -> bool:
         if self._is_open:
             logger.info("set pellet %s z %s", ("absolute", "relative")[relative], position)
+            if isinstance(position, tuple):
+                position, velocity = position
             if save_as_fixed:
                 if relative:
                     position += self._send_pos[Motor.PELLET_Z_MOTOR]
@@ -358,16 +395,16 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def move_servo_motor(self, motor: Motor, position: Union[float, Tuple[float, float]]):
+    def move_servo_motor(self, motor: Motor, position: PositionOrPosVelocityT):
         if isinstance(position, tuple):
             position = position[0]
         self._positions[motor] = position
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return True
 
-    def move_load_servo(self, position: float, _save: bool = False) -> bool:
+    def move_load_servo(self, position: PositionOrPosVelocityT, _save: bool = False) -> bool:
         if self._is_open:
-            logger.info(f"set load arm {position}")
+            logger.info("set load arm %s", position)
             if isinstance(position, float) or isinstance(position, int):
                 velocity = 100  # config.maximum_velocity
             elif isinstance(position, tuple):
@@ -387,9 +424,11 @@ class EmulationInterface(DeviceInterface):
             logger.info("scoop pellet")
         return self.move_load_servo(self._configs[Motor.PELLET_LOAD_SERVO].minimum_position)
 
-    def move_cover_servo(self, position, _save: bool = False) -> bool:
+    def move_cover_servo(self, position: PositionOrPosVelocityT, _save: bool = False) -> bool:
         if self._is_open:
-            logger.info(f"set barrier arm {position}")
+            logger.info("set barrier arm %s", position)
+            if isinstance(position, tuple):
+                position = position[0]
             self._positions[Motor.PELLET_COVER_SERVO] = position + 0.00001
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
@@ -410,7 +449,7 @@ class EmulationInterface(DeviceInterface):
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
-    def emit_tone(self, frequency, duration) -> bool:
+    def emit_tone(self, frequency: int, duration: float) -> bool:
         if self._is_open:
             logger.info(f"play tone f={frequency} d={duration}")
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
@@ -480,9 +519,9 @@ class EmulationInterface(DeviceInterface):
             self._messages.append(Version(Target.MAGNET_DEVICE, "Magnet Emulator v0.1.0"))
         return self._is_open
 
-    def delay(self, delay):
+    def delay(self, delay_sec: float):
         if self._is_open:
-            time.sleep(float(delay))
+            time.sleep(delay_sec)
             self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
         return self._is_open
 
@@ -502,8 +541,4 @@ class EmulationInterface(DeviceInterface):
         logger.verbose("setting tunnel fan OFF")
         self._positions[Motor.TUNNEL_FAN_SERVO] = 0
         self._messages.append(Acknowledge(uuid=EmulationInterface.next_uuid()))
-        return True
-
-    def board_reboot(self, target: Target):
-        logger.verbose("board_reboot %s", target)
         return True

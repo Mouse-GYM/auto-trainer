@@ -204,8 +204,8 @@ class AlarmContent(ContentWidget):
         ctx.alarm.property_changed -= ctx.property_changed_cb
         self._form_layout_alarms.removeRow(ctx.label)
 
-    def set_is_capture_active(self, is_editable: bool):
-        self._card_widget.setEnabled(is_editable)
+    def set_is_capture_active(self, is_active: bool):
+        self._card_widget.setEnabled(is_active)
 
     @invoke_method
     def _hardware_model_property_changed(self, name: str, value, _):
@@ -226,16 +226,12 @@ class AlarmContent(ContentWidget):
         if name == AudioSpectrumThrashMonitor.IS_ENGAGED:
             self.audio_thrashing_changed.emit(new_value)
 
-    def _refresh_alarm(self, ctx: AlarmContentContext):
+    @staticmethod
+    def _refresh_alarm(ctx: AlarmContentContext):
         cfg = ctx.alarm.config
         ctx.label.setEnabled(cfg.use)
         ctx.icon.setInUse(cfg.use)
         ctx.icon.setStatus(ctx.alarm.is_engaged)
-
-    @invoke_method
-    def _refresh_alarm_icons_labels(self):
-        for ctx in self._alarms.values():
-            self._refresh_alarm(ctx)
 
     @invoke_method
     def _pellet_misplaced_property_changed(self, name, value, _):

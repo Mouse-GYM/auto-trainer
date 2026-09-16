@@ -105,11 +105,11 @@ class CameraBase:
         logger.debug(f"<{self._name}> height: {self._height}")
 
     @property
-    def fps(self) -> int:
+    def fps(self) -> float:
         return self._fps
 
     @fps.setter
-    def fps(self, value: int) -> None:
+    def fps(self, value: float) -> None:
         self._fps = value
         logger.debug(f"<{self._name}> fps: {self._fps}")
 

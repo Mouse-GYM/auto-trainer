@@ -76,10 +76,10 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
         # self._on_property_changed("duration", value, prev)  unused
         self._rebuild_buffers()
 
-    def _custom_set_is_engaged(self):
+    def _custom_set_is_engaged(self, engaged: bool):
         self._event_manager.post_event_content(
             ApiEventKind.headbarPressureEngagedChanged,
-            data=dict(is_engaged=self._is_engaged),
+            data=dict(is_engaged=engaged),
             when=datetime.fromtimestamp(self._last_when), index=self._last_index)
 
     def update(self, values: List[float], when: float = 0.0, index: int = 0) -> bool:
