@@ -282,6 +282,7 @@ def make_3d_calib(
             with hard.wait_pending_command_acked(tokens):
                 key = coord2m[coord](value)
                 tokens.add(key)
+            time.sleep(0.5)
 
         logger.success("executed %s moves", len(moves))
 
