@@ -188,7 +188,7 @@ class CameraBase:
         elif name == "height":
             self.height = int(value)
         elif name == "fps":
-            self.fps = int(value)
+            self.fps = float(value)
         elif name == "name":
             self.name = value
         elif name == "primary":
