@@ -59,14 +59,21 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._event_manager = EventManager.default()
         self._mp_manager = mp_ctx
         self._thread_lock = threading.RLock()  # for perform_detection / perform_segmentation
+        #
         self._output_data_queue = mp_ctx.Queue(maxsize=64)  # inference result data queue
+        #
         self._cmd_queue_lock = threading.Lock()  # to ensure ack are correct respectively
         self._cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to inference process
         self._cmd_queue_ack = mp_ctx.Event()
-        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)  # msg queue for messages from pose-process and from data-monitor process to main process
+        #
+        self._data_monitor_cmd_queue_lock = threading.Lock()  # to ensure ack are correct respectively
         self._data_monitor_cmd_queue = mp_ctx.Queue(maxsize=16)  # command queue to monitor data result process
         self._data_monitor_cmd_ack_event = mp_ctx.Event()
-        self._record_stop_sema = record_stop_sema
+        #
+        self._notif_msg_queue = mp_ctx.Queue(maxsize=64)
+        # msg queue for messages from pose-process and from data-monitor process to main process
+        #
+        self._record_stop_sema = record_stop_sema  # for pose offline feeder thread (in pose subprocess)
         self._main_watchdog_holder: Optional[ValueProxy] = main_watchdog_holder
 
         self._offline_queue: Optional[FixedArrayMultiQueue] = None
@@ -130,20 +137,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def project(self, value: ProjectInfo):
         self._project = value
         logger.debug("Putting new project info to data monitor queue: %s", value)
-        self._data_monitor_cmd_ack_event.clear()
-        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_PROJECT_INFO, (value,), None))
-        cur_proc = self._data_monitor_proc
-        if cur_proc is None:
-            # can happen on startup before inference running/started
-            logger.verbose("data_monitor_proc not yet started, won't wait ack event")
-            # when it will start it will get the put project-info
-        else:
-            # inference data monitor proc could have been killed/died unexpectedly,
-            # it can be started again with start.
-            if cur_proc.is_alive():
-                logger.debug("waiting ack, proc=%s", cur_proc)
-                self._data_monitor_cmd_ack_event.wait()
-                logger.debug("ack obtained")
+        self._send_to_data_monitor_proc(InferenceMonitorDataMsg.SET_PROJECT_INFO, value)
 
     @property
     def pose_parts(self) -> List[str]:
@@ -198,11 +192,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     @pose_algorithm.setter
     def pose_algorithm(self, value):
         self._pose_algorithm = value
-        proc = self._data_monitor_proc
-        if proc is not None and proc.is_alive():
-            logger.debug("putting new pose_algo to data-monitor-proc")
-            self._data_monitor_cmd_queue.put(
-                (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (value,), None))
+        logger.debug("putting new pose_algo to data-monitor-proc")
+        self._send_to_data_monitor_proc(InferenceMonitorDataProc.Msg.SET_POSE_ALGO, value)
 
     @staticmethod
     def _check_previous_offline_thread(cause: str, cur_off: Optional[threading.Thread]):
@@ -443,21 +434,48 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             is_enabled=self.is_enabled,
         )
 
-    def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
-        cmd_queue = self._cmd_queue
-        # logger.debug("sending command msg %s qsize=%s", kind, cmd_queue.qsize())
-        with self._cmd_queue_lock:
-            self._cmd_queue_ack.clear()
-            cmd_queue.put((kind, data))
-            logger.debug("sent command msg %s qsize=%s", kind, cmd_queue.qsize())
-            pose_proc = self._pose_process
-            if pose_proc is not None and pose_proc.is_alive():
-                if self._cmd_queue_ack.wait(3):
-                    logger.debug("got cmd ack for %s", kind)
-                else:
-                    logger.warning("missed ack for %s within expected delay, continuing", kind)
+    @staticmethod
+    def _send_to_with_ack_evt(
+        name: str, *,
+        proc: Optional[multiprocessing.Process], out_q, ack, lock,
+        cmd, data,
+        timeout,
+    ):
+        with lock:
+            ack.clear()
+            out_q.put((cmd, data))
+            if __debug__:
+                logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
+            if proc is None:
+                logger.verbose("%s not yet started, won't wait ack event", name)
+            elif not proc.is_alive():
+                logger.warning("%s not anymore alive, won't wait ack event ; proc=%s", name, proc)
             else:
-                logger.verbose("pose-process not alive, skipped ack wait for %s", kind)
+                if not ack.wait(timeout):
+                    logger.warning("timeout wait ack for %s to %s", cmd, proc)
+
+    def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
+        """Send command to inference process"""
+        self._send_to_with_ack_evt(
+            "pose_process",
+            proc=self._pose_process,
+            out_q=self._cmd_queue,
+            ack=self._cmd_queue_ack,
+            lock=self._cmd_queue_lock,
+            cmd=kind, data=data,
+            timeout=3,
+        )
+
+    def _send_to_data_monitor_proc(self, cmd: InferenceMonitorDataMsg, *args, **kwargs):
+        self._send_to_with_ack_evt(
+            "data_monitor_proc",
+            proc=self._data_monitor_proc,
+            out_q=self._data_monitor_cmd_queue,
+            ack=self._data_monitor_cmd_ack_event,
+            lock=self._data_monitor_cmd_queue_lock,
+            cmd=cmd, data=(args, kwargs),
+            timeout=5,
+        )
 
     def _handle_segmentation_finished(self, prj: ProjectInfo, success: bool, *, error: str="NA"):
         ib = self._intertrial_block
@@ -485,10 +503,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def _cb_on_set_feed_intertrial_result(self, project: ProjectInfo, error: Optional[str],
                                           *, event: Optional[synchronize.Event]=None):
         logger.verbose("Got feed error cb: prj=%s err=%s", project, error)
-        self._data_monitor_cmd_ack_event.clear()
-        self._data_monitor_cmd_queue.put((InferenceMonitorDataMsg.SET_FEED_INTERTRIAL_RESULT, (project, error), None))
-        if not self._data_monitor_cmd_ack_event.wait(5):
-            logger.warning("timeout wait ack for SET_FEED_INTERTRIAL_RESULT to pose result process")
+        self._send_to_data_monitor_proc(InferenceMonitorDataMsg.SET_FEED_INTERTRIAL_RESULT, project, error)
         if event is not None:
             event.set()
 
@@ -544,8 +559,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                     self._set_status(InferenceStatus.waiting)
                     pose_algo = self._pose_algorithm
                     pose_algo.initialize(context)
-                    self._data_monitor_cmd_queue.put(
-                        (InferenceMonitorDataProc.Msg.SET_POSE_ALGO, (pose_algo,), None))
+                    self._send_to_data_monitor_proc(InferenceMonitorDataProc.Msg.SET_POSE_ALGO, pose_algo)
                     self.send_message(InferenceCommandMessageKind.Start)
                 elif msg == InferenceStatusMessageKind.Loading:
                     self._set_status(InferenceStatus.loading)

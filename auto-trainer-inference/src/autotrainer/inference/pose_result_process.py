@@ -195,7 +195,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
             if raw is None:
                 self._is_running = False
                 break
-            cmd, args, kwargs = raw
+            cmd, (args, kwargs) = raw
             logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
             if cmd is message.SET_POSE_ALGO:
                 pose_algo = args[0]
