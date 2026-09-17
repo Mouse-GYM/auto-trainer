@@ -638,7 +638,6 @@ class AppModel(ObservableObject):
             cam_offsets = None
             logger.warning("calib_src_dir=%r does not exist", calib_src_dir.as_posix())
 
-        inference = self._inference
         cfg = self._loaded_configuration
         infe_cfg = InferenceConfiguration if cfg is None else cfg.inference
         pose_algo = self._pose_algorithm = PoseAlgorithm(
@@ -651,9 +650,9 @@ class AppModel(ObservableObject):
             min_confidence_presence_threshold=infe_cfg.min_confidence_presence_threshold,
             frame_rate=self._frame_rate,
         )
-        if inference is not None:
-            pose_algo.initialize(inference.pose_parts)
-            inference.pose_algorithm = pose_algo
+        inference = self._inference
+        pose_algo.initialize(inference.pose_parts)
+        inference.pose_algorithm = pose_algo
         return pose_algo
 
     def _identify_primary_main_cam_idx(self):
