@@ -22,7 +22,7 @@ logger = get_verbose_logger(__name__)
 
 
 SCALE_MOTOR_COORDS = float(os.getenv("AUTOTRAINER_3D_CALIB_SCALE_MOTOR_COORDS", "1"))
-
+# optional to scale down motor coords during move. use 0.5 for instance.
 
 x, y, z = 'xyz'
 
@@ -140,6 +140,7 @@ def make_3d_calib(
     scale_motor_coords: float = SCALE_MOTOR_COORDS,
 ) -> Path:
     record_mode: VideoRecordMode = VideoRecordMode.TRIGGER  # only working with this one for now,
+    scale_motor_coords = min(1, max(0, scale_motor_coords))  # ensure it stays in [0, 1]
     # given/because of bad paths otherwise used by the recording side.
     if cam_params is None:
         cam_params = default_params
