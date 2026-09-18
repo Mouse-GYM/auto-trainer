@@ -109,10 +109,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             config = self._config
         self.config = config  # this always triggers a CONFIG property_changed, and a check_state(force=True).
 
-    def _set_config(self, value: DetectorConfigT):
-        self._logger.debug("got new config: %s", value)
-        prev, self._config = self._config, value
-        self.property_changed(self.CONFIG, value, prev)
+    def _set_config(self, config: DetectorConfigT):
+        self._logger.debug("got new config: %s", config)
+        prev, self._config = self._config, config
+        self.property_changed(self.CONFIG, config, prev)
         if self._running:
             self.check_state(force=True)  # force check_state even if same config, but only if running.
 
