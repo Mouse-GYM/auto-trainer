@@ -617,6 +617,7 @@ class AppModel(ObservableObject):
             Path(f"~/Autotrainer/{DEFAULT_3D_CALIB_DIR_NAME}") if calib_dir is None
             else calib_dir
         ).expanduser()
+        self._calib_dir = calib_src_dir
         logger.info("loading calib from %s", calib_src_dir)
         if calib_src_dir.exists():
             stereo_params = load_calib_stereo_params(
@@ -1735,6 +1736,7 @@ class AppModel(ObservableObject):
         try:
             self._motors_config = hard.load_default_motor_config(motors_cfg_file)
         except Exception as err:
+            logger.exception("Error loading motor config: %s", err)
             self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
             load_ok = False
         #
@@ -1743,6 +1745,7 @@ class AppModel(ObservableObject):
         try:
             self._move_config = hard.load_default_move_config(move_config_file)
         except Exception as err:
+            logger.exception("Error loading move config: %s", err)
             self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
             load_ok = False
         #
@@ -1756,12 +1759,14 @@ class AppModel(ObservableObject):
         try:
             self.reload_training_plans(reraise_on_error=True)
         except Exception as err:
+            logger.exception("Error loading training plans: %s", err)
             self._config_errors.append(f"Cannot load training plans config: {err}")
             load_ok = False
 
         try:
             self.reload_calib(self._calib_dir)
         except Exception as err:
+            logger.exception("Error loading calibration from %s: %s", self._calib_dir, err)
             self._config_errors.append(f"Cannot load calibration config from {self._calib_dir}: {err}")
             load_ok = False
 
@@ -1769,6 +1774,7 @@ class AppModel(ObservableObject):
         try:
             self._load_animals()
         except Exception as err:
+            logger.exception("Error loading animals: %s", err)
             self._config_errors.append(f"Cannot load animals: {err}")
             load_ok = False
 

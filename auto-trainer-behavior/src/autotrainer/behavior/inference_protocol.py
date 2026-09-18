@@ -1,4 +1,4 @@
-from typing import Protocol, Callable, Tuple, Optional, Any
+from typing import Protocol, Callable, Tuple, Optional, Any, List
 
 from autotrainer.core import Offset3DTuple, ObservableObject
 from autotrainer.core.project import ProjectDependentProtocol, ProjectInfo
@@ -43,6 +43,10 @@ class _InferenceProtocol(Protocol):
 
     def save_configuration(self) -> InferenceConfiguration:
         """Returns current configuration"""
+
+    @property
+    def pose_parts(self) -> List[str]:
+        """The list of pose parts once loaded from configuration"""
 
     @property
     def pose_algorithm(self) -> PoseAlgorithm:
