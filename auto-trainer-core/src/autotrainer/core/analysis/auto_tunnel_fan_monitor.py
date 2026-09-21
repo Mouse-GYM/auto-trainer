@@ -67,7 +67,7 @@ class AutoTunnelSweepMonitor(BaseDetector[AutoTunnelSweepConfiguration]):
             return None
         misplaced_det = self._misplaced_detector
         misplaced_engaged = misplaced_det.is_engaged
-        pellet_miss = cfg.misplaced_trigger_delay - misplaced_det.engaged_age
+        pellet_miss = cfg.misplaced_trigger_delay - misplaced_det.get_engaged_age(p_now)
         misplaced_triggered = misplaced_engaged and pellet_miss <= 0
         recurrent_miss = (
             60 * self._config.recurrent_delay_minutes - (p_now - self._last_recurrent_perf_c)
