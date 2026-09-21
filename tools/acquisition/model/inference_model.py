@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import multiprocessing.pool
 import os
 import queue
@@ -438,14 +439,18 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     def _send_to_with_ack_evt(
         name: str, *,
         proc: Optional[multiprocessing.Process], out_q, ack, lock,
-        cmd, data,
-        timeout,
+        cmd: Any, data: Any,
+        timeout: float,
     ):
         with lock:
             ack.clear()
-            out_q.put((cmd, data))
+            try:
+                out_q.put((cmd, data), timeout=timeout)
+            except queue.Full:
+                raise RuntimeError(f"Timeout waiting free space in queue {name}") from None
             if __debug__:
-                logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
             if proc is None:
                 logger.verbose("%s not yet started, won't wait ack event", name)
             elif not proc.is_alive():
