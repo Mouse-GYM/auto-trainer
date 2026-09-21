@@ -478,6 +478,7 @@ def test_play_tone_doesnt_ack_timeout(
     expected_tok_event.clear()
     ctx = uuid.uuid4()
     expected_tok.value = ctx
+    t_before = get_perf_now()
     with caplog.at_level(logging.DEBUG):
         device.notify_message(SystemCommandKind.RELEASE_PELLET, None, context=ctx)
         assert expected_tok_event.wait(delay + 1.5)  # need at least delay + smth here !
