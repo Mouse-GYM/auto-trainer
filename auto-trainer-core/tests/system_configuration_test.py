@@ -3,6 +3,7 @@ import dataclasses
 import datetime
 import io
 import math
+import random
 import shutil
 from pathlib import Path
 
@@ -518,3 +519,20 @@ def test_v55_renames_are_respected():
 def test_hardware_config_fail_with_not_finite_or_zero_or_negative_cam_timeout(delay):
     with pytest.raises(ValueError, match="camera_start_timeout"):
         HardwareConfiguration(camera_start_timeout=delay)
+
+
+@pytest.mark.parametrize("bad_value", [
+    -1, 90, math.inf, math.nan, -math.inf,
+])
+@pytest.mark.parametrize("param", [
+    'min_confidence_plot_threshold',
+    'min_confidence_presence_threshold'
+])
+def test_bad_confidence_thresholds(bad_value, param):
+    kw = {param: bad_value}
+    with pytest.raises(ValueError, match=f"Invalid value for {param}"):
+        InferenceConfiguration(**kw)
+    value = random.random()
+    kw[param] = value
+    cfg = InferenceConfiguration(**kw)
+    assert getattr(cfg, param) == value

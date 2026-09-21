@@ -27,6 +27,7 @@ class InferenceConfiguration(_InferenceConfiguration):
     def __init__(self, **kwargs):
         kwargs.pop("intersession_wait_time", None)  # was deprecated/removed
         super().__init__(**kwargs)
+        self.__post_init__()  # NB: with custom init we have to call post_init explicitly, when there is one.
 
     def __post_init__(self):
         for name, thresh_val in (
