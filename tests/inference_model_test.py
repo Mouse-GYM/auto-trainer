@@ -1,4 +1,4 @@
-
+import dataclasses
 import multiprocessing
 import sys
 import threading
@@ -12,7 +12,11 @@ import numpy
 import pytest
 
 from autotrainer.behavior import SegmentationConfiguration
-from autotrainer.core import FixedArrayMultiQueue, FrameIndexCategory
+from autotrainer.core import (
+    FixedArrayMultiQueue,
+    FrameIndexCategory,
+    InferenceConfiguration,
+)
 from autotrainer.inference import InferenceCommandMessageKind, InferenceStatus
 from tools.acquisition.model.inference_model import InferenceModel
 
@@ -104,3 +108,15 @@ def test_inference_recording_and_offline_processing(
     assert completed
     assert complete_ok is True
     assert complete_error is None
+
+
+def test_load_different_defaults(inference):
+    cfg = InferenceConfiguration()
+    vals_set = {}
+    for field in dataclasses.fields(cfg):
+        senti = object()
+        setattr(cfg, field.name, senti)
+        vals_set[field.name] = senti
+    inference.load_configuration(cfg)
+    saved_cfg = inference.save_configuration()
+    assert dict(vars(saved_cfg)) == vals_set

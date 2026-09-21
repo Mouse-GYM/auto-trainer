@@ -1,4 +1,5 @@
 import ctypes
+import dataclasses
 import multiprocessing.pool
 import os
 import queue
@@ -42,7 +43,6 @@ _local_do_debug = False
 class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     IS_ENABLED = "is_enabled"
-    IS_PREDICT_ENABLED = "is_predict_enabled"
     MODEL_LOCATION = "model_location"
 
     def __init__(self,
@@ -55,6 +55,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
     ):
         super().__init__()
 
+        self._active_config = InferenceConfiguration()
         mp_ctx = get_mp_ctx() if mp_manager is None else mp_manager
         self._event_manager = EventManager.default()
         self._mp_manager = mp_ctx
@@ -73,8 +74,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._offline_segmentation_thread: Optional[Thread] = None
         self._offline_analysis_thread: Optional[Thread] = None
 
-        self._is_enabled = False
-        self._model_location = ""
         self._pose_algorithm = pose_algorithm
         self._pose_parts: List[str] = []
         self._calib_dir = calib_dir
@@ -151,29 +150,22 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     @property
     def is_enabled(self) -> bool:
-        return self._is_enabled
+        return self._active_config.is_enabled
 
     @is_enabled.setter
     def is_enabled(self, value: bool):
-        prev, self._is_enabled = self._is_enabled, value
+        cfg = self._active_config
+        prev, cfg.is_enabled = cfg.is_enabled, value
         self._on_property_changed(self.IS_ENABLED, value, prev)
 
     @property
-    def is_predict_enabled(self) -> bool:
-        return self._is_predict_enabled
-
-    @is_predict_enabled.setter
-    def is_predict_enabled(self, value: bool):
-        prev, self._is_predict_enabled = self._is_predict_enabled, value
-        self._on_property_changed(self.IS_PREDICT_ENABLED, value, prev)
-
-    @property
     def model_location(self) -> str:
-        return self._model_location
+        return self._active_config.pose_model_location
 
     @model_location.setter
     def model_location(self, value: str):
-        prev, self._model_location = self._model_location, value
+        cfg = self._active_config
+        prev, cfg.pose_model_location = cfg.pose_model_location, value
         self._on_property_changed(self.MODEL_LOCATION, value, prev)
 
     @property
@@ -295,13 +287,14 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._frames_per_camera = live_queue.frames_per_camera
 
         self._pose_process_watchdog_perf_c.value = get_perf_now()
+        cfg = self._active_config
         proc = self._pose_process = PoseProcess(
             live_queue,
             data_queue=self._output_data_queue,
             cmd_queue=self._cmd_queue,
             cmd_queue_ack=self._cmd_queue_ack,
             msg_queue=self._notif_msg_queue,
-            model_location=self._model_location,
+            model_location=cfg.pose_model_location,
             stop_recorded_event=data_monitor_proc.stop_recorded,
             offline_input_event_cb_ack=self._mp_manager.Event(),
             watchdog_perf_c=self._pose_process_watchdog_perf_c,
@@ -434,14 +427,13 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         self._notif_msg_queue = None
 
     def load_configuration(self, config: InferenceConfiguration):
+        # NB: assign _active_config *after* each of these assign (which can emits property change event):
         self.model_location = config.pose_model_location
         self.is_enabled = config.is_enabled
+        self._active_config = config
 
     def save_configuration(self) -> InferenceConfiguration:
-        return InferenceConfiguration(
-            pose_model_location=self.model_location,
-            is_enabled=self.is_enabled,
-        )
+        return self._active_config
 
     def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
         cmd_queue = self._cmd_queue
