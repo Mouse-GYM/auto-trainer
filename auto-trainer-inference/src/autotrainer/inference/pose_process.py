@@ -241,31 +241,42 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
         return True
 
     def _handle_cmd_queue(self, offline_input: OfflineInputProcess):
+        cmd_q = self._cmd_queue
         while True:
             if not self.check_main_watchdog():
                 logger.error("main watchdog holder timedout, exiting")
                 self._is_running = False
                 break
             try:
-                cmd, context = self._cmd_queue.get(timeout=1)
+                cmd, context = cmd_q.get(timeout=1)
             except Empty:
                 continue
-            logger.info("Handling command %s ...", cmd)
+            all_commands = [(cmd, context)]
+            # read the full queue without blocking:
+            while True:
+                try:
+                    all_commands.append(cmd_q.get(block=False))
+                except Empty:
+                    break
+            logger.verbose("Handling %s commands ...", len(all_commands))
             try:
-                if cmd == InferenceCommandMessageKind.Terminate:
-                    self._is_running = False
-                    return
-                elif cmd == InferenceCommandMessageKind.ProcessLive:
-                    self._set_process_live(reason=str(cmd))
-                elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
-                    offline_input.set_live(True)
-                elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
-                    prj, wait_stop_recorded = context
-                    offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
-                else:
-                    logger.warning("Unhandled command: %s", cmd)
-            except Exception as err:
-                logger.warning("Error processing %s: %s", cmd, err)
+                for cmd, context in all_commands:
+                    logger.info("Handling command %s ...", cmd)
+                    try:
+                        if cmd == InferenceCommandMessageKind.Terminate:
+                            self._is_running = False
+                            return
+                        elif cmd == InferenceCommandMessageKind.ProcessLive:
+                            self._set_process_live(reason=str(cmd))
+                        elif cmd == InferenceCommandMessageKind.SetOfflineToLive:
+                            offline_input.set_live(True)
+                        elif cmd == InferenceCommandMessageKind.ProcessOffline:  # received from perform_segmentation
+                            prj, wait_stop_recorded = context
+                            offline_input.set_project_info(prj, wait_stop_recorded=wait_stop_recorded)
+                        else:
+                            logger.warning("Unhandled command: %s", cmd)
+                    except Exception as err:
+                        logger.warning("Error processing %s: %s", cmd, err)
             finally:
                 self._cmd_queue_ack.set()
 
