@@ -1992,6 +1992,8 @@ class AppModel(ObservableObject):
             sub_name = value[1]
             if sub_name in (detector.IS_ENGAGED, detector.CONFIG):
                 self._update_led_color()
+        elif name == alarm_mon.ENGAGED_REASONS_CHANGED:
+            self._update_led_color()
 
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()
@@ -2461,10 +2463,8 @@ class AppModel(ObservableObject):
             magnet_intensity = math.nan
         doors_mon = analysis.external_doors_alarm
         doors_state = doors_mon.doors_state
-        alarm_mon = analysis.emergency_alarm_monitor
         load_cell = analysis.load_cell_monitor
         audio_mon = analysis.animal_thrashing_alarm
-        presence_mon = analysis.global_animal_presence_alarm
         misplaced_mon = analysis.pellet_misplaced_monitor
         animal = self._selected_animal
 

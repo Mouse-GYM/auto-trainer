@@ -131,6 +131,8 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
 
     @property
     def is_engaged(self) -> bool:
+        # see below GroupBaseDetector for the reason of this bool(...),
+        # _is_engaged might be "1" or "".
         return bool(self._is_engaged or self._force_engaged)
 
     @is_engaged.setter
@@ -149,28 +151,41 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             if prev == engaged:
                 return
             perf_now = get_perf_now()
-            if engaged:
-                self._engaged_perf_c = perf_now
-            else:
-                self._disengaged_perf_c = perf_now
-            self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
-                                engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
-            kind = self.detector_api_kind
-            if kind is not None:
-                self.post_detector_event(kind, engaged, self.default_detector_enabled)
+            prev_bool = bool(prev)  # see in GroupBaseDetector._check_state.
+            if prev_bool != engaged:
+                # only set/reset perf_counter and api event if really changed
+                if engaged:
+                    self._engaged_perf_c = perf_now
+                else:
+                    self._disengaged_perf_c = perf_now
+                self._logger.verbose("is_engaged -> %s (age previous = %.1f)",
+                                    engaged, perf_now - (self._disengaged_perf_c if engaged else self._engaged_perf_c))
+                kind = self.detector_api_kind
+                if kind is not None:
+                    self.post_detector_event(kind, engaged, self.default_detector_enabled)
             self._custom_set_is_engaged(engaged)  # before the property changed event
         # deliver the event without the lock acquired:
         self.property_changed(self.IS_ENGAGED, engaged, prev)
 
     @property
-    def engaged_age(self):
-        with self._lock:
-            return (get_perf_now() if self._is_engaged else self._disengaged_perf_c) - self._engaged_perf_c
+    def engaged_perf_c(self) -> float:
+        return self._engaged_perf_c
 
     @property
-    def disengaged_age(self):
+    def disengaged_perf_c(self) -> float:
+        return self._disengaged_perf_c
+
+    def get_engaged_age(self, p_now: Optional[float]=None):
+        if p_now is None:
+            p_now = get_perf_now()
         with self._lock:
-            return (get_perf_now() if not self._is_engaged else self._engaged_perf_c) - self._disengaged_perf_c
+            return (p_now if self._is_engaged else self._disengaged_perf_c) - self._engaged_perf_c
+
+    def get_disengaged_age(self, p_now: Optional[float]=None):
+        if p_now is None:
+            p_now = get_perf_now()
+        with self._lock:
+            return (p_now if not self._is_engaged else self._engaged_perf_c) - self._disengaged_perf_c
 
     def _make_new_timer(self, delay: float):
         self._cur_timer.cancel()  # safer
@@ -396,6 +411,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
     """Group Detector base class, is ORing of the sub-detectors"""
 
     DETECTOR_PROPERTY_CHANGED = "detector_property_changed"
+    ENGAGED_REASONS_CHANGED = "engaged_reason_changed"
 
     use_daemon = True
     default_timer_delay = 60  # ensure not too frequent recurrent check
@@ -407,8 +423,10 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         self._thread_local = _GroupThreadLocals()
 
     def _custom_set_is_engaged(self, engaged: bool):
+        super()._custom_set_is_engaged(engaged)
         if not engaged:
-            self._engaged_reasons.clear()
+            prev_reasons, self._engaged_reasons = self._engaged_reasons, set()
+            self._on_engaged_reasons_changed(prev_reasons, self._engaged_reasons)
 
     @property
     def engaged_reasons(self) -> List[str]:
@@ -478,8 +496,9 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             logger.notice("%s: engaging with %s", self._name, new_engaged)
         elif new_engaged:
             logger.verbose("%s: reengaging with %s (prev = %s)", self._name, new_engaged, prev_engaged)
-        else:
+        elif prev_engaged:
             logger.notice("%s: disengaging (prev = %s)", self._name, prev_engaged)
+        self._on_property_changed(self.ENGAGED_REASONS_CHANGED, new_engaged, prev_engaged)
 
     def check_state(self, *, force: bool=False):
         delay = super().check_state(force=force)
@@ -523,6 +542,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
                 if sub_name in prev_engaged:
                     if self._consider_for_keep_engaged(det):
                         new_engaged.add(sub_name)  # keep it
+        self._engaged_reasons = new_engaged
         if new_engaged != prev_engaged:
             self._on_engaged_reasons_changed(prev_engaged, new_engaged)
             # ensure IS_ENGAGED property changed event still always relayed,
@@ -531,5 +551,4 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             # using same "bool/truthy" value than previously, so that possible readers of self.is_engaged,
             # which is not using the lock to read the private attribute, will keep see/get the correct value.
             # and also so that the prev_value != value, used in the is_engaged setter, will still trigger.
-        self._engaged_reasons = new_engaged
         self.is_engaged = len(new_engaged) > 0
