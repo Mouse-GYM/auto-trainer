@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy
 import pandas
 
-from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, get_perf_now
+from autotrainer.core import ObservableObject, Pairs3dOffsetT, Offset3DTuple, get_perf_now, InferenceConfiguration
 from autotrainer.inference.calibration import triangulate_3d_with_params
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.inference.config import StereoParams
@@ -160,9 +160,6 @@ class PoseAlgorithm:
     The PoseResponse returned by the PoseAlgorithm captures the interpreted values (e.g., "mouse seen" which may be
     some function of multiple parts being present and/or at different confidence levels).
     """
-    # TODO Configurable properties
-    MIN_CONFIDENCE_PLOT_THRESHOLD = 0.9
-    MIN_CONFIDENCE_PRESENT_THRESHOLD = 0.9
 
     # could eventually be re-used at some point:
     # process_frames_select_frames_method: Literal['all_most_likely', 'last_one'] = "all_most_likely"
@@ -175,6 +172,9 @@ class PoseAlgorithm:
         cam_names: Optional[List[str]] = None,
         square_size: Optional[int] = None,
         cam_offsets: Optional[List[float]] = None,
+        min_confidence_plot_threshold: float = InferenceConfiguration.min_confidence_plot_threshold,
+        min_confidence_presence_threshold: float = InferenceConfiguration.min_confidence_presence_threshold,
+        frame_rate: Optional[float] = None,
     ):
         super().__init__()
         self._parts_list: List[str] = []
@@ -189,7 +189,9 @@ class PoseAlgorithm:
         self._cam_names = cam_names
         self._square_size = square_size
         self._cam_offsets = cam_offsets
-        self._frame_rate: Optional[int] = None
+        self._min_confidence_plot_threshold = min_confidence_plot_threshold
+        self._min_confidence_presence_threshold = min_confidence_presence_threshold
+        self._frame_rate: Optional[float] = frame_rate
         #
         axis_labels = self._2d_axis_labels = ['x', 'y', 'likelihood']
         self._hand_base_names = ['H_flat', 'H_spread', 'H_grab']
@@ -311,7 +313,7 @@ class PoseAlgorithm:
         # create a df_res with len(dfs) entries with all NaNs :
         no_result = (math.nan, math.nan, 0)  # x, y, p
         df_res = pandas.DataFrame(index=list(range(len(dfs))), columns=self._measure_offset_parts_columns)
-        min_combined_score = len(dfs) * self.MIN_CONFIDENCE_PRESENT_THRESHOLD
+        min_combined_score = len(dfs) * self._min_confidence_presence_threshold
         for elem in df0.columns.levels[0]:
             combined = [
                 (idx, self._combine_frames_likelihood(frames.loc[idx, elem] for frames in dfs))
@@ -349,7 +351,7 @@ class PoseAlgorithm:
         confident_parts = [
             part
             for part in df_2d.columns.levels[0]
-            if all(df_2d[part]["likelihood"] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD)
+            if all(df_2d[part]["likelihood"] >= self._min_confidence_presence_threshold)
         ]
         confident_df = df_2d[confident_parts]
         if len(confident_parts) == 0:
@@ -431,12 +433,12 @@ class PoseAlgorithm:
         # get parts presence:
         for pose_l, pose_r in zip(left_frames, right_frames):
             for idx, part in enumerate(self._parts_list):
-                if pose_l[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if pose_l[idx, 2] >= self._min_confidence_presence_threshold:
                     parts_flag_1[part] = True
                     maybe_dual = True
                 else:
                     maybe_dual = False
-                if pose_r[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if pose_r[idx, 2] >= self._min_confidence_presence_threshold:
                     parts_flag_2[part] = True
                     if maybe_dual:
                         parts_flag_3[part] = True
@@ -485,9 +487,9 @@ class PoseAlgorithm:
                 # but if want uses most likelihood, then:
                 v0 = v0_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
                 v1 = v1_raw[elem].sort_values(by="likelihood", ascending=False).reset_index().iloc[0]
-                if v0['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if v0['likelihood'] >= self._min_confidence_presence_threshold:
                     locations_1[elem] = PoseLocation(-1, *v0[_xy_col_names])
-                if v1['likelihood'] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+                if v1['likelihood'] >= self._min_confidence_presence_threshold:
                     locations_2[elem] = PoseLocation(-1, *v1[_xy_col_names])
         #
         locations_3d = {}
@@ -505,7 +507,7 @@ class PoseAlgorithm:
         for part in df_3d.columns.levels[0]:
             p_3d = df_3d_row[part]
             r_p_3d = raw_df_3d_row[part]
-            if r_p_3d["p"] >= self.MIN_CONFIDENCE_PRESENT_THRESHOLD:
+            if r_p_3d["p"] >= self._min_confidence_presence_threshold:
                 raw_3d_loc[part] = Offset3DTuple(r_p_3d[0:3])
                 locations_3d[part] = Offset3DTuple(p_3d[0:3])  # 3 first columns (x, y, z)
         #
@@ -535,7 +537,7 @@ class PoseAlgorithm:
         locations: Dict[str, PoseLocation] = {}
         for pose in frames:
             for idx, part in enumerate(self._parts_list):
-                if pose[idx, 2] >= PoseAlgorithm.MIN_CONFIDENCE_PLOT_THRESHOLD:
+                if pose[idx, 2] >= self._min_confidence_plot_threshold:
                     locations[part] = PoseLocation(idx, pose[idx, 0], pose[idx, 1])
         return locations
 
