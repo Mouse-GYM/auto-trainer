@@ -334,7 +334,15 @@ class CanDevice(Device):
         success = self._interface.delay(duration)
         if success:
             duration += 1
-            logger.debug("setting command timeout to requested duration + 1: (%s)", duration)
+            logger.debug("delay: setting command timeout to requested duration + 1: (%s)", duration)
+            self._prev_command_timeout = duration
+        return success
+
+    def _handle_play_tone(self, freq, duration):
+        success = self._interface.emit_tone(freq, duration)
+        if success:
+            duration += 1
+            logger.debug("play_tone: setting command timeout to requested duration + 1: (%s)", duration)
             self._prev_command_timeout = duration
         return success
 
@@ -511,10 +519,7 @@ class CanDevice(Device):
                 lambda data: self._interface.set_color_led(data[0], data[1], data[2]),
 
             SystemCommandKind.PLAY_TONE:
-                lambda data: (
-                    self._interface.emit_tone(data[0], data[1]) if isinstance(data, tuple)
-                    else self._interface.emit_tone(data, 0.5)  # 500 millisecond
-                ),
+                lambda data: self._handle_play_tone(*((data[0], data[1]) if isinstance(data, tuple) else (data, 0.5))),
 
             SystemCommandKind.SET_MOTOR_DRIFT: self._interface.set_motors_drift,
             SystemCommandKind.SET_AUTO_CORRECT_DRIFT: self._interface.set_auto_correct_motor_drift,
@@ -1619,9 +1624,10 @@ class CanDevice(Device):
         elif step_type == 'tone':
             motor = Motor.TONE
             freq, duration = step_val  # noqa
-            success = self._interface.emit_tone(freq, duration)
+            success = self._handle_play_tone(freq, duration)
             if success:
                 board.skip_uuid_ack_perf_c = True
+                # NB: this is to not include the tone duration in the release pellet compound move
 
         elif step_type == 'predefined':
 

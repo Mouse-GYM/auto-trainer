@@ -424,9 +424,13 @@ class VoidInference(InferenceProtocol):
         self._stop_recorded_event = threading.Event()  # noqa
 
     @property
+    def pose_parts(self) -> List[str]:
+        return []
+
+    @property
     def stop_recorded_event(self) -> synchronize.Event:
         # still required,
-        # could maye be added to InferenceProtocol, which is more actually InferenceBase class...
+        # could maybe be added to InferenceProtocol, which is more actually InferenceBase class...
         return self._stop_recorded_event
 
 

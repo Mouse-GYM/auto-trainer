@@ -53,13 +53,14 @@ def expected_tok() -> RawValueHolder:
     return value
 
 
-def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHolder):
+def api_msg_cb(msg_kind, data, *, event, tokens_acked, expected_tok: RawValueHolder, expected_tok_result):
     # print(msg_kind, data)
     if msg_kind == SystemStatusMessageKind.ACKNOWLEDGE:
         tok, perf_c, result = data[:3]
         tokens_acked.append(tok)
         if tok is not None and tok == expected_tok.value:
             expected_tok.value = None
+            expected_tok_result.value = result
             if event is not None:
                 event.set()
 
@@ -110,9 +111,14 @@ def dev_ack_timeout_ctx():
 
 
 @pytest.fixture
+def expected_tok_result():
+    return RawValueHolder(None)
+
+
+@pytest.fixture
 def device(
     expected_tok_event,
-    expected_tok,
+    expected_tok, expected_tok_result,
     tokens_acked,
     dev_ack_timeout_ctx
 ) -> CanDevice:  # noqa
@@ -125,6 +131,7 @@ def device(
         api_msg_cb,
         tokens_acked=tokens_acked,
         expected_tok=expected_tok,
+        expected_tok_result=expected_tok_result,
         event=expected_tok_event,
     )
 
@@ -360,6 +367,7 @@ def test_send_fixed_xyz_timedout(
 @pytest.mark.parametrize("delay", [0.5, 3])
 def test_delay_doesnt_ack_timeout(
     expected_tok,
+    expected_tok_result,
     expected_tok_event,
     tokens_acked,
     device,
@@ -402,6 +410,84 @@ def test_delay_doesnt_ack_timeout(
     t_after = get_perf_now()
     # assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
     assert t_after - t_before >= delay
+    res = expected_tok_result.value
+    assert isinstance(res, CommandResult)
+    assert res.succeeded
+
+
+@pytest.mark.parametrize("delay", [0.5, 3])
+def test_play_tone_doesnt_ack_timeout(
+    expected_tok,
+    expected_tok_event,
+    expected_tok_result,
+    tokens_acked,
+    device,
+    device_conn,
+    dev_ack_timeout_ctx,
+    monkeypatch,
+    caplog,
+    delay,
+):
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    iface = device.device_interface
+    prev_handler = device._command_handlers[SystemCommandKind.PLAY_TONE]
+    orig = iface.emit_tone
+    # NB: ensure the board delay func is executed asyncly :
+    def patched(freq, duration):
+        new_uuid = iface.next_uuid()  # but ensure generate uuid sync
+        def new_func(freq, dur):
+            del freq  # unused
+            time.sleep(dur)
+            iface._messages.append(Acknowledge(uuid=new_uuid))  # noqa
+        thread = threading.Thread(target=new_func, daemon=True, args=(freq, duration,))
+        thread.start()
+        return True  # write CAN bus ok.
+
+    def new_handler(*args, **kwargs):
+        # ensure runs, but fails, with previous develop code too
+        if prev_handler == orig:
+            return patched(*args, **kwargs)
+        return prev_handler(*args, **kwargs)
+
+    monkeypatch.setattr(iface, iface.emit_tone.__name__, mock.MagicMock(side_effect=patched))
+    # actually need to patch it also in the command handlers dict:
+    device._command_handlers[SystemCommandKind.PLAY_TONE] = new_handler
+    # even with default_command_ack_timeout_duration smaller, the command won't ack timeout :
+    device.default_command_ack_timeout_duration = delay / 3
+    device.default_command_ack_timeout_repeat_count = 0
+    t_before = get_perf_now()
+    expected_tok_event.clear()
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.PLAY_TONE, (4500, delay), context=ctx)
+        assert expected_tok_event.wait(delay + 1.5)  # need at least delay + smth here !
+    res = expected_tok_result.value
+    assert isinstance(res, CommandResult), res
+    assert res.succeeded, res
+    t_after = get_perf_now()
+    # assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
+    assert t_after - t_before >= delay
+    #
+    # now same but via compound step:
+    custom = [
+        dict(type="barrier_arm", value=100),
+        dict(type="tone", value=(2800, delay)),
+    ]
+    device_conn.set_release_procedure(MotorSteps("release", custom))
+    caplog.clear()
+    expected_tok_event.clear()
+    ctx = uuid.uuid4()
+    expected_tok.value = ctx
+    t_before = get_perf_now()
+    with caplog.at_level(logging.DEBUG):
+        device.notify_message(SystemCommandKind.RELEASE_PELLET, None, context=ctx)
+        assert expected_tok_event.wait(delay + 1.5)  # need at least delay + smth here !
+    t_after = get_perf_now()
+    # assert f"setting command timeout to requested duration + 1: ({delay + 1})" in caplog.text
+    assert t_after - t_before >= delay
+    res = expected_tok_result.value
+    assert isinstance(res, CommandResult), res
+    assert res.succeeded, res
 
 
 @pytest.mark.parametrize("fail_all_retries", [False, True])
