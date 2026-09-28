@@ -487,14 +487,10 @@ class AppModel(ObservableObject):
             return math.nan
         return holder.value
 
-    def refresh_main_watchdog(self):
+    def refresh_main_watchdog(self, *, p_now: Optional[float] = None):
         holder = self._main_watchdog_holder
         if holder is not None:
-            holder.value = get_perf_now()
-
-    @property
-    def main_watchdog_holder(self) -> Optional[Synchronized]:
-        return self._main_watchdog_holder
+            holder.value = get_perf_now() if p_now is None else p_now
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
