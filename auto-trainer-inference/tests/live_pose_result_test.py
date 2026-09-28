@@ -78,7 +78,7 @@ def inference_data_proc(mp_manager, pose_algo, capture_multiprocess_logs, monkey
         tot_live_workers=1,  # ensure always sequential
     )
     cmd_q.put(
-        (proc.Msg.SET_POSE_ALGO, (pose_algo,), None)
+        (proc.Msg.SET_POSE_ALGO, ((pose_algo,), None))
     )
     try:
         yield proc  # noqa

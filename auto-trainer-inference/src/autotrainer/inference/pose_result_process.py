@@ -192,23 +192,36 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
                 raw = cmd_queue.get(timeout=1)
             except queue.Empty:
                 continue
-            if raw is None:
-                self._is_running = False
-                break
-            cmd, args, kwargs = raw
-            logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
-            if cmd is message.SET_POSE_ALGO:
-                pose_algo = args[0]
-                self._pose_algo = pose_algo
-            elif cmd is message.SET_PROJECT_INFO:
-                self._project = args[0]
-            elif cmd is message.SET_FEED_INTERTRIAL_RESULT:
-                project, error = args
-                self._feed_intertrial_project = project
-                self._feed_intertrial_error = error
-            else:
-                logger.warning("Unknown command: %s", cmd)
-            self._cmd_ack_event.set()
+            all_commands = [raw]
+            # read the full queue without blocking:
+            while True:
+                try:
+                    all_commands.append(cmd_queue.get(block=False))
+                except queue.Empty:
+                    break
+            logger.verbose("Handling %s commands ...", len(all_commands))
+            try:
+                for raw in all_commands:
+                    if raw is None:
+                        self._is_running = False
+                        logger.notice("Received exit sentinel, exiting..")
+                        break
+                    cmd, (args, kwargs) = raw
+                    logger.debug("Processing cmd %s with %s // %s", cmd, args, kwargs)
+                    if cmd is message.SET_POSE_ALGO:
+                        pose_algo = args[0]
+                        self._pose_algo = pose_algo
+                    elif cmd is message.SET_PROJECT_INFO:
+                        self._project = args[0]
+                    elif cmd is message.SET_FEED_INTERTRIAL_RESULT:
+                        project, error = args
+                        self._feed_intertrial_project = project
+                        self._feed_intertrial_error = error
+                    else:
+                        logger.warning("Unknown command: %s", cmd)
+                # end for raw in all_commands.
+            finally:
+                self._cmd_ack_event.set()
 
     def _send_msg(self, msg, *args, block_msg_queue_put: bool=True, **kwargs):
         self._msg_queue.put((msg, (args, kwargs)), block=block_msg_queue_put)
