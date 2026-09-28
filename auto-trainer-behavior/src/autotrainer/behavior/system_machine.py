@@ -234,10 +234,13 @@ class SystemMachine(StateMachine):
     @project.setter
     def project(self, value: ProjectInfo):
         logger.verbose("Received new project-info, relaying to event manager, algo and inference ..")
-        self._project_info = value
-        self._event_manager.project = value
-        self._algorithm.project = value
-        self._inference.project = value
+        prev, self._project_info = self._project_info, value
+        if value is prev:
+            logger.debug("skipping send of same previous project info")
+        else:
+            self._event_manager.project = value
+            self._algorithm.project = value
+            self._inference.project = value
 
     @property
     def shift_xyz_handler(self) -> ShiftXYZHandler:

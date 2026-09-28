@@ -843,7 +843,11 @@ class AppModel(ObservableObject):
 
     @project.setter
     def project(self, project: Optional[ProjectInfo]):
-        self._project_info = project
+        prev, self._project_info = self._project_info, project
+        if prev is project:
+            logger.debug("skipping reset of same project to sub-models ; project=%s", project)
+            return
+        logger.info("Setting new project-info: %s", project)
         for model in self._models:
             model.project = project
         self._analysis.project_info = project

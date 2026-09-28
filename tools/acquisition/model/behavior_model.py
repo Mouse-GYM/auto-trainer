@@ -163,7 +163,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def project(self, value: ProjectInfo) -> None:
         self._project = value
         self._system_machine.project = value
-        # self._machine.project = value  # instead of having to do it in on_prepare_capture()
 
     @property
     def system_machine(self) -> SystemMachine:

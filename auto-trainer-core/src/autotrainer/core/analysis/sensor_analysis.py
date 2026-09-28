@@ -193,7 +193,7 @@ class SensorAnalysis(ObservableObject):
     def restart(self):
         logger.notice("Restart requested")
         cur_project = self._project_info
-        self.project_info = None
+        self.project_info = None  # for closing analysis csv output stream files.
         for detector in self._detectors:
             detector.restart()
         self.project_info = cur_project
@@ -204,7 +204,10 @@ class SensorAnalysis(ObservableObject):
 
     @project_info.setter
     def project_info(self, value: ProjectInfo) -> None:
-        self._project_info = value
+        prev, self._project_info = self._project_info, value
+        if prev is value:
+            logger.debug("skipping reset of same project: %s", value)
+            return
         self._have_new_project_audio = True
         self._have_new_project_record_data = True
         self._perf_monitor.reset()
