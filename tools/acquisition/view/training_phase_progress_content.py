@@ -132,7 +132,7 @@ class TrainingPhaseProgressContent(CardWidget):
         )
         self._time_in_training_label.setText(f"{prog.time_in_training:.1f}")
         for label, value in (
-            (self._sessions_label, prog.session_count),
+            (self._sessions_label, prog.trial_count),
             (self._attempts_label,  prog.phase_attempts),
             (self._pellets_presented_label, prog.pellets_presented),
             (self._pellets_consumed_label, prog.pellets_consumed),
@@ -140,4 +140,3 @@ class TrainingPhaseProgressContent(CardWidget):
             (self._total_reaches_label, prog.total_reaches)
         ):
             label.setText(f"{value}")
-
