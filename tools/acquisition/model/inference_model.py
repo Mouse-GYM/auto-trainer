@@ -447,7 +447,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             try:
                 out_q.put((cmd, data), timeout=timeout)
             except queue.Full:
-                raise RuntimeError(f"Timeout waiting free space in queue {name}") from None
+                logger.warning("Timeout waiting free space in queue %s ; timeout=%s", name, timeout)
+                return
             if __debug__:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
