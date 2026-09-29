@@ -1985,6 +1985,8 @@ class AppModel(ObservableObject):
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:
+            # NB: reminder: group detector / alarm mon, also reemit the IS_ENGAGED callback (with appropriate value(s)),
+            # when a subdetector / engaged_reasons change occurs but the group is_engaged one doesn't.
             self._update_led_color()
         elif name == alarm_mon.DETECTOR_PROPERTY_CHANGED:
             detector = value[0]
@@ -1992,8 +1994,9 @@ class AppModel(ObservableObject):
             sub_name = value[1]
             if sub_name in (detector.IS_ENGAGED, detector.CONFIG):
                 self._update_led_color()
-        elif name == alarm_mon.ENGAGED_REASONS_CHANGED:
-            self._update_led_color()
+        # elif name == alarm_mon.ENGAGED_REASONS_CHANGED:
+        #     self._update_led_color()
+        #   already unconditionally handled via the IS_ENGAGED above.
 
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()

@@ -204,13 +204,13 @@ def mock_event_manager(monkeypatch, _check_threads):
 
 def has_api_event_kind(kind):
     if _m_event_mgr is None:
-        raise RuntimeError(f"mock_event_manager not active")
+        raise RuntimeError("mock_event_manager not active")
     return any(call.args[0].kind == kind for call in _m_event_mgr.post_event.call_args_list)  # noqa
 
 
 def get_api_event_context(kind) -> Optional[Mapping[str, Any]]:
     if _m_event_mgr is None:
-        raise RuntimeError(f"mock_event_manager not active")
+        raise RuntimeError("mock_event_manager not active")
     for call in _m_event_mgr.post_event.call_args_list:
         info = call.args[0]
         info: EventInfo

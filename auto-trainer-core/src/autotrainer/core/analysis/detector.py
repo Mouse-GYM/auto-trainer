@@ -150,10 +150,10 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             prev, self._is_engaged = self._is_engaged, engaged
             if prev == engaged:
                 return
-            perf_now = get_perf_now()
             prev_bool = bool(prev)  # see in GroupBaseDetector._check_state.
             if prev_bool != engaged:
                 # only set/reset perf_counter and api event if really changed
+                perf_now = get_perf_now()
                 if engaged:
                     self._engaged_perf_c = perf_now
                 else:
@@ -163,9 +163,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 kind = self.detector_api_kind
                 if kind is not None:
                     self.post_detector_event(kind, engaged, self.default_detector_enabled)
+        # deliver the property changed callback(s) without the lock acquired:
+        if prev_bool != engaged:
+            # only call the custom if the truthy value of the is_engaged really changed
             self._custom_set_is_engaged(engaged)  # before the property changed event
-        # deliver the event without the lock acquired:
-        self.property_changed(self.IS_ENGAGED, engaged, prev)
+        # but still callback the IS_ENGAGED, for GroupBaseDetector below...
+        self.property_changed(self.IS_ENGAGED, engaged, prev_bool)
 
     @property
     def engaged_perf_c(self) -> float:
@@ -425,6 +428,8 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
     def _custom_set_is_engaged(self, engaged: bool):
         super()._custom_set_is_engaged(engaged)
         if not engaged:
+            # ensure that is one does group.is_engaged = False (while it was engaged),
+            # then all engaged reasons are cleared:
             prev_reasons, self._engaged_reasons = self._engaged_reasons, set()
             self._on_engaged_reasons_changed(prev_reasons, self._engaged_reasons)
 

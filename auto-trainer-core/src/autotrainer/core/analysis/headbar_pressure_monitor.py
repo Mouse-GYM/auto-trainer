@@ -77,6 +77,7 @@ class HeadbarPressureMonitor(BaseDetector[HeadbarPressureConfiguration]):
         self._rebuild_buffers()
 
     def _custom_set_is_engaged(self, engaged: bool):
+        super()._custom_set_is_engaged(engaged)
         self._event_manager.post_event_content(
             ApiEventKind.headbarPressureEngagedChanged,
             data=dict(is_engaged=engaged),
