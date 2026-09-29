@@ -1811,6 +1811,10 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
+        # give a good amount of time for possible child procs to check on us:
+        p_now = get_perf_now()
+        self.refresh_main_watchdog(p_now=p_now + 120)
+        #
         for timer in (
             self._timer_one_minute_repeat,
             self._timer_daily,
@@ -1869,6 +1873,7 @@ class AppModel(ObservableObject):
             logger.verbose("shutting down %s", mgr)
             mgr.shutdown()
             self._mp_manager = None
+        self.refresh_main_watchdog(p_now=math.nan)
 
     def _load_animals(self):
         animals = []
