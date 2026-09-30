@@ -253,7 +253,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         return config
 
     def on_prepare_capture(self):
-        self._system_machine.project = self._project
+        # self._system_machine.project = self._project  # NB: project-info is already set by caller.
         self._system_machine.state = SystemState.cage  # forced,
         self._system_machine.intertrial.state = IntertrialState.idle
         # if acquisition is/was stopped during an intertrial analysis,

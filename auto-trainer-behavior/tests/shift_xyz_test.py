@@ -45,10 +45,7 @@ class TestShiftXYZ(MockSystemMachine):
         cfg.batch_trial_recording.maximum_batch_size = 6 * min_reach_fail  # big enough to hold 2+ * minimum_reach_fail
         cfg.pellet_delivery.is_intertrial_analysis_enabled = True
         machine._delay_timer_consider_end_trial = 0
-        prj = self.system_machine.project
         self.pellet_dev.last_dcs_set_position = Offset3DTuple(-5, 25, -6)
-        prj.dcs_send_position = Offset3DTuple(-5, 25, -6)
-        self.system_machine.project = prj  # ensure all sub-machines/components receive it
         assert self.algo.intertrial_enabled is True
 
     def make_trial(self, stack: FifoExitStack, reach_events, rh_max_vp_list):

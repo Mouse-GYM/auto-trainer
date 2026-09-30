@@ -88,7 +88,7 @@ class SystemMachine(StateMachine):
         if project_info is None:
             project_info = ProjectInfo.get_null_project()
         assert project_info is not None
-        self._project_info = project_info
+        self._project_info: ProjectInfo = project_info
         #
         # during same tunnel session:
         self._tot_trials_recorded = 0
@@ -186,6 +186,10 @@ class SystemMachine(StateMachine):
         intertrial_machine.events.on_analysis_ended += self._on_intertrial_analysis_ended
         intertrial_machine.events.state_changed += self._on_intertrial_state_changed
 
+        # finally, ensure project_info is synced to sub-parts:
+        prj, self._project_info = self._project_info, None  # noqa
+        self.project = prj  # see project setter.
+
     def cancel_timers(self):
         for timer in (
             self._timer_consider_start_trial_capture,
@@ -202,6 +206,10 @@ class SystemMachine(StateMachine):
         self._timer_consider_end_trial_capture = no_op_timer
         self._timer_consider_close_gate = no_op_timer
         self._timer_auto_clamp_disengage = no_op_timer
+
+    @property
+    def inference(self) -> InferenceProtocol:
+        return self._inference
 
     @property
     def tunnel_device(self) -> TunnelDeviceProtocol:
