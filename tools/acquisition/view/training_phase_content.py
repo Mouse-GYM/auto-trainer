@@ -171,7 +171,7 @@ class TrainingPhaseCard(CardWidget):
         grid.addWidget(QLabel("Yes" if phase.advance_predicate is not None else "No"), r, c + 1)
         r += 1
         grid.addWidget(QLabel("Trial Actions"), r, c)
-        grid.addWidget(QLabel(str(len(phase.session_actions))), r, c + 1)
+        grid.addWidget(QLabel(str(len(phase.trial_actions))), r, c + 1)
 
         self._apply_background(grid)
 
@@ -255,7 +255,7 @@ class TrainingPhaseContent(StackedWidget):
             self.removeWidget(card)
             card.setParent(None)
 
-        logger.debug("Adding new phase %s with %s actions", phase.phase_id, len(phase.session_actions))
+        logger.debug("Adding new phase %s with %s actions", phase.phase_id, len(phase.trial_actions))
         card = TrainingPhaseCard(phase)
         self.addWidget(card)
         self._phase_card_by_phase_id[phase.phase_id] = card

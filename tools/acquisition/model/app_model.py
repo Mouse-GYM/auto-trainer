@@ -1119,14 +1119,14 @@ class AppModel(ObservableObject):
         animal = self._selected_animal
         if animal is None:
             # if animal not created yet
-            return
+            return None
         assert isinstance(animal, AnimalSubject)
         attached = self._attached_plan
-        if attached is not None:
+        if attached is not None and not force_update:
             if attached.plan_id == plan.plan_id and animal == self._attached_animal:
                 logger.verbose("Plan %s already attached", plan.plan_id)
-                return
-            self._detach_training_plan()
+                return None
+        self._detach_training_plan()
         prog = animal.training.get_plan_progress(plan.plan_id)
         # if prog is None:
         #     logger.debug("plan first use, using plan.serialize_progress")
@@ -1151,6 +1151,7 @@ class AppModel(ObservableObject):
         plan.progress_updated += self._on_training_plan_progress_updated
         self._attach_training_phase(plan.current_phase)
         plan.resume()
+        return True
 
     def _attach_training_phase(self, phase: Optional[TrainingPhase]):
         self._detach_training_phase()  # always

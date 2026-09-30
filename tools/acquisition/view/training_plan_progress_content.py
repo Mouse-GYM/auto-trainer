@@ -136,7 +136,7 @@ class TrainingPlanProgressContent(CardWidget):
         # but label is with hour unit:
         self._time_in_training_label.setText(f"{hour_plan_tot_time:.1f}")
         for label, value in (
-            (self._sessions_label, plan.total_session_count),
+            (self._sessions_label, plan.total_trial_count),
             (self._pellets_presented_label, plan.total_pellets_presented),
             (self._pellets_consumed_label, plan.total_pellets_consumed),
             (self._successful_reaches_label, plan.total_successful_reaches),
