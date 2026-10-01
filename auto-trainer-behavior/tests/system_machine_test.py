@@ -273,7 +273,6 @@ def test_inference_detection_ready(machine):
 @pytest.mark.parametrize("feature_enabled", [False, True])
 def test_clean_raw_data_on_trial_end(machine, project_info, feature_enabled):
     algo = machine.algorithm
-    machine.project = project_info
     algo.start_trial_capture()
     algo.intertrial_enabled = True
     # check with cam1 file paths:
@@ -550,4 +549,3 @@ def test_handle_diamond_triangle_offset_full(mock_system, machine):
     assert pellet_m.can_use_pellet_command()
     pose_changed()
     assert algo.get_diamond_triangle_drifts() == (0.5, -1, 1)  # back
-

@@ -163,7 +163,6 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     def project(self, value: ProjectInfo) -> None:
         self._project = value
         self._system_machine.project = value
-        # self._machine.project = value  # instead of having to do it in on_prepare_capture()
 
     @property
     def system_machine(self) -> SystemMachine:
@@ -254,7 +253,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         return config
 
     def on_prepare_capture(self):
-        self._system_machine.project = self._project
+        # self._system_machine.project = self._project  # NB: project-info is already set by caller.
         self._system_machine.state = SystemState.cage  # forced,
         self._system_machine.intertrial.state = IntertrialState.idle
         # if acquisition is/was stopped during an intertrial analysis,

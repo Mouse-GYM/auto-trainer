@@ -280,15 +280,14 @@ class AppModel(ObservableObject):
         self._motors_config: Optional[MotorConfigurations] = None
         self._move_config: Optional[CompoundMovements] = None
 
-        self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
         self._project_info: Optional[ProjectInfo] = None
+        self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
         self._animal_name = ""
         self._notes = ""
 
         self._frame_rate: Optional[float] = None  # optional "main" frame rate, used for inference too
         left = self._left_camera = VideoCaptureModel("left", mp_ctx=mp_ctx)
         right = self._right_camera = VideoCaptureModel("right", mp_ctx=mp_ctx)
-
 
         self._timer_daily: DaemonTimer = _daily_timer(0, self._on_daily_timer)
         self._current_day: Optional[date] = None
@@ -419,12 +418,14 @@ class AppModel(ObservableObject):
             system_machine=system_machine,
         )
         system_machine = behavior_model.system_machine  # ensure same
+        if system_machine.inference is not self._inference:
+            raise ValueError(f"System Machine inference is not same: {system_machine.inference} vs {self._inference}")
 
         self._models: List[ProjectDependentProtocol] = [
             self._left_camera,
             self._right_camera,
             self._top_camera,
-            self._inference,
+            # self._inference,  is sub-included via behavior:
             self._behavior,
         ]
 
@@ -839,7 +840,11 @@ class AppModel(ObservableObject):
 
     @project.setter
     def project(self, project: Optional[ProjectInfo]):
-        self._project_info = project
+        prev, self._project_info = self._project_info, project
+        if prev is project:
+            logger.debug("skipping reset of same project to sub-models ; project=%s", project)
+            return
+        logger.info("Setting new project-info: %s", project)
         for model in self._models:
             model.project = project
         self._analysis.project_info = project

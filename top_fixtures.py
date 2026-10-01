@@ -546,9 +546,9 @@ def machine(
         pellet_device=pellet_device,
         analysis=sensor_analysis,
         inference=inference,
-        project_info=project_info,
         msg_handler=fake_system_msg_handler,
     )
+    machine.project = project_info
     algo = machine.algorithm
     # most tests rely on:
     cfg = algo.pellet_delivery_config

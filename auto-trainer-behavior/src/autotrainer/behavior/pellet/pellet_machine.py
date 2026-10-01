@@ -34,12 +34,12 @@ class PelletLoadFailedEventT(Protocol):
 
 
 class PelletSentEventT(Protocol):
-    def __call__(self, *, perf_c: Optional[float]=None):
+    def __call__(self, *, perf_c: float):
         """Pellet Sent event signature"""
 
 
 class PelletReleasedEventT(Protocol):
-    def __call__(self, *, perf_c: Optional[float]=None):
+    def __call__(self, *, perf_c: float):
         """Pellet Released event signature"""
 
 

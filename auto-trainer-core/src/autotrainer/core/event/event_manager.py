@@ -77,7 +77,7 @@ class EventManager:
 
         self._plugins: List[EventManagerPlugin] = []
 
-        self._project_info = None
+        self._project_info: Optional[ProjectInfo] = None
 
         # Callers should expect requests to post an event return as quickly as possible.  Events are pushed to a queue
         # so that processing can be done in a separate thread as resources allow.
@@ -94,11 +94,11 @@ class EventManager:
         return self._write_thread is not None and self._write_queue is not None
 
     @property
-    def project(self) -> ProjectInfo:
+    def project(self) -> Optional[ProjectInfo]:
         return self._project_info
 
     @project.setter
-    def project(self, value: ProjectInfo) -> None:
+    def project(self, value: Optional[ProjectInfo]) -> None:
         """
         ProjectInfo is an optional property.  If set, it is used to generate the location and name of the event file in
         the expected format.

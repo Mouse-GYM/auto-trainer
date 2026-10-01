@@ -1,14 +1,13 @@
-import dataclasses
 import math
-import uuid
 from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Optional, List
 
+from transitions import Machine
+
 from autotrainer.api.event import BatchAnalysisStartedContext, BatchAnalysisEndedContext, SessionStartedContext, \
     SessionEndedContext, SessionTrialContext, IntertrialResponseContext
-from transitions import Machine
 
 from autotrainer.api import ApiEventKind, build_event
 
@@ -38,7 +37,6 @@ from .pellet_shift import ShiftXYZHandler
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-from ..core.analysis.system_fault_monitor import SystemFaultReason
 
 logger = get_verbose_logger(__name__)
 
@@ -69,7 +67,6 @@ class SystemMachine(StateMachine):
                  pellet_device: PelletDeviceProtocol,
                  inference: InferenceProtocol,
                  algorithm: Optional[BehaviorAlgorithm] = None,
-                 project_info: Optional[ProjectInfo] = None,
                  topcam_presence: Optional[PresenceDetectionAttrs] = None,
                  ):
 
@@ -85,10 +82,7 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
-        if project_info is None:
-            project_info = ProjectInfo.get_null_project()
-        assert project_info is not None
-        self._project_info = project_info
+        self._project_info: ProjectInfo = ProjectInfo.get_null_project()
         #
         # during same tunnel session:
         self._tot_trials_recorded = 0
@@ -133,7 +127,7 @@ class SystemMachine(StateMachine):
         self._msg_handler = msg_handler
 
         algo = self._algorithm = BehaviorAlgorithm(
-            project_info=project_info,
+            project_info=self._project_info,
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
         del algorithm  # using algo
@@ -204,6 +198,10 @@ class SystemMachine(StateMachine):
         self._timer_auto_clamp_disengage = no_op_timer
 
     @property
+    def inference(self) -> InferenceProtocol:
+        return self._inference
+
+    @property
     def tunnel_device(self) -> TunnelDeviceProtocol:
         return self._tunnel_device
 
@@ -234,10 +232,13 @@ class SystemMachine(StateMachine):
     @project.setter
     def project(self, value: ProjectInfo):
         logger.verbose("Received new project-info, relaying to event manager, algo and inference ..")
-        self._project_info = value
-        self._event_manager.project = value
-        self._algorithm.project = value
-        self._inference.project = value
+        prev, self._project_info = self._project_info, value
+        if value is prev:
+            logger.debug("skipping send of same previous project info")
+        else:
+            self._event_manager.project = value
+            self._algorithm.project = value
+            self._inference.project = value
 
     @property
     def shift_xyz_handler(self) -> ShiftXYZHandler:
