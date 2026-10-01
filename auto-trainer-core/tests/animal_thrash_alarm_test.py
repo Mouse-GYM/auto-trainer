@@ -120,5 +120,5 @@ def test_it_engages_disengages_with_aggr_delay(
     time.sleep(0.001)  # give small extra time to daemon thread: it sets is_engaged before sending the API event,
     # so this must be quite enough for it (see above next_delay forced to very small) to do that here.
     assert has_api_event_kind(ApiEventKind.alarmChanged)
-    engaged_dur = mon.engaged_age
+    engaged_dur = mon.get_engaged_age()
     assert abs(engaged_dur - aggr_delay / 2) < 2

@@ -1,26 +1,29 @@
 
 import logging
+import math
 import threading
 from functools import partial
 from typing import Optional
 
 import pytest
 
+from top_fixtures import MixinEvents
+
 from autotrainer.core.analysis.detector import GroupBaseDetector, BaseDetector
 
 
-class Group(GroupBaseDetector):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, **kw)
-            self.check_done = threading.Event()
+class Group(MixinEvents, GroupBaseDetector):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.check_done = threading.Event()
 
-        def _check_state(self, *, force: bool = False) -> Optional[float]:
-            super()._check_state(force=force)
-            self.check_done.set()
+    def _check_state(self, *, force: bool = False) -> Optional[float]:
+        super()._check_state(force=force)
+        self.check_done.set()
 
 
 class Detector(BaseDetector):
-    def _check_state(self) -> Optional[float]:
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
         pass
 
 
@@ -120,3 +123,26 @@ def test_need_explicit_check(group, caplog, request):
     assert det2.is_engaged
     assert not det1.is_engaged  # obv
     assert not got_called, "detector1 should not have been explicitly checked"
+
+
+def test_engaged_perf_c_doesnt_reset_on_reasons_changed_but_state_not(group, caplog, request):
+    group.use_daemon = False  # simplify test
+    det1 = Detector()
+    request.addfinalizer(det1.stop)
+    det2 = Detector()
+    request.addfinalizer(det2.stop)
+    group.register_sub_detector("det1", det1)
+    group.register_sub_detector("det2", det2)
+    group.start()
+    assert not group.is_engaged
+    #
+    det1.is_engaged = True
+    first_engaged_perf = group.engaged_perf_c
+    assert group.is_engaged
+    assert math.isfinite(first_engaged_perf)
+    assert group.engaged_reasons == ["det1"]
+    #
+    det2.is_engaged = True
+    assert group.is_engaged  # still obv
+    assert group.engaged_perf_c == first_engaged_perf, "group engaged_perf_c should remain same"
+    assert group.engaged_reasons == ["det1", "det2"]

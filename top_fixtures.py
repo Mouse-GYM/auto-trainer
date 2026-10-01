@@ -204,13 +204,13 @@ def mock_event_manager(monkeypatch, _check_threads):
 
 def has_api_event_kind(kind):
     if _m_event_mgr is None:
-        raise RuntimeError(f"mock_event_manager not active")
+        raise RuntimeError("mock_event_manager not active")
     return any(call.args[0].kind == kind for call in _m_event_mgr.post_event.call_args_list)  # noqa
 
 
 def get_api_event_context(kind) -> Optional[Mapping[str, Any]]:
     if _m_event_mgr is None:
-        raise RuntimeError(f"mock_event_manager not active")
+        raise RuntimeError("mock_event_manager not active")
     for call in _m_event_mgr.post_event.call_args_list:
         info = call.args[0]
         info: EventInfo
@@ -881,3 +881,37 @@ def behavior_model(sensor_analysis, fake_system_msg_handler, hardware_model, inf
         yield model  # noqa
     finally:
         BehaviorAlgorithm.close_algorithm_handler()
+
+
+class MixinEvents:
+    """Used to have thread event on detectors used in tests"""
+
+    is_engaged: bool
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.check_in_progress_event = threading.Event()
+        self.check_attempted = threading.Event()
+        self.engaged_event = threading.Event()
+        self.disengaged_event = threading.Event()
+        if self.is_engaged:
+            self.engaged_event.set()
+        else:
+            self.disengaged_event.set()
+
+    def set_is_engaged(self, engaged):
+        super().set_is_engaged(engaged)  # noqa
+        if self.is_engaged:
+            self.engaged_event.set()
+            self.disengaged_event.clear()
+        else:
+            self.disengaged_event.set()
+            self.engaged_event.clear()
+
+    def _check_state(self, *, force: bool=False) -> Optional[float]:
+        self.check_in_progress_event.set()
+        try:
+            d = super()._check_state(force=force)
+        finally:
+            self.check_attempted.set()
+        return d
