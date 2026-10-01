@@ -1,14 +1,13 @@
-import dataclasses
 import math
-import uuid
 from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Optional, List
 
+from transitions import Machine
+
 from autotrainer.api.event import BatchAnalysisStartedContext, BatchAnalysisEndedContext, SessionStartedContext, \
     SessionEndedContext, SessionTrialContext, IntertrialResponseContext
-from transitions import Machine
 
 from autotrainer.api import ApiEventKind, build_event
 
@@ -38,7 +37,6 @@ from .pellet_shift import ShiftXYZHandler
 from .state_machine import StateMachine
 from .system_machine_state import SystemState
 from .tunnel_device_protocol import TunnelDeviceProtocol
-from ..core.analysis.system_fault_monitor import SystemFaultReason
 
 logger = get_verbose_logger(__name__)
 
@@ -69,7 +67,6 @@ class SystemMachine(StateMachine):
                  pellet_device: PelletDeviceProtocol,
                  inference: InferenceProtocol,
                  algorithm: Optional[BehaviorAlgorithm] = None,
-                 project_info: Optional[ProjectInfo] = None,
                  topcam_presence: Optional[PresenceDetectionAttrs] = None,
                  ):
 
@@ -85,10 +82,7 @@ class SystemMachine(StateMachine):
             model_override=True,
         )
 
-        if project_info is None:
-            project_info = ProjectInfo.get_null_project()
-        assert project_info is not None
-        self._project_info: ProjectInfo = project_info
+        self._project_info: ProjectInfo = ProjectInfo.get_null_project()
         #
         # during same tunnel session:
         self._tot_trials_recorded = 0
@@ -133,7 +127,7 @@ class SystemMachine(StateMachine):
         self._msg_handler = msg_handler
 
         algo = self._algorithm = BehaviorAlgorithm(
-            project_info=project_info,
+            project_info=self._project_info,
             topcam_presence=topcam_presence,
         ) if algorithm is None else algorithm
         del algorithm  # using algo
@@ -185,10 +179,6 @@ class SystemMachine(StateMachine):
         )
         intertrial_machine.events.on_analysis_ended += self._on_intertrial_analysis_ended
         intertrial_machine.events.state_changed += self._on_intertrial_state_changed
-
-        # finally, ensure project_info is synced to sub-parts:
-        prj, self._project_info = self._project_info, None  # noqa
-        self.project = prj  # see project setter.
 
     def cancel_timers(self):
         for timer in (
