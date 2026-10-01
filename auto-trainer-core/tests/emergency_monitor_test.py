@@ -1,10 +1,11 @@
 import dataclasses
 import logging
 import threading
-import time
 from typing import Optional
 
 import pytest
+
+from top_fixtures import MixinEvents
 
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
@@ -16,39 +17,6 @@ from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 @pytest.fixture(autouse=True)
 def _use_mock_event_manager(mock_event_manager):
     pass
-
-
-class MixinEvents:
-
-    is_engaged: bool
-
-    def __init__(self, *a, **kw):
-        super().__init__(*a, **kw)
-        self.check_in_progress_event = threading.Event()
-        self.check_attempted = threading.Event()
-        self.engaged_event = threading.Event()
-        self.disengaged_event = threading.Event()
-        if self.is_engaged:
-            self.engaged_event.set()
-        else:
-            self.disengaged_event.set()
-
-    def set_is_engaged(self, engaged):
-        super().set_is_engaged(engaged)  # noqa
-        if self.is_engaged:
-            self.engaged_event.set()
-            self.disengaged_event.clear()
-        else:
-            self.disengaged_event.set()
-            self.engaged_event.clear()
-
-    def _check_state(self, *, force: bool=False) -> Optional[float]:
-        self.check_in_progress_event.set()
-        try:
-            d = super()._check_state(force=force)
-        finally:
-            self.check_attempted.set()
-        return d
 
 
 class MixinAllowSetEngaged:

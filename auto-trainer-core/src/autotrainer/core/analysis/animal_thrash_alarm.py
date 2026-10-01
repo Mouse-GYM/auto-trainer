@@ -39,9 +39,10 @@ class AnimalThrashAlarm(AlarmDetector[AnimalThrashAlarmConfig]):
         det = self._audio_thrash_det
         if name == det.IS_ENGAGED:
             with self._lock:
-                self._audio_thrash_values.append((get_perf_now(), value,
-                                                  det.disengaged_age if value
-                                                  else det.engaged_age
+                p_now = get_perf_now()
+                self._audio_thrash_values.append((p_now, value,
+                                                  det.get_disengaged_age(p_now) if value
+                                                  else det.get_engaged_age(p_now)
                                                   ))
             self.check_state()
 

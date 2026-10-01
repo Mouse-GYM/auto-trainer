@@ -860,6 +860,10 @@ class MainWindow(QMainWindow):
         app_model.analysis.watchdog_monitor.unregister_watchdog(WatchdogItems.MAIN_UI_THREAD)
         # ensure any other emergency source also does not trigger:
         app_model.analysis.emergency_alarm_monitor.stop()
+        self._main_ui_watchdog_timer.stop()
+        self._main_ui_watchdog_timer.timeout.disconnect(app_model.refresh_main_watchdog)
+        # give a give amount of time ahead for child procs, in case we hang in close/terminate sequence:
+        app_model.refresh_main_watchdog(p_now=get_perf_now() + 120)
         self._on_capture_start_stop(False, after_callback=after_stop)
         dialog = QDialog(self)
         layout = QVBoxLayout()

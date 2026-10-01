@@ -491,14 +491,10 @@ class AppModel(ObservableObject):
             return math.nan
         return holder.value
 
-    def refresh_main_watchdog(self):
+    def refresh_main_watchdog(self, *, p_now: Optional[float] = None):
         holder = self._main_watchdog_holder
         if holder is not None:
-            holder.value = get_perf_now()
-
-    @property
-    def main_watchdog_holder(self) -> Optional[Synchronized]:
-        return self._main_watchdog_holder
+            holder.value = get_perf_now() if p_now is None else p_now
 
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_daily_timer(self):
@@ -1850,6 +1846,10 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
+        # give a good amount of time for possible child procs to check on us:
+        p_now = get_perf_now()
+        self.refresh_main_watchdog(p_now=p_now + 120)
+        #
         for timer in (
             self._timer_one_minute_repeat,
             self._timer_daily,
@@ -1908,6 +1908,7 @@ class AppModel(ObservableObject):
             logger.verbose("shutting down %s", mgr)
             mgr.shutdown()
             self._mp_manager = None
+        self.refresh_main_watchdog(p_now=math.nan)
 
     def _load_animals(self):
         animals = []
@@ -2020,6 +2021,8 @@ class AppModel(ObservableObject):
     def _on_alarm_monitor_property_changed(self, name, value, _):
         alarm_mon = self._analysis.emergency_alarm_monitor
         if name == alarm_mon.IS_ENGAGED:
+            # NB: reminder: group detector / alarm mon, also reemit the IS_ENGAGED callback (with appropriate value(s)),
+            # when a subdetector / engaged_reasons change occurs but the group is_engaged one doesn't.
             self._update_led_color()
         elif name == alarm_mon.DETECTOR_PROPERTY_CHANGED:
             detector = value[0]
@@ -2027,6 +2030,9 @@ class AppModel(ObservableObject):
             sub_name = value[1]
             if sub_name in (detector.IS_ENGAGED, detector.CONFIG):
                 self._update_led_color()
+        # elif name == alarm_mon.ENGAGED_REASONS_CHANGED:
+        #     self._update_led_color()
+        #   already unconditionally handled via the IS_ENGAGED above.
 
     def _on_system_maint_prop_changed(self, name, value, _):
         self.check_max_pellet_loaded()
@@ -2496,10 +2502,8 @@ class AppModel(ObservableObject):
             magnet_intensity = math.nan
         doors_mon = analysis.external_doors_alarm
         doors_state = doors_mon.doors_state
-        alarm_mon = analysis.emergency_alarm_monitor
         load_cell = analysis.load_cell_monitor
         audio_mon = analysis.animal_thrashing_alarm
-        presence_mon = analysis.global_animal_presence_alarm
         misplaced_mon = analysis.pellet_misplaced_monitor
         animal = self._selected_animal
 
