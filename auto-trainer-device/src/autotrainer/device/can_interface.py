@@ -1694,7 +1694,7 @@ class CanInterface(DeviceInterface):
         """
         handler = self._handlers.get(message.type, None)
         if handler is None:
-            logger.warning("Unhandled message type: %s", message.type)
+            logger.debug("Unhandled message type: %s", message.type)
             return None
         res = handler(message)
         if res is not None:
