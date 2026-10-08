@@ -22,7 +22,7 @@ dependencies = [
     'pyyaml >= 6.0.2, < 7',
 
     # CAN communication with pellet/tunnel boards:
-    'pyjerrycan >= 1.2.5, < 2 ; platform_machine == "aarch64"',
+    'pyjerrycan >= 1.2.8, < 2 ; platform_machine == "aarch64"',
 ]
 
 [tool.setuptools_scm]

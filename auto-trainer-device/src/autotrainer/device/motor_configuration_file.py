@@ -23,8 +23,8 @@ from typing import Tuple, Union, Dict, Optional, Type, TypeVar
 
 from typing_extensions import Self
 
-from autotrainer.core import MotorConfigurations
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message.motor_configuration_message import MotorConfigurations
 
 from .device_interface import ServoConfig, StepperConfig, Motor
 

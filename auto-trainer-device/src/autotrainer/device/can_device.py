@@ -16,20 +16,20 @@ import threading
 import time
 import uuid
 from functools import partial
-from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict, Literal
+from typing import Tuple, Union, SupportsInt, List, Optional, Any, cast, Dict, Literal, Callable, Protocol
 
 from autotrainer.core import Offset3DTuple, get_perf_now, Motor
-from autotrainer.core.logging import get_verbose_logger
-from autotrainer.core.message import SystemDataArgsKwargs
-
 from autotrainer.core import (SystemStatusMessageKind, SystemCommandKind,
                               AudioSpectrumData, Offset3DTuple)
+from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message import SystemDataArgsKwargs
+from autotrainer.core.observable_object import EventHandler
+from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 
 from .motor_steps import MotorSteps
 from .device import Device
 from .emulation_interface import EmulationInterface
 from .device_api import DeviceApi
-from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 from .can_interface import CanInterface, Target, target_of_motor
 from .device_interface import (
     Acknowledge,
@@ -51,9 +51,8 @@ from .device_interface import (
     SensorStatus,
     ServoStatus,
     StepperStatus,
-    Version,
+    Version, Uptime,
 )
-
 
 logger = get_verbose_logger(__name__)
 
@@ -173,7 +172,18 @@ def _make_proc_access(name: str):
     return property(wrapped)
 
 
+class UptimeEvent(Protocol):
+    def __call__(self, target: int, uptime_msecs: int, *, is_boot: bool = False):
+        """Uptime event"""
+
+
+class CanDeviceEvents:
+    uptime_refreshed = EventHandler[UptimeEvent]
+
+
 class CanDevice(Device):
+
+    uptime_refreshed: CanDeviceEvents.uptime_refreshed
 
     default_command_write_failed_repeat_count: int = 3
     default_command_ack_timeout_duration: float = 3  # seconds
@@ -223,7 +233,7 @@ class CanDevice(Device):
         self._interface: Union[CanInterface, EmulationInterface] = \
             CanInterface() if HAVE_CAN_DEVICE and not force_emulation else EmulationInterface()
 
-        super().__init__(self._interface, api)
+        super().__init__(self._interface, api, event_names=tuple(a for a in dir(CanDeviceEvents) if not a.startswith("_")))
 
         self._want_exit = threading.Event()
 
@@ -618,6 +628,8 @@ class CanDevice(Device):
             DoorData: handle_door_msg,
 
             Acknowledge: self._handle_ack,
+
+            Uptime: self._handle_uptime,
         }
 
     @property
@@ -1086,6 +1098,9 @@ class CanDevice(Device):
         logger.debug("Received ack: target=%s - uuid=%s ; cur_can_uuid=%s ; perf_c=%.3f ; err=%s",
                      msg.target, msg.uuid, cur_can_uuid, perf_c, msg.error)
         self._put_to_cmd_queue((_uuid_ack, (msg.uuid, msg.error, perf_c), None))
+
+    def _handle_uptime(self, msg: Uptime):
+        self.uptime_refreshed(msg.target, msg.msecs, is_boot=msg.is_boot)
 
     @property
     def api(self):

@@ -2,7 +2,7 @@ import math
 from typing import Protocol, List, Dict, Any, Optional
 import copy
 
-from autotrainer.core import Motor
+from autotrainer.core.message.motor_configuration_message import Motor
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)

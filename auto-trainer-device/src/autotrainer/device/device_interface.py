@@ -85,6 +85,12 @@ class Heartbeat(Source):
 
 
 @dataclass
+class Uptime(Source):
+    msecs: int = -1
+    is_boot: bool = False
+
+
+@dataclass
 class MagnetDigitalInputs(Source):
     continuity_0: bool = False
     continuity_1: bool = False
