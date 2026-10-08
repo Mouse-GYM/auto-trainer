@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import os
 import sys
@@ -31,12 +32,15 @@ def main():
     if app_start_log_level.isdigit():
         app_start_log_level = int(app_start_log_level)
 
+    console_start_log_level = os.getenv("AUTOTRAINER_CONSOLE_LOG_LEVEL", "INFO")
+
     logger = setup_logging(
         "autotrainer",
         logger_level=app_start_log_level,
         time_precision=6,
         multiprocess_enabled=True,
         fork_method=fork_method,
+        console_handler_level=console_start_log_level,
     )
 
     try:

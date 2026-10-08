@@ -10,7 +10,7 @@ from copy import copy
 from enum import IntEnum
 
 from autotrainer.core import SystemStatusMessageKind, SystemCommandKind, EventManager
-from autotrainer.core.logging import setup_logging
+from autotrainer.core.logging import setup_logging, get_console_handler
 from autotrainer.core.message import SystemDataArgsKwargs
 from autotrainer.device import (
     CanDevice,
@@ -556,6 +556,9 @@ def run_monitor():
                             level = int(level)
                         logger.info("logger %s: level=%s", log.name, log.level)
                         log.setLevel(level)
+                        console = get_console_handler()
+                        if console is not None:
+                            console.setLevel(level)
                 else:
                     get_input = True
                     logger.warning("Unknown command: %s", cmd)
@@ -827,5 +830,5 @@ def main():
 
 
 if __name__ == '__main__':
-    logger = setup_logging(time_precision=4)
-    sys.exit(main())
+    logger = setup_logging(time_precision=3)
+    main()
