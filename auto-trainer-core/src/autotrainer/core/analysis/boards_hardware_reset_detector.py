@@ -23,12 +23,13 @@ class BoardsHardwareResetDetector(BaseDetector[BoardsHardwareResetDetectorConfig
         self._boards_uptime.clear()
 
     def update_uptime(self, target: int, uptime_msecs: int, *, is_boot: bool = False):
+        uptime_sec = uptime_msecs / 1000
         prev = self._boards_uptime.get(target, None)
-        self._boards_uptime[target] = uptime_msecs
-        if is_boot or (prev is not None and uptime_msecs < prev):
+        self._boards_uptime[target] = uptime_sec
+        if is_boot or (prev is not None and uptime_sec < prev):
             prev_up = math.nan if prev is None else prev
             self._logger.notice("Detected board reboot: target=%s is_boot=%s uptime=%.3f prev_up=%.3f",
-                                target, is_boot, uptime_msecs, prev_up)
+                                target, is_boot, uptime_sec, prev_up)
             self.is_engaged = True
 
     def _check_state(self, *, force: bool = False) -> Optional[float]:
