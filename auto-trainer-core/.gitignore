@@ -1,0 +1,4 @@
+/src/autotrainer/core/_version.py
+*.egg-info/
+/build/
+/dist/

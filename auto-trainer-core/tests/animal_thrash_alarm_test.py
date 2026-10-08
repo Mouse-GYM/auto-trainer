@@ -10,7 +10,7 @@ from autotrainer.api import ApiAlarmKind, ApiEventKind
 from autotrainer.core import LoadCellMonitor, get_perf_now
 from autotrainer.core.analysis.animal_thrash_alarm import AnimalThrashAlarm
 from autotrainer.core.analysis.audio_spectrum_monitor import AudioSpectrumThrashMonitor
-from top_fixtures import AlmostEqualFloat, has_api_event_kind
+from autotrainer.core.testing import AlmostEqualFloat, has_api_event_kind
 
 
 @pytest.fixture(autouse=True)

@@ -11,6 +11,7 @@ from tools.acquisition.model.app_model import AppModel
 
 import top_fixtures
 from top_fixtures import nullify_attributes
+from autotrainer.core.testing import increase_simulate_perf_now
 
 
 @pytest.fixture
@@ -83,7 +84,7 @@ def app_model(mock_system, user_pref, calib_dir, diamond_config_path, system_con
         is_done = threading.Event()
         def increase_fake_perf_now():
             while not is_done.is_set():
-                top_fixtures.increase_simulate_perf_now(0.5)
+                increase_simulate_perf_now(0.5)
                 time.sleep(0.01)
         th = threading.Thread(target=increase_fake_perf_now, daemon=True)
         th.start()

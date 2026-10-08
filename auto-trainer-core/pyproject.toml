@@ -14,7 +14,7 @@ namespaces = true
 name = "auto-trainer-core"
 description = "Core objects and implementations for autotrainer"
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.8, <3.13"
 dynamic = ["version"]
 
 dependencies = [
@@ -34,12 +34,29 @@ dependencies = [
     'pyyaml >= 6.0.2, < 7',
     'dacite >= 1.9, < 2',  # dict tools, used for nested instantiate dataclasses from nested dict.
 
-    'importlib-resources; python_version < "3.10"',
-    'importlib-metadata; python_version < "3.10"'
+    "typing-extensions >= 4.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest >= 8.2, < 9",
+    "pytest-mock >= 3, < 4",
+    "pytest-random-order >= 1.1, < 2",
 ]
 
 [tool.setuptools_scm]
-root = ".."  # temporary while embedded in autotrainer main repo
-# also strip auto-trainer-core when moved as independent repo
-write_to = "auto-trainer-core/src/autotrainer/core/version.txt"
-git_describe_command = "git describe --tags --dirty --match 'core-v*' --abbrev=8"
+version_file = "src/autotrainer/core/_version.py"
+search_parent_directories = true
+
+[tool.setuptools_scm.scm.git]
+describe_command = "git describe --tags --dirty --match 'core-v*' --abbrev=8"
+
+[tool.pytest.ini_options]
+addopts = "-p autotrainer.core.testing --random-order --random-order-bucket=global"
+testpaths = ["tests"]
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s %(threadName)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.pyright]
+pythonVersion = "3.8"

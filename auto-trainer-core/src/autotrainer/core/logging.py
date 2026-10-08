@@ -13,7 +13,7 @@ from pathlib import Path
 from logging import LogRecord
 from queue import Empty
 from multiprocessing import Process
-from typing import Optional, Dict, Union, List
+from typing import Optional, Dict, Union, List, Sequence
 
 import sys
 import verboselogs
@@ -283,6 +283,7 @@ def thread_exception_hook(arg):
 
 
 def install_log_exception_hook():
+    """Replaces `sys.excepthook` and `threading.excepthook` for the whole process."""
     sys.excepthook = main_exception_hook
     threading.excepthook = thread_exception_hook
 
@@ -516,6 +517,7 @@ def setup_logging(
     base_logger_name: Optional[str] = None,  # i.e: "root" logger if None
     logger_level: _LogLevelT = logging.NOTSET,
     root_level: _LogLevelT = logging.NOTSET,
+    extra_logger_names: Sequence[str] = (),
     log_format: str = MULTIPROC_LOG_FORMAT,
     date_format: str = DateTimeFormats.hour_time_precise,
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
@@ -524,6 +526,16 @@ def setup_logging(
     multiprocess_enabled: bool = False,
     fork_method: str = "spawn",
 ) -> verboselogs.VerboseLogger:
+    """Configure logging for the whole process; call it once, from an application entry point.
+
+    Later calls return the `name` logger and change nothing, `extra_logger_names` included.
+
+    Process-wide effects: converts and sets the level of the base logger, "transitions", "autotrainer", `name`
+    and each of `extra_logger_names` (see `get_verbose_logger`); caps the third-party loggers listed in
+    `_limit_loggers_level`; installs the exception hooks (see `install_log_exception_hook`). With
+    `multiprocess_enabled`, it also replaces `logging.Logger.setLevel` for every logger in the process, so that
+    level changes reach the listener process, until `stop_multiproc_logging` restores it.
+    """
     global _already_setup
     global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _root_handler
 
@@ -589,9 +601,9 @@ def setup_logging(
     # logger.debug("Setup logging ; base_logger=%s", repr_logger(base_logger))
 
     get_verbose_logger("transitions").setLevel(logger_level)
-    get_verbose_logger("tools").setLevel(logger_level)
     get_verbose_logger("autotrainer").setLevel(logger_level)
-    get_verbose_logger("inference_algorithms").setLevel(logger_level)
+    for extra_logger_name in extra_logger_names:
+        get_verbose_logger(extra_logger_name).setLevel(logger_level)
 
     for _limit_name, v in _limit_loggers_level.items():
         logging.getLogger(_limit_name).setLevel(v["level"])
@@ -652,6 +664,8 @@ def make_log_dict_config(
 
 
 def get_verbose_logger(name: Optional[str] = None) -> VerboseLoggerWithThreadId:
+    """Reassigns `__class__` on the logger object itself, root and third-party loggers included, so every holder
+    of that logger sees the change."""
     obj = logging.getLogger(name)
     if not isinstance(obj, VerboseLoggerWithThreadId):
         obj.__class__ = VerboseLoggerWithThreadId

@@ -7,7 +7,8 @@ from unittest.mock import call
 import pytest
 
 from autotrainer.core.configuration.behavior_configuration import TimePeriod
-from top_fixtures import MockSystemMachine, AlmostEqualFloat
+from autotrainer.core.testing import AlmostEqualFloat
+from top_fixtures import MockSystemMachine
 
 from autotrainer.behavior import SystemState, SystemMachine
 

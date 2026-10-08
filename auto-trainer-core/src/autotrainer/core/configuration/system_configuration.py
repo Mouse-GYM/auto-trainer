@@ -188,22 +188,26 @@ class SystemConfiguration:
                                                 config=_MIGRATE_DACITE_CONFIG)
         else:
             assert version > SystemConfiguration.version
-            logger.warning("Loading configuration version %s while SystemConfiguration.version == %s, "
-                           "only considering known config attributes/properties.",
+            logger.warning("Configuration version %s is newer than SystemConfiguration.version %s: "
+                           "loading only the known attributes; saving this configuration drops the others.",
                            version, SystemConfiguration.version)
             configuration: Self = yaml.load(data, SystemConfigurationSafeLoader)
 
+        # A newer file is not rewritten here, but it is still backed up: the acquisition app saves its configuration
+        # over the same file at close, and that save drops every setting this version does not know.
         if version != SystemConfiguration.version and file_path is not None:
             now = datetime.now()
             now_str = now.strftime(f"{DATE_FORMAT}_{TIME_FORMAT}")
             new_p = file_path.parent.joinpath(
                 f"{file_path.stem}_v{version}_{now_str}{file_path.suffix}")
-            logger.notice("Detected config version change/mismatch, saving old config to %s,"
-                          " and replacing with new after.", new_p)
             shutil.copy2(file_path, new_p)
-            configuration.version = SystemConfiguration.version
-            # and save new one over previous:
-            configuration.save_file(file_path.with_suffix(""), as_yaml=True)
+            if version < SystemConfiguration.version:
+                logger.notice("Detected older config version %s, saved it to %s, and replacing it with version %s.",
+                              version, new_p, SystemConfiguration.version)
+                configuration.version = SystemConfiguration.version
+                configuration.save_file(file_path.with_suffix(""), as_yaml=True)
+            else:
+                logger.notice("Detected newer config version %s, saved a copy of it to %s.", version, new_p)
 
         return configuration
 

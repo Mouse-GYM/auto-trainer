@@ -2,6 +2,7 @@ import copy
 import dataclasses
 import datetime
 import io
+import logging
 import math
 import random
 import shutil
@@ -498,6 +499,33 @@ def test_load_version_51_file_is_migrated_on_disk(tmp_path):
     reloaded = SystemConfiguration.load_yaml_file(path)
     assert reloaded.version == SystemConfiguration.version
     assert dataclasses.asdict(reloaded) == dataclasses.asdict(config)
+
+
+def test_higher_version_file_is_left_unchanged_and_backed_up(tmp_path, caplog):
+    newer_version = SystemConfiguration.version + 1
+    path = tmp_path.joinpath("system_configuration.yaml")
+    path.write_text(f"""
+!SystemConfiguration
+version: {newer_version}
+unknown_attribute: 42
+""")
+    original_bytes = path.read_bytes()
+
+    with caplog.at_level(logging.WARNING):
+        config = SystemConfiguration.load_yaml_file(path, save_backup=True)
+
+    assert path.read_bytes() == original_bytes
+    backups = list(tmp_path.glob(f"system_configuration_v{newer_version}_*.yaml"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == original_bytes
+    assert sorted(tmp_path.iterdir()) == sorted([path, backups[0]])
+    assert config.version == newer_version
+    assert any(
+        record.levelno == logging.WARNING
+        and str(newer_version) in record.getMessage()
+        and str(SystemConfiguration.version) in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_v55_renames_are_respected():

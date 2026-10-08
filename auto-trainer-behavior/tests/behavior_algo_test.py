@@ -15,7 +15,7 @@ from autotrainer.core.interfaces import CoverServoStatus
 from autotrainer.behavior.pellet import PelletState
 from autotrainer.core import BehaviorConfiguration, Offset3DTuple, ProjectInfo
 from autotrainer.core.capture import CaptureProcessStatus
-from top_fixtures import increase_simulate_perf_now, AlmostEqualFloat
+from autotrainer.core.testing import increase_simulate_perf_now, AlmostEqualFloat
 
 import pytest
 

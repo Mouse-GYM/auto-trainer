@@ -13,11 +13,8 @@ from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.behavior_model import EmergencyControlSource
-from top_fixtures import (
-    MockSystemMachine,
-    has_api_event_kind,
-    increase_simulate_perf_now,
-)
+from autotrainer.core.testing import has_api_event_kind, increase_simulate_perf_now
+from top_fixtures import MockSystemMachine
 
 
 @pytest.fixture(autouse=True)

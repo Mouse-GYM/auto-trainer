@@ -18,6 +18,9 @@ pytest_plugins = [
     # NB: having to use another name than "fixtures(.py)" given otherwise it's overridden by:
     # ./auto-trainer-core/tests/fixtures
     # notably/already.
+    # core's module comes first: top_fixtures imports helpers from it, and a plugin imported before pytest
+    # registers it cannot have its asserts rewritten.
+    "autotrainer.core.testing",
     "top_fixtures",
 ]
 

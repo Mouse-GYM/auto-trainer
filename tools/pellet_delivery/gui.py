@@ -5,7 +5,8 @@ import sys
 
 def main():
     from autotrainer.core.logging import setup_logging
-    setup_logging("autotrainer", logger_level=logging.DEBUG)
+    from tools.app_logger_names import APP_LOGGER_NAMES
+    setup_logging("autotrainer", logger_level=logging.DEBUG, extra_logger_names=APP_LOGGER_NAMES)
 
     parser = argparse.ArgumentParser()
 

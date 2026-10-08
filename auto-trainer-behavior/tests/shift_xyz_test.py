@@ -11,7 +11,8 @@ from autotrainer.core import Offset3DTuple
 from autotrainer.core.diamond_triangle_config import DiamondTriangleOffsetConfig
 from autotrainer.core.reach_event import ReachEvent, ReachEventMethod
 from autotrainer.inference.analysis import IntertrialResponse
-from top_fixtures import MockSystemMachine, AlmostEqualFloat, FifoExitStack
+from autotrainer.core.testing import AlmostEqualFloat
+from top_fixtures import MockSystemMachine, FifoExitStack
 
 
 def make_reach_events(tuples):

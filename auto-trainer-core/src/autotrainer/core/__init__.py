@@ -323,3 +323,11 @@ from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .event.event_info import EventInfo
 from .event.api_event_plugin import EventManagerPlugin
 from .event.event_manager import EventManager
+
+
+def __getattr__(name: str):
+    # resolved on first access: the git lookup starts a subprocess, and every spawned child process imports core
+    if name == "__version__":
+        from .package_version import get_version
+        return get_version()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
