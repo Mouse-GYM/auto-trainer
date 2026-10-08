@@ -1,10 +1,9 @@
 import math
 
-from typing import Optional
+from typing import Optional, Dict
 
 from autotrainer.api import ApiDetectorKind
 
-from autotrainer.core import Offset3DTuple
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.boards_hardware_reset_detector_config import BoardsHardwareResetDetectorConfig
 
@@ -17,33 +16,20 @@ class BoardsHardwareResetDetector(BaseDetector[BoardsHardwareResetDetectorConfig
 
     def __init__(self):
         super().__init__()
-        self._hardware_send_pos = Offset3DTuple.get_nan()
-        self._requested_send_pos = Offset3DTuple.get_nan()
+        self._boards_uptime: Dict[int, float] = {}
 
     def _start(self):
         super()._start()
-        self._hardware_send_pos = Offset3DTuple.get_nan()
-        self._requested_send_pos = Offset3DTuple.get_nan()
+        self._boards_uptime.clear()
 
-    def set_send_position(self, pos: Offset3DTuple):
-        self._logger.debug("set_send_pos: %s", pos)
-        self._requested_send_pos = pos
-        self.check_state()
+    def update_uptime(self, target: int, uptime_msecs: int, *, is_boot: bool = False):
+        prev = self._boards_uptime.get(target, None)
+        self._boards_uptime[target] = uptime_msecs
+        if is_boot or (prev is not None and uptime_msecs < prev):
+            prev_up = math.nan if prev is None else prev
+            self._logger.notice("Detected board reboot: target=%s is_boot=%s uptime=%.3f prev_up=%.3f",
+                                target, is_boot, uptime_msecs, prev_up)
+            self.is_engaged = True
 
-    def set_hardware_send_position(self, pos: Offset3DTuple):
-        self._logger.debug("set_hardware_send_pos: %s", pos)
-        self._hardware_send_pos = pos
-        self.check_state()
-
-    def _check_state(self) -> Optional[float]:
-        engaged = (
-            # NB: this is only a heuristic,
-            # which cannot work if/when SEND-POS is effectively set to (0, 0, 0)
-            self._hardware_send_pos == (0, 0, 0)
-            and all(math.isfinite(v) for v in self._requested_send_pos)
-            and self._requested_send_pos != self._hardware_send_pos
-            # so we check for that to not trigger false-positive.
-        )
-        if engaged != self._is_engaged:
-            self._logger.debug("check_state: %s ; %s vs %s", engaged, self._hardware_send_pos, self._requested_send_pos)
-        self.is_engaged = engaged
+    def _check_state(self, *, force: bool = False) -> Optional[float]:
+        pass

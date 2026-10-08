@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
-from autotrainer.device import EmulationInterface
+from autotrainer.device import EmulationInterface, Target
 from autotrainer.device.device_interface import Acknowledge
 from tools.acquisition.model.app_model import app_status_to_api_app_mode, app_status_to_behavior_algo_status
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -173,3 +173,22 @@ def test_resume_fails_if_hard_reconnect_fails(
     assert not algo.algo_paused  # not anymore
     assert not emergency_mon.is_engaged
     assert emergency_mon.engaged_reasons == []
+
+
+def test_board_reset_engage_emergency(
+    app_model,
+    monkeypatch,
+    caplog,
+):
+    analysis = app_model.analysis
+    # ensure system-fault is emergency cond:
+    analysis.system_fault_alarm.config.is_emergency_condition = True
+    app_model.capture_start(target_status=AppModelStatus.ACQUIRING)
+    analysis.boards_hardware_reset_detector.update_uptime(Target.PELLET_DEVICE, 50, is_boot=True)
+    assert analysis.boards_hardware_reset_detector.is_engaged
+    assert analysis.emergency_alarm_monitor.is_engaged
+    assert app_model.behavior.algorithm.algo_paused
+    app_model.behavior.emergency_resume(EmergencyControlSource.USER_BUTTON)
+    assert not analysis.emergency_alarm_monitor.is_engaged
+    assert not analysis.boards_hardware_reset_detector.is_engaged
+    assert not app_model.behavior.algorithm.algo_paused
