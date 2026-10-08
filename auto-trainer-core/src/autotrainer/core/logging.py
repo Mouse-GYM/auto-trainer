@@ -335,7 +335,7 @@ def get_root_handler():
     return _root_handler
 
 
-def get_console_handler() -> logging.Handler:
+def get_console_handler() -> Optional[logging.Handler]:
     return _console_handler
 
 
@@ -564,7 +564,7 @@ def setup_logging(
     base_logger_name: Optional[str] = None,  # i.e: "root" logger if None
     logger_level: _LogLevelT = logging.NOTSET,
     root_level: _LogLevelT = logging.NOTSET,
-    console_handler_level: _LogLevelT = logging.INFO,
+    console_handler_level: _LogLevelT = logging.NOTSET,
     log_format: str = MULTIPROC_LOG_FORMAT,
     date_format: str = DateTimeFormats.hour_time_precise,
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
