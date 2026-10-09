@@ -1,7 +1,6 @@
 
 import dataclasses
 import math
-from enum import Enum
 from typing import Dict, Optional
 
 from autotrainer.core import get_perf_now
@@ -24,7 +23,7 @@ class _BaseSceneElement(str):  # , Enum):
         # set all string values to SceneElement/cls instance,
         # which pre-loads it in _cache_scene_elements:
         for name, value in vars(cls).items():
-            if cls.__annotations__.get(name) != 'SceneElement' or not isinstance(value, str):
+            if cls.__annotations__.get(name) != "SceneElement" or not isinstance(value, str):
                 continue
             setattr(cls, name, cls(value))
 
@@ -44,28 +43,28 @@ class _BaseSceneElement(str):  # , Enum):
 
 class SceneElement(_BaseSceneElement):
 
-    Pellet: "SceneElement" = 'Pellet'
+    Pellet: "SceneElement" = "Pellet"
 
-    R_Hand: "SceneElement" = 'R_Hand'  # composite element part
-    RH_flat: "SceneElement" = 'RH_flat'
-    RH_spread: "SceneElement" = 'RH_spread'
-    RH_grab: "SceneElement" = 'RH_grab'
+    R_Hand: "SceneElement" = "R_Hand"  # composite element part
+    RH_flat: "SceneElement" = "RH_flat"
+    RH_spread: "SceneElement" = "RH_spread"
+    RH_grab: "SceneElement" = "RH_grab"
 
-    L_Hand: "SceneElement" = 'L_Hand'  # composite element part
-    LH_flat: "SceneElement" = 'LH_flat'
-    LH_spread: "SceneElement" = 'LH_spread'
-    LH_grab: "SceneElement" = 'LH_grab'
+    L_Hand: "SceneElement" = "L_Hand"  # composite element part
+    LH_flat: "SceneElement" = "LH_flat"
+    LH_spread: "SceneElement" = "LH_spread"
+    LH_grab: "SceneElement" = "LH_grab"
 
-    Nose: "SceneElement" = 'Nose'
-    Mouth: "SceneElement" = 'Mouth'
-    Tongue_mid: "SceneElement" = 'Tongue_mid'
-    Tongue_tip: "SceneElement" = 'Tongue_tip'
+    Nose: "SceneElement" = "Nose"
+    Mouth: "SceneElement" = "Mouth"
+    Tongue_mid: "SceneElement" = "Tongue_mid"
+    Tongue_tip: "SceneElement" = "Tongue_tip"
 
-    Star: "SceneElement" = 'Star'
-    Diamond: "SceneElement" = 'Diamond'
-    Triangle: "SceneElement" = 'Triangle'
+    Star: "SceneElement" = "Star"
+    Diamond: "SceneElement" = "Diamond"
+    Triangle: "SceneElement" = "Triangle"
 
-    AnyAnimalPart: "SceneElement" = 'AnyAnimalPart'
+    AnyAnimalPart: "SceneElement" = "AnyAnimalPart"
 
 
 AllHandsParts = {

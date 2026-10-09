@@ -1,7 +1,7 @@
 import re
 import urllib.parse
 from dataclasses import dataclass, field
-from enum import Enum, IntEnum
+from enum import IntEnum
 from typing import Dict, Any
 
 from typing_extensions import Self

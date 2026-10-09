@@ -122,6 +122,10 @@ To limit testing to an individual namespace package, issue still from the base r
 
 for instance. Alternatively you can `cd` into the subdir, and execute `pytest ./tests` too.
 
+Running only core's tests, with `pytest ./auto-trainer-core/tests` or `pytest` inside `auto-trainer-core/`, uses
+core's own configuration in `auto-trainer-core/pyproject.toml` rather than `./conftest.py`; runs that mix several
+packages still use the root configuration.
+
 To list all test cases, from repo base/root dir:
 
 `pytest --collect-only --quiet`

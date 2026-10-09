@@ -6,7 +6,7 @@ import pytest
 
 
 from autotrainer.core import LoadCellMonitor
-from top_fixtures import simulate_get_perf_now, get_current_simulate_perf_now, increase_simulate_perf_now
+from autotrainer.core.testing import get_current_simulate_perf_now, increase_simulate_perf_now
 
 
 @pytest.fixture

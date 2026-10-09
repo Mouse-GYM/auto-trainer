@@ -1,13 +1,11 @@
 import math
 import os
-import sys
 import logging.config
 import multiprocessing
 import signal
 import threading
 import time
 from multiprocessing.managers import SyncManager, ValueProxy
-from multiprocessing.sharedctypes import Synchronized
 from typing import Optional
 
 import psutil

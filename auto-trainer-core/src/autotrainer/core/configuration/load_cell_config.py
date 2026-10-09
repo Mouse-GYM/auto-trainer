@@ -34,15 +34,15 @@ class LoadCellConfiguration(DetectorConfig):
     @classmethod
     def from_version_zero(cls, content: Dict[str, Any]) -> Self:
         return cls(**build_kwargs_apply_mapping(content, (
-            ('weight_active_threshold', 'load_trigger'),
-            ('threshold_duration', 'min_load_on_duration'),
-            ('min_post_event_hold_duration', 'min_load_off_duration'),
+            ("weight_active_threshold", "load_trigger"),
+            ("threshold_duration", "min_load_on_duration"),
+            ("min_post_event_hold_duration", "min_load_off_duration"),
         )))
 
     @classmethod
     def from_version_one(cls, content: Dict[str, Any]) -> Self:
         return cls(**build_kwargs_apply_mapping(content, (
-            ('weight_active_threshold', 'threshold'),
+            ("weight_active_threshold", "threshold"),
         )))
 
 

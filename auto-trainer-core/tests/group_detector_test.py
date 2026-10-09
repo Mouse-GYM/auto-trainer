@@ -7,7 +7,7 @@ from typing import Optional
 
 import pytest
 
-from top_fixtures import MixinEvents
+from autotrainer.core.testing import MixinEvents
 
 from autotrainer.core.analysis.detector import GroupBaseDetector, BaseDetector
 

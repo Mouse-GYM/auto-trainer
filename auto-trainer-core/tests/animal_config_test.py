@@ -1,4 +1,3 @@
-import pytest
 
 from autotrainer.core import AnimalSubject
 from autotrainer.core.animal.animal_subject import AnimalPelletCounts

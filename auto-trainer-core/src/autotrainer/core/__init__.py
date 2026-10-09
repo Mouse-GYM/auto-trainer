@@ -76,7 +76,7 @@ class ValueHolderDescriptor(Generic[ValueHolderT]):
 def transitions_allow_functions(transitions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Update the dicts to the functions name"""
     for trans in transitions:
-        for k in ('trigger', 'before', 'after', 'conditions'):
+        for k in ("trigger", "before", "after", "conditions"):
             v = trans.get(k)
             if isinstance(v, (list, tuple)):
                 trans[k] = tuple(
@@ -90,7 +90,7 @@ def transitions_allow_functions(transitions: List[Dict[str, Any]]) -> List[Dict[
 
 Pairs3dOffsetT = Union[List[Tuple[str, str]], Tuple[Tuple[str, str], ...]]
 
-_Offset3DTuple = namedtuple("Offset3DTuple", ('x', 'y', 'z'))
+_Offset3DTuple = namedtuple("Offset3DTuple", ("x", "y", "z"))
 
 
 def _get_perf_now():
@@ -323,3 +323,11 @@ from .analysis import LoadCellMonitor, HeadbarPressureMonitor
 from .event.event_info import EventInfo
 from .event.api_event_plugin import EventManagerPlugin
 from .event.event_manager import EventManager
+
+
+def __getattr__(name: str):
+    # resolved on first access: the git lookup starts a subprocess, and every spawned child process imports core
+    if name == "__version__":
+        from .package_version import get_version
+        return get_version()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

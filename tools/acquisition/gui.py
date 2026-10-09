@@ -26,6 +26,7 @@ def main():
     # import autotrainer only AFTER having set mp start method,
     # otherwise it can be set by some other 3rd party dependency.
     from autotrainer.core.logging import setup_logging, stop_multiproc_logging
+    from tools.app_logger_names import APP_LOGGER_NAMES
 
     app_start_log_level = os.getenv("AUTOTRAINER_LOG_LEVEL", "NOTSET")
     if app_start_log_level.isdigit():
@@ -34,6 +35,7 @@ def main():
     logger = setup_logging(
         "autotrainer",
         logger_level=app_start_log_level,
+        extra_logger_names=APP_LOGGER_NAMES,
         time_precision=6,
         multiprocess_enabled=True,
         fork_method=fork_method,

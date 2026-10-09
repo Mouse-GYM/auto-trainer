@@ -488,7 +488,7 @@ class SensorAnalysis(ObservableObject):
             fh = dest_path.open("a")
             writer = csv.DictWriter(
                 fh,
-                fieldnames=('Time', 'Index', *(f'Bin {i}' for i in range(64))),
+                fieldnames=("Time", "Index", *(f"Bin {i}" for i in range(64))),
             )
             if not file_existed:
                 logger.debug("writing audio header to %s", dest_path)

@@ -13,7 +13,7 @@ from pathlib import Path
 from logging import LogRecord
 from queue import Empty
 from multiprocessing import Process
-from typing import Optional, Dict, Union, List
+from typing import Optional, Dict, Union, List, Sequence
 
 import sys
 import verboselogs
@@ -43,23 +43,23 @@ MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(pro
 
 # these loggers can be too verbose:
 _limit_loggers_level = {
-    'botocore': {
-        'level': 'INFO'
+    "botocore": {
+        "level": "INFO"
     },
-    'boto3': {
-        'level': 'INFO'
+    "boto3": {
+        "level": "INFO"
     },
-    'urllib3': {
-        'level': 'INFO'
+    "urllib3": {
+        "level": "INFO"
     },
-    'py4j': {
-        'level': 'INFO'
+    "py4j": {
+        "level": "INFO"
     },
-    'h5py': {
-        'level': 'INFO'
+    "h5py": {
+        "level": "INFO"
     },
-    'watchdog': {
-        'level': 'INFO'
+    "watchdog": {
+        "level": "INFO"
     }
 }
 
@@ -72,25 +72,25 @@ class DateTimeFormats:
 
 
 DEFAULT_FIELD_STYLES = dict(
-    asctime=dict(color='white', bold=False),
-    hostname=dict(color='magenta'),
-    levelname=dict(color='blue', bold=True),
-    name=dict(color='cyan', bold=False),
-    programname=dict(color='cyan'),
-    username=dict(color='yellow'),
+    asctime=dict(color="white", bold=False),
+    hostname=dict(color="magenta"),
+    levelname=dict(color="blue", bold=True),
+    name=dict(color="cyan", bold=False),
+    programname=dict(color="cyan"),
+    username=dict(color="yellow"),
 )
 
 
 DEFAULT_LEVEL_STYLES = dict(
-    spam=dict(color='white', faint=True),
-    debug=dict(color='white', bold=False, faint=False),
-    verbose=dict(color='white', bold=True),
-    info=dict(color='blue', bold=False, faint=True),
-    notice=dict(color='magenta', faint=True),
-    warning=dict(color='yellow'),
-    success=dict(color='green', bold=False),
-    error=dict(color='red', bold=False, faint=True),
-    critical=dict(color='red', bold=True),
+    spam=dict(color="white", faint=True),
+    debug=dict(color="white", bold=False, faint=False),
+    verbose=dict(color="white", bold=True),
+    info=dict(color="blue", bold=False, faint=True),
+    notice=dict(color="magenta", faint=True),
+    warning=dict(color="yellow"),
+    success=dict(color="green", bold=False),
+    error=dict(color="red", bold=False, faint=True),
+    critical=dict(color="red", bold=True),
 )
 
 
@@ -283,6 +283,7 @@ def thread_exception_hook(arg):
 
 
 def install_log_exception_hook():
+    """Replaces `sys.excepthook` and `threading.excepthook` for the whole process."""
     sys.excepthook = main_exception_hook
     threading.excepthook = thread_exception_hook
 
@@ -516,6 +517,7 @@ def setup_logging(
     base_logger_name: Optional[str] = None,  # i.e: "root" logger if None
     logger_level: _LogLevelT = logging.NOTSET,
     root_level: _LogLevelT = logging.NOTSET,
+    extra_logger_names: Sequence[str] = (),
     log_format: str = MULTIPROC_LOG_FORMAT,
     date_format: str = DateTimeFormats.hour_time_precise,
     time_precision: int = 3,  # for sub seconds precision, nbr of digits after the dot.
@@ -524,6 +526,16 @@ def setup_logging(
     multiprocess_enabled: bool = False,
     fork_method: str = "spawn",
 ) -> verboselogs.VerboseLogger:
+    """Configure logging for the whole process; call it once, from an application entry point.
+
+    Later calls return the `name` logger and change nothing, `extra_logger_names` included.
+
+    Process-wide effects: converts and sets the level of the base logger, "transitions", "autotrainer", `name`
+    and each of `extra_logger_names` (see `get_verbose_logger`); caps the third-party loggers listed in
+    `_limit_loggers_level`; installs the exception hooks (see `install_log_exception_hook`). With
+    `multiprocess_enabled`, it also replaces `logging.Logger.setLevel` for every logger in the process, so that
+    level changes reach the listener process, until `stop_multiproc_logging` restores it.
+    """
     global _already_setup
     global _multiprocess_log_queue, _queue_listener, _queue_handler, _console_handler, _root_handler
 
@@ -589,9 +601,9 @@ def setup_logging(
     # logger.debug("Setup logging ; base_logger=%s", repr_logger(base_logger))
 
     get_verbose_logger("transitions").setLevel(logger_level)
-    get_verbose_logger("tools").setLevel(logger_level)
     get_verbose_logger("autotrainer").setLevel(logger_level)
-    get_verbose_logger("inference_algorithms").setLevel(logger_level)
+    for extra_logger_name in extra_logger_names:
+        get_verbose_logger(extra_logger_name).setLevel(logger_level)
 
     for _limit_name, v in _limit_loggers_level.items():
         logging.getLogger(_limit_name).setLevel(v["level"])
@@ -629,29 +641,31 @@ def make_log_dict_config(
         if log_queue is None:
             return None
     dct_cfg = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'handlers': {
-            'queue': {
-                'class': 'autotrainer.core.logging.WithThreadIdQueueHandler',
-                'queue': log_queue,
-                'level': logging.NOTSET,  # pass everything to the listener
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "queue": {
+                "class": "autotrainer.core.logging.WithThreadIdQueueHandler",
+                "queue": log_queue,
+                "level": logging.NOTSET,  # pass everything to the listener
             }
         },
         # root logger is here:
-        'root': {
-            'handlers': ['queue'],
+        "root": {
+            "handlers": ["queue"],
             # with its own level here:
-            'level': logging.NOTSET,  # root_log_level,
+            "level": logging.NOTSET,  # root_log_level,
             # FORCE NOTSET to relay everything so that file handler can properly get DEBUG as well
         },
         # but eventual level of other loggers have to be defined here:
-        'loggers': copy.deepcopy(_limit_loggers_level),
+        "loggers": copy.deepcopy(_limit_loggers_level),
     }
     return dct_cfg
 
 
 def get_verbose_logger(name: Optional[str] = None) -> VerboseLoggerWithThreadId:
+    """Reassigns `__class__` on the logger object itself, root and third-party loggers included, so every holder
+    of that logger sees the change."""
     obj = logging.getLogger(name)
     if not isinstance(obj, VerboseLoggerWithThreadId):
         obj.__class__ = VerboseLoggerWithThreadId

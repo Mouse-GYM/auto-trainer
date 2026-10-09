@@ -1,7 +1,6 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from math import floor
 from typing import Optional
 
 logger = logging.getLogger(__name__)

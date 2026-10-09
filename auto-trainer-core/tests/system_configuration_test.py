@@ -2,12 +2,12 @@ import copy
 import dataclasses
 import datetime
 import io
+import logging
 import math
 import random
 import shutil
 from pathlib import Path
 
-import humps
 import pytest
 import yaml
 
@@ -27,7 +27,7 @@ from autotrainer.core.configuration import (
 from autotrainer.core.configuration.alarm_configuration import EmergencyAlarmConfiguration
 from autotrainer.core.configuration.behavior_configuration import PelletDeliveryConfiguration, HeadClampConfiguration, \
     AutoEndTrialConfiguration, BatchTrialRecordingConfiguration, AutoCloseGateOnIntertrialConfiguration, \
-    AnimalSleepWindow, TimePeriod
+    TimePeriod
 from autotrainer.core.configuration.hardware_configuration import HardwareConfiguration
 
 
@@ -44,7 +44,7 @@ emergency_alarm_cfg = EmergencyAlarmConfiguration()
 
 current_default_config_dict = dataclasses.asdict(SystemConfiguration())
 
-behavior_default_config_dict = current_default_config_dict['behavior']
+behavior_default_config_dict = current_default_config_dict["behavior"]
 
 
 v0_expected_result_config = {
@@ -161,12 +161,12 @@ v0_expected_result_config = {
 
 
 def _fill_v0():
-    v0_behavior = v0_expected_result_config['behavior']
+    v0_behavior = v0_expected_result_config["behavior"]
     for k, v in behavior_default_config_dict.items():
         if k not in v0_behavior:
             v0_behavior[k] = copy.deepcopy(v)
-    v0_headclamp = v0_behavior['head_clamp']
-    for k, v in behavior_default_config_dict['head_clamp'].items():
+    v0_headclamp = v0_behavior["head_clamp"]
+    for k, v in behavior_default_config_dict["head_clamp"].items():
         if k not in v0_headclamp:
             v0_headclamp[k] = copy.deepcopy(v)
     v0_expected_result_config["watchdog"] = current_default_config_dict["watchdog"]
@@ -201,33 +201,33 @@ def test_load_version_1():
     path = fixtures_path.joinpath("v1_config.yaml")
     with path.open() as fh:
         config = SystemConfiguration.load_yaml(fh)
-    exp_load_cell = copy.deepcopy(v0_expected_result_config['behavior']['load_cell'])
+    exp_load_cell = copy.deepcopy(v0_expected_result_config["behavior"]["load_cell"])
     exp_load_cell.update({
-        'min_event_duration': 3.0,
-            'min_post_event_hold_duration': 6.0,
-            'thrashing_min_ptp_change_count': 3,
-            'thrashing_var_max_delay': 0.2,
-            'thrashing_var_min_delay': 0.05,
-            'thrashing_var_weight_threshold_max': 30,
-            'thrashing_var_weight_threshold_min': 20,
-            'threshold_duration': 0.25,
-            'weight_active_threshold': 15.0,
-            'weight_inactive_threshold': 2,
+        "min_event_duration": 3.0,
+            "min_post_event_hold_duration": 6.0,
+            "thrashing_min_ptp_change_count": 3,
+            "thrashing_var_max_delay": 0.2,
+            "thrashing_var_min_delay": 0.05,
+            "thrashing_var_weight_threshold_max": 30,
+            "thrashing_var_weight_threshold_min": 20,
+            "threshold_duration": 0.25,
+            "weight_active_threshold": 15.0,
+            "weight_inactive_threshold": 2,
     })
     expected_behavior = copy.deepcopy(behavior_default_config_dict)
     expected_behavior["load_cell"] = exp_load_cell
     expected_behavior["pellet_delivery"].update({
-                'is_enabled': False,
-                'is_intertrial_analysis_enabled': True,
-                'is_intertrial_pellet_shift_enabled': True,
-                'is_pellet_cover_enabled': True,
-                'max_pellet_missing_seconds': 15,
-                'max_pellets_per_day': 75,
-                'max_pellets_per_trial': 10,
-                'auto_correct_motors_drift': False,
-                'triangle_pellet_expected_distance': PelletDeliveryConfiguration.triangle_pellet_expected_distance,
-                'triangle_pellet_diff_too_far_threshold': PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
-                'use_triangle_pellet_distance_too_far': PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
+                "is_enabled": False,
+                "is_intertrial_analysis_enabled": True,
+                "is_intertrial_pellet_shift_enabled": True,
+                "is_pellet_cover_enabled": True,
+                "max_pellet_missing_seconds": 15,
+                "max_pellets_per_day": 75,
+                "max_pellets_per_trial": 10,
+                "auto_correct_motors_drift": False,
+                "triangle_pellet_expected_distance": PelletDeliveryConfiguration.triangle_pellet_expected_distance,
+                "triangle_pellet_diff_too_far_threshold": PelletDeliveryConfiguration.triangle_pellet_diff_too_far_threshold,
+                "use_triangle_pellet_distance_too_far": PelletDeliveryConfiguration.use_triangle_pellet_distance_too_far,
             }
     )
     # for k, v in behavior_default_config_dict.items():
@@ -500,6 +500,33 @@ def test_load_version_51_file_is_migrated_on_disk(tmp_path):
     assert dataclasses.asdict(reloaded) == dataclasses.asdict(config)
 
 
+def test_higher_version_file_is_left_unchanged_and_backed_up(tmp_path, caplog):
+    newer_version = SystemConfiguration.version + 1
+    path = tmp_path.joinpath("system_configuration.yaml")
+    path.write_text(f"""
+!SystemConfiguration
+version: {newer_version}
+unknown_attribute: 42
+""")
+    original_bytes = path.read_bytes()
+
+    with caplog.at_level(logging.WARNING):
+        config = SystemConfiguration.load_yaml_file(path, save_backup=True)
+
+    assert path.read_bytes() == original_bytes
+    backups = list(tmp_path.glob(f"system_configuration_v{newer_version}_*.yaml"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == original_bytes
+    assert sorted(tmp_path.iterdir()) == sorted([path, backups[0]])
+    assert config.version == newer_version
+    assert any(
+        record.levelno == logging.WARNING
+        and str(newer_version) in record.getMessage()
+        and str(SystemConfiguration.version) in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_v55_renames_are_respected():
     config_text = """
     !SystemConfiguration
@@ -525,8 +552,8 @@ def test_hardware_config_fail_with_not_finite_or_zero_or_negative_cam_timeout(de
     -1, 90, math.inf, math.nan, -math.inf,
 ])
 @pytest.mark.parametrize("param", [
-    'min_confidence_plot_threshold',
-    'min_confidence_presence_threshold'
+    "min_confidence_plot_threshold",
+    "min_confidence_presence_threshold"
 ])
 def test_bad_confidence_thresholds(bad_value, param):
     kw = {param: bad_value}
