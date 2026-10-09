@@ -1,6 +1,6 @@
 import dataclasses
 import enum
-from typing import Optional, List, Set, Callable, Dict, Union
+from typing import Callable, Union
 
 from autotrainer.api import ApiAlarmKind
 

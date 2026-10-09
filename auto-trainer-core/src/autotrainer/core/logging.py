@@ -43,23 +43,23 @@ MULTIPROC_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s[%(processName)s.%(pro
 
 # these loggers can be too verbose:
 _limit_loggers_level = {
-    'botocore': {
-        'level': 'INFO'
+    "botocore": {
+        "level": "INFO"
     },
-    'boto3': {
-        'level': 'INFO'
+    "boto3": {
+        "level": "INFO"
     },
-    'urllib3': {
-        'level': 'INFO'
+    "urllib3": {
+        "level": "INFO"
     },
-    'py4j': {
-        'level': 'INFO'
+    "py4j": {
+        "level": "INFO"
     },
-    'h5py': {
-        'level': 'INFO'
+    "h5py": {
+        "level": "INFO"
     },
-    'watchdog': {
-        'level': 'INFO'
+    "watchdog": {
+        "level": "INFO"
     }
 }
 
@@ -72,25 +72,25 @@ class DateTimeFormats:
 
 
 DEFAULT_FIELD_STYLES = dict(
-    asctime=dict(color='white', bold=False),
-    hostname=dict(color='magenta'),
-    levelname=dict(color='blue', bold=True),
-    name=dict(color='cyan', bold=False),
-    programname=dict(color='cyan'),
-    username=dict(color='yellow'),
+    asctime=dict(color="white", bold=False),
+    hostname=dict(color="magenta"),
+    levelname=dict(color="blue", bold=True),
+    name=dict(color="cyan", bold=False),
+    programname=dict(color="cyan"),
+    username=dict(color="yellow"),
 )
 
 
 DEFAULT_LEVEL_STYLES = dict(
-    spam=dict(color='white', faint=True),
-    debug=dict(color='white', bold=False, faint=False),
-    verbose=dict(color='white', bold=True),
-    info=dict(color='blue', bold=False, faint=True),
-    notice=dict(color='magenta', faint=True),
-    warning=dict(color='yellow'),
-    success=dict(color='green', bold=False),
-    error=dict(color='red', bold=False, faint=True),
-    critical=dict(color='red', bold=True),
+    spam=dict(color="white", faint=True),
+    debug=dict(color="white", bold=False, faint=False),
+    verbose=dict(color="white", bold=True),
+    info=dict(color="blue", bold=False, faint=True),
+    notice=dict(color="magenta", faint=True),
+    warning=dict(color="yellow"),
+    success=dict(color="green", bold=False),
+    error=dict(color="red", bold=False, faint=True),
+    critical=dict(color="red", bold=True),
 )
 
 
@@ -641,24 +641,24 @@ def make_log_dict_config(
         if log_queue is None:
             return None
     dct_cfg = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'handlers': {
-            'queue': {
-                'class': 'autotrainer.core.logging.WithThreadIdQueueHandler',
-                'queue': log_queue,
-                'level': logging.NOTSET,  # pass everything to the listener
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "queue": {
+                "class": "autotrainer.core.logging.WithThreadIdQueueHandler",
+                "queue": log_queue,
+                "level": logging.NOTSET,  # pass everything to the listener
             }
         },
         # root logger is here:
-        'root': {
-            'handlers': ['queue'],
+        "root": {
+            "handlers": ["queue"],
             # with its own level here:
-            'level': logging.NOTSET,  # root_log_level,
+            "level": logging.NOTSET,  # root_log_level,
             # FORCE NOTSET to relay everything so that file handler can properly get DEBUG as well
         },
         # but eventual level of other loggers have to be defined here:
-        'loggers': copy.deepcopy(_limit_loggers_level),
+        "loggers": copy.deepcopy(_limit_loggers_level),
     }
     return dct_cfg
 

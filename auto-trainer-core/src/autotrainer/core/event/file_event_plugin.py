@@ -101,7 +101,7 @@ class FileEventPlugin(EventManagerPlugin):
                     fh,
                     fieldnames=["Time" , "Index", "EventId", "EventName", "Data", "Repeat"],
                     quotechar='"',
-                    escapechar='\\',
+                    escapechar="\\",
                     quoting=csv.QUOTE_NONNUMERIC,
                 )
                 if not file_existed:

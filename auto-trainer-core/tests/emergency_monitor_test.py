@@ -9,7 +9,7 @@ from autotrainer.core.testing import MixinEvents
 
 from autotrainer.core.analysis import EmergencyAlarmMonitor
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
-from autotrainer.core.analysis.detector import BaseDetector, GroupBaseDetector
+from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
 from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 

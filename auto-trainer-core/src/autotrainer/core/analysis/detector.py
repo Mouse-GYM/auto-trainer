@@ -4,14 +4,12 @@ import inspect
 import math
 import queue
 import threading
-import time
-import typing
 import warnings
 from functools import partial
-from typing import Dict, Tuple, Optional, Union, ClassVar, TypeVar, Type, Generic, List, Set, Callable, Any
+from typing import Dict, Tuple, Optional, ClassVar, TypeVar, Type, Generic, List, Set, Callable
 
 import typing_extensions
-from autotrainer.api import ApiEventKind, ApiDetectorKind
+from autotrainer.api import ApiDetectorKind
 from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
 from autotrainer.core.event import post_api_detector_event_content

@@ -1,11 +1,10 @@
 import threading
-from unittest import mock
 
 import pytest
 
 import time
 
-from autotrainer.api import ApiAlarmKind, ApiEventKind
+from autotrainer.api import ApiEventKind
 
 from autotrainer.core import LoadCellMonitor, get_perf_now
 from autotrainer.core.analysis.animal_thrash_alarm import AnimalThrashAlarm

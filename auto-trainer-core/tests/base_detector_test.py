@@ -1,5 +1,4 @@
 import logging
-import time
 import threading
 from typing import Optional
 from unittest import mock

@@ -3,7 +3,7 @@ import logging
 import queue
 import time
 from enum import IntEnum
-from multiprocessing import RawArray, Value, sharedctypes
+from multiprocessing import sharedctypes
 from multiprocessing.context import BaseContext
 from typing import List, Optional, Tuple
 

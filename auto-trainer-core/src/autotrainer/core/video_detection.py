@@ -6,9 +6,8 @@ from typing import Optional
 
 from typing_extensions import Self
 
-from autotrainer.core import ValueHolderDescriptor, get_perf_now, RawValueHolder
+from autotrainer.core import ValueHolderDescriptor, RawValueHolder
 from autotrainer.core.configuration.presence_detection_configuration import PresenceDetectionConfig
-from autotrainer.core.project.project_info import ProjectInfo
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import get_mp_ctx, EmptyWithContext
 
@@ -94,7 +93,7 @@ class PresenceDetectionAttrs:
 
     def __eq__(self, other):
         return all(getattr(self, a) == getattr(other, a)
-                   for a in (a.name.lstrip('_') for a in dataclasses.fields(self)))
+                   for a in (a.name.lstrip("_") for a in dataclasses.fields(self)))
 
     @property
     def lock(self):
@@ -105,7 +104,7 @@ class PresenceDetectionAttrs:
         with self._lock:
             dct = {
                 f"_{a}": RawValueHolder(getattr(self, a))
-                for a in (a.name.lstrip('_') for a in dataclasses.fields(self))
+                for a in (a.name.lstrip("_") for a in dataclasses.fields(self))
             }
         return self.__class__(**dct)
 
