@@ -12,7 +12,7 @@ from autotrainer.core import PersistenceConfiguration
 from tools.acquisition.model.app_model import AppModel
 
 from tools.acquisition.model.app_model_status import AppModelStatus
-from tools.acquisition.model.behavior_model import EmergencyControlSource
+from tools.acquisition.model.behavior_model import EmergencyControlSource, EmergencyResumeOutcome
 from autotrainer.core.testing import has_api_event_kind, increase_simulate_perf_now
 from top_fixtures import MockSystemMachine
 
@@ -186,6 +186,38 @@ class TestEmergency(MockSystemMachine):
             'reason_code': ApiEmergencyResumeReason.alarm_monitor_resume,
             'resumed_alarms': [ApiAlarmKind.systemFault],
         }
+
+    def test_try_resume_reports_resumed(self):
+        behavior = self._behavior
+        behavior.emergency_stop(source="testing")
+        assert behavior.try_emergency_resume("testing") == (EmergencyResumeOutcome.RESUMED, None)
+        assert not behavior.algorithm.algo_paused
+
+    def test_try_resume_reports_not_stopped(self):
+        assert self._behavior.try_emergency_resume("testing") == (EmergencyResumeOutcome.NOT_STOPPED, None)
+        assert not has_api_event_kind(ApiEventKind.emergencyResume)
+
+    def test_try_resume_reports_refused(self):
+        behavior = self._behavior
+        behavior.emergency_stop(source=EmergencyControlSource.USER_BUTTON)
+        outcome, _ = behavior.try_emergency_resume("something-else")
+        assert outcome is EmergencyResumeOutcome.REFUSED
+        assert behavior.algorithm.algo_paused
+
+    def test_try_resume_reports_failed(self):
+        def probe_failed():
+            raise RuntimeError("probe failed")
+
+        behavior = self._behavior
+        behavior.emergency_stop(source="testing")
+        behavior.before_emergency_resumed += probe_failed
+        try:
+            outcome, detail = behavior.try_emergency_resume("testing")
+        finally:
+            behavior.before_emergency_resumed -= probe_failed
+        assert outcome is EmergencyResumeOutcome.FAILED
+        assert "probe failed" in detail
+        assert behavior.algorithm.algo_paused
 
 
 mid_day = dtm.datetime(2026,1,1, 12, 0)
