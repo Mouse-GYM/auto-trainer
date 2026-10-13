@@ -13,7 +13,10 @@ requires-python = ">= 3.8"
 dynamic = ["version"]
 dependencies = [
     'auto-trainer-training >= 0.10.0, < 0.11',
-    # NB: auto-trainer-api is coming via auto-trainer-core
+    'auto-trainer-api >= 0.12.0, < 0.13.0',
+
+    'verboselogs >= 1.7, < 2',
+    'pyyaml >= 6.0.2, < 7',
 
     # but not already for these, still parts of this repo:
     'auto-trainer-behavior',

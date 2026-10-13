@@ -2,7 +2,8 @@ import pytest
 from autotrainer.api import ApiEventKind
 
 from autotrainer.core import EventManager
-from top_fixtures import MockSystemMachine, has_api_event_kind, get_api_event_context
+from autotrainer.core.testing import has_api_event_kind, get_api_event_context
+from top_fixtures import MockSystemMachine
 
 
 def test_with_it(mock_event_manager, request):

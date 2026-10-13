@@ -108,3 +108,40 @@ jobs:
             pytest -xvs || true  # TODO: top_fixtures contains everything mixed...
             popd
           done
+  core-standalone:
+    name: auto-trainer-core installed alone
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ["3.8"]
+    env:
+      FORCE_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # setuptools_scm needs the core-v* tags
+          fetch-tags: true
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install auto-trainer-core alone, non-editable, with its test extra
+        run: |
+          set -x
+          pip install --upgrade pip
+          pip install "./auto-trainer-core[test]"
+          pip list
+      - name: Check that the installed core is the one under test
+        working-directory: auto-trainer-core
+        run: |
+          python - <<'EOF'
+          import autotrainer.core
+          version = autotrainer.core.__version__
+          print(autotrainer.core.__file__, version)
+          assert "site-packages" in autotrainer.core.__file__
+          assert not version.startswith(("0.0.0", "0.1.dev")), version
+          EOF
+      - name: Test auto-trainer-core
+        working-directory: auto-trainer-core
+        run: pytest -v --color=yes

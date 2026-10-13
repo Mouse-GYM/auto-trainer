@@ -1,6 +1,6 @@
 import dataclasses
 import math
-from typing import Dict, Tuple, Optional, NamedTuple
+from typing import Optional, NamedTuple
 
 from autotrainer.api import ApiDetectorKind, ApiAlarmKind
 

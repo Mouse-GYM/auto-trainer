@@ -2,7 +2,7 @@ import dataclasses
 import datetime
 import enum
 from dataclasses import dataclass, field
-from typing import Type, Optional, Dict
+from typing import Type, Dict
 from typing_extensions import Self
 
 import yaml
@@ -141,8 +141,8 @@ class PelletDeliveryConfiguration:
     def from_version_zero(cls, content: dict) -> Self:
         return cls(**build_kwargs_apply_mapping(content, (
             *(f.name for f in dataclasses.fields(cls)),
-            ('is_enabled', 'is_deliver_pellet_enabled'),
-            ('is_pellet_cover_enabled', 'is_cover_pellet_enabled'),
+            ("is_enabled", "is_deliver_pellet_enabled"),
+            ("is_pellet_cover_enabled", "is_cover_pellet_enabled"),
         ), skip_remaining=True))
 
 
@@ -281,11 +281,11 @@ class _BehaviorConfiguration:
     @classmethod
     def from_version_one(cls, content: Dict):
         headclamp = content.get("head_clamp", {})
-        headclamp.pop('max_baseline_intensity')
-        headclamp.pop('baseline_intensity_increment')
-        baseline = headclamp.pop('min_baseline_intensity')
+        headclamp.pop("max_baseline_intensity")
+        headclamp.pop("baseline_intensity_increment")
+        baseline = headclamp.pop("min_baseline_intensity")
         if baseline is not None:
-            headclamp['baseline_intensity'] = baseline
+            headclamp["baseline_intensity"] = baseline
         pellet_dev = content.get("pellet_delivery", {})
         return cls(
             load_cell=LoadCellConfiguration.from_version_one(content.get("load_cell", {})),

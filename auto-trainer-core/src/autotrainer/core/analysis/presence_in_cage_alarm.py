@@ -1,5 +1,3 @@
-import math
-import warnings
 from typing import Optional
 
 from autotrainer.api import ApiAlarmKind

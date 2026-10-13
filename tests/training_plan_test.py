@@ -26,11 +26,11 @@ from tools.acquisition.model.app_model import AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.training_plan import get_plan_id
+from autotrainer.core.testing import increase_simulate_perf_now
 from top_fixtures import (
     MockSystemMachine,
     FifoExitStack,
     nullify_attributes,
-    increase_simulate_perf_now,
 )
 
 this_dir = Path(__file__).parent.resolve()

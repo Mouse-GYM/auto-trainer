@@ -22,7 +22,8 @@ from autotrainer.inference import (
     pose_result_process,
 )
 from autotrainer.inference.pose_result_process import InferenceMonitorDataProc
-from top_fixtures import collect_log_queue_to_caplog, increase_simulate_perf_now
+from autotrainer.core.testing import increase_simulate_perf_now
+from top_fixtures import collect_log_queue_to_caplog
 
 frames_idc_online_no_recording = np.asarray([(-1, -1, -1), (-1, -1, -1)])
 

@@ -3,7 +3,7 @@ import dataclasses
 import math
 import os
 import time
-from typing import Callable, Optional, List, Protocol
+from typing import Optional, List, Protocol
 
 import numpy
 

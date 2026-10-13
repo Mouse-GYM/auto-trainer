@@ -1,6 +1,5 @@
 import math
-import time
-from typing import Optional, Callable, Dict, List, Set
+from typing import Optional, Callable, Dict, List
 
 from autotrainer.core import get_perf_now, get_verbose_logger
 from autotrainer.core.analysis.detector import BaseDetector, GroupBaseDetector

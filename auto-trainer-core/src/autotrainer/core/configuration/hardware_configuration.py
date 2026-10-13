@@ -5,7 +5,6 @@ from typing import Optional
 from typing_extensions import Self
 
 
-from autotrainer.core import make_camelize_representer, make_decamelize_constructor
 
 
 @dataclass

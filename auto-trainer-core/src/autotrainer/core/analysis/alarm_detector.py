@@ -1,6 +1,4 @@
-import dataclasses
-from functools import partial
-from typing import Type, TypeVar, Generic, ClassVar, Optional, Callable, Dict, Set, List
+from typing import Type, TypeVar, Generic, ClassVar, Optional
 
 from autotrainer.api import ApiAlarmKind, ApiAlarmStatus, ApiEventKind, build_event
 from autotrainer.core.analysis.detector import BaseDetector

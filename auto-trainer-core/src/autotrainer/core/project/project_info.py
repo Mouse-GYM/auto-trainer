@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ctypes
 import dataclasses
-import logging
 import math
 import multiprocessing.managers
 import os

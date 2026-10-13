@@ -4,7 +4,8 @@ from unittest import mock
 
 import pytest
 
-from top_fixtures import MockSystemMachine, AlmostEqualFloat
+from autotrainer.core.testing import AlmostEqualFloat
+from top_fixtures import MockSystemMachine
 
 from autotrainer.behavior import IntertrialState
 from autotrainer.core.interfaces import CaptureAnalysisResult, RecordingEndingReason
