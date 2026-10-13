@@ -329,5 +329,7 @@ def __getattr__(name: str):
     # resolved on first access: the git lookup starts a subprocess, and every spawned child process imports core
     if name == "__version__":
         from .package_version import get_version
-        return get_version()
+        global __version__
+        __version__ = get_version()
+        return __version__
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

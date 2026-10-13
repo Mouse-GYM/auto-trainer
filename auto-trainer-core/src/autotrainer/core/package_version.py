@@ -1,4 +1,3 @@
-import functools
 import importlib
 import importlib.metadata
 import importlib.util
@@ -58,7 +57,6 @@ def _version_from_metadata() -> Optional[str]:
         return None
 
 
-@functools.lru_cache(maxsize=None)
 def get_version() -> str:
     for source in (_version_from_checkout, _version_from_file, _version_from_metadata):
         version = source()

@@ -11,12 +11,13 @@ SOURCE_NAMES = ("_version_from_checkout", "_version_from_file", "_version_from_m
 
 
 @pytest.fixture(autouse=True)
-def _clear_version_cache():
-    package_version.get_version.cache_clear()
+def _clear_cached_version():
+    # through vars(), not hasattr/del: hasattr would run the lookup, and del raises when nothing is cached yet
+    vars(autotrainer.core).pop("__version__", None)
     try:
         yield
     finally:
-        package_version.get_version.cache_clear()
+        vars(autotrainer.core).pop("__version__", None)
 
 
 def _fail_if_called(*args, **kwargs):
