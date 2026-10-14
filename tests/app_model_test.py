@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
-from autotrainer.device import EmulationInterface
+from autotrainer.device import EmulationInterface, Target
 from autotrainer.device.device_interface import Acknowledge
 from tools.acquisition.model.app_model import app_status_to_api_app_mode, app_status_to_behavior_algo_status
 from tools.acquisition.model.app_model_status import AppModelStatus
@@ -173,3 +173,35 @@ def test_resume_fails_if_hard_reconnect_fails(
     assert not algo.algo_paused  # not anymore
     assert not emergency_mon.is_engaged
     assert emergency_mon.engaged_reasons == []
+
+
+def test_board_reset_engage_emergency(
+    app_model,
+    monkeypatch,
+    caplog,
+):
+    analysis = app_model.analysis
+    system_fault = analysis.system_fault_alarm
+    reset_det = analysis.boards_hardware_reset_detector
+    reset_det.config.allow_autoresume_on_cleared = False  # force here
+    reset_det.update_config()
+    reset_det_engaged_transitions = []
+    def prop_changed(name, value, prev_value):
+        if name == system_fault.DETECTOR_PROPERTY_CHANGED:
+            det, name, value = value
+            if value != prev_value and det == reset_det:
+                reset_det_engaged_transitions.append(value)
+    # ensure system-fault is emergency cond:
+    system_fault.config.is_emergency_condition = True
+    app_model.capture_start(target_status=AppModelStatus.ACQUIRING)
+    system_fault.property_changed += prop_changed
+    reset_det.update_uptime(Target.PELLET_DEVICE, 50, is_boot=True)
+    assert not reset_det.is_engaged  # it's reset with an analysis stop/start because of emergency stop
+    assert reset_det_engaged_transitions == [True, False]  # engaged, then disengaged
+    assert analysis.emergency_alarm_monitor.is_engaged  # but emergency alarm is kept engaged
+    assert analysis.system_fault_alarm.is_engaged   # given system fault is engaged via the board hardware reset
+    assert app_model.behavior.algorithm.algo_paused
+    app_model.behavior.emergency_resume(EmergencyControlSource.USER_BUTTON)
+    assert not analysis.emergency_alarm_monitor.is_engaged
+    assert not reset_det.is_engaged
+    assert not app_model.behavior.algorithm.algo_paused

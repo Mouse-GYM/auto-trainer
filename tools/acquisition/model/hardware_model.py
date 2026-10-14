@@ -590,6 +590,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self.set_board_status_timeout(self._board_status_timeout)
 
         can_device.property_changed += self._can_device_property_changed
+        can_device.uptime_refreshed += self._sensor_analysis.boards_hardware_reset_detector.update_uptime
 
         device_conn = self._device_conn = DeviceConnection(can_device, message_queue=cmd_queue, name="can-device")
         device_conn.request_connect()
@@ -660,6 +661,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         if can_dev is not None:
             can_dev.disconnect()
             can_dev.property_changed -= self._can_device_property_changed
+            can_dev.uptime_refreshed -= self._sensor_analysis.boards_hardware_reset_detector.update_uptime
             self._can_device = None
         self._on_property_changed(self.TUNNEL_VERSION_PROPERTY, "", None)
         self._on_property_changed(self.PELLET_VERSION_PROPERTY, "", None)
@@ -854,9 +856,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
             popped = self._pending_tokens.pop(token, None)
             commands_in_prog = list(self._pending_tokens.values())
         if popped is None:
-            # this can happen at device connection
-            (logger.debug if not self._device_stream_started else logger.warning)(
-                "Received unexpected ack token: %s", token)
+            logger.debug("Received unknown ack token: %s", token)
         else:
             self._refresh_cmd_in_progress(commands_in_prog)
         # nb: we receive the command result for *any* command initiated from within the application

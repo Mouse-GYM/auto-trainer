@@ -1,7 +1,7 @@
 import dataclasses
 import enum
 from datetime import datetime
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Union
 
 from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason, ApiAlarmKind
 from autotrainer.api.event import build_event, EmergencyStopContext, EmergencyResumeContext
@@ -308,7 +308,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
     @BehaviorAlgorithm.relay_func(wait=False)
     def emergency_resume(
         self,
-        source: str,
+        source: Union[str, EmergencyControlSource],
         *,
         reason_code: ApiEmergencyResumeReason=ApiEmergencyResumeReason.unknown,
         resumed_alarms: Optional[List[ApiAlarmKind]] = None,

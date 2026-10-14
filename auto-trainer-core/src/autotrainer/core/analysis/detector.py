@@ -481,9 +481,9 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         return ctx.detector
 
     def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
+        self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
         if name in (detector.IS_ENGAGED, detector.CONFIG):
             self.check_state()
-        self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
 
     def _consider_for_new_engage(self, det):
         cfg = det.config

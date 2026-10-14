@@ -1532,8 +1532,6 @@ class AppModel(ObservableObject):
 
         boards_reset_mon = self._analysis.boards_hardware_reset_detector
         boards_reset_mon.restart()  # better be started after hardware connect
-        # boards_reset_mon.set_hardware_send_position(Offset3DTuple.get_nan())  # already set by restart()
-        boards_reset_mon.set_send_position(hard.last_set_position)
 
         if animal is not None:
             self._set_animal_base_positions(animal)
@@ -2114,12 +2112,9 @@ class AppModel(ObservableObject):
     def _on_hardware_property_changed(self, name: str, value, _):
         # NB: SEND_XYZ is the motor/hardware reported value
         hard = self._hardware
-        if name == hard.SEND_XYZ:
-            self._analysis.boards_hardware_reset_detector.set_hardware_send_position(value)
         # while SET_X/Y/Z is the application requested value
-        elif name == hard.SET_XYZ:
+        if name == hard.SET_XYZ:
             xyz: Offset3DTuple = value
-            self._analysis.boards_hardware_reset_detector.set_send_position(xyz)
             animal = self._selected_animal
             if animal is None:
                 return
