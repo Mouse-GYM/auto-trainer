@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass
 
-from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 
 
 @dataclass

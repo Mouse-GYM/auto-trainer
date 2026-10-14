@@ -1,10 +1,7 @@
 import ctypes
-import logging
-import multiprocessing
 import time
 
-from multiprocessing import RawArray, Value
-from multiprocessing import synchronize
+from multiprocessing import RawArray
 from multiprocessing.context import BaseContext
 from typing import Tuple, List, Optional
 

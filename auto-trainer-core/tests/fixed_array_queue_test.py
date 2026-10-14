@@ -1,6 +1,5 @@
 import threading
 import time
-from functools import partial
 
 import numpy
 

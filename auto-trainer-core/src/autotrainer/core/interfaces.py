@@ -1,5 +1,5 @@
 import enum
-from typing import Callable, List, Protocol, Optional, TypeVar
+from typing import Callable, List, Protocol, Optional
 from uuid import UUID
 
 from autotrainer.core import Offset3DTuple, ObservableObjectProtocol, ProjectInfo

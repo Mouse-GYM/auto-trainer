@@ -2,8 +2,7 @@
 import dataclasses
 from typing import Optional
 
-from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
-from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
+from autotrainer.core.configuration.detector import GroupSubDetectorConfig
 
 
 @dataclasses.dataclass

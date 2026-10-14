@@ -1,5 +1,4 @@
 import dataclasses
-import enum
 
 from typing import Optional
 

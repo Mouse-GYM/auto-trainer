@@ -30,6 +30,9 @@ dependencies = [
     'torch == 2.1.0a0+41361538.nv23.6 ; platform_machine == "aarch64"',
     # ensure we get/specify the desired version from nvidia for aarch64 ( == Jetson)
 
+    'verboselogs >= 1.7, < 2',
+    'pyyaml >= 6.0.2, < 7',
+
     'pandas >= 2, < 3',
     'numpy >= 1.23.5, < 2',
 

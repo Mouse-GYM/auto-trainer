@@ -239,7 +239,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         if log_dict_config is None:
-            setup_logging(logger_level=logging.DEBUG)
+            setup_logging(logger_level=logging.DEBUG, extra_logger_names=("tools", "inference_algorithms"))
         else:
             logging.config.dictConfig(log_dict_config)
             install_log_exception_hook()

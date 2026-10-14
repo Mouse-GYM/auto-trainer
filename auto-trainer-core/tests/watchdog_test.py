@@ -4,7 +4,7 @@ import pytest
 
 from autotrainer.core import get_perf_now
 from autotrainer.core.analysis.watchdog_monitor import WatchdogMonitor
-from top_fixtures import increase_simulate_perf_now
+from autotrainer.core.testing import increase_simulate_perf_now
 
 
 @pytest.fixture

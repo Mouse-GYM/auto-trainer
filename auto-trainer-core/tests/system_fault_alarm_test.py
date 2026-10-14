@@ -5,7 +5,7 @@ from autotrainer.api import ApiEventKind
 
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultAlarm
-from top_fixtures import has_api_event_kind
+from autotrainer.core.testing import has_api_event_kind
 
 
 @pytest.fixture(autouse=True)

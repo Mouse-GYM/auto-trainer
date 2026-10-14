@@ -10,7 +10,8 @@ from autotrainer.behavior.pellet import PelletState
 from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
 from autotrainer.core.capture import CaptureProcessStatus
 
-from top_fixtures import mock_system, get_current_simulate_perf_now, increase_simulate_perf_now
+from autotrainer.core.testing import get_current_simulate_perf_now, increase_simulate_perf_now
+from top_fixtures import mock_system
 
 
 @pytest.fixture(autouse=True)

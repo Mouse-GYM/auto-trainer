@@ -2,7 +2,8 @@ from unittest import mock
 
 import pytest
 
-from top_fixtures import MockSystemMachine, AlmostEqualFloat
+from autotrainer.core.testing import AlmostEqualFloat
+from top_fixtures import MockSystemMachine
 
 
 class TestRecordPrebufferDuration(MockSystemMachine):
