@@ -1,3 +1,4 @@
+import collections
 import copy
 import dataclasses
 import functools
@@ -11,6 +12,7 @@ import os
 import signal
 import threading
 import time
+import typing
 from pathlib import Path
 from logging import LogRecord
 from queue import Empty
@@ -96,6 +98,24 @@ DEFAULT_LEVEL_STYLES = dict(
 )
 
 
+
+_empty_logger = logging.Logger(name="_empty_logger")
+_empty_logger.propagate = False
+
+
+def parse_log_level(level: Union[int, str], invalid_level_ret=logging.NOTSET) -> Union[int, str]:
+    if isinstance(level, str) and level.isdigit():
+        return int(level)  # any
+    elif isinstance(level, str):
+        level = level.upper()
+    try:
+        _empty_logger.setLevel(level)
+    except (TypeError, ValueError):
+        logger.warning("Invalid log level: %r", level)
+        return invalid_level_ret
+    return level
+
+
 @dataclasses.dataclass
 class LogConfig:
     base_logger_name: Optional[str] = None  # i.e: "root" logger if None
@@ -124,7 +144,7 @@ def make_console_handler(cfg: LogConfig):
         time_precision=cfg.time_precision,
     )
     console_handler.setFormatter(fmt)
-    console_handler.setLevel(cfg.console_handler_level)
+    console_handler.setLevel(parse_log_level(cfg.console_handler_level))
     return console_handler
 
 
@@ -157,7 +177,7 @@ class LogQueueListenerProc(Process):
         self._listener: WithThreadIdQueueListener
         self._console_handler: logging.StreamHandler
         self._file_handler: Optional[logging.FileHandler] = None
-        self._buffer_previous: List[logging.LogRecord] = []
+        self._buffer_previous: Optional[typing.Deque[logging.LogRecord]] = None
         self._buffer_file_handler_interval_seconds = 5
         self._lock: threading.Lock = None  # noqa
 
@@ -168,7 +188,7 @@ class LogQueueListenerProc(Process):
             logger.warning("command %s timeout after 5s, skipping waiting")
 
     @listener_command
-    def set_handler_level(self, name, level):
+    def set_handler_level(self, name: str, level: Union[int, str]):
         """Set handler level"""
         if name == "console_handler":
             self._console_handler.setLevel(level)
@@ -176,10 +196,9 @@ class LogQueueListenerProc(Process):
             logger.verbose("unhandled handler name: %r", name)
 
     @listener_command
-    def set_logger_level(self, name, level):
+    def set_logger_level(self, name: str, level: Union[int, str]):
         """Set logger level"""
         logging.getLogger(name).setLevel(level)
-        # logger.debug("set_logger_level(%s, %s)", name, level)
 
     @listener_command
     def add_file_handler(self, path, *, formatter: Optional[logging.Formatter] = None):
@@ -197,15 +216,21 @@ class LogQueueListenerProc(Process):
         file_handler.setLevel(
             verboselogs.SPAM + 1
         )  # writes everything up to DEBUG which reaches it
-        # before adding to listener handlers:
+        # handle all "previous" records:
         with self._lock:
-            save_buffer = self._buffer_previous
-            self._buffer_previous = []
-        logger.verbose("prepending %s records to %s", len(save_buffer), file_handler)
-        if file_handler is not None:
-            for r in save_buffer:
-                file_handler.handle(r)
-        self._listener.handlers += (file_handler,)
+            save_buffer = self._buffer_previous or []
+            self._buffer_previous = None
+            if len(save_buffer) > 0:
+                save_buffer_list = sorted(filter(
+                    lambda rec: rec.levelno >= file_handler.level, save_buffer),
+                    key=lambda rec: rec.created)
+                logger.verbose("prepending %s records to %s", len(save_buffer_list), file_handler)
+                for rec in save_buffer_list:
+                    file_handler.handle(rec)
+            self._listener.handlers += (file_handler,)
+            # add the new file handler with the lock taken,
+            # to ensure the file won't get twice the same record, if the sorter thread happens to emit some
+            # while this prepending is ongoing.
         self._file_handler = file_handler
         logger.debug(
             "logging.root.handlers=%s ; listener_handlers=%s",
@@ -234,9 +259,14 @@ class LogQueueListenerProc(Process):
         # os.kill(self.pid, signal.SIGINT)
         self.join()
 
-    def _add_to_buffer(self, rec):
+    def _add_to_buffer(self, records: List[logging.LogRecord]):
+        if self._buffer_previous is None:
+            return
         with self._lock:
-            self._buffer_previous.append(rec)
+            prev = self._buffer_previous
+            if prev is None:
+                return
+            prev.extend(records)
 
     def run(self):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -244,7 +274,7 @@ class LogQueueListenerProc(Process):
         cfg = self._log_config
         console_handler = self._console_handler = make_console_handler(cfg)
 
-        self._buffer_previous = []
+        self._buffer_previous = collections.deque(maxlen=100_000)
         self._lock = threading.Lock()
 
         # NB: start the listener as soon as possible
@@ -261,8 +291,10 @@ class LogQueueListenerProc(Process):
 
         proc_level = cfg.log_queue_proc_handler_level
         if proc_level == logging.NOTSET:
-            proc_level = os.environ.get("RCP_LOG_PROCESS_LOG_LEVEL", logging.NOTSET)
+            proc_level = os.environ.get("AUTOTRAINER_LOG_PROCESS_LOG_LEVEL", logging.NOTSET)
+        proc_level = parse_log_level(proc_level)
         base_logger.setLevel(proc_level)
+
         base_logger.verbose("Started log queue listener. config=%s", self._log_config)
         # base_logger.setLevel(cfg.root_level)
 
@@ -271,20 +303,8 @@ class LogQueueListenerProc(Process):
 
         command_q = self._command_queue
         command_executed = self._command_executed.set
-        p_next_check_buffer = -math.inf
 
         while True:
-            p_now = time.perf_counter()
-            if p_now > p_next_check_buffer:
-                t_now = time.time()
-                p_next_check_buffer += 2
-                idx = 0
-                with self._lock:
-                    for record in self._buffer_previous:
-                        if t_now - record.created < self._buffer_file_handler_interval_seconds:
-                            break
-                        idx += 1
-                    del self._buffer_previous[:idx]
             try:
                 data = command_q.get(timeout=1)
             except Empty:
@@ -465,9 +485,8 @@ class WithThreadIdQueueListener(logging.handlers.QueueListener):
         return buff
 
     def _sorter(self):
-        buffer: List[LogRecord] = []
-        recheck_delay = self._recheck_delay
-        p_next_sort = time.perf_counter() + recheck_delay
+        sorted_buffer: List[LogRecord] = []
+        p_next_sort = time.perf_counter() + self._recheck_delay
         get_created = operator.attrgetter("created")
         while True:
             new_recs = self._get_2_sorter()
@@ -475,38 +494,40 @@ class WithThreadIdQueueListener(logging.handlers.QueueListener):
             while any(r is None for r in new_recs):
                 want_quit = True
                 new_recs.remove(None)
-            buffer.extend(new_recs)
+            sorted_buffer.extend(new_recs)
             p_now = time.perf_counter()
             if p_now < p_next_sort and not want_quit:
                 if len(new_recs) == 0:
                     time.sleep(0.05)
             else:
-                p_next_sort = p_now + recheck_delay
-                buffer = sorted(buffer, key=get_created)
+                p_next_sort = p_now + self._recheck_delay
+                sorted_buffer = sorted(sorted_buffer, key=get_created)
                 t_now = time.time()
                 idx = 0
-                for record in buffer:
+                for record in sorted_buffer:
                     if t_now - record.created < self._delay_buffer and not want_quit:
                         break
-                    self._handle(record)
                     idx += 1
-                del buffer[:idx]
+                if idx > 0:
+                    self._handle(sorted_buffer[:idx])
+                    del sorted_buffer[:idx]
             #
             if want_quit:
-                logger.debug("flushing %s records from buffer", len(buffer))
-                for record in buffer:
-                    self._handle(record)
+                sorted_buffer.sort(key=get_created)
+                logger.debug("flushing %s records from buffer", len(sorted_buffer))
+                self._handle(sorted_buffer)
                 break
 
-    def _handle(self, record):
-        self._add_to_buffer(record)
-        for handler in self.handlers:
-            if not self.respect_handler_level:
-                process = True
-            else:
-                process = record.levelno >= handler.level
-            if process:
-                handler.handle(record)
+    def _handle(self, records: List[logging.LogRecord]):
+        self._add_to_buffer(records)
+        for record in records:
+            for handler in self.handlers:
+                if not self.respect_handler_level:
+                    process = True
+                else:
+                    process = record.levelno >= handler.level
+                if process:
+                    handler.handle(record)
 
     def handle(self, record):
         record = self.prepare(record)

@@ -556,9 +556,10 @@ def run_monitor():
                             level = int(level)
                         logger.info("logger %s: level=%s", log.name, log.level)
                         log.setLevel(level)
-                        console = get_console_handler()
-                        if console is not None:
-                            console.setLevel(level)
+                        if log is logging.root:
+                            console = get_console_handler()
+                            if console is not None:
+                                console.setLevel(level)
                 else:
                     get_input = True
                     logger.warning("Unknown command: %s", cmd)
