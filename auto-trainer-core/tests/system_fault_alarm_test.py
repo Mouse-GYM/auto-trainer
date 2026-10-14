@@ -3,6 +3,7 @@ from typing import Optional
 import pytest
 from autotrainer.api import ApiEventKind
 
+from autotrainer.core.analysis.boards_hardware_reset_detector import BoardsHardwareResetDetector
 from autotrainer.core.analysis.detector import BaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultAlarm
 from top_fixtures import has_api_event_kind
@@ -11,6 +12,15 @@ from top_fixtures import has_api_event_kind
 @pytest.fixture(autouse=True)
 def _use_mock_event_manager(mock_event_manager):
     pass
+
+
+@pytest.fixture
+def board_reset_det():
+    det = BoardsHardwareResetDetector()
+    try:
+        yield det
+    finally:
+        det.stop()
 
 
 @pytest.fixture()
@@ -87,3 +97,18 @@ def test_alarm_changed_counts(system_fault_alarm, mock_event_manager):
         "alarmChanged should have been reemitted"
     )
     assert len(engaged_reasons_changed) == 1
+
+
+def test_board_reset_detector_autoresume_its_containing_group(system_fault_alarm, mock_event_manager, board_reset_det):
+    system_fault_alarm.register_sub_detector("det1", board_reset_det)
+    assert not system_fault_alarm.is_engaged
+    assert not board_reset_det.is_engaged
+    board_reset_det.update_uptime(0, 0, is_boot=True)
+    assert board_reset_det.is_engaged
+    assert system_fault_alarm.is_engaged
+    board_reset_det.update_uptime(0, 30, is_boot=False)
+    assert board_reset_det.is_engaged  # it keeps engaged after reset/reboot detected
+    assert system_fault_alarm.is_engaged
+    board_reset_det.restart()  # up until restarted
+    assert not board_reset_det.is_engaged
+    assert not system_fault_alarm.is_engaged
