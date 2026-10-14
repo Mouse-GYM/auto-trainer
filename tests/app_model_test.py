@@ -181,14 +181,27 @@ def test_board_reset_engage_emergency(
     caplog,
 ):
     analysis = app_model.analysis
+    system_fault = analysis.system_fault_alarm
+    reset_det = analysis.boards_hardware_reset_detector
+    reset_det.config.allow_autoresume_on_cleared = False  # force here
+    reset_det.update_config()
+    reset_det_engaged_transitions = []
+    def prop_changed(name, value, prev_value):
+        if name == system_fault.DETECTOR_PROPERTY_CHANGED:
+            det, name, value = value
+            if value != prev_value and det == reset_det:
+                reset_det_engaged_transitions.append(value)
     # ensure system-fault is emergency cond:
-    analysis.system_fault_alarm.config.is_emergency_condition = True
+    system_fault.config.is_emergency_condition = True
     app_model.capture_start(target_status=AppModelStatus.ACQUIRING)
-    analysis.boards_hardware_reset_detector.update_uptime(Target.PELLET_DEVICE, 50, is_boot=True)
-    assert analysis.boards_hardware_reset_detector.is_engaged
-    assert analysis.emergency_alarm_monitor.is_engaged
+    system_fault.property_changed += prop_changed
+    reset_det.update_uptime(Target.PELLET_DEVICE, 50, is_boot=True)
+    assert not reset_det.is_engaged  # it's reset with an analysis stop/start because of emergency stop
+    assert reset_det_engaged_transitions == [True, False]  # engaged, then disengaged
+    assert analysis.emergency_alarm_monitor.is_engaged  # but emergency alarm is kept engaged
+    assert analysis.system_fault_alarm.is_engaged   # given system fault is engaged via the board hardware reset
     assert app_model.behavior.algorithm.algo_paused
     app_model.behavior.emergency_resume(EmergencyControlSource.USER_BUTTON)
     assert not analysis.emergency_alarm_monitor.is_engaged
-    assert not analysis.boards_hardware_reset_detector.is_engaged
+    assert not reset_det.is_engaged
     assert not app_model.behavior.algorithm.algo_paused
