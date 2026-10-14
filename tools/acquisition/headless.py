@@ -100,8 +100,11 @@ def main():
     args = parser.parse_args()
 
     from autotrainer.core.logging import setup_logging, stop_multiproc_logging
+    from tools.app_logger_names import APP_LOGGER_NAMES
 
-    logger = setup_logging(logger_level=logging.DEBUG, time_precision=6, multiprocess_enabled=True)
+    logger = setup_logging(
+        logger_level=logging.DEBUG, extra_logger_names=APP_LOGGER_NAMES, time_precision=6, multiprocess_enabled=True,
+    )
 
     try:
         return _exec_main(args)

@@ -53,8 +53,8 @@ def _ignore_unknown(loader, suffix, node):
 
 
 # allow to ignore unknown tags:
-SystemConfigurationSafeLoader.add_multi_constructor('', _ignore_unknown)
-SystemConfigurationSafeLoader.add_multi_constructor('!', _ignore_unknown)
+SystemConfigurationSafeLoader.add_multi_constructor("", _ignore_unknown)
+SystemConfigurationSafeLoader.add_multi_constructor("!", _ignore_unknown)
 
 
 #

@@ -53,5 +53,5 @@ def test_headbar_detection():
     assert detection_count == 18
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_headbar_detection()

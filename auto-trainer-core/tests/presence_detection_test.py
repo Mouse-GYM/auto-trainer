@@ -21,7 +21,7 @@ def modify_value(value):
     return object()
 
 
-@pytest.mark.parametrize("field", [f.name.lstrip('_') for f in dataclasses.fields(PresenceDetectionAttrs)])
+@pytest.mark.parametrize("field", [f.name.lstrip("_") for f in dataclasses.fields(PresenceDetectionAttrs)])
 def test_to_local_value(field):
     det = PresenceDetectionAttrs()
     det2 = det.to_local_value()

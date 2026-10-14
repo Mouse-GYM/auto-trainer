@@ -3,7 +3,7 @@ import queue
 import time
 from queue import Queue, Empty
 from threading import Thread
-from typing import Callable, Union, Any, Optional, Protocol, List
+from typing import Optional, Protocol, List
 from uuid import UUID
 
 from autotrainer.core.logging import get_verbose_logger

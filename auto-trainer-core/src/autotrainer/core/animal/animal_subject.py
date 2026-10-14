@@ -35,13 +35,13 @@ class AnimalTraining:
         #                 "progress": progress
         #                 }
         for prot in self.protocols:
-            if prot.get('plan_id') == plan_id:
+            if prot.get("plan_id") == plan_id:
                 return prot
         return None
 
     def set_plan_progress(self, plan_id: str, progress: Dict[str, Any]):
         for idx, prog in enumerate(self.protocols):
-            if prog['plan_id'] == plan_id:
+            if prog["plan_id"] == plan_id:
                 self.protocols[idx] = progress
                 return
         self.protocols.append(progress)
@@ -89,7 +89,7 @@ class _AnimalSubject:
     def _load_old_format(cls, data: Dict[str, Any]) -> Self:
         kw = {}
         if "name" in data:
-            kw['name'] = data["name"]
+            kw["name"] = data["name"]
         animal = cls(**kw)
         if "pellet_x" in data and "pellet_y" in data and "pellet_z" in data:
             animal.pellet_x = data["pellet_x"]
@@ -126,34 +126,34 @@ class AnimalSubject(_AnimalSubject):
                     # old format
                     return cls._load_old_format(data)
                 # new "id" format:
-                reach = data.pop('reach')
-                pellet_dev = reach.pop('pelletDevice', None)
-                pellet_dcs = reach.pop('pelletDcs', None)
+                reach = data.pop("reach")
+                pellet_dev = reach.pop("pelletDevice", None)
+                pellet_dcs = reach.pop("pelletDcs", None)
                 if pellet_dcs is None:
                     src = pellet_dev
                 else:
                     src = pellet_dcs
-                pellet_x, pellet_y, pellet_z = src['x'], src['y'], src['z']
-                training = data.pop('training')
+                pellet_x, pellet_y, pellet_z = src["x"], src["y"], src["z"]
+                training = data.pop("training")
                 pellet_counts_day_dct = data.pop("pelletCountsDay", {})
                 pellet_counts_total_dct = data.pop("pelletCountsTotal", {})
-                count_day_date_str: Optional[str] = data.pop('pelletCountsDayDate', None)
+                count_day_date_str: Optional[str] = data.pop("pelletCountsDayDate", None)
                 if count_day_date_str is None:
                     pellet_counts_day_date = datetime.date.today()
                 else:
                     pellet_counts_day_date = datetime.datetime.strptime(count_day_date_str, _date_format).date()
                 autoclamp_evasion_pellets_consumed = data.pop("autoclampEvasionPelletsConsumed", 0)
                 animal = cls(
-                    id=data.pop('id'),
-                    name=data.pop('name'),
+                    id=data.pop("id"),
+                    name=data.pop("name"),
                     is_pellet_dcs=pellet_dcs is not None,
-                    target_y_limit=data.pop('targetYLimit', None),
+                    target_y_limit=data.pop("targetYLimit", None),
                     pellet_x=pellet_x,
                     pellet_y=pellet_y,
                     pellet_z=pellet_z,
                     training=AnimalTraining(
-                        current_protocol=training.pop('currentProtocol'),
-                        protocols=training.pop('protocols'),
+                        current_protocol=training.pop("currentProtocol"),
+                        protocols=training.pop("protocols"),
                     ),
                     pellet_counts_day_date=pellet_counts_day_date,
                     pellet_counts_day=AnimalPelletCounts(**pellet_counts_day_dct),
@@ -197,9 +197,9 @@ class AnimalSubject(_AnimalSubject):
         reach: Dict[str, Any] = {}
         key = "pelletDcs" if self.is_pellet_dcs else "pelletDevice"
         reach[key] = {
-            'x': self.pellet_x,
-            'y': self.pellet_y,
-            'z': self.pellet_z,
+            "x": self.pellet_x,
+            "y": self.pellet_y,
+            "z": self.pellet_z,
         }
         data = {
             "version": self.version,
@@ -207,8 +207,8 @@ class AnimalSubject(_AnimalSubject):
             "name": self.name,
             "reach": reach,
             "training": {
-                'currentProtocol': self.training.current_protocol,
-                'protocols': self.training.protocols,
+                "currentProtocol": self.training.current_protocol,
+                "protocols": self.training.protocols,
             },
             "targetYLimit": self.target_y_limit,
             "pelletCountsDayDate": self.pellet_counts_day_date.strftime(_date_format),

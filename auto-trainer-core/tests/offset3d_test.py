@@ -1,5 +1,4 @@
 import math
-import statistics
 
 import numpy
 import pytest
@@ -174,8 +173,8 @@ def test_divide(o1, o2, result):
 
 
 @pytest.mark.parametrize("offset, digits, expected", [
-    [Offset3DTuple(1/3, 1/7, 1/9), 2, '(0.33, 0.14, 0.11)'],
-    [Offset3DTuple(1/3, 1/7, 1/9), 3, '(0.333, 0.143, 0.111)'],
+    [Offset3DTuple(1/3, 1/7, 1/9), 2, "(0.33, 0.14, 0.11)"],
+    [Offset3DTuple(1/3, 1/7, 1/9), 3, "(0.333, 0.143, 0.111)"],
 ])
 def test_humanize(offset, digits, expected):
     assert offset.humanize(n_digits=digits) == expected

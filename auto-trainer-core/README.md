@@ -15,6 +15,23 @@ Major Elements
   * Performance monitoring wrappers
   * Queue extensions
 
+### Testing
+Core's tests run under core's own pytest configuration, in `pyproject.toml`: run `pytest` inside
+`auto-trainer-core/`, or `pytest auto-trainer-core/tests` from the monorepo root.
+
+Inside the monorepo, the editable `auto-trainer` install already provides core; do not install core separately
+there. On its own, install core with its test extra first:
+
+```bash
+pip install -e ".[test]"
+pytest
+```
+
+Packages built on core reuse its test support by loading `autotrainer.core.testing` as a pytest plugin, either with
+`-p autotrainer.core.testing` in `addopts` or with `pytest_plugins = ["autotrainer.core.testing"]` in a top-level
+`conftest.py`, and by importing its helpers (`AlmostEqualFloat`, `increase_simulate_perf_now`, `has_api_event_kind`,
+...). Never import its fixtures: a fixture imported into another module is registered a second time.
+
 ### Future Work
 The Project class and functionality is largely geared towards the creation of projects, knowing where to save
 data and created those folders and files where necessary.  It should be improved to make it easier to use as 

@@ -24,7 +24,7 @@ from autotrainer.core.reach_event import ReachEvent
 
 import pytest
 
-from top_fixtures import AlmostEqualFloat
+from autotrainer.core.testing import AlmostEqualFloat
 
 
 logger = get_verbose_logger(__name__)

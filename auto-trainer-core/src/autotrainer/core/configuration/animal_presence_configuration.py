@@ -1,7 +1,6 @@
 import dataclasses
 
 from autotrainer.core.configuration.alarm_detector import AlarmDetectorConfig
-from autotrainer.core.configuration.detector import DetectorConfig
 
 
 @dataclasses.dataclass
