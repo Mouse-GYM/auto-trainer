@@ -99,13 +99,6 @@ _MIGRATE_DACITE_CONFIG = Config(
 )
 
 
-def _camelize_deep(dct):
-    for k, v in tuple(dct.items()):
-        dct[humps.camelize(k)] = dct.pop(k)
-        if isinstance(v, dict):
-            _camelize_deep(v)
-
-
 @dataclass
 class SystemConfiguration:
     """
