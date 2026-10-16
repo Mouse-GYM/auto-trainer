@@ -14,10 +14,6 @@ class FrameIndexCategory(enum.IntEnum):
     # NB: positive or zero frane index means recording online or offline reprocessing.
 
     @classmethod
-    def is_signaling_index(cls, frame_idx) -> bool:
-        return frame_idx < cls.ONLINE_NO_RECORDING
-
-    @classmethod
     def _missing_(cls, value):
         if isinstance(value, str):
             value = int(value)
