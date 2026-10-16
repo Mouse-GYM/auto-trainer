@@ -3,7 +3,6 @@ import math
 import threading
 import time
 from datetime import timedelta
-from functools import partial
 from unittest import mock
 
 import numpy
@@ -534,6 +533,28 @@ class TestBehaviorAlgoWithHandlerThread:
         assert not inner_event.is_set()
         assert inner_event.wait(1) is True
 
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_set_force_wait(self, algo, enabled):
+        wait_dur = 0.25
+        seen_force_wait = None
+
+        @algo.relay_func(wait=False)
+        def foobar():
+            time.sleep(wait_dur)
+
+        algo.foobar = foobar
+        with algo.set_force_wait_mode(enabled):
+            seen_force_wait = getattr(algo._thread_locals, "force_wait", None)
+            p_before = time.perf_counter()
+            algo.foobar()
+            p_after = time.perf_counter()
+        assert seen_force_wait is enabled
+        duration = p_after - p_before
+        if enabled:
+            assert duration >= wait_dur
+        else:
+            assert duration < 0.02, ("unless test runner overloaded, "
+                                     "without wait the duration should be almost 0")
 
 class TestBehaviorAlgoWithoutHandlerThread:
 
