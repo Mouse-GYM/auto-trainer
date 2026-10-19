@@ -4,7 +4,7 @@ import time
 import typing
 from pathlib import Path
 from random import uniform, random
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 from autotrainer.core import Offset3DTuple, get_perf_now
 from autotrainer.core.logging import get_verbose_logger
@@ -30,6 +30,7 @@ from .device_interface import (
     Acknowledge,
     ColorLed,
     PositionOrPosVelocityT,
+    Source,
 )
 from .can_interface import motor_to_str
 
@@ -186,7 +187,7 @@ class EmulationInterface(DeviceInterface):
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
         # TODO: handle collect_ms
 
-        messages = self._messages.get_and_reset()
+        messages: List[Source] = self._messages.get_and_reset()
 
         perf_now = get_perf_now()  # time.perf_counter()
 
@@ -253,6 +254,10 @@ class EmulationInterface(DeviceInterface):
             self._last_data_message = perf_now
             messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
             messages.append(LoadCellReading(load=uniform(0, 20)))
+
+        for msg in messages:
+            msg.index = round(time.perf_counter() * 1e9)
+            msg.timestamp_ns = round(time.time() * 1e9)
 
         return messages
 
