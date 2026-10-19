@@ -3,15 +3,21 @@ import math
 from unittest import mock
 
 import pytest
+from autotrainer.api import ApiEventKind
 
 import autotrainer.behavior.pellet.pellet_machine
 from autotrainer.behavior import SystemState
 from autotrainer.behavior.pellet import PelletState
-from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed
-from autotrainer.core.capture import CaptureProcessStatus
+from autotrainer.behavior.pellet.pellet_machine import PelletDeviceCommandFailed, PelletMachine
 
-from autotrainer.core.testing import get_current_simulate_perf_now, increase_simulate_perf_now
-from top_fixtures import mock_system
+from autotrainer.core.capture import CaptureProcessStatus
+from autotrainer.core.message.message_handler import CommandResult
+
+from autotrainer.core.testing import (
+    get_current_simulate_perf_now,
+    increase_simulate_perf_now,
+    has_api_event_kind,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -417,3 +423,62 @@ def test_unknown_state(machine, caplog, monkeypatch):
     pellet.state = "some_unknown_state"
     pellet.environment_changed()
     assert "unknown state: some_unknown_state" in caplog.text
+
+
+@pytest.mark.parametrize("action,state", (
+    ("cover_pellet", PelletState.covering),
+    ("release_pellet", PelletState.releasing),
+))
+def test_manual_release_or_cover_wait_finished(machine, action, state):
+    pellet = machine.pellet
+    assert machine.algorithm.can_retract_pellet(pellet_state=PelletState.covering)  # pre-require
+    getattr(pellet, action)(force=True)
+    assert pellet.state == state
+    pellet.environment_changed()
+    assert pellet.state == state, "state should remain in covering/releasing, until action finished"
+    command_res = CommandResult(succeeded=True)
+    assert not pellet.can_use_pellet_command()
+    pellet._pellet_device_ack_received(pellet._api_status_token, command_res)
+    assert pellet.state == PelletState.retract, "once cover/release finished state should be back to retract"
+    assert not pellet.can_use_pellet_command(), "which must be finished before can use pellet"
+    pellet._pellet_device_ack_received(pellet._api_status_token, command_res)
+    assert pellet.can_use_pellet_command()
+    assert pellet.state == PelletState.retract
+
+
+PM = PelletMachine
+
+@pytest.mark.parametrize("action,event_kind", (
+    (PM.cover_pellet, ApiEventKind.pelletCoverEnd),
+    (PM.release_pellet, ApiEventKind.pelletReleaseEnd),
+    (PM.send_pellet, ApiEventKind.pelletSendEnd),
+    (PM.move_home, ApiEventKind.pelletHomeEnd),
+    (PM.move_retract, ApiEventKind.pelletRetractEnd)
+))
+def test_command_with_error(
+    machine,
+    caplog,
+    action,
+    event_kind,
+    mock_event_manager,
+):
+    pellet = machine.pellet
+    # 1st) test we get the expected event on success:
+    assert pellet.can_use_pellet_command()
+    getattr(pellet, action.__name__)(force=True)
+    assert not pellet.can_use_pellet_command()
+    pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=True))
+    assert has_api_event_kind(event_kind)
+    assert "pellet command failed:" not in caplog.text
+    while pellet._api_status_token is not None:
+        # for post-command steps, if any
+        pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=True))
+    assert pellet.can_use_pellet_command()
+    # now do same with command error:
+    mock_event_manager.reset_mock()
+    getattr(pellet, action.__name__)(force=True)
+    assert not pellet.can_use_pellet_command()
+    pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=False))
+    assert not has_api_event_kind(event_kind)
+    assert "pellet command failed:" in caplog.text
+    assert pellet.can_use_pellet_command()

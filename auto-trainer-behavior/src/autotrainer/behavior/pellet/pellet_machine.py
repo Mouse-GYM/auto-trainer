@@ -265,7 +265,7 @@ class PelletMachine(StateMachine):
             self._api_status_token = None
             was_api_token = True
             if not result.succeeded:
-                logger.error("command %s failed: %s", token, result)
+                logger.error("pellet command failed: token=%s result=%s", token, result)
         else:
             was_api_token = False
 
@@ -322,10 +322,6 @@ class PelletMachine(StateMachine):
             # we could possibly & erroneously acknowledge a successfully load-pellet...
             caller="pellet_device_ack_received",
         )
-
-    @property
-    def pellet_send_end_perf_c(self) -> float:
-        return self._send_end_perf_c
 
     def get_pellet_send_begin_age(self, perf_now: float):
         return perf_now - self._send_begin_perf_c
