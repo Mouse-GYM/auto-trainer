@@ -21,15 +21,14 @@ import warnings
 from enum import Enum, IntEnum
 from operator import attrgetter
 from pathlib import Path
-from typing import Type, Optional, Dict, Union, Any, Tuple
-
+from typing import Type, Optional, Dict, Union, Any, Tuple, Callable
 
 try:
     import pyjerrycan as jerry
     from pyjerrycan import JerryCAN, JerryCANMsg, JerryCANCmdType, JerryCANCfgMsg, AbsOrRel, \
         JerryCANBootloaderCmd
 except ModuleNotFoundError:
-    jerry = JerryCAN = None
+    jerry = JerryCAN = JerryCANMsg = None
 else:
     from importlib.metadata import version
     jerry_v = tuple(
@@ -68,6 +67,7 @@ from .device_interface import (
     StepperStatus,
     Version,
     PositionOrPosVelocityT,
+    Uptime,
 )
 from .stepper_motor import mm_to_turns, turns_to_mm
 
@@ -450,7 +450,7 @@ class CanInterface(DeviceInterface):
             return Acknowledge(uuid=msg.uuid, error=msg.ack.error)
 
         # Simple handlers implemented as lambdas
-        self._handlers = {
+        self._handlers: Dict[JerryCANCmdType, Callable] = {
             JerryCANCmdType.HEARTBEAT: lambda msg: Heartbeat(target=_addr2tgt(msg.dst_id)),
             JerryCANCmdType.BOOTLOADER_RESPONSE: self._translate_bootloader,
             JerryCANCmdType.CFG_RESPONSE: self._translate_config,
@@ -497,6 +497,7 @@ class CanInterface(DeviceInterface):
             JerryCANCmdType.BOOTLOADER_DATA: no_op,
             JerryCANCmdType.CFG_READ: no_op,
             JerryCANCmdType.LOAD_CELL_TARE: no_op,
+            JerryCANCmdType.UPTIME: self._handle_uptime,
         }
 
     def __allow_fake_status_time(self, motor):
@@ -507,6 +508,10 @@ class CanInterface(DeviceInterface):
                 m = Motor(int(m_idx))
                 if m == motor:
                     return age
+
+    def _handle_uptime(self, message: JerryCANMsg) -> Uptime:
+        up = message.uptime
+        return Uptime(target=_addr2tgt(message.dst_id),  msecs=up.msecs, is_boot=up.is_boot)
 
     def _handle_motor_status_age(self, motor: Motor):
         p_now = motor_p_now = get_perf_now()
@@ -1967,7 +1972,7 @@ class CanInterface(DeviceInterface):
         self._handle_motor_status_age(motor)
         return ServoStatus(target, motor, self.round_float(message.servo_status.position))
 
-    def _handle_stepper_status(self, message):
+    def _handle_stepper_status(self, message) -> Optional[StepperStatus]:
         status = self._translate_stepper_status(message)
         if status is None:
             return None
