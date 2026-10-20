@@ -22,6 +22,7 @@ logger = get_verbose_logger(__name__)
 
 
 _request_check_state = object()
+_execute_func = object()
 
 
 DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
@@ -344,8 +345,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             cmd = r[0]
             if cmd is _request_check_state:
                 force = r[1]
-                continue
-            log.warning("unhandled command object: %r", r)
+            elif cmd is _execute_func:
+                func = r[1]
+                try:
+                    func()
+                except Exception as err:
+                    log.exception("Error while executing %s", err)
+            else:
+                log.warning("unhandled command object: %r", r)
         # end while True
         log.verbose("%s: exiting main loop", self._name)
 
@@ -481,9 +488,18 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         return ctx.detector
 
     def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
-        self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
-        if name in (detector.IS_ENGAGED, detector.CONFIG):
-            self.check_state()
+        th_q = self._thread_queue
+        if th_q is not None and threading.current_thread() is not th_q[0]:
+            logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
+                         detector.name, name)
+            # when a group is daemon, then forward the event to its thread (if not it)
+            th_q[1].put_nowait((_execute_func,
+                                lambda: self._on_sub_detector_property_changed(detector, name, value, old_value)))
+        else:
+            # otherwise handle with current
+            self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
+            if name in (detector.IS_ENGAGED, detector.CONFIG):
+                self.check_state()
 
     def _consider_for_new_engage(self, det):
         cfg = det.config

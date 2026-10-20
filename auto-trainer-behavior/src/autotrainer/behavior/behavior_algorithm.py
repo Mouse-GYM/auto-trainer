@@ -299,7 +299,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
-            handler_queue = queue.Queue(maxsize=24)
+            handler_queue = queue.Queue(maxsize=64)
             # reentrant_list = []  # re-use the previous for now
             handler_thread = threading.Thread(
                 target=cls._handler_thread_run, args=(handler_queue, thread_lock, reentrant_list),
