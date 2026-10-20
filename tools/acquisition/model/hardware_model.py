@@ -590,7 +590,9 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         self.set_board_status_timeout(self._board_status_timeout)
 
         can_device.property_changed += self._can_device_property_changed
-        can_device.uptime_refreshed += self._sensor_analysis.boards_hardware_reset_detector.update_uptime
+        board_reset_det = self._sensor_analysis.boards_hardware_reset_detector
+        board_reset_det.restart()  # this double ensures it starts with a state freshly cleaned.
+        can_device.uptime_refreshed += board_reset_det.update_uptime
 
         device_conn = self._device_conn = DeviceConnection(can_device, message_queue=cmd_queue, name="can-device")
         device_conn.request_connect()
