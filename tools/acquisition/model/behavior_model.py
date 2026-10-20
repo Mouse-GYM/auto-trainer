@@ -1,7 +1,7 @@
 import dataclasses
 import enum
 from datetime import datetime
-from typing import Optional, Callable, List, Union
+from typing import Optional, Callable, List, Union, Tuple
 
 from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason, ApiAlarmKind
 from autotrainer.api.event import build_event, EmergencyStopContext, EmergencyResumeContext
@@ -42,6 +42,17 @@ class EmergencyControlSource(str, enum.Enum):
 
     def is_admin_source(self) -> bool:
         return self is self.USER_BUTTON or self is self.RPC_SERVICE
+
+
+class EmergencyResumeOutcome(enum.Enum):
+    RESUMED = "resumed"
+    NOT_STOPPED = "not-stopped"
+    REFUSED = "refused"
+    FAILED = "failed"
+
+
+def _ignore_resume_outcome(outcome: EmergencyResumeOutcome, detail: Optional[str] = None):
+    pass
 
 
 class BehaviorModelEvents:
@@ -313,24 +324,68 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         reason_code: ApiEmergencyResumeReason=ApiEmergencyResumeReason.unknown,
         resumed_alarms: Optional[List[ApiAlarmKind]] = None,
     ):
+        self._emergency_resume(source, reason_code=reason_code, resumed_alarms=resumed_alarms)
+
+    def try_emergency_resume(
+        self,
+        source: str,
+        *,
+        reason_code: ApiEmergencyResumeReason = ApiEmergencyResumeReason.unknown,
+        resumed_alarms: Optional[List[ApiAlarmKind]] = None,
+    ) -> Tuple[EmergencyResumeOutcome, Optional[str]]:
+        """Resume as `emergency_resume` does, wait for it on the algorithm thread, and report how it ended.
+
+        RESUMED means the algorithm was un-paused, even if something stopped it again before this returns.
+        Must not be called from the algorithm handler thread: a call from there is queued behind the caller.
+        """
+        outcome: List[Tuple[EmergencyResumeOutcome, Optional[str]]] = [
+            (EmergencyResumeOutcome.FAILED, "the resume did not run")]
+
+        def report(result: EmergencyResumeOutcome, detail: Optional[str] = None):
+            outcome[0] = (result, detail)
+
+        try:
+            BehaviorAlgorithm.put_func_call(
+                self._emergency_resume, (source,),
+                dict(reason_code=reason_code, resumed_alarms=resumed_alarms, report=report),
+                wait=True)
+        except Exception:
+            # reached only when the call runs in place (no handler thread, as in tests); the handler thread logs and
+            # drops such an exception itself. A raising emergency_resumed handler must not undo a completed resume.
+            if outcome[0][0] is not EmergencyResumeOutcome.RESUMED:
+                raise
+            logger.exception("emergency_resumed handler failed after resuming from %s", source)
+        return outcome[0]
+
+    def _emergency_resume(
+        self,
+        source: str,
+        *,
+        reason_code: ApiEmergencyResumeReason,
+        resumed_alarms: Optional[List[ApiAlarmKind]],
+        report: Callable[..., None] = _ignore_resume_outcome,
+    ):
         algo = self._system_machine.algorithm
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
         if resumed_alarms is None:
             resumed_alarms = []
         if not algo.algo_paused:  # should be same than self._source_emergency is None
             logger.debug("algo not paused, skipping emergency_resume from %s", source)
+            report(EmergencyResumeOutcome.NOT_STOPPED)
             return
         control_src = EmergencyControlSource(source)
         current = EmergencyControlSource(self._source_emergency)
         if current is not None and current.is_admin_source() and not control_src.is_admin_source():
             logger.verbose("Refusing resume from emergency %s given was set by %s",
                           source, current)
+            report(EmergencyResumeOutcome.REFUSED, f"the stop was set by {current.value}")
             return
         #
         try:
             self.before_emergency_resumed()
         except Exception as err:
             logger.error("before_emergency_resumed failed, skipping emergency_resume. error=%s", err)
+            report(EmergencyResumeOutcome.FAILED, str(err))
             self.emergency_resumed_failed(str(err))
             return
         #
@@ -342,6 +397,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
             self._emergency_engaged_alarms = []
         self._source_emergency = None
         algo.algo_paused = False
+        report(EmergencyResumeOutcome.RESUMED)
         self.emergency_resumed(source)
 
     def get_led_color(self, *, now: Optional[datetime]=None):

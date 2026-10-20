@@ -16,14 +16,14 @@ from typing import Optional, List, Tuple, Dict, Any, Iterable, Union, Callable
 from threading import Event
 import urllib.parse
 
-import numpy
 from numpy import ndarray
 
-from autotrainer.core import clear_queue, FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
+from autotrainer.core import FixedArrayQueue, FixedArrayMultiQueue, ObservableObject, \
     CameraConfiguration, CameraId, NotificationCenter, TriggerNotification, Notification, get_verbose_logger, \
     get_perf_now
 from autotrainer.core.multiproc import get_mp_ctx
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
+from autotrainer.core.queue_util import clear_queue
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.video import VideoCapture, VideoRecordProperties, VideoRecordMode, VideoManager, \
     VideoReader, CaptureCommandKind, CaptureCameraAttrs, CaptureInferenceAttrs, CaptureAttrs

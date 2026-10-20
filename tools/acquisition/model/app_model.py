@@ -17,10 +17,11 @@ import time
 import warnings
 from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
+from functools import partial
 from multiprocessing.managers import SyncManager, ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple
+from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple, NamedTuple, Type, TypeVar
 
 import pandas
 import yaml
@@ -33,7 +34,7 @@ from autotrainer.api import (
     ApiEventKind,
     build_event,
 )
-from autotrainer.api.event import DayStartedContext
+from autotrainer.api.event import DayStartedContext, ApplicationModeContext, TrainingModeContext
 from autotrainer.api import ApiSystemStatus, ApiDetectorKind, ApiProjectStatus, \
     ApiAlarmStatus, ApiDetectorStatus, ApiTunnelDeviceStatus, ApiPelletDeviceStatus, ApiTrainingMode, \
     ApiSystemConfiguration, ApiApplicationMode, ApiCommand, ApiCommandRequestErrorKind, ApiEmergencyStopReason, \
@@ -98,7 +99,7 @@ from tools.autotrainer_version import __version__ as app_version
 from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
-from tools.acquisition.model.behavior_model import BehaviorModel, EmergencyControlSource
+from tools.acquisition.model.behavior_model import BehaviorModel, EmergencyControlSource, EmergencyResumeOutcome
 from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
@@ -107,10 +108,58 @@ logger = get_verbose_logger(__name__)
 # allow to be patched from tests:
 _daily_timer = make_daemon_timer
 _make_emergency_proc_thread = threading.Thread
+_make_rpc_command_thread = threading.Thread
 
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
+
+
+def _to_rpc_command_response(request: ApiCommandRequest, rsp: Any) -> ApiCommandRequestResponse:
+    """Build the response for `request` from a command handler's return value.
+
+    A handler returns a full response, a bare result, None or True (SUCCESS), False (FAILED), or a SUCCESS payload.
+    """
+    if isinstance(rsp, ApiCommandRequestResponse):
+        return dataclasses.replace(rsp, command=request.command, nonce=request.nonce)
+    if isinstance(rsp, ApiCommandRequestResult):
+        return ApiCommandRequestResponse(result=rsp, command=request.command, nonce=request.nonce)
+    if rsp is False:
+        return ApiCommandRequestResponse(
+            result=ApiCommandRequestResult.FAILED,
+            command=request.command,
+            nonce=request.nonce,
+            error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
+            error_message=f"Command request {request.command} failed",
+        )
+    if rsp is None or rsp is True:
+        return ApiCommandRequestResponse(
+            result=ApiCommandRequestResult.SUCCESS, command=request.command, nonce=request.nonce)
+    return ApiCommandRequestResponse(
+        result=ApiCommandRequestResult.SUCCESS, data=rsp, command=request.command, nonce=request.nonce)
+
+
+def _rpc_failure(result: ApiCommandRequestResult, message: str) -> ApiCommandRequestResponse:
+    return ApiCommandRequestResponse(
+        result=result, error_code=ApiCommandRequestErrorKind.COMMAND_ERROR, error_message=message)
+
+
+def _rpc_data_value(request: ApiCommandRequest, key: str) -> Any:
+    data = request.data
+    return data.get(key) if isinstance(data, dict) else None
+
+
+_IntEnumT = TypeVar("_IntEnumT", bound=enum.IntEnum)
+
+
+def _parse_rpc_enum(enum_type: Type[_IntEnumT], value: Any) -> Optional[_IntEnumT]:
+    # bool is an int subclass: without this check False would parse as the member whose value is 0
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    try:
+        return enum_type(value)
+    except ValueError:
+        return None
 
 
 class InvalidTargetAppModelStatus(Exception):
@@ -125,6 +174,10 @@ def app_status_to_api_app_mode(self: AppModelStatus) -> ApiApplicationMode:
     return _app_model_status_2_api_app_mode[self]
 
 
+def api_app_mode_to_app_status(mode: ApiApplicationMode) -> AppModelStatus:
+    return _api_app_mode_2_app_model_status[mode]
+
+
 def app_status_to_behavior_algo_status(self: AppModelStatus) -> Optional[BehaviorAlgoStatus]:
     return _to_behavior_algo_status.get(self, None)
 
@@ -136,6 +189,10 @@ _app_model_status_2_api_app_mode = {
     AppModelStatus.CALIBRATION_DCS: ApiApplicationMode.CALIBRATION_DCS,
     AppModelStatus.ANIMAL_IN_DEVICE: ApiApplicationMode.IN_DEVICE,
     AppModelStatus.ANIMAL_IN_TRAINING: ApiApplicationMode.IN_TRAINING,
+}
+
+_api_app_mode_2_app_model_status = {
+    api_mode: status for status, api_mode in _app_model_status_2_api_app_mode.items()
 }
 
 _app_model_status_valid_targets = {
@@ -180,6 +237,57 @@ def training_mode_to_api_training_mode(mode: TrainingMode) -> ApiTrainingMode:
         return member
     except AttributeError:
         return ApiTrainingMode.UNDEFINED
+
+
+def api_training_mode_to_training_mode(mode: ApiTrainingMode) -> Optional[TrainingMode]:
+    return TrainingMode.__members__.get(mode.name)
+
+
+_CALIBRATION_STATUSES = frozenset({AppModelStatus.CALIBRATION_3D, AppModelStatus.CALIBRATION_DCS})
+# the states in which the main window disables its training-mode selector
+_TRAINING_MODE_LOCKED_STATUSES = frozenset({AppModelStatus.ANIMAL_IN_TRAINING, *_CALIBRATION_STATUSES})
+
+
+class _RpcBehaviorSetting(NamedTuple):
+    owner: Callable[["AppModel"], Any]
+    attribute: str
+    on_changed: Optional[Callable[["AppModel", bool], None]] = None
+
+
+def _on_auto_clamp_enabled_changed(app: "AppModel", enabled: bool):
+    app.behavior.algorithm.active_config.head_clamp.enabled = enabled
+
+
+def _on_tunnel_sweep_enabled_changed(app: "AppModel", enabled: bool):
+    monitor = app.analysis.auto_tunnel_sweep_monitor
+    if enabled:
+        monitor.restart()
+    else:
+        monitor.stop()
+
+
+# owners are resolved per request: load_configuration replaces the configuration objects they return
+_RPC_BEHAVIOR_SETTINGS: Dict[ApiCommand, _RpcBehaviorSetting] = {
+    ApiCommand.SET_LIVE_ANALYSIS_ENABLED: _RpcBehaviorSetting(lambda app: app.inference, "is_enabled"),
+    ApiCommand.SET_PELLET_DELIVERY_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm, "pellet_delivery_enabled"),
+    ApiCommand.SET_PELLET_COVER_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm, "pellet_cover_enabled"),
+    ApiCommand.SET_INTERTRIAL_PELLET_SHIFT_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm, "intertrial_pellet_shift_enabled"),
+    ApiCommand.SET_HOME_ON_EXCESSIVE_DRIFT_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm.home_on_excessive_drift_distance_config, "enabled"),
+    ApiCommand.SET_TRIANGLE_PELLET_DISTANCE_DETECTION_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm, "use_triangle_pellet_distance_too_far"),
+    ApiCommand.SET_AUTO_CLOSE_GATE_ON_INTERTRIAL_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm.auto_close_gate_on_intertrial_config, "enabled"),
+    ApiCommand.SET_AUTO_CLAMP_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm, "head_fixation_enabled", _on_auto_clamp_enabled_changed),
+    ApiCommand.SET_TUNNEL_SWEEP_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.analysis.auto_tunnel_sweep_monitor.config, "enabled", _on_tunnel_sweep_enabled_changed),
+    ApiCommand.SET_BATCH_TRIALS_ENABLED: _RpcBehaviorSetting(
+        lambda app: app.behavior.algorithm.batch_trial_recording_config, "enabled"),
+}
 
 
 class TrainingPlanDeserializedEvent(Protocol):
@@ -438,6 +546,9 @@ class AppModel(ObservableObject):
         self._attached_animal: Optional[AnimalSubject] = None
 
         self._rpc_service: Optional[RpcService] = None
+        self._closing = False
+        self._rpc_start_or_stop_pending = False
+        self._rpc_command_handlers = self._make_rpc_command_handlers()
 
         self._hardware.property_changed += self._on_hardware_property_changed
         inference.property_changed += self._on_inference_property_changed
@@ -580,6 +691,9 @@ class AppModel(ObservableObject):
         self._analysis.auto_tunnel_sweep_monitor.animal_in_training = animal_in_training
         if algo_status is not None:
             self._behavior.algorithm.status = algo_status
+        # before property_changed: a raising in-process handler must not suppress the event for a change already made
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.applicationModeChanged, ApplicationModeContext(mode=app_status_to_api_app_mode(status))))
         self.property_changed(self.Props.STATUS, status, prev)
         is_from_start = status in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
@@ -993,8 +1107,9 @@ class AppModel(ObservableObject):
                     # this will also attach to it (given current mode != manual):
                     self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
         self._on_property_changed(self.Props.TRAINING_MODE, mode, prev)
-        self._event_manager.post_event_content(
-            ApiEventKind.trainingModeChanged, dict(training_mode=mode))
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.trainingModeChanged,
+            TrainingModeContext(training_mode=training_mode_to_api_training_mode(mode))))
 
     @property
     def attached_plan(self) -> Optional[TrainingPlan]:
@@ -1200,11 +1315,9 @@ class AppModel(ObservableObject):
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.animalCreated, animal.to_api_status()))
 
-            # Ensure property change events for listeners
-            animals = self._animals
-            animals.append(animal)
-            self._animals = None
-            self.animals = animals
+            # a new list, not an in-place append: the setter's change event needs old != new, and GET_ANIMALS reads
+            # _animals from the RPC thread, so it must only ever hold a whole list
+            self.animals = [*self._animals, animal]
         else:
             animal = matching_animals[0]
 
@@ -1539,10 +1652,6 @@ class AppModel(ObservableObject):
         self._acquisition_started = True
         self.status = target_status
         self.property_changed(self.Props.ACQUISITION_RUNNING, True, False)
-        self._event_manager.post_event_content(
-            ApiEventKind.applicationModeChanged,
-            dict(mode=app_status_to_api_app_mode(target_status))
-        )
 
         self.check_max_pellet_loaded()
 
@@ -1579,10 +1688,6 @@ class AppModel(ObservableObject):
             if self._reload_plans_needed:
                 self._reload_plans_needed = False
                 self.reload_training_plans(refresh=True)
-            self._event_manager.post_event_content(
-                ApiEventKind.applicationModeChanged,
-                dict(mode=app_status_to_api_app_mode(AppModelStatus.IDLE))
-            )
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
 
     def _update_led_for_stop(self):
@@ -1844,6 +1949,7 @@ class AppModel(ObservableObject):
 
     def on_close(self):
         logger.debug("AppModel.on_close")
+        self._closing = True
         # give a good amount of time for possible child procs to check on us:
         p_now = get_perf_now()
         self.refresh_main_watchdog(p_now=p_now + 120)
@@ -2344,142 +2450,213 @@ class AppModel(ObservableObject):
     def _handle_rpc_service_command(self, request: ApiCommandRequest) -> ApiCommandRequestResponse:
         logger.notice("RPC command: %s ; nonce=%s", request.command, request.nonce)
         logger.debug("RPC cmd=%s custom=%s data=%s", request.command, request.custom_command, request.data)
-        data = None
-        error_message = None
-        error_code = ApiCommandRequestErrorKind.NONE
         try:
             rsp = self.__handle_rpc_service_command(request)
         except Exception as err:
             logger.exception("RPC command %s exception: %s", request.command, err)
-            result = ApiCommandRequestResult.EXCEPTION
-            error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
-            error_message = f"Exception executing {request.command}: {type(err)} -> {err}"
-        else:
-            if isinstance(rsp, ApiCommandRequestResponse):
-                return dataclasses.replace(rsp, command=request.command, nonce=request.nonce)
-            if isinstance(rsp, ApiCommandRequestResult):
-                result = rsp
-            elif any(map(lambda x: rsp is x,
-                         (None, True, False))):  # to not have to create/return it for all possible request
-                if rsp is not False:
-                    result = ApiCommandRequestResult.SUCCESS
-                else:
-                    result = ApiCommandRequestResult.FAILED
-                    error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
-                    error_message = f"Command request {request.command} failed"
-            else:
-                result = ApiCommandRequestResult.SUCCESS
-                data = rsp
+            return ApiCommandRequestResponse(
+                nonce=request.nonce,
+                command=request.command,
+                result=ApiCommandRequestResult.EXCEPTION,
+                error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
+                error_message=f"Exception executing {request.command}: {type(err)} -> {err}",
+            )
+        return _to_rpc_command_response(request, rsp)
 
-        return ApiCommandRequestResponse(
-            nonce=request.nonce,
-            command=request.command,
-            result=result,
-            data=data,
-            error_code=error_code,
-            error_message=error_message,
-        )
-
-    def _handle_rpc_async_command(self, request: ApiCommandRequest, func) -> ApiCommandRequestResult:
+    def _handle_rpc_async_command(self, request: ApiCommandRequest, func: Callable[[], Any]) -> ApiCommandRequestResult:
         def execute():
             try:
-                res = func()
+                message = _to_rpc_command_response(request, func())
             except BaseException as err:
                 logger.exception("Failure during async execution of RPC command %s: %s", request.command, err)
-                res = None
-                has_err = err
-            else:
-                has_err = None
+                message = ApiCommandRequestResponse(
+                    result=ApiCommandRequestResult.EXCEPTION,
+                    command=request.command,
+                    nonce=request.nonce,
+                    error_code=ApiCommandRequestErrorKind.SYSTEM_ERROR,
+                    error_message=f"{err}",
+                )
             rpc = self._rpc_service
             if rpc is None:
-                # service gone
                 return
-            if has_err is not None:
-                result = ApiCommandRequestResult.EXCEPTION
-                error_code = ApiCommandRequestErrorKind.SYSTEM_ERROR
-                error_message = f"{has_err}"
-            else:
-                if res is None:
-                    res = True
-                if res is True:
-                    result = ApiCommandRequestResult.SUCCESS
-                    error_code = ApiCommandRequestErrorKind.NONE
-                    error_message = None
-                else:
-                    result = ApiCommandRequestResult.FAILED
-                    error_code = ApiCommandRequestErrorKind.COMMAND_ERROR
-                    error_message = f"{request.command} failed (result=False)"
-            #
-            message = ApiCommandRequestResponse(
-                result=result,
-                command=request.command,
-                nonce=request.nonce,
-                error_code=error_code,
-                error_message=error_message,
-            )
             rpc.send_command_result(message)
 
-        #
-        th = threading.Thread(target=execute, daemon=True, name=f"Handle-{func}")
-        th.start()
+        thread = _make_rpc_command_thread(target=execute, daemon=True, name=f"rpc-{request.command.name}")
+        thread.start()
         return ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
 
-    def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Optional[
-        Union[bool, ApiCommandRequestResponse, ApiCommandRequestResult, Any]]:
-        cmd = request.command
-        rsp = None  # let caller handle it
-        algo = self._behavior.algorithm
-        if cmd == ApiCommand.START_ACQUISITION:
-            return self._handle_rpc_async_command(request, self.capture_start)
+    def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Any:
+        handler = self._rpc_command_handlers.get(request.command)
+        if handler is None:
+            return _rpc_failure(ApiCommandRequestResult.UNRECOGNIZED,
+                                f"Unknown/Unhandled request command: {request.command!r}")
+        return handler(request)
 
-        elif cmd == ApiCommand.STOP_ACQUISITION:
-            return self._handle_rpc_async_command(request, self.capture_stop)
+    def _make_rpc_command_handlers(self) -> Dict[ApiCommand, Callable[[ApiCommandRequest], Any]]:
+        handlers: Dict[ApiCommand, Callable[[ApiCommandRequest], Any]] = {
+            ApiCommand.NONE: self._rpc_none,
+            ApiCommand.START_ACQUISITION: self._rpc_obsolete,
+            ApiCommand.STOP_ACQUISITION: self._rpc_obsolete,
+            ApiCommand.EMERGENCY_STOP: self._rpc_emergency_stop,
+            ApiCommand.EMERGENCY_RESUME: self._rpc_emergency_resume,
+            ApiCommand.USER_DEFINED: self._rpc_user_defined,
+            ApiCommand.GET_CONFIGURATION: self._rpc_get_configuration,
+            ApiCommand.GET_STATUS: self._rpc_get_status,
+            ApiCommand.GET_ANIMALS: self._rpc_get_animals,
+            ApiCommand.SET_APPLICATION_MODE: self._rpc_set_application_mode,
+            ApiCommand.SET_TRAINING_MODE: self._rpc_set_training_mode,
+        }
+        for command, setting in _RPC_BEHAVIOR_SETTINGS.items():
+            handlers[command] = partial(self._rpc_set_behavior_setting, setting)
+        return handlers
 
-        elif cmd == ApiCommand.EMERGENCY_STOP:
-            with algo.set_force_wait_mode(True):
-                self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE,
-                                              reason_code=ApiEmergencyStopReason.rpc_service)
+    def _rpc_none(self, request: ApiCommandRequest) -> Any:
+        return None
+
+    def _rpc_obsolete(self, request: ApiCommandRequest) -> Any:
+        return _rpc_failure(ApiCommandRequestResult.UNRECOGNIZED,
+                            f"{request.command.name} is obsolete; use SET_APPLICATION_MODE")
+
+    def _rpc_emergency_stop(self, request: ApiCommandRequest) -> Any:
+        with self._behavior.algorithm.set_force_wait_mode(True):
+            self._behavior.emergency_stop(EmergencyControlSource.RPC_SERVICE,
+                                          reason_code=ApiEmergencyStopReason.rpc_service)
+        return dict(reason=EmergencyControlSource.RPC_SERVICE)
+
+    def _rpc_emergency_resume(self, request: ApiCommandRequest) -> Any:
+        if not self._behavior.algorithm.algo_paused:
+            return _rpc_failure(ApiCommandRequestResult.FAILED, "The system is not emergency-stopped")
+        return self._handle_rpc_async_command(request, self._rpc_finish_emergency_resume)
+
+    def _rpc_finish_emergency_resume(self) -> Any:
+        outcome, detail = self._behavior.try_emergency_resume(
+            EmergencyControlSource.RPC_SERVICE, reason_code=ApiEmergencyResumeReason.rpc_service)
+        if outcome is EmergencyResumeOutcome.RESUMED:
             return dict(reason=EmergencyControlSource.RPC_SERVICE)
+        suffix = f": {detail}" if detail else ""
+        return _rpc_failure(ApiCommandRequestResult.FAILED,
+                            f"Emergency resume did not complete ({outcome.value}){suffix}")
 
-        elif cmd == ApiCommand.EMERGENCY_RESUME:
-            with algo.set_force_wait_mode(True):
-                self._behavior.emergency_resume(EmergencyControlSource.RPC_SERVICE,
-                                                reason_code=ApiEmergencyResumeReason.rpc_service)
-            return dict(reason=EmergencyControlSource.RPC_SERVICE)
+    def _rpc_user_defined(self, request: ApiCommandRequest) -> Any:
+        logger.verbose("TODO")
+        return None
 
-        elif cmd == ApiCommand.USER_DEFINED:
-            logger.verbose("TODO")
+    def _rpc_get_configuration(self, request: ApiCommandRequest) -> Any:
+        project_info = self._project_info
+        if project_info is None:
+            raise RuntimeError("No current project info")
+        prefs = self._preferences
+        return ApiSystemConfiguration(
+            application_version=self._app_version,
+            device_id=project_info.device_id,
+            configuration_location=self._loaded_config_dir_path.as_posix(),
+            data_location=self._output_location,
+            animal_location=prefs.animal_location,
+            log_location=prefs.log_location,
+            inference_model=self._inference.model_location,
+        )
 
-        elif cmd == ApiCommand.GET_CONFIGURATION:
-            project_info = self._project_info
-            if project_info is None:
-                raise RuntimeError("No current project info")
-            prefs = self._preferences
-            return ApiSystemConfiguration(
-                application_version=self._app_version,
-                device_id=project_info.device_id,
-                configuration_location=self._loaded_config_dir_path.as_posix(),
-                data_location=self._output_location,
-                animal_location=prefs.animal_location,
-                log_location=prefs.log_location,
-                inference_model=self._inference.model_location,
-            )
+    def _rpc_get_status(self, request: ApiCommandRequest) -> Any:
+        return self._make_api_system_status_payload()
 
-        elif cmd == ApiCommand.GET_STATUS:
-            return self._make_api_system_status_payload()
+    def _rpc_get_animals(self, request: ApiCommandRequest) -> Any:
+        return [animal.to_api_status() for animal in list(self._animals)]
 
-        elif cmd == ApiCommand.NONE:
-            pass
+    def _rpc_set_application_mode(self, request: ApiCommandRequest) -> Any:
+        api_mode = _parse_rpc_enum(ApiApplicationMode, _rpc_data_value(request, "mode"))
+        if api_mode is None:
+            return _rpc_failure(ApiCommandRequestResult.FAILED,
+                                f"{request.command.name} requires data {{mode: <ApiApplicationMode value>}}, "
+                                f"got {request.data!r}")
+        target = api_app_mode_to_app_status(api_mode)
+        if target in _CALIBRATION_STATUSES:
+            return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, f"{api_mode.name} cannot be set by command")
+        with self.app_lock:
+            # ahead of the current-mode check: during a start or stop, the mode in effect is about to change
+            if (self._rpc_start_or_stop_pending
+                    or (self._acquisition_starting and not self._acquisition_started)
+                    or self._acquisition_stopping):
+                return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, "Acquisition is starting or stopping")
+            current = self._status
+            if target == current:
+                return dict(mode=api_mode)
+            if current in _CALIBRATION_STATUSES:
+                return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE,
+                                    f"A calibration is in progress ({app_status_to_api_app_mode(current).name})")
+            try:
+                self.check_target_status_valid(target)
+            except InvalidTargetAppModelStatus as err:
+                return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, str(err))
+            if self._acquisition_started and target != AppModelStatus.IDLE:
+                self.status = target
+                return dict(mode=app_status_to_api_app_mode(self._status))
+            # capture_start/capture_stop set their own flags only once the worker runs; the next request may come first
+            self._rpc_start_or_stop_pending = True
+        try:
+            return self._handle_rpc_async_command(request, partial(self._rpc_start_or_stop_acquisition, target))
+        except BaseException:
+            # no worker will run to release it
+            self._rpc_start_or_stop_pending = False
+            raise
 
-        else:
-            rsp = ApiCommandRequestResponse(
-                result=ApiCommandRequestResult.UNRECOGNIZED,
-                nonce=request.nonce,
-                command=cmd,
-                error_code=ApiCommandRequestErrorKind.COMMAND_ERROR,
-                error_message=f"Unknown/Unhandled request command: {cmd!r}"
-            )
-        return rsp
+    def _rpc_start_or_stop_acquisition(self, target: AppModelStatus) -> Any:
+        errors: List[str] = []
+
+        def collect_error(title: str, message: str):
+            errors.append(f"{title}: {message}")
+
+        self.on_error += collect_error
+        try:
+            if target == AppModelStatus.IDLE:
+                self.capture_stop()
+            else:
+                self.capture_start(target_status=target, is_cancelled=lambda: self._closing)
+            current = self._status
+        finally:
+            self.on_error -= collect_error
+            # after the mode is read, so no later request changes it first; before the final result is sent, so a
+            # client acting on that result is not refused
+            self._rpc_start_or_stop_pending = False
+        if current == target:
+            return dict(mode=app_status_to_api_app_mode(current))
+        cause = "; ".join(errors) if errors else "see the application log"
+        return _rpc_failure(ApiCommandRequestResult.FAILED,
+                            f"Could not change the application mode to {app_status_to_api_app_mode(target).name}; "
+                            f"it is {app_status_to_api_app_mode(current).name} ({cause})")
+
+    def _rpc_set_training_mode(self, request: ApiCommandRequest) -> Any:
+        api_mode = _parse_rpc_enum(ApiTrainingMode, _rpc_data_value(request, "mode"))
+        if api_mode is None:
+            return _rpc_failure(ApiCommandRequestResult.FAILED,
+                                f"{request.command.name} requires data {{mode: <ApiTrainingMode value>}}, "
+                                f"got {request.data!r}")
+        mode = api_training_mode_to_training_mode(api_mode)
+        if mode is None:
+            return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, f"Training mode {api_mode.name} is not supported")
+        status = self._status
+        if status in _TRAINING_MODE_LOCKED_STATUSES:
+            return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE,
+                                f"The training mode cannot change in application mode "
+                                f"{app_status_to_api_app_mode(status).name}")
+        # not under app_lock: attaching a plan calls into the behavior algorithm, whose handler thread needs that lock
+        self.training_mode = mode
+        return dict(mode=training_mode_to_api_training_mode(self._training_mode))
+
+    def _rpc_set_behavior_setting(self, setting: _RpcBehaviorSetting, request: ApiCommandRequest) -> Any:
+        enabled = _rpc_data_value(request, "enabled")
+        if not isinstance(enabled, bool):
+            return _rpc_failure(ApiCommandRequestResult.FAILED,
+                                f"{request.command.name} requires data {{enabled: bool}}, got {request.data!r}")
+        owner = setting.owner(self)
+        if getattr(owner, setting.attribute) != enabled:
+            setattr(owner, setting.attribute, enabled)
+            if setting.on_changed is not None:
+                setting.on_changed(self, enabled)
+        actual = getattr(setting.owner(self), setting.attribute)
+        if actual != enabled:
+            return _rpc_failure(ApiCommandRequestResult.FAILED,
+                                f"{request.command.name} did not take effect; the setting is {actual}")
+        return dict(enabled=actual)
 
     def _send_api_system_status(self):
         system_status = self._make_api_system_status_payload()
