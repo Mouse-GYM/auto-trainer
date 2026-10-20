@@ -1413,6 +1413,7 @@ class MainWindow(QMainWindow):
 
     def _internal_simulate_trigger_load_cell(self):
         is_checked = self.load_cell_trigger_action.isChecked()
+        logger.notice("Simulate load cell triggered=%s", is_checked)
         app_model = self._app_model
         load_cell_monitor = app_model.analysis.load_cell_monitor
         if not is_checked and self.analysis_results_action.isChecked():
