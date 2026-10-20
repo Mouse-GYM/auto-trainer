@@ -304,7 +304,6 @@ from .project import ProjectInfo, ProjectInterval
 from .animal import AnimalSubject
 
 from .perf_monitor import PerfMonitor
-from .queue_util import clear_queue
 from .notification import NotificationCenter, Notification, TriggerNotification, post_trigger_enable
 from .configuration import HardwareConfiguration, InferenceConfiguration, PersistenceConfiguration
 

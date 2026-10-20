@@ -57,10 +57,6 @@ class FixedArrayQueue:
     def shape(self):
         return self._shape
 
-    @property
-    def buffer_index(self) -> int:
-        return self._buffer_index
-
     def put(self, content: numpy.ndarray):
         return self._put(content)
 

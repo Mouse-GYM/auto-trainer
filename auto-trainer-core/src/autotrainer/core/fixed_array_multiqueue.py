@@ -255,6 +255,3 @@ class FixedArrayMultiQueue:
                     # put_block() will take care to raise if timeout occurs
                     self.put_block(frame, cdx, frame_idx, timeout=timeout)
                     timeout -= time.perf_counter() - t0
-
-    def get_frame_indices(self):
-        return list(self._frame_indices)
