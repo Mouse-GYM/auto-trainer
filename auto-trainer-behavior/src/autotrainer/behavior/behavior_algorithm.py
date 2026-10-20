@@ -299,7 +299,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
-            handler_queue = queue.Queue(maxsize=64)
+            handler_queue = queue.Queue(maxsize=24)
             # reentrant_list = []  # re-use the previous for now
             handler_thread = threading.Thread(
                 target=cls._handler_thread_run, args=(handler_queue, thread_lock, reentrant_list),
@@ -484,10 +484,14 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     event = cls._thread_locals.event = threading.Event()
             else:
                 event = None
-            handler_queue.put((func, args, kwargs, event))
-            if event is not None:
-                event.wait()
-                event.clear()  # need always clear after used
+            try:
+                handler_queue.put((func, args, kwargs, event), timeout=5)
+            except queue.Full:
+                logger.error("could not put %s to behavior algo thread, queue full", func)
+            else:
+                if event is not None:
+                    event.wait()
+                    event.clear()  # need always clear after used
 
     @property
     def thread_lock(self):
