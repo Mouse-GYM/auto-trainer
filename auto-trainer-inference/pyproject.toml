@@ -14,18 +14,24 @@ namespaces = true
 name = "auto-trainer-inference"
 description = "Network implementations for autotrainer"
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">= 3.8, < 3.11"
 dynamic = ["version"]
 dependencies = [
 
     "auto-trainer-core",
 
-    'deeplabcut >= 2.3.11, < 2.4',  # famous deeplab
+    'deeplabcut >= 2.3.11, < 2.4 ; python_version < "3.10"',  # famous deeplab
+    'deeplabcut >= 3, < 4 ; python_version >= "3.10"',
 
     'tensorpack >= 0.11, < 1',
     'tf-slim >= 1.1, < 2',
-    # NB: tensorpack and tf-slim are used/required by deeplabcut, even tough they are not depended on by it,
+    'tf-keras >= 2, < 3 ; platform_machine != "aarch64" and python_version >= "3.10"',
+    # NB: tensorpack and tf-slim and tf-keras are used/required by deeplabcut,
+    # even tough they are not depended on by it directly,
     # so we explicitly add them here.
+    # tf-keras is hard to spot:
+    # without it the error is an infinite recursion import loop from deeplabcut/tensorflow,
+    # but without indication about tf-keras missing / would fix it.
 
     'torch == 2.1.0a0+41361538.nv23.6 ; platform_machine == "aarch64"',
     # ensure we get/specify the desired version from nvidia for aarch64 ( == Jetson)
@@ -36,7 +42,8 @@ dependencies = [
     'pandas >= 2, < 3',
     'numpy >= 1.23.5, < 2',
 
-    'tensorflow >= 2.12, < 3 ; platform_machine != "aarch64"',       # for non-aarch64 platform only
+    'tensorflow >= 2.12, < 3 ; platform_machine != "aarch64" and python_version < "3.10"',
+    'tensorflow[and-cuda] >= 2.21, < 3 ; platform_machine != "aarch64" and python_version >= "3.10"',
     'tensorflow == 2.12.0+nv23.06 ; platform_machine == "aarch64"',  # for aarch64 platform only
     # for now let it be installed manually still.
     # Otherwise, we need to have some pip.conf having extra-index-url to nvidia, or PIP_EXTRA_INDEX_URL variable too.
