@@ -173,7 +173,7 @@ class BehaviorAlgoStatus(str, enum.Enum):
 
 class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
 
-    _thread_locals: ClassVar[threading.local] = threading.local()
+    _thread_locals: ClassVar[threading.local]
     _handler_thread_queue: ClassVar[Tuple[threading.Thread, Optional[queue.Queue], List]] = (threading.current_thread(), None, [])
     _no_handler_thread: ClassVar[Optional[bool]] = False
 
@@ -189,6 +189,8 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
+        self.__class__._thread_locals = threading.local()
+
         if project_info is None:
             project_info = ProjectInfo.get_null_project()
         self._project_info: ProjectInfo = project_info
@@ -427,7 +429,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         try:
             yield
         finally:
-            t_locals.force_wait = prev
+            if prev is not None:
+                t_locals.force_wait = prev
+            else:
+                del t_locals.force_wait
 
     @classmethod
     def put_func_call(

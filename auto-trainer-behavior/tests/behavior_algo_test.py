@@ -538,17 +538,22 @@ class TestBehaviorAlgoWithHandlerThread:
         wait_dur = 0.25
         seen_force_wait = None
 
-        @algo.relay_func(wait=False)
+        @algo.relay_func(wait=not enabled)
         def foobar():
             time.sleep(wait_dur)
 
         algo.foobar = foobar
+        unique = object()
+        before_force_wait = getattr(algo._thread_locals, "force_wait", unique)
+        assert before_force_wait is unique
         with algo.set_force_wait_mode(enabled):
-            seen_force_wait = getattr(algo._thread_locals, "force_wait", None)
+            seen_force_wait = getattr(algo._thread_locals, "force_wait", unique)
             p_before = time.perf_counter()
             algo.foobar()
             p_after = time.perf_counter()
+        after_force_wait = getattr(algo._thread_locals, "force_wait", unique)
         assert seen_force_wait is enabled
+        assert after_force_wait is unique
         duration = p_after - p_before
         if enabled:
             assert duration >= wait_dur
