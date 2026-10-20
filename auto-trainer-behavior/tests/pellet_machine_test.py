@@ -241,13 +241,15 @@ def test_day_limit(machine, mock_system):
 @pytest.mark.parametrize("trigger_count", [0, 1, 3])
 def test_force_home_with_load_retract_count_triggered(machine, mock_system, monkeypatch, trigger_count, caplog):
     pellet_m = machine.pellet
+    pellet_d = mock_system.pellet_dev
     algo = machine.algorithm
     monkeypatch.setattr(autotrainer.behavior.pellet.pellet_machine,
                         "DEFAULT_LOAD_RETRACT_COUNT_FORCE_HOME", trigger_count)
     algo.pellet_cover_enabled = True
     pellet_m.state = PelletState.monitoring
     # before:
-    assert machine._pellet_device.send_home.call_args_list == []
+
+    assert pellet_d.send_home.call_args_list == []
     caplog.set_level(logging.INFO)
     #
     for _ in range(trigger_count - 1):
@@ -257,10 +259,10 @@ def test_force_home_with_load_retract_count_triggered(machine, mock_system, monk
     mock_system.mock_pellet_ack(until_none=True)
     pellet_m.send_pellet(force=True)
     if trigger_count > 0:
-        assert machine._pellet_device.send_home.call_args_list == [mock.call()]
+        assert pellet_d.send_home.call_args_list == [mock.call()]
         assert f'Forcing a send_home to reset to limits due to load + retract count greater-or-equal than threshold: {2 * trigger_count} vs {trigger_count}' in caplog.text
     else:
-        assert machine._pellet_device.send_home.call_args_list == []
+        assert pellet_d.send_home.call_args_list == []
         assert "Forcing a send_home to reset to limits" not in caplog.text, "when 0 it's disabled"
 
 
@@ -429,19 +431,23 @@ def test_unknown_state(machine, caplog, monkeypatch):
     ("cover_pellet", PelletState.covering),
     ("release_pellet", PelletState.releasing),
 ))
-def test_manual_release_or_cover_wait_finished(machine, action, state):
+def test_manual_release_or_cover_wait_finished(
+    machine,
+    action,
+    state,
+    mock_system,
+):
     pellet = machine.pellet
     assert machine.algorithm.can_retract_pellet(pellet_state=PelletState.covering)  # pre-require
     getattr(pellet, action)(force=True)
     assert pellet.state == state
     pellet.environment_changed()
     assert pellet.state == state, "state should remain in covering/releasing, until action finished"
-    command_res = CommandResult(succeeded=True)
     assert not pellet.can_use_pellet_command()
-    pellet._pellet_device_ack_received(pellet._api_status_token, command_res)
+    mock_system.mock_pellet_ack()
     assert pellet.state == PelletState.retract, "once cover/release finished state should be back to retract"
     assert not pellet.can_use_pellet_command(), "which must be finished before can use pellet"
-    pellet._pellet_device_ack_received(pellet._api_status_token, command_res)
+    mock_system.mock_pellet_ack()
     assert pellet.can_use_pellet_command()
     assert pellet.state == PelletState.retract
 
@@ -453,7 +459,8 @@ PM = PelletMachine
     (PM.release_pellet, ApiEventKind.pelletReleaseEnd),
     (PM.send_pellet, ApiEventKind.pelletSendEnd),
     (PM.move_home, ApiEventKind.pelletHomeEnd),
-    (PM.move_retract, ApiEventKind.pelletRetractEnd)
+    (PM.move_retract, ApiEventKind.pelletRetractEnd),
+    (PM.load_pellet, ApiEventKind.pelletLoadEnd),
 ))
 def test_command_with_error(
     machine,
@@ -461,24 +468,23 @@ def test_command_with_error(
     action,
     event_kind,
     mock_event_manager,
+    mock_system,
 ):
     pellet = machine.pellet
     # 1st) test we get the expected event on success:
     assert pellet.can_use_pellet_command()
     getattr(pellet, action.__name__)(force=True)
     assert not pellet.can_use_pellet_command()
-    pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=True))
+    mock_system.mock_pellet_ack()
     assert has_api_event_kind(event_kind)
     assert "pellet command failed:" not in caplog.text
-    while pellet._api_status_token is not None:
-        # for post-command steps, if any
-        pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=True))
+    mock_system.mock_pellet_ack(until_none=True)  # for post-command steps, if any
     assert pellet.can_use_pellet_command()
     # now do same with command error:
     mock_event_manager.reset_mock()
     getattr(pellet, action.__name__)(force=True)
     assert not pellet.can_use_pellet_command()
-    pellet._pellet_device_ack_received(pellet._api_status_token, CommandResult(succeeded=False))
+    mock_system.mock_pellet_ack(success=False)
     assert not has_api_event_kind(event_kind)
     assert "pellet command failed:" in caplog.text
     assert pellet.can_use_pellet_command()

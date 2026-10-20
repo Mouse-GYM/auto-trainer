@@ -13,7 +13,7 @@ import logging
 import os
 import subprocess
 import threading
-from typing import Any, Callable, Mapping, Optional, Union
+from typing import Any, Callable, Mapping, Optional, Union, Iterator
 from unittest import mock
 
 import pytest
@@ -123,8 +123,12 @@ def mock_get_perf_now(monkeypatch) -> SimulatePerfNow:
 _m_event_mgr: Optional[mock.MagicMock] = None
 
 
+class MockedEventManager(EventManager, mock.MagicMock):
+    pass  # for type hints
+
+
 @pytest.fixture()
-def mock_event_manager(monkeypatch, _check_threads) -> Union[EventManager, mock.MagicMock]:  # type: ignore
+def mock_event_manager(monkeypatch, _check_threads) -> Iterator[MockedEventManager]:
     real_manager = event_manager.EventManager
     real_post_api_event = real_manager.post_api_event
     real_post_event_content = real_manager.post_event_content
@@ -143,7 +147,7 @@ def mock_event_manager(monkeypatch, _check_threads) -> Union[EventManager, mock.
     global _m_event_mgr
     _m_event_mgr = m_event_mgr
     try:
-        yield m_event_mgr  # type: ignore
+        yield m_event_mgr
     finally:
         _m_event_mgr = None
 
