@@ -407,7 +407,7 @@ class AppModel(ObservableObject):
         self.set_log_location()
 
         self._plan_repo = PlanRepository()
-        self._training_mode = TrainingMode.MANUAL
+        self._training_mode: TrainingMode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
         self._acquisition_starting = False
@@ -544,11 +544,14 @@ class AppModel(ObservableObject):
         self._attached_plan: Optional[TrainingPlan] = None
         self._attached_phase: Optional[TrainingPhase] = None
         self._attached_animal: Optional[AnimalSubject] = None
+        self._thread_set_training_mode: Optional[threading.Thread] = None
+        self._thread_set_training_plan: Optional[threading.Thread] = None
 
         self._rpc_service: Optional[RpcService] = None
         self._closing = False
         self._rpc_start_or_stop_pending = False
         self._rpc_command_handlers = self._make_rpc_command_handlers()
+        self._rpc_async_threads: List[threading.Thread] = []
 
         self._hardware.property_changed += self._on_hardware_property_changed
         inference.property_changed += self._on_inference_property_changed
@@ -1088,9 +1091,16 @@ class AppModel(ObservableObject):
 
     @training_mode.setter
     def training_mode(self, mode: TrainingMode):
+        self.set_training_mode(mode)
+
+    def set_training_mode(self, mode: TrainingMode, *, background: bool = False):
         prev, self._training_mode = self._training_mode, mode
         if prev == mode:
             return
+        func = self._update_training_mode_in_background if background else self._set_training_mode
+        func(mode, previous_mode=prev)
+
+    def _set_training_mode(self, mode: TrainingMode, *, previous_mode: TrainingMode):
         if mode == TrainingMode.MANUAL:
             self._detach_training_plan()
         else:
@@ -1106,7 +1116,7 @@ class AppModel(ObservableObject):
                 else:
                     # this will also attach to it (given current mode != manual):
                     self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
-        self._on_property_changed(self.Props.TRAINING_MODE, mode, prev)
+        self._on_property_changed(self.Props.TRAINING_MODE, mode, previous_mode)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trainingModeChanged,
             TrainingModeContext(training_mode=training_mode_to_api_training_mode(mode))))
@@ -1123,11 +1133,17 @@ class AppModel(ObservableObject):
     def training_plan(self, plan: Optional[TrainingPlan]):
         self.set_training_plan(plan)
 
-    def set_training_plan(self, plan: Optional[TrainingPlan], *, force_update: bool = False):
+    def set_training_plan(self, plan: Optional[TrainingPlan],
+                          *, force_update: bool = False, background: bool = False):
         animal = self._selected_animal
         prev, self._training_plan = self._training_plan, plan
         if prev == plan and self._training_plan_animal == animal:
             return
+        func = self._update_training_plan_in_background if background else self._set_training_plan
+        func(animal, plan, force_update=force_update, previous_plan=prev)
+
+    def _set_training_plan(self, animal, plan: Optional[TrainingPlan], *,
+                           force_update: bool = False, previous_plan: Optional[TrainingPlan]):
         self._training_plan_animal = animal
         if animal is not None:
             self._detach_training_plan()
@@ -1142,7 +1158,7 @@ class AppModel(ObservableObject):
             if self._training_mode != TrainingMode.MANUAL:
                 if self._attach_training_plan(plan, force_update=force_update) is False:
                     return
-        self._on_property_changed(self.Props.TRAINING_PLAN, plan, prev)
+        self._on_property_changed(self.Props.TRAINING_PLAN, plan, previous_plan)
         self._event_manager.post_event_content(
             ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
 
@@ -1256,13 +1272,17 @@ class AppModel(ObservableObject):
                        animal.name, is_auto, plan.plan_id, hex(id(plan)))
         plan.is_automatic = is_auto
         pellet_dev = tunnel_dev = self._hardware
+        logger.verbose("attaching to plan %s", plan.plan_id)
         plan.attach(algo, pellet_dev, tunnel_dev)
+        logger.verbose("attached to plan %s", plan.plan_id)
         self._attached_plan = plan
         self._attached_animal = animal
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.progress_updated += self._on_training_plan_progress_updated
         self._attach_training_phase(plan.current_phase)
+        logger.verbose("resuming plan %s", plan.plan_id)
         plan.resume()
+        logger.success("plan %s successfully resumed", plan.plan_id)
         return True
 
     def _attach_training_phase(self, phase: Optional[TrainingPhase]):
@@ -1272,6 +1292,7 @@ class AppModel(ObservableObject):
             phase.property_changed += self._on_training_phase_property_changed
             self._event_manager.post_event_content(
                 ApiEventKind.trainingPhaseEnter, {'training_phase_id': phase.phase_id})
+            logger.verbose("registered to phase %s property_changed", phase.phase_id)
 
     def _detach_training_plan(self):
         plan = self._attached_plan
@@ -1293,6 +1314,7 @@ class AppModel(ObservableObject):
     def _detach_training_phase(self):
         phase = self._attached_phase
         if phase is not None:
+            logger.debug("detaching from phase %s", phase.phase_id)
             phase.property_changed -= self._on_training_phase_property_changed
             self._attached_phase = None
             self._event_manager.post_event_content(
@@ -1948,7 +1970,10 @@ class AppModel(ObservableObject):
         self._analysis.start()
 
     def on_close(self):
-        logger.debug("AppModel.on_close")
+        logger.verbose("AppModel.on_close()")
+        if self._closing:
+            logger.warning("app_model already closing")
+            return
         self._closing = True
         # give a good amount of time for possible child procs to check on us:
         p_now = get_perf_now()
@@ -2012,6 +2037,14 @@ class AppModel(ObservableObject):
             logger.verbose("shutting down %s", mgr)
             mgr.shutdown()
             self._mp_manager = None
+
+        self.join_rpc_threads()
+
+        for thread in (self._thread_set_training_mode, self._thread_set_training_plan):
+            if thread is not None:
+                logger.verbose("joining %s", thread)
+                thread.join()
+
         self.refresh_main_watchdog(p_now=math.nan)
 
     def _load_animals(self):
@@ -2450,6 +2483,7 @@ class AppModel(ObservableObject):
     def _handle_rpc_service_command(self, request: ApiCommandRequest) -> ApiCommandRequestResponse:
         logger.notice("RPC command: %s ; nonce=%s", request.command, request.nonce)
         logger.debug("RPC cmd=%s custom=%s data=%s", request.command, request.custom_command, request.data)
+        self.join_rpc_threads(only_finished=True)
         try:
             rsp = self.__handle_rpc_service_command(request)
         except Exception as err:
@@ -2481,8 +2515,10 @@ class AppModel(ObservableObject):
                 return
             rpc.send_command_result(message)
 
+        # eventual todo: use a pool of limited nbr of threads:
         thread = _make_rpc_command_thread(target=execute, daemon=True, name=f"rpc-{request.command.name}")
         thread.start()
+        self._rpc_async_threads.append(thread)  # NB: only once started
         return ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
 
     def __handle_rpc_service_command(self, request: ApiCommandRequest) -> Any:
@@ -2633,14 +2669,20 @@ class AppModel(ObservableObject):
         mode = api_training_mode_to_training_mode(api_mode)
         if mode is None:
             return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, f"Training mode {api_mode.name} is not supported")
+        assert mode is not None
         status = self._status
         if status in _TRAINING_MODE_LOCKED_STATUSES:
             return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE,
                                 f"The training mode cannot change in application mode "
                                 f"{app_status_to_api_app_mode(status).name}")
         # not under app_lock: attaching a plan calls into the behavior algorithm, whose handler thread needs that lock
-        self.training_mode = mode
-        return dict(mode=training_mode_to_api_training_mode(self._training_mode))
+        if mode == self._training_mode:
+            return dict(mode=training_mode_to_api_training_mode(mode))
+        def execute_it():
+            assert mode is not None
+            self.set_training_mode(mode)
+            return dict(mode=training_mode_to_api_training_mode(mode))
+        return self._handle_rpc_async_command(request, execute_it)
 
     def _rpc_set_behavior_setting(self, setting: _RpcBehaviorSetting, request: ApiCommandRequest) -> Any:
         enabled = _rpc_data_value(request, "enabled")
@@ -2657,6 +2699,23 @@ class AppModel(ObservableObject):
             return _rpc_failure(ApiCommandRequestResult.FAILED,
                                 f"{request.command.name} did not take effect; the setting is {actual}")
         return dict(enabled=actual)
+
+    def join_rpc_threads(self, *, only_finished: bool = False):
+        threads = self._rpc_async_threads
+        joined = []
+        for thread in threads:
+            alive = thread.is_alive()
+            if alive and not only_finished:
+                logger.verbose("joining rpc async thread %s", thread)
+            elif alive and only_finished:
+                continue
+            thread.join()
+            joined.append(thread)
+        for thread in joined:
+            try:
+                self._rpc_async_threads.remove(thread)
+            except ValueError:
+                pass
 
     def _send_api_system_status(self):
         system_status = self._make_api_system_status_payload()
@@ -2942,3 +3001,44 @@ class AppModel(ObservableObject):
             selected.pellet_counts_day.presented = algo.pellets_presented_day
             selected.pellet_counts_total.presented = algo.pellets_presented_total
             self._save_animal_metadata(selected, sender="on_pellet_sent")  # always
+
+    def _update_training_mode_in_background(self, mode: TrainingMode, *, previous_mode: TrainingMode):
+        def execute_it():
+            try:
+                self._set_training_mode(mode, previous_mode=previous_mode)
+            finally:
+                self._thread_set_training_mode = None
+
+        prev = self._thread_set_training_mode
+        if prev is not None:
+            if prev.is_alive():
+                if threading.current_thread() is prev:
+                    execute_it()
+                    return
+                logger.warning("previous set training mode thread still alive, giving 1s")
+                prev.join(1)
+                if prev.is_alive():
+                    raise RuntimeError("Refusing set training mode while previous still in progress")
+        thread = self._thread_set_training_mode = threading.Thread(target=execute_it, name="training_mode_updater", daemon=True)
+        thread.start()
+
+    def _update_training_plan_in_background(self, animal, plan: Optional[TrainingPlan],
+                                            *, force_update: bool = False, previous_plan: Optional[TrainingPlan]):
+        prev = self._thread_set_training_plan
+        def execute_it():
+            try:
+                self._set_training_plan(animal, plan, force_update=force_update, previous_plan=previous_plan)
+            finally:
+                self._thread_set_training_plan = None
+        if prev is not None:
+            if prev.is_alive():
+                if threading.current_thread() is prev:
+                    execute_it()
+                    return
+                logger.warning("previous set training plan thread still alive, giving 1s")
+                prev.join(1)
+                if prev.is_alive():
+                    raise RuntimeError("Refusing set training plan while previous still in progress")
+
+        thread = self._thread_set_training_plan = threading.Thread(target=execute_it, name="training_plan_updater", daemon=True)
+        thread.start()

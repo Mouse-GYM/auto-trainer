@@ -1161,7 +1161,8 @@ class MainWindow(QMainWindow):
 
         def training_mode_index_changed(_):
             selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            app_model.training_mode = selected_mode
+            self._app_model.set_training_mode(selected_mode, background=True)
+
         combo.currentIndexChanged.connect(training_mode_index_changed)
 
         label = QLabel("Protocol:")
@@ -1178,7 +1179,7 @@ class MainWindow(QMainWindow):
             plan_id = self._training_plan_combo.currentData()
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
-            app_model.training_plan = selected_plan
+            self._app_model.set_training_plan(selected_plan, background=True)
 
         combo.currentIndexChanged.connect(training_plan_index_changed)
 
@@ -1193,8 +1194,6 @@ class MainWindow(QMainWindow):
             self._training_plan_combo.blockSignals(True)
             self._training_plan_combo.setCurrentIndex(training_plan_idx)
             self._training_plan_combo.blockSignals(False)
-            # self.main_content.training_plan_changed.emit(self._app_model.training_plan)
-            self._app_model.training_mode = training_mode
             self._refresh_prev_next_phases()
 
         update_training_mode(self._app_model.training_mode)
@@ -1918,13 +1917,14 @@ class MainWindow(QMainWindow):
         load_btn = msg_box.addButton("Load", QMessageBox.ButtonRole.ActionRole)
         msg_box.addButton(QMessageBox.StandardButton.Cancel)
         msg_box.exec()
-        if msg_box.clickedButton() == load_btn:
-            app_model.set_training_plan(plan, force_update=True)
+        clicked_but = msg_box.clickedButton()
         msg_box.close()
         try:
             self._open_dialogs.remove(msg_box)
         except ValueError:
             pass
+        if clicked_but == load_btn:
+            self._app_model.set_training_plan(plan, force_update=True, background=True)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model

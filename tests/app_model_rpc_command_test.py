@@ -33,29 +33,48 @@ def _use_mock_event_manager(mock_event_manager):
     pass
 
 
-class _InlineThread:
+class _InlineThread(threading.Thread):
 
-    def __init__(self, target, daemon=None, name=None):
-        self._target = target
+    def __init__(self, group=None, target=None, daemon=None, name=None):
+        super().__init__(group, target=target, daemon=daemon, name=name)
+        self._orig_target = target
+        self._started = False
+        self._stopped = False
 
     def start(self):
-        self._target()
+        if self._started:
+            raise RuntimeError("already started")
+        self._started = True
+        self._orig_target()
+        self._stopped = True
+
+    def join(self, *, timeout=None):
+        if not self._started:
+            raise RuntimeError("not started")
+        if not self._stopped:
+            raise RuntimeError("still running")
+
+    def is_alive(self):
+        return self._started and not self._stopped
 
 
-class _DeferredThread:
+class _DeferredThread(_InlineThread):
 
-    def __init__(self, target, daemon=None, name=None, *, workers: List[Callable[[], None]]):
-        self._target = target
+    def __init__(self, *args, target=None, workers: List[Callable[[], None]], **kwargs):
+        super().__init__(*args, **kwargs)
+        self._orig_target = target
         self._workers = workers
 
     def start(self):
-        self._workers.append(self._target)
+        self._started = True
+        self._workers.append(self.run)
+
+    def run(self):
+        self._orig_target()
+        self._stopped = True
 
 
-class _FailingThread:
-
-    def __init__(self, target, daemon=None, name=None):
-        pass
+class _FailingThread(_InlineThread):
 
     def start(self):
         raise RuntimeError("can't start new thread")
@@ -321,9 +340,11 @@ class TestTrainingMode:
 
     def test_it_sets_the_training_mode(self, app_model, mock_event_manager):
         response = _send(app_model, ApiCommand.SET_TRAINING_MODE, {"mode": int(ApiTrainingMode.AUTOMATIC)})
-        assert response.result == ApiCommandRequestResult.SUCCESS
-        assert response.data == {"mode": ApiTrainingMode.AUTOMATIC}
-        assert app_model.training_mode is TrainingMode.AUTOMATIC
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        app_model.join_rpc_threads()
+        # assert response.result == ApiCommandRequestResult.SUCCESS
+        # assert response.data == {"mode": ApiTrainingMode.AUTOMATIC}
+        assert app_model.training_mode == TrainingMode.AUTOMATIC
         contexts = _event_contexts(mock_event_manager, ApiEventKind.trainingModeChanged)
         assert contexts == [{"training_mode": ApiTrainingMode.AUTOMATIC}]
         assert type(contexts[0]["training_mode"]) is ApiTrainingMode
@@ -509,8 +530,10 @@ class TestSetApplicationMode:
         _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
         is_cancelled = captured[0]
         assert is_cancelled() is False
-        app_model._closing = True
-        assert is_cancelled() is True
+        with mock.patch.object(app_model, "_closing", True):
+            # nb: need it restored to False/previous value when test ends,
+            # so that app_model on_close will be executed by the fixture providing it.
+            assert is_cancelled() is True
 
     def test_it_moves_through_the_running_modes(self, app_model, rpc_service, mock_event_manager):
         response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
