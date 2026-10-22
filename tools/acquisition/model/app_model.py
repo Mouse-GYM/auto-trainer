@@ -21,6 +21,7 @@ from functools import partial
 from multiprocessing.managers import SyncManager, ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
+from queue import Queue, Empty
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple, NamedTuple, Type, TypeVar
 
 import pandas
@@ -295,12 +296,17 @@ class TrainingPlanDeserializedEvent(Protocol):
         """Emitted when we deserialize a plan"""
 
 
+class OnErrorEvent(Protocol):
+    def __call__(self, title: str, content: str):
+        """Emitted with AppModel.on_error to any registered callback"""
+
+
 class AppModelEvents:
     # NB: events "definition/typehint" are forwarded *into* AppModel below,
     # so we *assign* them here (=), but we'll typehint (:) in AppModel.
 
     configuration_loaded_event = EventHandler[Callable[[SystemConfiguration], None]]
-    on_error = EventHandler[Callable[[str, str], None]]
+    on_error = EventHandler[OnErrorEvent]
     training_plan_deserialized = EventHandler[TrainingPlanDeserializedEvent]
 
     current_day_changed = EventHandler[Callable[[date], None]]
@@ -361,8 +367,8 @@ class AppModel(ObservableObject):
 
         # self._app_lock = threading.RLock()  using BehaviorAlgo lock
 
-        def log_on_error(title, msg):
-            logger.error("%s: %s", title, msg)
+        def log_on_error(title: str, content: str):
+            logger.error("%s: %s", title, content)
 
         self.on_error += log_on_error
 
@@ -544,8 +550,12 @@ class AppModel(ObservableObject):
         self._attached_plan: Optional[TrainingPlan] = None
         self._attached_phase: Optional[TrainingPhase] = None
         self._attached_animal: Optional[AnimalSubject] = None
-        self._thread_set_training_mode: Optional[threading.Thread] = None
-        self._thread_set_training_plan: Optional[threading.Thread] = None
+        self._worker_thread_queue = Queue(maxsize=16)
+        thread = threading.Thread(
+            target=self._worker_thread_run, args=(self._worker_thread_queue,), name="main_worker_thread")
+        self._worker_thread_long_tasks_execution = thread
+        thread.start()
+        self._worker_thread_long_tasks_execution = thread
 
         self._rpc_service: Optional[RpcService] = None
         self._closing = False
@@ -588,7 +598,9 @@ class AppModel(ObservableObject):
             self._update_led_color()
             self._send_api_system_status()
             delay = 60
-            timer = self._timer_one_minute_repeat = make_daemon_timer(delay, one_minute_timer_handle_and_reschedule)
+            timer = self._timer_one_minute_repeat = make_daemon_timer(
+                delay, one_minute_timer_handle_and_reschedule)
+            timer.name = "one_minute_timer"
             timer.start()
             logger.verbose("Scheduled send_system_status in %.1f seconds", delay)
 
@@ -1043,23 +1055,33 @@ class AppModel(ObservableObject):
 
     @selected_animal.setter
     def selected_animal(self, animal: Optional[AnimalSubject]):
-        prev, self._selected_animal = self._selected_animal, animal
+        self.set_selected_animal(animal)
+
+    def set_selected_animal(self, animal: Optional[AnimalSubject], *, background: bool = False, callback: Optional[Callable] = None) -> Optional[bool]:
+        prev = self._selected_animal
         if animal == prev:
-            return
+            return True
+        func = self._update_selected_animal_in_background if background else self._set_selected_animal
+        return func(animal, callback=callback, previous_animal=prev)
+
+    def _update_selected_animal_in_background(self, animal, *, callback, previous_animal):
+        def execute_it():
+            self._set_selected_animal(animal, callback=callback, previous_animal=previous_animal)
+        self._worker_thread_queue.put_nowait(execute_it)
+
+    def _set_selected_animal(self, animal: Optional[AnimalSubject], *, callback, previous_animal):
         self._detach_training_plan()  # always
-        logger.debug("updating animal to %s (prev=%s)", animal, prev)
-        if prev is not None:
-            self._save_animal_metadata(prev, sender="selected_animal_detach")  # in case of
-        self.property_changed(self.Props.ANIMAL_NAME, *(
-            ("(none)", "(none)") if animal is None
-            else (animal.name, self.animal_name)
-        ))
+        logger.debug("updating animal to %s (prev=%s)", animal, previous_animal)
+        if previous_animal is not None:
+            self._save_animal_metadata(previous_animal, sender="selected_animal_detach")  # in case of
+        #
         algo = self._behavior.algorithm
         self._behavior.system_machine.shift_xyz_handler.reset()
 
+        skip = object()
         if animal is None:
-            self.training_plan = None
             algo.reset_selected_animal_counts(None)
+            animal_plan = None
         else:
             logger.debug("animal pellet=%s is_dcs=%s",
                          (animal.pellet_x, animal.pellet_y, animal.pellet_z), animal.is_pellet_dcs)
@@ -1072,18 +1094,33 @@ class AppModel(ObservableObject):
             if self._training_mode == TrainingMode.MANUAL:
                 # only set animal base position if manual training mode
                 self._set_animal_base_positions(animal)
+                animal_plan = skip
             else:
-                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+                animal_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+        #
+        self._selected_animal = animal
+        if animal_plan is not skip:
+            if not self.set_training_plan(animal_plan, callback=callback):
+                self._selected_animal = None  # force
+                # NB: self.on_error() is called inside set_training_plan already.
+                return False
+        logger.success("Switched to animal %s", animal)
+        if callback is not None:
+            callback(True)
+        self.property_changed(self.Props.ANIMAL_NAME, *(
+            ("(none)", "(none)") if animal is None
+            else (animal.name, self.animal_name)
+        ))
         self._preferences.selected_animal = "" if animal is None else animal.name
+        self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, previous_animal)
+        self._event_manager.post_api_event(build_event(
+            ApiEventKind.animalSelected, None if animal is None else animal.to_api_status()))
         analysis = self._behavior.analysis
         analysis.autoclamp_evasion_detector.pellets_consumed = (
             0 if animal is None
             else animal.autoclamp_evasion_pellets_consumed
         )
-        self._on_property_changed(self.Props.SELECTED_ANIMAL, animal, prev)
-        self._event_manager.post_api_event(build_event(
-            ApiEventKind.animalSelected, None if animal is None else animal.to_api_status()))
-        logger.success("Switched to animal %s", animal)
+        return True
 
     @property
     def training_mode(self):
@@ -1093,33 +1130,51 @@ class AppModel(ObservableObject):
     def training_mode(self, mode: TrainingMode):
         self.set_training_mode(mode)
 
-    def set_training_mode(self, mode: TrainingMode, *, background: bool = False):
-        prev, self._training_mode = self._training_mode, mode
+    def set_training_mode(
+        self, mode: TrainingMode,
+        *,
+        background: bool = False,
+        callback: Optional[Callable] = None,
+    ) -> Optional[bool]:
+        prev = self._training_mode
         if prev == mode:
-            return
+            return True
         func = self._update_training_mode_in_background if background else self._set_training_mode
-        func(mode, previous_mode=prev)
+        return func(mode, previous_mode=prev, callback=callback)
 
-    def _set_training_mode(self, mode: TrainingMode, *, previous_mode: TrainingMode):
+    def _set_training_mode(self, mode: TrainingMode, *, previous_mode: TrainingMode, callback: Optional[Callable] = None):
         if mode == TrainingMode.MANUAL:
             self._detach_training_plan()
+            plan = None
         else:
             animal = self._selected_animal
             if animal is None:  # animal might be not active/created yet
                 self._detach_training_plan()
+                plan = None
             else:
                 attached = self._attached_plan
                 if attached is not None:
                     is_auto = mode == TrainingMode.AUTOMATIC
                     logger.info("Updating plan is_automatic to %s", is_auto)
                     attached.is_automatic = is_auto
+                    plan = None
                 else:
                     # this will also attach to it (given current mode != manual):
-                    self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+                    plan = self.get_training_plan_by_id(animal.training.current_protocol)
+        self._training_mode = mode
+        if plan is not None:
+            ok = self.set_training_plan(plan)
+            if not ok:
+                if callback is not None:
+                    callback(False, error="set_training_plan() failed")
+                return False
+        if callback is not None:
+            callback(True)
         self._on_property_changed(self.Props.TRAINING_MODE, mode, previous_mode)
         self._event_manager.post_api_event(build_event(
             ApiEventKind.trainingModeChanged,
             TrainingModeContext(training_mode=training_mode_to_api_training_mode(mode))))
+        return True
 
     @property
     def attached_plan(self) -> Optional[TrainingPlan]:
@@ -1133,17 +1188,30 @@ class AppModel(ObservableObject):
     def training_plan(self, plan: Optional[TrainingPlan]):
         self.set_training_plan(plan)
 
-    def set_training_plan(self, plan: Optional[TrainingPlan],
-                          *, force_update: bool = False, background: bool = False):
+    def set_training_plan(
+        self,
+        plan: Optional[TrainingPlan],
+        *,
+        force_update: bool = False,
+        background: bool = False,
+        callback: Optional[Callable] = None,
+    ) -> Optional[bool]:
         animal = self._selected_animal
-        prev, self._training_plan = self._training_plan, plan
-        if prev == plan and self._training_plan_animal == animal:
-            return
+        prev = self._training_plan
+        if plan == prev and animal == self._training_plan_animal:
+            return True
         func = self._update_training_plan_in_background if background else self._set_training_plan
-        func(animal, plan, force_update=force_update, previous_plan=prev)
+        return func(animal, plan, force_update=force_update, previous_plan=prev, callback=callback)
 
-    def _set_training_plan(self, animal, plan: Optional[TrainingPlan], *,
-                           force_update: bool = False, previous_plan: Optional[TrainingPlan]):
+    def _set_training_plan(
+        self,
+        animal: Optional[AnimalSubject],
+        plan: Optional[TrainingPlan],
+        *,
+        force_update: bool = False,
+        previous_plan: Optional[TrainingPlan],
+        callback: Optional[Callable] = None,
+    ):
         self._training_plan_animal = animal
         if animal is not None:
             self._detach_training_plan()
@@ -1156,11 +1224,21 @@ class AppModel(ObservableObject):
             self._detach_training_plan()  # always
         elif animal is not None:
             if self._training_mode != TrainingMode.MANUAL:
-                if self._attach_training_plan(plan, force_update=force_update) is False:
-                    return
+                if self._attach_training_plan(animal, plan, force_update=force_update) is False:
+                    msg = (
+                        f"\nCould not attach to plan {plan.plan_id}\n\n"
+                        f"The current animal or the plan might be corrupted")
+                    if callback is not None:
+                        callback(False, error=msg)
+                    self.on_error("Attach training plan failed", msg)
+                    return False
+        self._training_plan = plan
+        if callback is not None:
+            callback(True)
         self._on_property_changed(self.Props.TRAINING_PLAN, plan, previous_plan)
         self._event_manager.post_event_content(
             ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
+        return True
 
     @property
     def output_location(self) -> str:
@@ -1241,14 +1319,15 @@ class AppModel(ObservableObject):
             return None
         return self._plan_repo.get_plan(plan_id)
 
-    def _attach_training_plan(self, plan: TrainingPlan, *, force_update: bool = False) -> Optional[bool]:
+    def _attach_training_plan(
+        self,
+        animal: AnimalSubject,
+        plan: TrainingPlan,
+        *,
+        force_update: bool = False,
+    ) -> Optional[bool]:
         """Returns False if attach not done"""
         algo = self._behavior.algorithm
-        animal = self._selected_animal
-        if animal is None:
-            # if animal not created yet
-            return None
-        assert isinstance(animal, AnimalSubject)
         attached = self._attached_plan
         if attached is not None and not force_update:
             if attached.plan_id == plan.plan_id and animal == self._attached_animal:
@@ -1268,7 +1347,7 @@ class AppModel(ObservableObject):
                 return False
 
         is_auto = self._training_mode == TrainingMode.AUTOMATIC
-        logger.success("Animal %s: attaching auto=%s to plan %s (%s) ..",
+        logger.notice("Animal %s: attaching is_auto=%s to plan %s (%s) ..",
                        animal.name, is_auto, plan.plan_id, hex(id(plan)))
         plan.is_automatic = is_auto
         pellet_dev = tunnel_dev = self._hardware
@@ -1298,18 +1377,26 @@ class AppModel(ObservableObject):
         plan = self._attached_plan
         if plan is None:
             return
-        self._detach_training_phase()
-        plan.property_changed -= self._on_training_plan_property_changed
-        plan.progress_updated -= self._on_training_plan_progress_updated
-        animal = self._attached_animal
-        assert isinstance(animal, AnimalSubject)
-        logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
-        plan.detach()
-        self._attached_plan = None
-        self._attached_animal = None
-        prog = plan.serialize_progress()
-        animal.training.set_plan_progress(plan.plan_id, prog)
-        self._save_animal_metadata(animal, sender="detach_plan")
+        try:
+            self._detach_training_phase()
+        finally:
+            try:
+                plan.property_changed -= self._on_training_plan_property_changed
+                plan.progress_updated -= self._on_training_plan_progress_updated
+            finally:
+                animal = None
+                try:
+                    animal = self._attached_animal
+                    assert isinstance(animal, AnimalSubject)
+                    logger.notice("%s: detaching from plan %s (%s)", animal.name, plan.plan_id, hex(id(plan)))
+                    plan.detach()
+                finally:
+                    self._attached_plan = None
+                    self._attached_animal = None
+                    prog = plan.serialize_progress()
+                    if animal is not None:
+                        animal.training.set_plan_progress(plan.plan_id, prog)
+                        self._save_animal_metadata(animal, sender="detach_plan")
 
     def _detach_training_phase(self):
         phase = self._attached_phase
@@ -1322,7 +1409,16 @@ class AppModel(ObservableObject):
 
     #
 
-    def add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
+    def add_animal(self, name: str, select: bool = False, *, background: bool = False) -> Optional[AnimalSubject]:
+        def execute_add_animal():
+            return self._add_animal(name, select=select)
+        if background:
+            self._worker_thread_queue.put_nowait(execute_add_animal)
+            return None
+        else:
+            return execute_add_animal()
+
+    def _add_animal(self, name: str, select: bool = False) -> Optional[AnimalSubject]:
         if not name:
             if select:
                 self.selected_animal = None
@@ -1661,9 +1757,9 @@ class AppModel(ObservableObject):
         if self._training_mode == TrainingMode.MANUAL or animal is None:
             # logger.notice("training mode is MANUAL or animal is none")
             # forcing manual so:
-            self.training_mode = TrainingMode.MANUAL
+            self.set_training_mode(TrainingMode.MANUAL)
         else:
-            self.training_plan = plan
+            self.set_training_plan(plan)
 
         boards_reset_mon = self._analysis.boards_hardware_reset_detector
         boards_reset_mon.restart()  # better be started after hardware connect
@@ -2040,10 +2136,11 @@ class AppModel(ObservableObject):
 
         self.join_rpc_threads()
 
-        for thread in (self._thread_set_training_mode, self._thread_set_training_plan):
-            if thread is not None:
-                logger.verbose("joining %s", thread)
-                thread.join()
+        wrk = self._worker_thread_long_tasks_execution
+        if wrk.is_alive():
+            self._worker_thread_queue.put(None)
+            logger.debug("joining worker thread")
+            wrk.join()
 
         self.refresh_main_watchdog(p_now=math.nan)
 
@@ -2408,7 +2505,7 @@ class AppModel(ObservableObject):
                 break
         animal.check_today_date()  # in case of
         dst = Path(self._preferences.animal_location).joinpath(f"{animal.name}.json")
-        logger.verbose("Saving %s to %s ; sender=%s", animal, dst, sender)
+        logger.notice("Saving %s to %s ; sender=%s", animal, dst, sender)
         if backup_previous and dst.exists():
             now = datetime.now()
             dst.with_suffix(f'.{now.strftime(DATE_TIME_FORMAT)}.json.bak').write_bytes(dst.read_bytes())
@@ -2669,7 +2766,6 @@ class AppModel(ObservableObject):
         mode = api_training_mode_to_training_mode(api_mode)
         if mode is None:
             return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE, f"Training mode {api_mode.name} is not supported")
-        assert mode is not None
         status = self._status
         if status in _TRAINING_MODE_LOCKED_STATUSES:
             return _rpc_failure(ApiCommandRequestResult.UNAVAILABLE,
@@ -2677,10 +2773,26 @@ class AppModel(ObservableObject):
                                 f"{app_status_to_api_app_mode(status).name}")
         # not under app_lock: attaching a plan calls into the behavior algorithm, whose handler thread needs that lock
         if mode == self._training_mode:
+            assert mode is not None
             return dict(mode=training_mode_to_api_training_mode(mode))
         def execute_it():
             assert mode is not None
-            self.set_training_mode(mode)
+            evt = threading.Event()
+            success = False
+            obtained_err = None
+            def cb(result, *, error=None):
+                nonlocal success, obtained_err
+                success = result
+                obtained_err = error
+                evt.set()
+            self.set_training_mode(mode, background=True, callback=cb)
+            evt.wait()
+            if not success:
+                if obtained_err is None:
+                    obtained_err = "set_training_mode failed without error reported"
+                if not isinstance(obtained_err, BaseException):
+                    obtained_err = RuntimeError(f"{obtained_err}")
+                raise obtained_err
             return dict(mode=training_mode_to_api_training_mode(mode))
         return self._handle_rpc_async_command(request, execute_it)
 
@@ -3002,43 +3114,37 @@ class AppModel(ObservableObject):
             selected.pellet_counts_total.presented = algo.pellets_presented_total
             self._save_animal_metadata(selected, sender="on_pellet_sent")  # always
 
-    def _update_training_mode_in_background(self, mode: TrainingMode, *, previous_mode: TrainingMode):
+    def _update_training_mode_in_background(self, mode: TrainingMode,
+                                            *, previous_mode: TrainingMode, callback: Optional[Callable] = None):
         def execute_it():
-            try:
-                self._set_training_mode(mode, previous_mode=previous_mode)
-            finally:
-                self._thread_set_training_mode = None
+            self._set_training_mode(mode, previous_mode=previous_mode, callback=callback)
+        self._worker_thread_queue.put_nowait(execute_it)
 
-        prev = self._thread_set_training_mode
-        if prev is not None:
-            if prev.is_alive():
-                if threading.current_thread() is prev:
-                    execute_it()
-                    return
-                logger.warning("previous set training mode thread still alive, giving 1s")
-                prev.join(1)
-                if prev.is_alive():
-                    raise RuntimeError("Refusing set training mode while previous still in progress")
-        thread = self._thread_set_training_mode = threading.Thread(target=execute_it, name="training_mode_updater", daemon=True)
-        thread.start()
-
-    def _update_training_plan_in_background(self, animal, plan: Optional[TrainingPlan],
-                                            *, force_update: bool = False, previous_plan: Optional[TrainingPlan]):
-        prev = self._thread_set_training_plan
+    def _update_training_plan_in_background(
+        self,
+        animal,
+        plan: Optional[TrainingPlan],
+        *,
+        force_update: bool = False,
+        previous_plan: Optional[TrainingPlan],
+        callback: Optional[Callable] = None,
+    ):
         def execute_it():
-            try:
-                self._set_training_plan(animal, plan, force_update=force_update, previous_plan=previous_plan)
-            finally:
-                self._thread_set_training_plan = None
-        if prev is not None:
-            if prev.is_alive():
-                if threading.current_thread() is prev:
-                    execute_it()
-                    return
-                logger.warning("previous set training plan thread still alive, giving 1s")
-                prev.join(1)
-                if prev.is_alive():
-                    raise RuntimeError("Refusing set training plan while previous still in progress")
+            self._set_training_plan(animal, plan,
+                                    force_update=force_update, previous_plan=previous_plan, callback=callback)
+        self._worker_thread_queue.put_nowait(execute_it)
 
-        thread = self._thread_set_training_plan = threading.Thread(target=execute_it, name="training_plan_updater", daemon=True)
-        thread.start()
+    @staticmethod
+    def _worker_thread_run(cmd_queue: Queue):
+        while True:
+            try:
+                raw = cmd_queue.get(timeout=1)
+            except Empty:
+                continue
+            if raw is None:
+                break
+            logger.verbose("executing %s", raw)
+            try:
+                raw()
+            except Exception as err:
+                logger.exception("%s failed: %s", raw, err)

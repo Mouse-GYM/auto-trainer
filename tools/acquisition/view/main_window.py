@@ -608,8 +608,12 @@ class MainWindow(QMainWindow):
         algo.diamond_triangle_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will get its x/y/z in DCS
-        app_model.selected_animal = None
-        app_model.selected_animal = animal
+        def doit():
+            def cb(result, *, error=None):
+                if result:
+                    app_model.set_selected_animal(animal)
+            app_model.set_selected_animal(None, callback=cb, background=True)
+        algo.put_func_call(doit, wait=False)
 
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
@@ -1587,15 +1591,21 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.add_animal(self._animal_dropdown_combo.currentText(), select=True)
+        name = self._animal_dropdown_combo.currentText().strip()
+        # NB: pre-check if it's not already present:
+        # for some reason this callback (connected on the combo.lineEdit().editingFinished event),
+        # it's triggered every time the combo is clicked in UI
+        if not name or any(name == animal.name for animal in self._app_model.animals):
+            return
+        self._app_model.add_animal(name, select=True, background=True)
 
     def _animal_changed(self, _):
         if self._animal_dropdown_combo.currentIndex() in (0, -1):
-            self._app_model.selected_animal = None
+            animal = None
         else:
             animal_id = self._animal_dropdown_combo.currentData()
-            animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
-            self._app_model.selected_animal = animal
+            animal = self._app_model.get_animal_by_id(animal_id)
+        self._app_model.set_selected_animal(animal, background=True)
 
     @invoke_method
     def _refresh_prev_next_phases(self):
@@ -1724,6 +1734,7 @@ class MainWindow(QMainWindow):
         elif name == props.SELECTED_ANIMAL:
             animal_dropdown = self._animal_dropdown_combo
             animal_dropdown.blockSignals(True)
+            animal_dropdown.lineEdit().blockSignals(True)
             if value is None:
                 animal_dropdown.setCurrentIndex(0)
             else:
@@ -1736,6 +1747,7 @@ class MainWindow(QMainWindow):
                     animal_dropdown.addItem(value.name, value.id)
 
             animal_dropdown.blockSignals(False)
+            animal_dropdown.lineEdit().blockSignals(False)
             self._refresh_prev_next_phases()
 
         elif name == props.TRAINING_MODE:
@@ -1764,20 +1776,22 @@ class MainWindow(QMainWindow):
         # get current selected animal before adding them,
         # given when adding that's modifying the currently selected one too,
         # which reset the preference selected to that one...
+        app_selected = self._app_model.selected_animal
         find_animal_name = (
-            self._preferences.selected_animal if self._app_model.selected_animal is None
-            else self._app_model.selected_animal.name
+            self._preferences.selected_animal if app_selected is None
+            else app_selected.name
         )
+        if not find_animal_name:
+            find_animal_name = None
 
         # prevent on_animal_changed event:
         combo = self._animal_dropdown_combo
         combo.blockSignals(True)
+        combo.lineEdit().blockSignals(True)
         combo.clear()
         combo.addItem("", None)
         for idx, animal in enumerate(animals):
             combo.addItem(animal.name, animal.id)
-        combo.blockSignals(False)
-
         # we set the good one here:
         if find_animal_name is not None:
             index = combo.findText(find_animal_name)
@@ -1785,6 +1799,8 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(index)
         else:
             combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+        combo.lineEdit().blockSignals(False)
 
     @staticmethod
     def _update_log_level(value: int):
