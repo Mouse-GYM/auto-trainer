@@ -10,7 +10,7 @@ import math
 import queue
 import threading
 import time
-from datetime import datetime, date
+from datetime import date
 from functools import partial
 from pathlib import Path
 from typing import Optional, Tuple, ClassVar, Any, Dict, Deque, List
@@ -189,6 +189,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
+
         if project_info is None:
             project_info = ProjectInfo.get_null_project()
         self._project_info: ProjectInfo = project_info
@@ -427,7 +428,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         try:
             yield
         finally:
-            t_locals.force_wait = prev
+            if prev is not None:
+                t_locals.force_wait = prev
+            else:
+                del t_locals.force_wait
 
     @classmethod
     def put_func_call(
