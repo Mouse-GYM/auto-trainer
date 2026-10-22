@@ -260,8 +260,6 @@ class LogQueueListenerProc(Process):
         self.join()
 
     def _add_to_buffer(self, records: List[logging.LogRecord]):
-        if self._buffer_previous is None:
-            return
         with self._lock:
             prev = self._buffer_previous
             if prev is None:
