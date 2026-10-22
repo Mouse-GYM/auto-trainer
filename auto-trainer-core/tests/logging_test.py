@@ -24,3 +24,4 @@ def test_mp_file_handler(tmp_path):
     assert counts("START", content) == 1
     assert counts("BEFORE", content) == 1
     assert counts("AFTER", content) == 1
+    assert counts("CLOSE", content) == 100

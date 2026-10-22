@@ -2,7 +2,7 @@ import time
 import logging
 import sys
 
-from autotrainer.core.logging import setup_logging, get_log_queue_listener
+from autotrainer.core.logging import setup_logging, get_log_queue_listener, stop_multiproc_logging
 
 
 def exec_mp_file_handler(log_path):
@@ -15,8 +15,9 @@ def exec_mp_file_handler(log_path):
     logger.info("BEFORE")
     listener.add_file_handler(log_path)
     logger.info("AFTER")
-    time.sleep(0.5)  # necessary to give some time for add_file_handler to be processed,
-    # given it's async command.
+    for idx in range(100):
+        logger.info("CLOSE#%s", idx)
+    stop_multiproc_logging()
 
 
 if __name__ == "__main__":

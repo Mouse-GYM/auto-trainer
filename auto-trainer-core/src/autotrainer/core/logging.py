@@ -430,15 +430,14 @@ def stop_multiproc_logging():
             if isinstance(handler, WithThreadIdQueueHandler):
                 _base_logger.removeHandler(handler)
 
-    if q_listener is not None:
-        # must be before following log queue close()
-        q_listener.stop()
-        _queue_listener = None
-
     if mp_log_queue is not None:
         mp_log_queue.close()
         mp_log_queue.join_thread()
         _multiprocess_log_queue = None
+
+    if q_listener is not None:
+        q_listener.stop()
+        _queue_listener = None
 
     if q_handler is not None:
         q_handler.close()
