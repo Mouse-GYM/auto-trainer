@@ -9,7 +9,6 @@ import threading
 import time
 from multiprocessing import synchronize
 from multiprocessing.managers import ValueProxy
-from multiprocessing.sharedctypes import Synchronized
 from multiprocessing.synchronize import Semaphore as SemaphoreType
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any
@@ -17,12 +16,13 @@ from threading import Thread
 
 from autotrainer.api import build_event, ApiEventKind
 
-from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, clear_queue, \
+from autotrainer.core import FixedArrayMultiQueue, ProjectInfo, EventManager, \
     InferenceConfiguration, Offset3DTuple, get_perf_now
 from autotrainer.core.project import ProjectDependentProtocol
 from autotrainer.core.multiproc import get_mp_ctx, pool_init
 from autotrainer.core.logging import get_verbose_logger, make_log_dict_config
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
+from autotrainer.core.queue_util import clear_queue
 
 from autotrainer.inference import PoseProcess, InferenceCommandMessageKind, InferenceStatusMessageKind, PoseAlgorithm, \
     InferenceMode, InferenceStatus, InferenceMonitorDataMsg

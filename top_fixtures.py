@@ -461,12 +461,18 @@ class MockSystemMachine:
     def msg_handler(self) -> MessageHandler:
         return self._machine._msg_handler
 
-    @property
-    def tunnel_dev(self) -> Union[mock.MagicMock, TunnelDeviceProtocol]:
-        return self._machine._tunnel_device
+    class _MockedTunnelDev(TunnelDeviceProtocol, mock.MagicMock):
+        pass  # for help type hints
 
     @property
-    def pellet_dev(self) -> Union[mock.MagicMock, PelletDeviceProtocol]:
+    def tunnel_dev(self) -> _MockedTunnelDev:
+        return self._machine._tunnel_device
+
+    class _MockedPelletDev(PelletDeviceProtocol, mock.MagicMock):
+        pass
+
+    @property
+    def pellet_dev(self) -> _MockedPelletDev:
         return self._machine._pellet_device
 
     #
@@ -605,7 +611,7 @@ class MockSystemMachine:
         assert self.pellet.state == PelletState.covering
         self.mock_pellet_ack()
 
-    def mock_pellet_ack(self, until_none: bool=False, max_limit: int=45):
+    def mock_pellet_ack(self, *, until_none: bool=False, max_limit: int=45, success: bool=True):
         """Ack the previous sent pellet command"""
         cur_ack = 0
         while True:
@@ -616,7 +622,7 @@ class MockSystemMachine:
             self.increment_perf_now(1e-9)
             (# self.pellet._pellet_device_ack_received
             self.msg_handler.ack_received
-             (token, CommandResult(succeeded=True)))
+             (token, CommandResult(succeeded=success)))
             if not until_none:
                 break
             if cur_ack > max_limit:
