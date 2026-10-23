@@ -16,4 +16,5 @@ class TextBoxHandler(logging.Handler):
         self.emitter.log_message.connect(self.text_edit.appendPlainText)
 
     def emit(self, record):
-        self.emitter.log_message.emit(self.format(record))
+        if self.text_edit.isVisible():
+            self.emitter.log_message.emit(self.format(record))
