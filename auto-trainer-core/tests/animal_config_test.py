@@ -44,8 +44,9 @@ def test_save_load(tmp_path):
             continue
         setattr(animal, k, v)
         def to_dict(dataclass_instance):
-            return {field.name: getattr(dataclass_instance) for field in dataclasses.fields(dataclass_instance)}
-        assert to_dict(animal != to_dict(animal2)
+            return {field.name: getattr(dataclass_instance, field.name)
+                    for field in dataclasses.fields(dataclass_instance)}
+        assert to_dict(animal) != to_dict(animal2)
         animal.to_file(dest)
         animal2 = AnimalSubject.from_file(dest)
         assert animal == animal2, f"attribute {k} is not correctly saved/loaded"
