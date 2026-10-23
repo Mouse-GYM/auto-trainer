@@ -1,3 +1,4 @@
+import dataclasses
 
 from autotrainer.core import AnimalSubject
 from autotrainer.core.animal.animal_subject import AnimalPelletCounts
@@ -42,7 +43,9 @@ def test_save_load(tmp_path):
         else:
             continue
         setattr(animal, k, v)
-        assert animal != animal2
+        def to_dict(dataclass_instance):
+            return {field.name: getattr(dataclass_instance) for field in dataclasses.fields(dataclass_instance)}
+        assert to_dict(animal != to_dict(animal2)
         animal.to_file(dest)
         animal2 = AnimalSubject.from_file(dest)
         assert animal == animal2, f"attribute {k} is not correctly saved/loaded"
