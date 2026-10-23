@@ -254,6 +254,9 @@ class EmulationInterface(DeviceInterface):
             messages.append(PressureReading(pressure=512 + uniform(-10, 10), ))
             messages.append(LoadCellReading(load=uniform(0, 20)))
 
+        if len(messages) == 0:
+            time.sleep(0.01)
+
         return messages
 
     def write(self, value: typing.Any) -> int:
