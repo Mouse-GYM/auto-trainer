@@ -1937,9 +1937,9 @@ class MainWindow(QMainWindow):
             def cb(result, *, error=None):
                 combo = self._training_plan_combo
                 if not result:
-                    idx = self._get_training_plan_combo_index(plan.plan_id)
+                    idx = self._get_training_plan_combo_index(None)
                     with signals_blocked(combo):
-                        combo.setCurrentIndex(idx)
+                        combo.setCurrentIndex(idx)  # reset to none if failed
             self._app_model.set_training_plan(plan, force_update=True, background=True, callback=cb)
 
     def _reset_animal_pellet_counts(self):
