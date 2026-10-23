@@ -85,6 +85,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
         watchdog_perf_c: Synchronized,
         tot_live_workers: int = 4,
         main_watchdog_holder: Optional[ValueProxy] = None,
+        pose_algo: Optional[PoseAlgorithm] = None,
     ):
         mp_ctx = get_mp_ctx()
         log_dict_config = make_log_dict_config()
@@ -111,7 +112,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
         self._parts_offsets = 0
         self._stop_recorded = mp_ctx.Event()
         self._watchdog_perf_c = watchdog_perf_c
-        self._pose_algo: Optional[PoseAlgorithm] = None
+        self._pose_algo: Optional[PoseAlgorithm] = pose_algo
         self._is_running = True
         self._feed_intertrial_project: Optional[ProjectInfo] = None
         self._feed_intertrial_error: Optional[str] = None
@@ -855,4 +856,3 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
                                  mode, type(pose_data), err)
 
         # end while self._is_running
-

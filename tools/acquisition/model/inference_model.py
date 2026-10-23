@@ -271,6 +271,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
                 watchdog_perf_c=self._data_monitor_watchdog_perf_c,
                 main_watchdog_holder=self._main_watchdog_holder,
+                pose_algo=self._pose_algo,
             )
             data_monitor_proc.start()
 
@@ -433,6 +434,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         cmd: Any, data: Any,
         timeout: float,
     ):
+        if proc is None or not proc.is_alive():
+            logger.debug("%s proc not alive (%s), send of %s delayed to creation", name, proc, cmd)
+            return
         with lock:
             ack.clear()
             try:
