@@ -1153,7 +1153,9 @@ class MainWindow(QMainWindow):
         combo = self._training_mode_combo = QComboBox()
         toolbar.addWidget(combo)
         combo.setDuplicatesEnabled(False)
-        for mode in TrainingMode:
+        self._training_mode_2_combo_index = {}
+        for idx, mode in enumerate(TrainingMode):
+            self._training_mode_2_combo_index[mode] = idx
             combo.addItem(mode.value,
                           (mode,)  # userData: encapsulated in a tuple,
                           # otherwise pyside drops the enum member and only keep the value string.
@@ -1167,7 +1169,7 @@ class MainWindow(QMainWindow):
             def cb(result, *, error=None):
                 if not result:
                     with signals_blocked(cmb):
-                        cmb.setCurrentIndex(0)  # MANUAL
+                        cmb.setCurrentIndex(self._training_mode_2_combo_index.get(app_model.training_mode, -1))
             app_model.set_training_mode(selected_mode, background=True, callback=cb)
 
         combo.currentIndexChanged.connect(training_mode_index_changed)
@@ -1186,7 +1188,14 @@ class MainWindow(QMainWindow):
             plan_id = self._training_plan_combo.currentData()
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
-            self._app_model.set_training_plan(selected_plan, background=True)
+            @invoke_method
+            def cb(result, *, error=None):
+                if not result:
+                    after_plan = app_model.training_plan
+                    idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
+                    self._training_plan_combo.setCurrentIndex(idx)
+
+            self._app_model.set_training_plan(selected_plan, background=True, callback=cb)
 
         combo.currentIndexChanged.connect(training_plan_index_changed)
 
@@ -1194,7 +1203,7 @@ class MainWindow(QMainWindow):
             logger.debug("Updating training_mode to %s", training_mode)
             cmb = self._training_mode_combo
             with signals_blocked(cmb):
-                cmb.setCurrentText(training_mode.value)
+                cmb.setCurrentIndex(self._training_mode_2_combo_index.get(training_mode, -1))
             is_non_manual = training_mode != TrainingMode.MANUAL
             self._widget_training_plan_action.setVisible(is_non_manual)
             self._status_training_widget.setVisible(is_non_manual)
@@ -1885,9 +1894,19 @@ class MainWindow(QMainWindow):
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
 
-    @invoke_method
+
     def _on_training_plan_deserialized(self, plan: TrainingPlan, result: LoadProgressResult, *,
                                        force_update: bool = False):
+        animal = self._app_model.selected_animal
+        self.__on_training_plan_deserialized(
+            plan, result, force_update=force_update, animal=animal)
+
+    @invoke_method
+    def __on_training_plan_deserialized(
+        self, plan: TrainingPlan, result: LoadProgressResult, *,
+        force_update: bool = False,
+        animal: Optional[AnimalSubject],
+    ):
         app_model = self._app_model
         #
         if result == LoadProgressResult.OUT_OF_DATE:
@@ -1919,7 +1938,6 @@ class MainWindow(QMainWindow):
                 logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
             return
 
-        app_model.set_training_plan(None, background=True)  # reset to None first, not supposed to fail
         msg_box = QMessageBox(self)
         self._add_box_to_open_dialogs(msg_box)
         msg_box.setWindowTitle("Confirmation")
@@ -1933,13 +1951,16 @@ class MainWindow(QMainWindow):
             self._open_dialogs.remove(msg_box)
         except ValueError:
             pass
+        app_model.set_training_plan(None, background=True, target_animal=animal)  # reset to None first, not supposed to fail
         if clicked_but == load_btn:
+            @invoke_method
             def cb(result, *, error=None):
                 combo = self._training_plan_combo
                 if not result:
-                    idx = self._get_training_plan_combo_index(None)
+                    plan_after = app_model.training_plan
+                    idx = self._get_training_plan_combo_index(None if plan_after is None else plan_after.plan_id)
                     with signals_blocked(combo):
-                        combo.setCurrentIndex(idx)  # reset to none if failed
+                        combo.setCurrentIndex(idx)
             self._app_model.set_training_plan(plan, force_update=True, background=True, callback=cb)
 
     def _reset_animal_pellet_counts(self):

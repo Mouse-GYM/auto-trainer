@@ -108,6 +108,11 @@ class AnimalSubject(_AnimalSubject):
     def __repr__(self):
         return f"{self.__class__.__name__}(name={self.name!r}, id={self.id!r})"
 
+    def __eq__(self, other) -> bool:
+        if isinstance(other, AnimalSubject):
+            return self.id == other.id
+        return super().__eq__(other)
+
     @classmethod
     def from_file(cls: Type[Self], file_path: Path) -> Optional[Self]:
         with file_path.open("r") as file:
