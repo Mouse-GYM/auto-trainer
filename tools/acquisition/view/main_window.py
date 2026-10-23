@@ -1200,7 +1200,7 @@ class MainWindow(QMainWindow):
             self._status_training_widget.setVisible(is_non_manual)
             animal = app_model.selected_animal
             plan_id = None if animal is None else animal.training.current_protocol
-            training_plan_idx = self._training_plan_index_by_plan_id.get(plan_id, -1)
+            training_plan_idx = self._get_training_plan_combo_index(plan_id)
             cmb = self._training_plan_combo
             with signals_blocked(cmb):
                 cmb.setCurrentIndex(training_plan_idx)
@@ -1758,11 +1758,7 @@ class MainWindow(QMainWindow):
             self.training_mode_changed.emit(value)
 
         elif name == props.TRAINING_PLAN:
-            if value is not None:
-                assert isinstance(value, TrainingPlan)
-                index = self._training_plan_index_by_plan_id.get(value.plan_id, -1)
-            else:
-                index = -1
+            index = self._get_training_plan_combo_index(None if value is None else value.plan_id)
             logger.debug("changing plan: index=%s -> %s", index, None if value is None else value.name)
             with signals_blocked(self._training_plan_combo):
                 self._training_plan_combo.setCurrentIndex(index)
@@ -1839,6 +1835,10 @@ class MainWindow(QMainWindow):
         # if name in (det.IS_ENGAGED, det.CONFIG, det.PELLETS_CONSUMED):
         self._set_autoclamp_evasion(det)
 
+    def _get_training_plan_combo_index(self, plan_id: Optional[str]):
+        dct = self._training_plan_index_by_plan_id
+        return dct.get(plan_id, len(dct))  # NB: the last is the empty/none selected.
+
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):
         app_model = self._app_model
@@ -1869,17 +1869,9 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(len(plans))
             return
         plan_id = animal.training.current_protocol
-        combo.blockSignals(True)  # required to not induce loop
-        if plan_id is None:
-            combo.setCurrentIndex(len(plans))
-        else:
-            plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
-            if plan_combo_index is None:
-                logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
-                combo.setCurrentIndex(len(plans))
-            else:
-                combo.setCurrentIndex(plan_combo_index)
-        combo.blockSignals(False)  # required to not induce loop
+        plan_combo_index = self._get_training_plan_combo_index(plan_id)
+        with signals_blocked(combo):  # required to not induce loop
+            combo.setCurrentIndex(plan_combo_index)
 
     @invoke_method
     def _on_app_model_configuration_loaded(self, config):
@@ -1927,7 +1919,7 @@ class MainWindow(QMainWindow):
                 logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
             return
 
-        app_model.training_plan = None
+        app_model.set_training_plan(None, background=True)  # reset to None first, not supposed to fail
         msg_box = QMessageBox(self)
         self._add_box_to_open_dialogs(msg_box)
         msg_box.setWindowTitle("Confirmation")
@@ -1942,7 +1934,13 @@ class MainWindow(QMainWindow):
         except ValueError:
             pass
         if clicked_but == load_btn:
-            self._app_model.set_training_plan(plan, force_update=True, background=True)
+            def cb(result, *, error=None):
+                combo = self._training_plan_combo
+                if not result:
+                    idx = self._get_training_plan_combo_index(plan.plan_id)
+                    with signals_blocked(combo):
+                        combo.setCurrentIndex(idx)
+            self._app_model.set_training_plan(plan, force_update=True, background=True, callback=cb)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model
