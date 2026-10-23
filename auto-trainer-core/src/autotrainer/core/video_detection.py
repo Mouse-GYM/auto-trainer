@@ -52,43 +52,35 @@ class PresenceDetectionAttrs:
     _pc_sum: Optional[Synchronized] = None
 
     def __post_init__(self):
-        ctx = get_mp_ctx()
-        lock = ctx.RLock()
         used = False
-        def make_shared(*args, **kwargs):
+        prep_shared = []
+        def make_shared(attr, *args, **kwargs):
             nonlocal used
+            dst_attr = f"_{attr}"
+            if getattr(self, dst_attr) is not None:
+                return
             used = True
-            return ctx.Value(*args, **kwargs, lock=lock)
+            prep_shared.append((dst_attr, lambda lck: ctx.Value(*args, **kwargs, lock=lck)))
 
-        if  self._pc_threshold is None:
-            self._pc_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_threshold)
-
-        if self._pc_high_exclude_threshold is None:
-            self._pc_high_exclude_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold)
-
-        if self._mask_lower_zero is None:
-            self._mask_lower_zero = make_shared(ctypes.c_double, PresenceDetectionConfig.mask_lower_zero)
-
-        if self._max_delay_skip_threshold is None:
-            self._max_delay_skip_threshold = make_shared(ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold)
-
-        if self._last_absence_start_perf_c is None:
-            self._last_absence_start_perf_c = make_shared(ctypes.c_double, -math.inf)
-
-        if self._last_presence_start_perf_c is None:
-            self._last_presence_start_perf_c = make_shared(ctypes.c_double, -math.inf)
-
-        if self._presence_detected is None:
-            self._presence_detected = make_shared(ctypes.c_bool, False)
-
-        if self._movement_detected is None:
-            self._movement_detected = make_shared(ctypes.c_bool, False)
-
-        if self._pc_sum is None:
-            self._pc_sum = make_shared(ctypes.c_double, 0)
+        make_shared("pc_threshold", ctypes.c_double, PresenceDetectionConfig.pc_threshold)
+        make_shared("pc_high_exclude_threshold", ctypes.c_double, PresenceDetectionConfig.pc_high_exclude_threshold)
+        make_shared("mask_lower_zero", ctypes.c_double, PresenceDetectionConfig.mask_lower_zero)
+        make_shared("max_delay_skip_threshold", ctypes.c_double, PresenceDetectionConfig.max_delay_skip_threshold)
+        make_shared("last_absence_start_perf_c", ctypes.c_double, -math.inf)
+        make_shared("last_presence_start_perf_c", ctypes.c_double, -math.inf)
+        make_shared("presence_detected", ctypes.c_bool, False)
+        make_shared("movement_detected", ctypes.c_bool, False)
+        make_shared("pc_sum", ctypes.c_double, 0)
 
         if not used:
             lock = EmptyWithContext()
+        else:
+            logger.verbose("creating lock for internal shared values: %s",
+                           tuple(attr for attr, _ in prep_shared))
+            ctx = get_mp_ctx()
+            lock = ctx.RLock()
+            for attr, func in prep_shared:
+                setattr(self, attr, func(lck=lock))
         self._lock = lock
 
     def __eq__(self, other):
