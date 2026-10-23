@@ -271,6 +271,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
                 watchdog_perf_c=self._data_monitor_watchdog_perf_c,
                 main_watchdog_holder=self._main_watchdog_holder,
+                pose_algo=self._pose_algorithm,
             )
             data_monitor_proc.start()
 
@@ -433,6 +434,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         cmd: Any, data: Any,
         timeout: float,
     ):
+        if proc is None:
+            logger.debug("%s proc not started, send of %s delayed to creation", name, cmd)
+            return
+        if not proc.is_alive():
+            logger.warning("%s proc not anymore alive, skip send of %s, proc: %s", name, cmd, proc)
+            return
         with lock:
             ack.clear()
             try:
@@ -443,13 +450,18 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             if __debug__:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
-            if proc is None:
-                logger.verbose("%s not yet started, won't wait ack event", name)
-            elif not proc.is_alive():
-                logger.warning("%s not anymore alive, won't wait ack event ; proc=%s", name, proc)
-            else:
-                if not ack.wait(timeout):
+            while True:
+                if not proc.is_alive():
+                    logger.warning("%s not anymore alive, won't wait ack event ; proc=%s", name, proc)
+                    break
+                p0 = time.perf_counter()
+                if ack.wait(0.5):
+                    break
+                p1 = time.perf_counter()
+                timeout -= p1 - p0
+                if timeout < 0:
                     logger.warning("timeout wait ack for %s to %s", cmd, proc)
+                    break
 
     def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
         """Send command to inference process"""
