@@ -48,7 +48,7 @@ class _InlineThread(threading.Thread):
         self._orig_target()
         self._stopped = True
 
-    def join(self, *, timeout=None):
+    def join(self, timeout=None):
         if not self._started:
             raise RuntimeError("not started")
         if not self._stopped:
