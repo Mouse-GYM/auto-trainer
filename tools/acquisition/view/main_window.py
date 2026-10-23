@@ -70,6 +70,7 @@ from autotrainer.pyside.content_widget import InvokeMethod, invoke_method
 
 from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult, TrainingPhase
 
+from autotrainer.pyside.utils import signals_blocked
 from autotrainer.pyside.xyz_label import XYZQLabel
 from tools.acquisition.model.behavior_model import EmergencyControlSource
 
@@ -244,9 +245,8 @@ class MainWindow(QMainWindow):
         self.make_3d_calib_action.setEnabled(stopped)
         #
         run_action = self.run_action
-        run_action.blockSignals(True)  # block signal to ensure we don't re-start/stop
-        run_action.setChecked(started)
-        run_action.blockSignals(False)
+        with signals_blocked(run_action):
+            run_action.setChecked(started)
         if started:
             icon = qta.icon('ei.stop')
             run_action.setText("Stop")
@@ -366,9 +366,8 @@ class MainWindow(QMainWindow):
         logger.verbose("_on_animal_in_training_triggered: %s", is_toggled)
         if is_toggled:
             for action in (self.animal_in_device_action,):
-                action.blockSignals(True)
-                action.setChecked(True)
-                action.blockSignals(False)
+                with signals_blocked(action):
+                    action.setChecked(True)
 
             if self._app_model.acquisition_started:
                 self._app_model.status = AppModelStatus.ANIMAL_IN_TRAINING
@@ -608,8 +607,12 @@ class MainWindow(QMainWindow):
         algo.diamond_triangle_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will get its x/y/z in DCS
-        app_model.selected_animal = None
-        app_model.selected_animal = animal
+        def doit():
+            def cb(result, *, error=None):
+                if result:
+                    app_model.set_selected_animal(animal)
+            app_model.set_selected_animal(None, callback=cb, background=True)
+        algo.put_func_call(doit, wait=False)
 
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
@@ -646,9 +649,8 @@ class MainWindow(QMainWindow):
         recording = True
         offsets = []
         positions = []
-        action.blockSignals(True)
-        action.setChecked(True)
-        action.blockSignals(False)
+        with signals_blocked(action):
+            action.setChecked(True)
         action.setIcon(qta.icon("fa5s.crosshairs", color='red'))
         before_pellet_delivery_enabled = algo.pellet_delivery_enabled
         algo.pellet_delivery_enabled = False
@@ -674,9 +676,8 @@ class MainWindow(QMainWindow):
         app_model.inference.pose_response_ready -= record_offsets
         algo.pellet_delivery_enabled = before_pellet_delivery_enabled
         action.setIcon(qta.icon("fa5s.crosshairs"))
-        action.blockSignals(True)
-        action.setChecked(False)
-        action.blockSignals(False)
+        with signals_blocked(action):
+            action.setChecked(False)
         #
         self._diamond_triangle_calib_run = None  # MUST be before
         app_model.status = prev_status
@@ -1152,7 +1153,9 @@ class MainWindow(QMainWindow):
         combo = self._training_mode_combo = QComboBox()
         toolbar.addWidget(combo)
         combo.setDuplicatesEnabled(False)
-        for mode in TrainingMode:
+        self._training_mode_2_combo_index = {}
+        for idx, mode in enumerate(TrainingMode):
+            self._training_mode_2_combo_index[mode] = idx
             combo.addItem(mode.value,
                           (mode,)  # userData: encapsulated in a tuple,
                           # otherwise pyside drops the enum member and only keep the value string.
@@ -1160,8 +1163,15 @@ class MainWindow(QMainWindow):
                           )
 
         def training_mode_index_changed(_):
-            selected_mode = self._training_mode_combo.currentData()[0]  # unpack from tuple, see above.
-            app_model.training_mode = selected_mode
+            cmb = self._training_mode_combo
+            selected_mode = cmb.currentData()[0]  # unpack from tuple, see above.
+            @invoke_method
+            def cb(result, *, error=None):
+                if not result:
+                    with signals_blocked(cmb):
+                        cmb.setCurrentIndex(self._training_mode_2_combo_index.get(app_model.training_mode, -1))
+            app_model.set_training_mode(selected_mode, background=True, callback=cb)
+
         combo.currentIndexChanged.connect(training_mode_index_changed)
 
         label = QLabel("Protocol:")
@@ -1178,23 +1188,31 @@ class MainWindow(QMainWindow):
             plan_id = self._training_plan_combo.currentData()
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
-            app_model.training_plan = selected_plan
+            @invoke_method
+            def cb(result, *, error=None):
+                if not result:
+                    after_plan = app_model.training_plan
+                    idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
+                    self._training_plan_combo.setCurrentIndex(idx)
+
+            self._app_model.set_training_plan(selected_plan, background=True, callback=cb)
 
         combo.currentIndexChanged.connect(training_plan_index_changed)
 
         def update_training_mode(training_mode: TrainingMode):
             logger.debug("Updating training_mode to %s", training_mode)
+            cmb = self._training_mode_combo
+            with signals_blocked(cmb):
+                cmb.setCurrentIndex(self._training_mode_2_combo_index.get(training_mode, -1))
             is_non_manual = training_mode != TrainingMode.MANUAL
             self._widget_training_plan_action.setVisible(is_non_manual)
             self._status_training_widget.setVisible(is_non_manual)
             animal = app_model.selected_animal
             plan_id = None if animal is None else animal.training.current_protocol
-            training_plan_idx = self._training_plan_index_by_plan_id.get(plan_id, -1)
-            self._training_plan_combo.blockSignals(True)
-            self._training_plan_combo.setCurrentIndex(training_plan_idx)
-            self._training_plan_combo.blockSignals(False)
-            # self.main_content.training_plan_changed.emit(self._app_model.training_plan)
-            self._app_model.training_mode = training_mode
+            training_plan_idx = self._get_training_plan_combo_index(plan_id)
+            cmb = self._training_plan_combo
+            with signals_blocked(cmb):
+                cmb.setCurrentIndex(training_plan_idx)
             self._refresh_prev_next_phases()
 
         update_training_mode(self._app_model.training_mode)
@@ -1216,17 +1234,15 @@ class MainWindow(QMainWindow):
             emergency_button.setText("Resume" if is_toggled else "Emergency")
             self.setWindowTitle(f"{self._title} - BEHAVIOR ALGORITHM PAUSED - Source: {source}" if is_toggled else self._title)
             # ensure button state stays in sync, even if not applied from it:
-            emergency_button.blockSignals(True)
-            emergency_button.setChecked(is_toggled)
-            emergency_button.blockSignals(False)
+            with signals_blocked(emergency_button):
+                emergency_button.setChecked(is_toggled)
 
         def emergency_stop_triggered(is_toggled: bool):
             logger.verbose("emergency_stop_triggered: %s", is_toggled)
-            emergency_button.blockSignals(True)
-            # keep button as it was (engaged/not-engaged),
-            # we will set as desired, via callbacks, if the action succeed
-            emergency_button.setChecked(not is_toggled)
-            emergency_button.blockSignals(False)
+            with signals_blocked(emergency_button):
+                # keep button as it was (engaged/not-engaged),
+                # we will set as desired, via callbacks, if the action succeed
+                emergency_button.setChecked(not is_toggled)
             if is_toggled:
                 behavior.emergency_stop(EmergencyControlSource.USER_BUTTON, reason_code=ApiEmergencyStopReason.user_button)
             else:
@@ -1588,15 +1604,21 @@ class MainWindow(QMainWindow):
         self._app_model.notes = value
 
     def _add_animal(self):
-        self._app_model.add_animal(self._animal_dropdown_combo.currentText(), select=True)
+        name = self._animal_dropdown_combo.currentText().strip()
+        # NB: pre-check if it's not already present:
+        # for some reason this callback (connected on the combo.lineEdit().editingFinished event),
+        # it's triggered every time the combo is clicked in UI
+        if not name or any(name == animal.name for animal in self._app_model.animals):
+            return
+        self._app_model.add_animal(name, select=True, background=True)
 
     def _animal_changed(self, _):
         if self._animal_dropdown_combo.currentIndex() in (0, -1):
-            self._app_model.selected_animal = None
+            animal = None
         else:
             animal_id = self._animal_dropdown_combo.currentData()
-            animal: AnimalSubject = self._app_model.get_animal_by_id(animal_id)
-            self._app_model.selected_animal = animal
+            animal = self._app_model.get_animal_by_id(animal_id)
+        self._app_model.set_selected_animal(animal, background=True)
 
     @invoke_method
     def _refresh_prev_next_phases(self):
@@ -1725,6 +1747,7 @@ class MainWindow(QMainWindow):
         elif name == props.SELECTED_ANIMAL:
             animal_dropdown = self._animal_dropdown_combo
             animal_dropdown.blockSignals(True)
+            animal_dropdown.lineEdit().blockSignals(True)
             if value is None:
                 animal_dropdown.setCurrentIndex(0)
             else:
@@ -1737,21 +1760,17 @@ class MainWindow(QMainWindow):
                     animal_dropdown.addItem(value.name, value.id)
 
             animal_dropdown.blockSignals(False)
+            animal_dropdown.lineEdit().blockSignals(False)
             self._refresh_prev_next_phases()
 
         elif name == props.TRAINING_MODE:
             self.training_mode_changed.emit(value)
 
         elif name == props.TRAINING_PLAN:
-            if value is not None:
-                assert isinstance(value, TrainingPlan)
-                index = self._training_plan_index_by_plan_id.get(value.plan_id, -1)
-            else:
-                index = -1
+            index = self._get_training_plan_combo_index(None if value is None else value.plan_id)
             logger.debug("changing plan: index=%s -> %s", index, None if value is None else value.name)
-            self._training_plan_combo.blockSignals(True)
-            self._training_plan_combo.setCurrentIndex(index)
-            self._training_plan_combo.blockSignals(False)
+            with signals_blocked(self._training_plan_combo):
+                self._training_plan_combo.setCurrentIndex(index)
             self._refresh_prev_next_phases()
 
         elif name == props.TRAINING_PLANS:
@@ -1765,20 +1784,22 @@ class MainWindow(QMainWindow):
         # get current selected animal before adding them,
         # given when adding that's modifying the currently selected one too,
         # which reset the preference selected to that one...
+        app_selected = self._app_model.selected_animal
         find_animal_name = (
-            self._preferences.selected_animal if self._app_model.selected_animal is None
-            else self._app_model.selected_animal.name
+            self._preferences.selected_animal if app_selected is None
+            else app_selected.name
         )
+        if not find_animal_name:
+            find_animal_name = None
 
         # prevent on_animal_changed event:
         combo = self._animal_dropdown_combo
         combo.blockSignals(True)
+        combo.lineEdit().blockSignals(True)
         combo.clear()
         combo.addItem("", None)
         for idx, animal in enumerate(animals):
             combo.addItem(animal.name, animal.id)
-        combo.blockSignals(False)
-
         # we set the good one here:
         if find_animal_name is not None:
             index = combo.findText(find_animal_name)
@@ -1786,6 +1807,8 @@ class MainWindow(QMainWindow):
                 combo.setCurrentIndex(index)
         else:
             combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+        combo.lineEdit().blockSignals(False)
 
     @staticmethod
     def _update_log_level(value: int):
@@ -1821,6 +1844,10 @@ class MainWindow(QMainWindow):
         # if name in (det.IS_ENGAGED, det.CONFIG, det.PELLETS_CONSUMED):
         self._set_autoclamp_evasion(det)
 
+    def _get_training_plan_combo_index(self, plan_id: Optional[str]):
+        dct = self._training_plan_index_by_plan_id
+        return dct.get(plan_id, len(dct))  # NB: the last is the empty/none selected.
+
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):
         app_model = self._app_model
@@ -1847,22 +1874,13 @@ class MainWindow(QMainWindow):
         combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:
-            combo.blockSignals(True)  # required to not induce loop
-            combo.setCurrentIndex(len(plans))
-            combo.blockSignals(False)  # required to not induce loop
+            with signals_blocked(combo):  # required to not induce loop
+                combo.setCurrentIndex(len(plans))
             return
         plan_id = animal.training.current_protocol
-        combo.blockSignals(True)  # required to not induce loop
-        if plan_id is None:
-            combo.setCurrentIndex(len(plans))
-        else:
-            plan_combo_index = self._training_plan_index_by_plan_id.get(plan_id, None)
-            if plan_combo_index is None:
-                logger.warning("Animal has current protocol %r but no such protocol found", plan_id)
-                combo.setCurrentIndex(len(plans))
-            else:
-                combo.setCurrentIndex(plan_combo_index)
-        combo.blockSignals(False)  # required to not induce loop
+        plan_combo_index = self._get_training_plan_combo_index(plan_id)
+        with signals_blocked(combo):  # required to not induce loop
+            combo.setCurrentIndex(plan_combo_index)
 
     @invoke_method
     def _on_app_model_configuration_loaded(self, config):
@@ -1876,9 +1894,19 @@ class MainWindow(QMainWindow):
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
 
-    @invoke_method
+
     def _on_training_plan_deserialized(self, plan: TrainingPlan, result: LoadProgressResult, *,
                                        force_update: bool = False):
+        animal = self._app_model.selected_animal
+        self.__on_training_plan_deserialized(
+            plan, result, force_update=force_update, animal=animal)
+
+    @invoke_method
+    def __on_training_plan_deserialized(
+        self, plan: TrainingPlan, result: LoadProgressResult, *,
+        force_update: bool = False,
+        animal: Optional[AnimalSubject],
+    ):
         app_model = self._app_model
         #
         if result == LoadProgressResult.OUT_OF_DATE:
@@ -1910,7 +1938,6 @@ class MainWindow(QMainWindow):
                 logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
             return
 
-        app_model.training_plan = None
         msg_box = QMessageBox(self)
         self._add_box_to_open_dialogs(msg_box)
         msg_box.setWindowTitle("Confirmation")
@@ -1918,13 +1945,23 @@ class MainWindow(QMainWindow):
         load_btn = msg_box.addButton("Load", QMessageBox.ButtonRole.ActionRole)
         msg_box.addButton(QMessageBox.StandardButton.Cancel)
         msg_box.exec()
-        if msg_box.clickedButton() == load_btn:
-            app_model.set_training_plan(plan, force_update=True)
+        clicked_but = msg_box.clickedButton()
         msg_box.close()
         try:
             self._open_dialogs.remove(msg_box)
         except ValueError:
             pass
+        app_model.set_training_plan(None, background=True, target_animal=animal)  # reset to None first, not supposed to fail
+        if clicked_but == load_btn:
+            @invoke_method
+            def cb(result, *, error=None):
+                combo = self._training_plan_combo
+                if not result:
+                    plan_after = app_model.training_plan
+                    idx = self._get_training_plan_combo_index(None if plan_after is None else plan_after.plan_id)
+                    with signals_blocked(combo):
+                        combo.setCurrentIndex(idx)
+            self._app_model.set_training_plan(plan, force_update=True, background=True, callback=cb)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model
