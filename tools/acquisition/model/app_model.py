@@ -3238,24 +3238,24 @@ class AppModel(ObservableObject):
                         close_queue_seen = True
                         continue
                     all_commands.append(raw)
-            new_animals = []
+            execute_all = []
             dct = {}
             new_commands = []
             for kind, func in reversed(all_commands):
-                if kind == WorkItemKind.ADD_ANIMAL:
-                    new_animals.append(func)
+                if kind in {WorkItemKind.ADD_ANIMAL, WorkItemKind.PLAN_ADVANCE_PHASE, WorkItemKind.PLAN_FALLBACK_PHASE}:
+                    execute_all.append(func)
                 else:
                     tentative = dct.setdefault(kind, func)
                     if tentative is func:
                         new_commands.append(func)
             # put back with orig order:
-            all_commands = list(reversed(new_commands)) + list(reversed(new_animals))
+            all_commands = list(reversed(new_commands)) + list(reversed(execute_all))
             for func in all_commands:
-                logger.verbose("executing %s", raw)
+                logger.verbose("executing %s", func)
                 try:
                     func()
                 except Exception as err:
-                    logger.exception("%s failed: %s", raw, err)
+                    logger.exception("%s failed: %s", func, err)
 
     def _plan_adv_or_flb_phase(self, plan: TrainingPlan, method: Callable[[], bool],
                                *, background: bool = False, callback: MaybeOkCallBack = None):
