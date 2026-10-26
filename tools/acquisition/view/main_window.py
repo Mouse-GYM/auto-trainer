@@ -434,9 +434,14 @@ class MainWindow(QMainWindow):
             if not self._check_target_next_or_previous_plan_phase("fallback", target):
                 return
         logger.info("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
-        plan.fallback()
-        self._refresh_prev_next_phases()
-        self.main_content.training_plan_changed.emit(plan)
+
+        @invoke_method
+        def cb(result, *, error=None):
+            if result:
+                self._refresh_prev_next_phases()
+                self.main_content.training_plan_changed.emit(plan)
+
+        app_model.plan_fallback_phase(plan, background=True, callback=cb)
 
     def on_next_plan_phase(self):
         app_model = self._app_model
@@ -449,9 +454,13 @@ class MainWindow(QMainWindow):
             if not self._check_target_next_or_previous_plan_phase("advance", target):
                 return
         logger.info("advance on plan %s (%s)", plan.plan_id, hex(id(plan)))
-        plan.advance()
-        self._refresh_prev_next_phases()
-        self.main_content.training_plan_changed.emit(plan)
+
+        @invoke_method
+        def cb(result, *, error=None):
+            if result:
+                self._refresh_prev_next_phases()
+                self.main_content.training_plan_changed.emit(plan)
+        app_model.plan_advance_phase(plan, background=True, callback=cb)
 
     def _handle_diamond_triangle_calib_run(
         self,

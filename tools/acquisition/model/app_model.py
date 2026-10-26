@@ -23,7 +23,8 @@ from multiprocessing.managers import SyncManager, ValueProxy
 from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from queue import Queue, Empty
-from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple, NamedTuple, Type, TypeVar
+from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple, NamedTuple, Type, TypeVar, \
+    Literal
 
 import pandas
 import yaml
@@ -349,7 +350,8 @@ class WorkItemKind(str, enum.Enum):
     SELECTED_ANIMAL = "selected_animal"
     TRAINING_MODE = "training_mode"
     TRAINING_PLAN = "training_plan"
-
+    PLAN_ADVANCE_PHASE = "plan_advance_phase"
+    PLAN_FALLBACK_PHASE = "plan_fallback_phase"
 
 
 _not_provided = object()
@@ -3254,3 +3256,36 @@ class AppModel(ObservableObject):
                     func()
                 except Exception as err:
                     logger.exception("%s failed: %s", raw, err)
+
+    def _plan_adv_or_flb_phase(self, plan: TrainingPlan, method: Callable[[], bool],
+                               *, background: bool = False, callback: MaybeOkCallBack = None):
+        direction = method.__name__
+        if method == plan.advance:
+            kind = WorkItemKind.PLAN_ADVANCE_PHASE
+        elif method == plan.fallback:
+            kind = WorkItemKind.PLAN_FALLBACK_PHASE
+        else:
+            raise ValueError(f"Unhandled method for plan_adv_or_flb: {method}")
+        def execute():
+            try:
+                if not method():
+                    raise RuntimeError(f"{direction}() returned False")
+            except Exception as err:
+                m_err = str(err)
+                if callback is not None:
+                    callback(False, error=f"{direction.capitalize()} failed: {m_err}")
+                self.on_error(f"Plan {direction} failed",
+                              f"{plan.plan_id} could not {direction}:\n\m{m_err}")
+            else:
+                if callback is not None:
+                    callback(True)
+        if background:
+            self._worker_thread_queue.put_nowait((kind, execute))
+        else:
+            execute()
+
+    def plan_advance_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack = None):
+        self._plan_adv_or_flb_phase(plan, plan.advance, background=background, callback=callback)
+
+    def plan_fallback_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack):
+        self._plan_adv_or_flb_phase(plan, plan.fallback, background=background, callback=callback)
