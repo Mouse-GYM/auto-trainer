@@ -29,7 +29,7 @@ from .device_interface import (
     DoorData,
     Acknowledge,
     ColorLed,
-    PositionOrPosVelocityT,
+    PositionOrPosVelocityT, Source,
 )
 from .can_interface import motor_to_str
 
@@ -184,9 +184,8 @@ class EmulationInterface(DeviceInterface):
         return self._is_open
 
     def read(self, max_count: int = 1, *, collect_ms: int = 0) -> typing.Any:
-        # TODO: handle collect_ms
 
-        messages = self._messages.get_and_reset()
+        messages: typing.List[Source] = self._messages.get_and_reset()
 
         perf_now = get_perf_now()  # time.perf_counter()
 
@@ -256,6 +255,11 @@ class EmulationInterface(DeviceInterface):
 
         if len(messages) == 0:
             time.sleep(0.01)
+        else:
+            t_now = time.time()
+            for msg in messages:
+                msg.index = round(perf_now * 1e9)
+                msg.timestamp_ns = round(t_now * 1e9)
 
         return messages
 
