@@ -923,9 +923,11 @@ class AppModel(ObservableObject):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
         cams_closed_finished = {}
-        while True:
+        while not self._closing:
             try:
-                raw = proc_msg_q.get()
+                raw = proc_msg_q.get(timeout=1)
+            except Empty:
+                continue
             except (EOFError, OSError, ValueError) as err:
                 logger.warning("Cannot get from queue: %s", err)
                 break
@@ -3231,7 +3233,7 @@ class AppModel(ObservableObject):
                 all_commands = [raw]
                 while True:
                     try:
-                        raw = cmd_queue.get(timeout=0)
+                        raw = cmd_queue.get(block=False)
                     except Empty:
                         break
                     if raw is None:
