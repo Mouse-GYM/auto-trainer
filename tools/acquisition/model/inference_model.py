@@ -340,8 +340,9 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         pool = self._process_pool
         if pool is not None:
             logger.verbose("Terminating process pool %s", pool)
-            pool.close()
-            pool.terminate()
+            # pool.close()
+            # NB: close() waits for queue to be empty
+            pool.terminate()  # while terminate finish it immediately
             pool.join()
             logger.verbose("process pool joined and terminated %s", pool)
             self._process_pool = None
