@@ -52,7 +52,7 @@ class SystemMessageHandler(MessageHandler):
             measures = self._analysis.measurements_received(data)
             mcb = self._measurement_callback
             if mcb is not None and len(measures) > 0:
-                mcb(measures)
+                mcb(data)
 
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)

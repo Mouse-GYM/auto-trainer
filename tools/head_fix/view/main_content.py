@@ -1,13 +1,14 @@
 
 import logging
 import qtawesome as qta
-from typing import Tuple
+from typing import Tuple, List
 
 from PySide6.QtCore import Qt, Signal, QTimer, Slot
 from PySide6.QtWidgets import (QWidget, QGridLayout, QHBoxLayout, QPushButton, QLabel, QSpinBox,
                                QCheckBox, QLineEdit, QFileDialog, QPlainTextEdit, QVBoxLayout, QDoubleSpinBox)
 
 from autotrainer.core import PerfMonitor, LoadCellMonitor, ProjectInfo, MessageHandler
+from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 from autotrainer.core.message import Motor
 from autotrainer.device import is_servo
 from autotrainer.model import EnvironmentProvider, HardwareVersion
@@ -401,18 +402,21 @@ class MainContent(QWidget):
                 self._headbar_pressure_plot.getPlotItem().getViewBox().setBackgroundColor(
                     (220, 220, 220))
 
-    def _measurements_received(self, measurements):
+    def _measurements_received(self, measurements: List[HeadFixMeasurement]):
         # weights, switch, pressure, temperature, humidity
-        self._load_cell_plot.cache_data(measurements[0])
-        self._head_contact_plot.cache_data(measurements[1])
-        self._headbar_pressure_plot.cache_data(measurements[2])
-        self._temperature_plot.cache_data(measurements[3])
-        self._humidity_plot.cache_data(measurements[4])
-
-        self._perf_monitor.add_cycles(len(measurements[0]))
+        def get(attr):
+            # reminder: HeadFixMeasurement.timestamp is perf_counter in integer nanosec
+            return [(m.timestamp / 1e9, getattr(m, attr)) for m in measurements]
+        self._load_cell_plot.cache_data(get("weight"))
+        self._head_contact_plot.cache_data(get("head_contact"))
+        self._headbar_pressure_plot.cache_data(get("pressure"))
+        self._temperature_plot.cache_data(get("temperature"))
+        self._humidity_plot.cache_data(get("humidity"))
+        self._perf_monitor.add_cycles(len(measurements))
 
     def _audio_spectrum_received(self, spectrum):
-        self._audio_spectrum_plot.replace_cache(spectrum)
+        self._audio_spectrum_plot.replace_cache(
+            [(idx, v) for idx, v in enumerate(spectrum)])
 
     def _set_magnet_position(self):
         self._model.set_magnet_position(self._magnet_position.value())
