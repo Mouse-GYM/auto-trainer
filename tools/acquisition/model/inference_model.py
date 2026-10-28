@@ -241,6 +241,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
 
+        project = self._project
+
         if self._process_pool is None:
             self._process_pool = multiprocessing.Pool(
                 processes=1,  # we only need 1 atm
@@ -261,8 +263,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
         if data_monitor_proc is None:
             self._data_monitor_watchdog_perf_c.value = get_perf_now()
-            data_monitor_proc = InferenceMonitorDataProc(
-                project=self._project,
+            data_monitor_proc = self._data_monitor_proc = InferenceMonitorDataProc(
+                project=project,
                 pose_data_queue=self._output_data_queue,
                 msg_queue=self._notif_msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
@@ -274,14 +276,16 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 pose_algo=self._pose_algorithm,
             )
             data_monitor_proc.start()
-            self._data_monitor_proc = data_monitor_proc
+            if project != self._project:
+                logger.warning("unexpected project info updated while starting, resending new one")
+                self._send_to_data_monitor_proc(InferenceMonitorDataMsg.SET_PROJECT_INFO, self._project)
 
         self._frame_height, self._frame_width = live_queue.shape
         self._frames_per_camera = live_queue.frames_per_camera
 
         self._pose_process_watchdog_perf_c.value = get_perf_now()
         cfg = self._active_config
-        proc = PoseProcess(
+        proc = self._pose_process = PoseProcess(
             live_queue,
             data_queue=self._output_data_queue,
             cmd_queue=self._cmd_queue,
@@ -295,7 +299,6 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             main_watchdog_holder=self._main_watchdog_holder,
         )
         proc.start()
-        self._pose_process = proc
 
         return True
 
@@ -439,7 +442,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if proc is None:
             logger.debug("%s proc not started, send of %s delayed to creation", name, cmd)
             return
-        if not proc.is_alive():
+        if proc.pid is not None and not proc.is_alive():
             logger.warning("%s proc not anymore alive, skip send of %s, proc: %s", name, cmd, proc)
             return
         with lock:
