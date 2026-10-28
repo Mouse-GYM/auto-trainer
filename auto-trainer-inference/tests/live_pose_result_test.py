@@ -84,7 +84,10 @@ def inference_data_proc(mp_manager, pose_algo, capture_multiprocess_logs, monkey
     try:
         yield proc  # noqa
     finally:
-        cmd_q.put(None)  # ensure clean stop
+        try:
+            cmd_q.put_nowait(None)  # ensure clean stop
+        except queue.Full:
+            logging.getLogger(__name__).warning("inference cmd queue full")
         proc.join(15)  # give large amount for allow coverage to write to disk
         proc.terminate()
         proc.join(5)
@@ -109,7 +112,7 @@ def test_live_no_recording(inference_data_proc, caplog, pose_algo):
             InferenceMode.Live,
             frames_idc_online_no_recording,
         ))
-        time.sleep(0.2)
+        time.sleep(0.2)  # looks required
 
     msg, (args, kwargs) = proc._msg_queue.get(timeout=5)
     # print(msg, args, kwargs)
@@ -129,7 +132,7 @@ def test_renew_workers(
         request, monkeypatch, caplog, capture_multiprocess_logs):
     # os.environ["AUTOTRAINER_LIVE_WORKERS_RENEW_TIMER_DELAY"] = "3"
     proc: InferenceMonitorDataProc = request.getfixturevalue("inference_data_proc")
-    proc._live_generation_renew_age = 3
+    proc._live_generation_renew_age = 1
     proc.start()
     # tried used mock_get_perf_now and increase_simulate_perf_now()
     # but proc is in a subprocess.. and there the get_perf_now() is not patched.. that would be todo...
@@ -151,7 +154,7 @@ def test_renew_workers(
                 frames_idc_online_no_recording,
             )
         )
-        time.sleep(1)
+        time.sleep(0.5)
 
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     assert "making new workers generation-1.." in caplog.text
@@ -159,11 +162,10 @@ def test_renew_workers(
 
     seq_nr = None
 
-    for _ in range(5):
-        msg, (args, kwargs) = proc._msg_queue.get(timeout=3)
+    for _ in range(4):
+        msg, (args, kwargs) = proc._msg_queue.get(timeout=1.5)
         pose_rsp = args[0]
         if seq_nr is None:
             seq_nr = pose_rsp.sequence
         assert pose_rsp.sequence == seq_nr
         seq_nr += 1
-

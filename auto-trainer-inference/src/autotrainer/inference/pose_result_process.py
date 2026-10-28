@@ -855,4 +855,3 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
                                  mode, type(pose_data), err)
 
         # end while self._is_running
-
