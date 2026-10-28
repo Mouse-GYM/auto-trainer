@@ -2,7 +2,7 @@ import contextlib
 import threading
 import time
 from functools import partial
-from typing import Any, Callable, Iterator, List, Optional
+from typing import Any, Callable, Iterator, List, Optional, Union
 from unittest import mock
 
 import pytest
@@ -80,8 +80,12 @@ class _FailingThread(_InlineThread):
         raise RuntimeError("can't start new thread")
 
 
+class MockedRpcService(mock.MagicMock, RpcService):
+    pass
+
+
 @pytest.fixture
-def rpc_service(app_model, monkeypatch) -> mock.MagicMock:
+def rpc_service(app_model, monkeypatch) -> MockedRpcService:
     monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", _InlineThread)
     service = mock.MagicMock(spec=RpcService)
     app_model.rpc_service = service
@@ -338,13 +342,18 @@ class TestGetAnimals:
 
 class TestTrainingMode:
 
-    def test_it_sets_the_training_mode(self, app_model, mock_event_manager):
+    def test_it_sets_the_training_mode(self, app_model, mock_event_manager, rpc_service):
         response = _send(app_model, ApiCommand.SET_TRAINING_MODE, {"mode": int(ApiTrainingMode.AUTOMATIC)})
         assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
         app_model.join_rpc_threads()
-        # assert response.result == ApiCommandRequestResult.SUCCESS
-        # assert response.data == {"mode": ApiTrainingMode.AUTOMATIC}
-        assert app_model.training_mode == TrainingMode.AUTOMATIC
+        xp = ApiCommandRequestResponse(
+            result=ApiCommandRequestResult.SUCCESS,
+            data={'mode': ApiTrainingMode.AUTOMATIC},
+            error_code=0, error_message=None,
+            command=ApiCommand.SET_TRAINING_MODE,
+            nonce=mock.ANY)
+        assert mock.call.send_command_result(xp) in rpc_service.method_calls
+        assert app_model.training_mode is TrainingMode.AUTOMATIC
         contexts = _event_contexts(mock_event_manager, ApiEventKind.trainingModeChanged)
         assert contexts == [{"training_mode": ApiTrainingMode.AUTOMATIC}]
         assert type(contexts[0]["training_mode"]) is ApiTrainingMode

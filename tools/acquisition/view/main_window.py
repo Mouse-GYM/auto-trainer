@@ -423,6 +423,11 @@ class MainWindow(QMainWindow):
         box.exec()
         return box.clickedButton() == button
 
+    def set_training_phase_previous_next_phase_enabled(self, enabled: bool=True):
+        # logger.verbose("prev/next phases enabled: %s", enabled)
+        self.next_training_phase_action.setEnabled(enabled)
+        self.previous_training_phase_action.setEnabled(enabled)
+
     def on_previous_plan_phase(self):
         app_model = self._app_model
         plan = app_model.attached_plan
@@ -435,10 +440,11 @@ class MainWindow(QMainWindow):
                 return
         logger.info("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
 
+        self.set_training_phase_previous_next_phase_enabled(False)
         @invoke_method
         def cb(result, *, error=None):
+            self._refresh_prev_next_phases()
             if result:
-                self._refresh_prev_next_phases()
                 self.main_content.training_plan_changed.emit(plan)
 
         app_model.plan_fallback_phase(plan, background=True, callback=cb)
@@ -449,16 +455,17 @@ class MainWindow(QMainWindow):
         if plan is None:
             return
         phase_idx = plan.phases.index(plan.current_phase)
-        if 0 <= phase_idx <= len(plan.phases) - 1:
+        if 0 <= phase_idx < len(plan.phases) - 1:
             target = plan.phases[phase_idx + 1]
             if not self._check_target_next_or_previous_plan_phase("advance", target):
                 return
         logger.info("advance on plan %s (%s)", plan.plan_id, hex(id(plan)))
 
+        self.set_training_phase_previous_next_phase_enabled(False)
         @invoke_method
         def cb(result, *, error=None):
+            self._refresh_prev_next_phases()
             if result:
-                self._refresh_prev_next_phases()
                 self.main_content.training_plan_changed.emit(plan)
         app_model.plan_advance_phase(plan, background=True, callback=cb)
 
@@ -616,12 +623,12 @@ class MainWindow(QMainWindow):
         algo.diamond_triangle_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will get its x/y/z in DCS
-        def doit():
-            def cb(result, *, error=None):
-                if result:
-                    app_model.set_selected_animal(animal)
-            app_model.set_selected_animal(None, callback=cb, background=True)
-        algo.put_func_call(doit, wait=False)
+        def cb(result, *, error=None):
+            if result:
+                # also use background, to ensure the first set_selected_animal(None) is completed,
+                # for this new one to be handled by the worker background thread (via its input queue)
+                app_model.set_selected_animal(animal, background=True)
+        app_model.set_selected_animal(None, callback=cb, background=True)
 
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
         logger.notice("Starting diamond-triangle calibration .. duration=%.1f second(s)", calib_duration)
@@ -1643,6 +1650,7 @@ class MainWindow(QMainWindow):
             action.setVisible(True)
             name = f"fa5s.arrow-alt-circle-{direction}"
             action.setIcon(qta.icon(name))
+            # logger.debug("setting %s enabled to %s", direction, can_do)
             action.setEnabled(can_do)
 
     @invoke_method
@@ -1960,8 +1968,10 @@ class MainWindow(QMainWindow):
             self._open_dialogs.remove(msg_box)
         except ValueError:
             pass
-        app_model.set_training_plan(None, background=True, target_animal=animal)  # reset to None first, not supposed to fail
         if clicked_but == load_btn:
+            # this first set_training_plan is routed through the app model worker thread:
+            app_model.set_training_plan(None, background=True,
+                                        target_animal=animal)  # reset to None first, not supposed to fail
             @invoke_method
             def cb(result, *, error=None):
                 combo = self._training_plan_combo
@@ -1970,7 +1980,8 @@ class MainWindow(QMainWindow):
                     idx = self._get_training_plan_combo_index(None if plan_after is None else plan_after.plan_id)
                     with signals_blocked(combo):
                         combo.setCurrentIndex(idx)
-            self._app_model.set_training_plan(plan, force_update=True, background=True, callback=cb)
+            # then this 2nd one too:
+            app_model.set_training_plan(plan, force_update=True, background=True, callback=cb, target_animal=animal)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model

@@ -114,6 +114,9 @@ _daily_timer = make_daemon_timer
 _make_emergency_proc_thread = threading.Thread
 _make_rpc_command_thread = threading.Thread
 
+# some sentinel:
+_not_provided = "not_provided"
+
 
 def _failed_camera_template(name: str, error: str):
     return f"Failed to start capture process for camera {name}:\n\t{error}\nPlease check all connections and settings."
@@ -336,7 +339,7 @@ MaybeOkCallBack = Optional[OkCallBackT]
 def _use_worker_lock(func):
     """Allows to ensure that all decorated functions with this,
     which are the internal methods for change of animal, training mode or plan, or add of new animal,
-    are correctly serialised, and not possibly interleaved/mixed between many different calling threads"""
+    are correctly serialized, and not possibly interleaved/mixed between many different calling threads"""
 
     @functools.wraps(func)
     def wrapper(self: "AppModel", *args, **kwargs):
@@ -352,9 +355,6 @@ class WorkItemKind(str, enum.Enum):
     TRAINING_PLAN = "training_plan"
     PLAN_ADVANCE_PHASE = "plan_advance_phase"
     PLAN_FALLBACK_PHASE = "plan_fallback_phase"
-
-
-_not_provided = object()
 
 
 class AppModel(ObservableObject):
@@ -923,7 +923,7 @@ class AppModel(ObservableObject):
         proc_msg_q = self._multiproc_msg_queue
         logger.info("handle_proc_msg_queue now running")
         cams_closed_finished = {}
-        while not self._closing:
+        while True:
             try:
                 raw = proc_msg_q.get(timeout=1)
             except Empty:
@@ -946,7 +946,7 @@ class AppModel(ObservableObject):
         # unpack args/kwargs from raw:
         if isinstance(raw, tuple):
             if len(raw) < 1:
-                logger.warning("Invalid status msg: %r", raw)
+                logger.warning("nvalid status msg: %r", raw)
                 return
             cmd = raw[0]
             if len(raw) > 1:
@@ -1098,9 +1098,15 @@ class AppModel(ObservableObject):
     def set_selected_animal(self, animal: Optional[AnimalSubject], *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[bool]:
         prev = self._selected_animal
         if animal == prev:
+            if callback is not None:
+                callback(True)
             return True
         def execute_it():
-            return self._set_selected_animal(animal, callback=callback, previous_animal=prev)
+            try:
+                return self._set_selected_animal(animal, callback=callback, previous_animal=prev)
+            except BaseException as err:
+                if callback is not None:
+                    callback(False, error=f"set_selected_animal error: {err}")
         if background:
             self._worker_thread_queue.put_nowait((WorkItemKind.SELECTED_ANIMAL, execute_it))
             return None
@@ -1110,6 +1116,8 @@ class AppModel(ObservableObject):
     def _set_selected_animal(self, animal: Optional[AnimalSubject], *, callback: MaybeOkCallBack, previous_animal: Optional[AnimalSubject]):
         if previous_animal != self._selected_animal:
             logger.warning("dropping set_selected_animal to %s as changed between, new=%s", animal, self._selected_animal)
+            if callback is not None:
+                callback(False, error="animal changed")
             return None
         if animal == self._selected_animal:
             logger.debug("already set on %s", animal)
@@ -1184,9 +1192,16 @@ class AppModel(ObservableObject):
         callback: MaybeOkCallBack = None,
     ) -> Optional[bool]:
         if mode == self._training_mode:
+            if callback is not None:
+                callback(True)
             return True
         def execute_it():
-            return self._set_training_mode(mode, callback=callback)
+            try:
+                return self._set_training_mode(mode, callback=callback)
+            except BaseException as err:
+                if callback is not None:
+                    callback(False, error=f"set_training_mode error: {err}")
+                raise
         if background:
             self._worker_thread_queue.put_nowait((WorkItemKind.TRAINING_MODE, execute_it))
             return None
@@ -1258,19 +1273,24 @@ class AppModel(ObservableObject):
         force_update: bool = False,
         background: bool = False,
         callback: MaybeOkCallBack = None,
-        target_animal: Optional[AnimalSubject] = _not_provided,
+        target_animal: Union[Literal["not_provided"], Optional[AnimalSubject]] = _not_provided,
     ) -> Optional[bool]:
         prev = self._training_plan
-        if target_animal is _not_provided:
-            target_animal = self._selected_animal
-        if plan == prev and target_animal == self._training_plan_animal:
+        use_animal = target_animal if target_animal != _not_provided else self._selected_animal
+        if plan == prev and use_animal == self._training_plan_animal:
+            if callback is not None:
+                callback(True)
             return True
-        target_mode = self._training_mode
         def execute_it():
-            return self._set_training_plan(
-                plan, target_animal=target_animal, target_mode=target_mode,
-                force_update=force_update, callback=callback,
-            )
+            try:
+                return self._set_training_plan(
+                    plan, target_animal=target_animal,
+                    force_update=force_update, callback=callback,
+                )
+            except BaseException as err:
+                if callback is not None:
+                    callback(False, f"set_training_plan error: {err}")
+                raise
         if background:
             self._worker_thread_queue.put_nowait((WorkItemKind.TRAINING_PLAN, execute_it))
             return None
@@ -1285,18 +1305,19 @@ class AppModel(ObservableObject):
         force_update: bool = False,
         callback: MaybeOkCallBack = None,
         target_mode: Optional[TrainingMode] = None,
-        target_animal: Optional[AnimalSubject] = None,
+        target_animal: Union[Literal["not_provided"], Optional[AnimalSubject]] = _not_provided,
     ):
-        if target_animal is None:
-            target_animal = self._selected_animal
         if target_mode is None:
             target_mode = self._training_mode
+        use_animal = self._selected_animal if target_animal == _not_provided else target_animal
         animal = self._selected_animal
-        if animal != target_animal:
-            logger.warning("dropping set_training_plan with selected_animal changed: %s vs %s", animal, target_animal)
+        if animal != use_animal:
+            logger.warning("dropping set_training_plan with selected_animal changed: %s vs %s", animal, use_animal)
             return None
         previous_plan = self._training_plan
-        if plan == previous_plan and self._selected_animal == self._training_plan_animal:
+        if plan == previous_plan and animal == self._training_plan_animal:
+            if callback is not None:
+                callback(True)
             return True
         if animal is not None:
             self._detach_training_plan()
@@ -1315,7 +1336,6 @@ class AppModel(ObservableObject):
                         f"The current animal or the plan might be corrupted")
                     if callback is not None:
                         callback(False, error=msg)
-                    self.on_error("Attach training plan failed", msg)
                     return False
         self._training_plan = plan
         self._training_plan_animal = animal
@@ -1378,6 +1398,10 @@ class AppModel(ObservableObject):
 
     @training_plans.setter
     def training_plans(self, value: List[PlanInfo]):
+        self.set_training_plans(value)
+
+    @_use_worker_lock
+    def set_training_plans(self, value):
         self._training_plans = value
         self._training_plan_by_plan_id = {
             plan.plan_id: plan
@@ -1445,11 +1469,20 @@ class AppModel(ObservableObject):
         prev_animal = self._attached_animal
         self._attached_plan = plan
         self._attached_animal = animal
-        if not plan.resume():
-            self._attached_plan = prev_plan
-            self._attached_animal = prev_animal
-            logger.error("plan %s resume failed", plan.plan_id)
-            return False
+        failed = True
+        try:
+            if plan.resume():
+                failed = False
+            else:
+                self._attached_plan = prev_plan
+                self._attached_animal = prev_animal
+                logger.error("plan %s resume failed", plan.plan_id)
+                return False
+        finally:
+            if failed:
+                logger.verbose("detaching from failed resume plan")
+                plan.detach()  # don't forget
+        #
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.progress_updated += self._on_training_plan_progress_updated
         self._attach_training_phase(plan.current_phase)
@@ -1910,6 +1943,7 @@ class AppModel(ObservableObject):
             if tok is not None:
                 tokens.add(tok)
 
+    @_use_worker_lock
     def _capture_stop(self, *, update_led: bool=True):
         if update_led:
             self._update_led_for_stop()
@@ -2197,7 +2231,10 @@ class AppModel(ObservableObject):
         proc_msg_queue = self._multiproc_msg_queue
         if proc_msg_queue is not None:
             logger.debug("Putting None to process messages thread")
-            proc_msg_queue.put(None)
+            try:
+                proc_msg_queue.put_nowait(None)
+            except queue.Full:
+                logger.warning("process messages queue full, None exit sentinel not pushed")
         logger.debug("Joining process messages thread")
         self._handle_proc_msg_thread.join(5)
         if self._handle_proc_msg_thread.is_alive():
@@ -2882,14 +2919,16 @@ class AppModel(ObservableObject):
                 obtained_err = error
                 evt.set()
             self.set_training_mode(mode, background=True, callback=cb)
-            evt.wait()
+            if not evt.wait(10):  # should be rather good enough
+                success = False
+                obtained_err = "Timeout wait set_training_mode callback result"
             if not success:
                 if obtained_err is None:
                     obtained_err = "set_training_mode failed without error reported"
                 if not isinstance(obtained_err, BaseException):
                     obtained_err = RuntimeError(f"{obtained_err}")
                 raise obtained_err
-            return dict(mode=training_mode_to_api_training_mode(mode))
+            return dict(mode=training_mode_to_api_training_mode(self._training_mode))
         return self._handle_rpc_async_command(request, execute_it)
 
     def _rpc_set_behavior_setting(self, setting: _RpcBehaviorSetting, request: ApiCommandRequest) -> Any:
@@ -3223,13 +3262,13 @@ class AppModel(ObservableObject):
             if self._closing:
                 logger.verbose("exiting on _closing")
                 break
+            try:
+                raw = cmd_queue.get(timeout=0.1)
+            except Empty:
+                continue
+            if raw is None:
+                break
             with self._worker_lock:
-                try:
-                    raw = cmd_queue.get(timeout=0.01)
-                except Empty:
-                    continue
-                if raw is None:
-                    break
                 all_commands = [raw]
                 while True:
                     try:
@@ -3250,6 +3289,8 @@ class AppModel(ObservableObject):
                     tentative = dct.setdefault(kind, func)
                     if tentative is func:
                         new_commands.append(func)
+                    else:
+                        logger.verbose("dropped %s from work items, as kind %s already present in batch", func, kind)
             # put back with orig order:
             all_commands = list(reversed(new_commands)) + list(reversed(execute_all))
             for func in all_commands:
@@ -3258,6 +3299,21 @@ class AppModel(ObservableObject):
                     func()
                 except Exception as err:
                     logger.exception("%s failed: %s", func, err)
+
+    @_use_worker_lock
+    def _plan_adv_or_flb_execute(self, plan, direction, method, callback):  # have to have the "self" arg for _use_worker_lock
+        try:
+            if not method():
+                raise RuntimeError(f"{direction}() returned False")
+        except Exception as err:
+            m_err = str(err)
+            if callback is not None:
+                callback(False, error=f"Plan {direction} failed: {m_err}")
+            self.on_error(f"Plan {direction} failed",
+                          f"{plan.plan_id} could not {direction}:\n\n{m_err}")
+        else:
+            if callback is not None:
+                callback(True)
 
     def _plan_adv_or_flb_phase(self, plan: TrainingPlan, method: Callable[[], bool],
                                *, background: bool = False, callback: MaybeOkCallBack = None):
@@ -3268,23 +3324,14 @@ class AppModel(ObservableObject):
             kind = WorkItemKind.PLAN_FALLBACK_PHASE
         else:
             raise ValueError(f"Unhandled method for plan_adv_or_flb: {method}")
-        def execute():
-            try:
-                if not method():
-                    raise RuntimeError(f"{direction}() returned False")
-            except Exception as err:
-                m_err = str(err)
-                if callback is not None:
-                    callback(False, error=f"{direction.capitalize()} failed: {m_err}")
-                self.on_error(f"Plan {direction} failed",
-                              f"{plan.plan_id} could not {direction}:\n\m{m_err}")
-            else:
-                if callback is not None:
-                    callback(True)
+
+        def execute_it():
+            self._plan_adv_or_flb_execute(plan, direction, method, callback)
+
         if background:
-            self._worker_thread_queue.put_nowait((kind, execute))
+            self._worker_thread_queue.put_nowait((kind, execute_it))
         else:
-            execute()
+            execute_it()
 
     def plan_advance_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack = None):
         self._plan_adv_or_flb_phase(plan, plan.advance, background=background, callback=callback)
