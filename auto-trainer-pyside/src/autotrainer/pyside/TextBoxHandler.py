@@ -14,7 +14,11 @@ class TextBoxHandler(logging.Handler):
         self.emitter = QSignaler()
         self.text_edit = text_edit
         self.emitter.log_message.connect(self.text_edit.appendPlainText)
+        self._is_visible = False
+
+    def setVisible(self, visible: bool):
+        self._is_visible = visible
 
     def emit(self, record):
-        if self.text_edit.isVisible():
+        if self._is_visible:
             self.emitter.log_message.emit(self.format(record))
