@@ -311,14 +311,13 @@ class SensorAnalysis(ObservableObject):
     def measurements_received(
         self,
         measurements: List[HeadFixMeasurement]
-    ) -> Tuple[List[float], List[bool], List[float], List[float], List[float]] :
-        """Return weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals"""
+    ) -> None:
+        """Process measurements handled directly by sensor analysis"""
         if len(measurements) == 0:
             raise RuntimeError("Expected non-empty measurements list")
 
         switch_vals: List[bool] = []
         pressure_vals: List[float] = []
-        temperature_vals: List[float] = []
         humidity_vals: List[float] = []
 
         fh = self._record_file
@@ -342,7 +341,6 @@ class SensorAnalysis(ObservableObject):
         for m in measurements:
             switch_vals.append(m.switch)
             pressure_vals.append(m.pressure)
-            temperature_vals.append(m.temperature)
             humidity_vals.append(m.humidity)
 
             # NB: save all measurements to file
@@ -385,8 +383,6 @@ class SensorAnalysis(ObservableObject):
 
         # Performance monitoring.
         self._perf_monitor.add_cycles(len(measurements))
-
-        return weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals
 
     def audio_spectrum_received(self, spectrum: AudioSpectrumMessage):
         if spectrum is None or not spectrum.magnitudes:

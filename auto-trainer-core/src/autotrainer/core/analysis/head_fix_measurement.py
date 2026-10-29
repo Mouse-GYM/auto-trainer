@@ -12,4 +12,3 @@ class HeadFixMeasurement:
     temperature: float = 0
     humidity: float = 0
     spectrum: List[float] = dataclasses.field(default_factory=list)
-    head_contact: bool = False

@@ -281,7 +281,7 @@ class MainContent(QWidget):
         # self._headbar_pressure_plot.setYRange(-1.0, 1024)
         plot_layout.addWidget(widget, 0, 1)
 
-        self._head_contact_plot, widget = self._create_plot_widget("Head Contact (On/Off)")
+        self._head_contact_plot, widget = self._create_plot_widget("Head Contact (On/Off)")  # aka "switch"
         self._head_contact_plot.setYRange(-1, 2)
         plot_layout.addWidget(widget, 2, 0)
 
@@ -408,7 +408,7 @@ class MainContent(QWidget):
             # reminder: HeadFixMeasurement.timestamp is perf_counter in integer nanosec
             return [(m.timestamp / 1e9, getattr(m, attr)) for m in measurements]
         self._load_cell_plot.cache_data(get("weight"))
-        self._head_contact_plot.cache_data(get("head_contact"))
+        self._head_contact_plot.cache_data(get("switch"))
         self._headbar_pressure_plot.cache_data(get("pressure"))
         self._temperature_plot.cache_data(get("temperature"))
         self._humidity_plot.cache_data(get("humidity"))

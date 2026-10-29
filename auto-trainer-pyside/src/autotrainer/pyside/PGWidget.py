@@ -14,6 +14,7 @@ class PGWidget(PlotWidget):
 
     x_window_size = 10  # how long is the rolling window on X axis.
     x_loop_back: Optional[float] = 60  # if not None, how far to go into X before reset to first(0).
+    max_points = 1000  # max nbr of previous data points to keep in window
 
     def __init__(self, parent=None):
         super().__init__(
@@ -72,6 +73,10 @@ class PGWidget(PlotWidget):
         if idx > 0:
             x = x[idx:]
             del self.y[:idx]
+        max_pt = self.max_points
+        if len(x) > max_pt:
+            x = x[-max_pt:]
+            self.y = self.y[-max_pt:]
         loop_back = self.x_loop_back
         if loop_back is not None and x[0] > loop_back:
             self._x_first = x_f + x[0]
