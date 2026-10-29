@@ -21,4 +21,9 @@ class TextBoxHandler(logging.Handler):
 
     def emit(self, record):
         if self._is_visible:
-            self.emitter.log_message.emit(self.format(record))
+            try:
+                data = self.format(record)
+            except Exception:
+                self.handleError(record)
+            else:
+                self.emitter.log_message.emit(data)
