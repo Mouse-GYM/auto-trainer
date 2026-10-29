@@ -318,7 +318,6 @@ class SensorAnalysis(ObservableObject):
 
         switch_vals: List[bool] = []
         pressure_vals: List[float] = []
-        humidity_vals: List[float] = []
 
         fh = self._record_file
         needs_update = self._have_new_project_record_data
@@ -341,7 +340,6 @@ class SensorAnalysis(ObservableObject):
         for m in measurements:
             switch_vals.append(m.switch)
             pressure_vals.append(m.pressure)
-            humidity_vals.append(m.humidity)
 
             # NB: save all measurements to file
             if fh is not None:
