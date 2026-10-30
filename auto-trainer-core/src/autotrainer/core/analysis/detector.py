@@ -489,17 +489,26 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
 
     def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
         th_q = self._thread_queue
-        if th_q is not None and threading.current_thread() is not th_q[0]:
-            logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
-                         detector.name, name)
+        def execute():
+            self._execute_on_sub_detector_property_changed(detector, name, value, old_value)
+        if th_q is not None:
+            th, cmd_q = th_q
             # when a group is daemon, then forward the event to its thread (if not it)
-            th_q[1].put_nowait((_execute_func,
-                                lambda: self._on_sub_detector_property_changed(detector, name, value, old_value)))
-        else:
-            # otherwise handle with current
-            self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
-            if name in (detector.IS_ENGAGED, detector.CONFIG):
-                self.check_state()
+            if not th.is_alive():
+                logger.warning("group detector thread %s not anymore alive, "
+                               "handling sub-detector property changed inline", self.name)
+            elif threading.current_thread() is not th:
+                logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
+                             detector.name, name)
+                cmd_q.put((_execute_func, execute), timeout=1)
+                return
+        # otherwise handle with current
+        execute()
+
+    def _execute_on_sub_detector_property_changed(self, detector, name, value, old_value):
+        self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
+        if name in (detector.IS_ENGAGED, detector.CONFIG):
+            self.check_state()
 
     def _consider_for_new_engage(self, det):
         cfg = det.config

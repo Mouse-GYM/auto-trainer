@@ -5,6 +5,7 @@ import itertools
 import logging
 import math
 import platform
+import queue
 from datetime import date
 from functools import partial
 
@@ -107,7 +108,14 @@ class PreferencesContent(QWidget):
 
     def _update_det_config(self, det):
         algo = self._app_model.behavior.algorithm
-        algo.put_func_call(det.update_config, wait=False)
+        try:
+            # raise queue.Full
+            algo.put_func_call(det.update_config, wait=False, put_timeout=1)
+        except queue.Full:
+            QMessageBox.warning(None,
+                                "Config update missed",
+                                "The request change could not be applied.\n\nApplication shall be restarted.",
+                                QMessageBox.StandardButton.Ok)
 
     def _update_tab_sizes(self):
         tabs = self._tabs

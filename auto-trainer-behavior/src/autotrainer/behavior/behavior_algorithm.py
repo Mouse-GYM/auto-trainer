@@ -140,6 +140,9 @@ _DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
 # True: safer for all
 # False: faster for caller/putter
 
+_DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT: Optional[float] = 15
+# None would mean infinite.
+
 
 def _relay_func(func: Callable, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE) -> Callable:
     """See BehaviorAlgorithm.relay_func()"""
@@ -300,7 +303,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
-            handler_queue = queue.Queue(maxsize=64)
+            handler_queue = queue.Queue(maxsize=128)  # atm under normal condition we have ~35 msgs / s
             # reentrant_list = []  # re-use the previous for now
             handler_thread = threading.Thread(
                 target=cls._handler_thread_run, args=(handler_queue, thread_lock, reentrant_list),
@@ -376,10 +379,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
             # always consume re-entrant list before input_queue:
-            raw = None
             if len(reentrant_list) > 0:
                 raw = reentrant_list.pop(0)
-            if raw is None:
+            else:
                 try:
                     raw = input_queue.get(timeout=1)
                 except queue.Empty:
@@ -441,6 +443,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         kwargs: Optional[Dict]=None,
         *,
         wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE,
+        put_timeout: Optional[float] = _DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT,  # None means infinite.
     ):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
@@ -489,7 +492,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             else:
                 event = None
             try:
-                handler_queue.put((func, args, kwargs, event), timeout=5)
+                handler_queue.put((func, args, kwargs, event), timeout=put_timeout)
             except queue.Full:
                 logger.error("could not put %s to behavior algo thread, queue full", func)
             else:
