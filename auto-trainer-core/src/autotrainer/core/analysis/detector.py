@@ -22,6 +22,7 @@ logger = get_verbose_logger(__name__)
 
 
 _request_check_state = object()
+_execute_func = object()
 
 
 DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
@@ -344,8 +345,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             cmd = r[0]
             if cmd is _request_check_state:
                 force = r[1]
-                continue
-            log.warning("unhandled command object: %r", r)
+            elif cmd is _execute_func:
+                func = r[1]
+                try:
+                    func()
+                except Exception as err:
+                    log.exception("Error while executing %s", err)
+            else:
+                log.warning("unhandled command object: %r", r)
         # end while True
         log.verbose("%s: exiting main loop", self._name)
 
@@ -481,6 +488,24 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         return ctx.detector
 
     def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
+        th_q = self._thread_queue
+        def execute():
+            self._execute_on_sub_detector_property_changed(detector, name, value, old_value)
+        if th_q is not None:
+            th, cmd_q = th_q
+            # when a group is daemon, then forward the event to its thread (if not it)
+            if not th.is_alive():
+                logger.warning("group detector thread %s not anymore alive, "
+                               "handling sub-detector property changed inline", self.name)
+            elif threading.current_thread() is not th:
+                logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
+                             detector.name, name)
+                cmd_q.put((_execute_func, execute), timeout=1)
+                return
+        # otherwise handle with current
+        execute()
+
+    def _execute_on_sub_detector_property_changed(self, detector, name, value, old_value):
         self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
         if name in (detector.IS_ENGAGED, detector.CONFIG):
             self.check_state()
