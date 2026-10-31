@@ -1393,7 +1393,7 @@ class CanDevice(Device):
             else:
                 logger.warning("Unhandled data type: %s", type(message))
 
-    def _handle_load_cell_reading(self, message):
+    def _handle_load_cell_reading(self, message: LoadCellReading):
         """
         Handle a load cell reading message.
 
