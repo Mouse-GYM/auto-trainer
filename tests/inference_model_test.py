@@ -86,10 +86,14 @@ def test_inference_recording_and_offline_processing(
         vw.release()
     for th in pads:
         th.join()
+    #
     inference_q.put_frame_index_category(frame, FrameIndexCategory.EOF_RECORDING)
-    wait_stop_recorded = False
+    #
+    wait_stop_recorded = True
     completed = False
     complete_ok = complete_error = None
+    evt = threading.Event()
+
     def on_complete(success: bool, *, error: Optional[str]=None):
         nonlocal completed, complete_ok, complete_error
         if completed:
@@ -97,17 +101,24 @@ def test_inference_recording_and_offline_processing(
         completed = True
         complete_ok = success
         complete_error = error
+        evt.set()
 
     cfg = SegmentationConfiguration(project=project_info, frame_rate=fps, complete=on_complete)
     assert inference.perform_segmentation(cfg) is not None
-    time.sleep(2.5)
+
     inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
-    time.sleep(5)
-    inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
-    time.sleep(2)
+    # fake the camera stop recording sema releases:
+    inference._pose_process._record_stop_sema.release()
+    inference._pose_process._record_stop_sema.release()
+    # inference._data_monitor_proc.stop_recorded.set()  # BUT not the data monitor one, which is really executed,
+    #
+    assert evt.wait(15), "should be ~very fast"
     assert completed
     assert complete_ok is True
     assert complete_error is None
+    # extra:
+    inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
+    inference.wait_for_status(InferenceStatus.live, timeout=5)
 
 
 def test_load_different_defaults(inference):
