@@ -241,6 +241,8 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
 
     def start(self, live_queue: FixedArrayMultiQueue) -> bool:
 
+        project = self._project
+
         if self._process_pool is None:
             self._process_pool = multiprocessing.Pool(
                 processes=1,  # we only need 1 atm
@@ -262,7 +264,7 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         if data_monitor_proc is None:
             self._data_monitor_watchdog_perf_c.value = get_perf_now()
             data_monitor_proc = self._data_monitor_proc = InferenceMonitorDataProc(
-                project=self._project,
+                project=project,
                 pose_data_queue=self._output_data_queue,
                 msg_queue=self._notif_msg_queue,
                 cmd_queue=self._data_monitor_cmd_queue,
@@ -271,8 +273,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
                 monitored_parts_offsets=list(self._pair_offsets_2_handler),
                 watchdog_perf_c=self._data_monitor_watchdog_perf_c,
                 main_watchdog_holder=self._main_watchdog_holder,
+                pose_algo=self._pose_algorithm,
             )
             data_monitor_proc.start()
+            if project != self._project:
+                logger.warning("unexpected project info updated while starting, resending new one")
+                self._send_to_data_monitor_proc(InferenceMonitorDataMsg.SET_PROJECT_INFO, self._project)
 
         self._frame_height, self._frame_width = live_queue.shape
         self._frames_per_camera = live_queue.frames_per_camera
@@ -433,6 +439,12 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
         cmd: Any, data: Any,
         timeout: float,
     ):
+        if proc is None:
+            logger.debug("%s proc not started, send of %s delayed to creation", name, cmd)
+            return
+        if proc.pid is not None and not proc.is_alive():
+            logger.warning("%s proc not anymore alive, skip send of %s, proc: %s", name, cmd, proc)
+            return
         with lock:
             ack.clear()
             try:
@@ -443,13 +455,18 @@ class InferenceModel(InferenceProtocol, ProjectDependentProtocol):
             if __debug__:
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug("%s: sent command msg %s qsize=%s", name, cmd, out_q.qsize())
-            if proc is None:
-                logger.verbose("%s not yet started, won't wait ack event", name)
-            elif not proc.is_alive():
-                logger.warning("%s not anymore alive, won't wait ack event ; proc=%s", name, proc)
-            else:
-                if not ack.wait(timeout):
+            while True:
+                if not proc.is_alive():
+                    logger.warning("%s not anymore alive, won't wait ack event ; proc=%s", name, proc)
+                    break
+                p0 = time.perf_counter()
+                if ack.wait(0.5):
+                    break
+                p1 = time.perf_counter()
+                timeout -= p1 - p0
+                if timeout < 0:
                     logger.warning("timeout wait ack for %s to %s", cmd, proc)
+                    break
 
     def send_message(self, kind: InferenceCommandMessageKind, data: Optional[Any] = None):
         """Send command to inference process"""
