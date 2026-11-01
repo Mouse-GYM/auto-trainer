@@ -48,11 +48,11 @@ class SystemMessageHandler(MessageHandler):
         #  behaviors are complex and do not check for change themselves, this could become a bottleneck.  This could be
         #  updated to store previous values and only notify listeners on change, like a typical ObservableObject
         #  implementation.  Keeping things simple for the time being.
-        if msg == SystemStatusMessageKind.MEASUREMENT or msg == SystemStatusMessageKind.MEASUREMENTS:
-            measures = self._analysis.measurements_received(data)
+        if msg == SystemStatusMessageKind.MEASUREMENTS:
+            self._analysis.measurements_received(data)
             mcb = self._measurement_callback
-            if mcb is not None and len(measures) > 0:
-                mcb(measures)
+            if mcb is not None and len(data) > 0:
+                mcb(data)
 
         elif msg == SystemStatusMessageKind.AUDIO_SPECTRUM:
             self._analysis.audio_spectrum_received(data)
