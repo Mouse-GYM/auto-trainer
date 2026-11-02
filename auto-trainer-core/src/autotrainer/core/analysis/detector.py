@@ -378,7 +378,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 log.warning("%s: stop() from daemon thread, should not happen", self._name)
             else:
                 if thread.is_alive():
-                    q.put_nowait(None)
+                    q.put(None, timeout=1)
                 log.debug("Joining check thread %s", thread)
                 thread.join(3)
                 if thread.is_alive():
@@ -447,12 +447,26 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
     def _start(self):
         super()._start()
         for sub in self._sub_detectors.values():
-            sub.detector.start()
+            try:
+                sub.detector.start()
+            except BaseException as err:
+                self._logger.exception("could not start detector %s: %s", sub.detector.name, err,
+                                       stacklevel=3)
+                try:
+                    self.stop()
+                except BaseException as err:
+                    self._logger.warning("failed to stop after failed sub-detector start: %s", err)
+                raise
 
     def _stop(self):
-        super()._stop()
-        for sub in self._sub_detectors.values():
-            sub.detector.stop()
+        try:
+            super()._stop()
+        finally:
+            for sub in self._sub_detectors.values():
+                try:
+                    sub.detector.stop()
+                except BaseException as err:
+                    logger.warning("sub-detector %s failed to stop: %s ; but continuing", sub.detector.name, err)
 
     @property
     def sub_detectors(self) -> Dict[str, GroupSubDetectorT]:

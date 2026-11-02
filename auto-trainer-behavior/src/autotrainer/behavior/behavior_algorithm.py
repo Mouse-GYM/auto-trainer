@@ -141,7 +141,7 @@ _DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
 # False: faster for caller/putter
 
 _DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT: Optional[float] = 15
-# None would mean infinite.
+# None means infinite.
 
 
 def _relay_func(func: Callable, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE) -> Callable:
@@ -495,6 +495,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                 handler_queue.put((func, args, kwargs, event), timeout=put_timeout)
             except queue.Full:
                 logger.error("could not put %s to behavior algo thread, queue full", func)
+                raise
             else:
                 if event is not None:
                     event.wait()
