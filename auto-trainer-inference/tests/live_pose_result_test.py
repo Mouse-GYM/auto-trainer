@@ -145,6 +145,25 @@ def test_renew_workers(
                 frames_idc_online_no_recording,
             )
         )
+    # wait that we get a first result on the proc (output) msg_queue:
+    # this ensures that the first live pose worker is alive, and being used.
+    # NB: during that time we have to continue to put new data to the proc input queue.
+    p_timeout = time.perf_counter() + 10
+    while True:
+        if time.perf_counter() > p_timeout:
+            raise RuntimeError("timeout waiting new live worker")
+        try:
+            proc._msg_queue.get(timeout=0.1)
+            break
+        except queue.Empty:
+            pass
+        proc._data_queue.put(
+            (
+                zero_pose_data,
+                InferenceMode.Live,
+                frames_idc_online_no_recording,
+            )
+        )
     tot_put = 8
     for idx in range(tot_put):
         proc._data_queue.put(
@@ -154,18 +173,15 @@ def test_renew_workers(
                 frames_idc_online_no_recording,
             )
         )
-        time.sleep(0.5)
+        time.sleep(0.15)
 
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     assert "making new workers generation-1.." in caplog.text
     assert "making new workers generation-2.." in caplog.text
 
-    seq_nr = None
-
+    seq_nr = 1
     for _ in range(4):
         msg, (args, kwargs) = proc._msg_queue.get(timeout=1.5)
         pose_rsp = args[0]
-        if seq_nr is None:
-            seq_nr = pose_rsp.sequence
         assert pose_rsp.sequence == seq_nr
         seq_nr += 1
