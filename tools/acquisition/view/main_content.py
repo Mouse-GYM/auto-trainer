@@ -311,7 +311,7 @@ class MainContent(ContentWidget):
         self.update()
 
     def _update_training_plan(self, plan: Optional[TrainingPlan]):
-        logger.debug("setting plan to %s (%s)", plan, hex(id(plan)))
+        logger.debug("setting plan to %s", None if plan is None else plan.plan_id)
         self._training_phase_content.set_training_phase(
             None if plan is None else plan.current_phase,
             force_refresh=True,

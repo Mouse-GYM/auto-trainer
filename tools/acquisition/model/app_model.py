@@ -1127,7 +1127,7 @@ class AppModel(ObservableObject):
         self._detach_training_plan()  # always
         logger.debug("updating animal to %s (prev=%s)", animal, previous_animal)
         if previous_animal is not None:
-            self._save_animal_metadata(previous_animal, sender="selected_animal_detach")  # in case of
+            self.save_animal_metadata(previous_animal, sender="selected_animal_detach")  # in case of
         #
         algo = self._behavior.algorithm
         self._behavior.system_machine.shift_xyz_handler.reset()
@@ -1155,11 +1155,18 @@ class AppModel(ObservableObject):
         self._selected_animal = animal
         if animal_plan is not skip:
             assert isinstance(animal_plan, (TrainingPlan, type(None)))
-            if not self._set_training_plan(animal_plan, callback=callback):
-                self._selected_animal = previous_animal  # force
-                # NB: self.on_error() is called inside set_training_plan already.
-                return False
-        logger.success("Switched to animal %s", animal)
+            try:
+                if not self._set_training_plan(animal_plan):  # don't pass the callback here.
+                    self._selected_animal = previous_animal  # force
+                    if callback is not None:
+                        callback(False, error="set_training_plan returned false")
+                    # NB: self.on_error() is called inside set_training_plan already.
+                    return False
+            except BaseException as err:
+                logger.error("set_training_plan failed: %s", err)
+                self._selected_animal = previous_animal
+                raise
+        logger.success("Switched fully to animal %s", animal)
         if callback is not None:
             callback(True)
         self.property_changed(self.Props.ANIMAL_NAME, *(
@@ -1242,10 +1249,10 @@ class AppModel(ObservableObject):
                 err_obtained = error
             ok = self._set_training_plan(plan, target_mode=mode, target_animal=animal, callback=cb2)
             if not ok:
-                self._training_mode = previous_mode
-                if callback is not None:
-                    callback(False, error=f"set_training_plan() failed: {err_obtained}")
-                return False
+                logger.error("attaching to animal plan failed: %s", err_obtained)
+                # don't error for set_training_plan failed:
+                # this can happen if the plan deserialize fails for instance,
+                # but we keep the mode change to succeed despite the plan attach fails.
         if callback is not None:
             callback(True)
         self._on_property_changed(self.Props.TRAINING_MODE, mode, previous_mode)
@@ -1284,7 +1291,7 @@ class AppModel(ObservableObject):
         def execute_it():
             try:
                 return self._set_training_plan(
-                    plan, target_animal=target_animal,
+                    plan, target_animal=use_animal,
                     force_update=force_update, callback=callback,
                 )
             except BaseException as err:
@@ -1309,10 +1316,12 @@ class AppModel(ObservableObject):
     ):
         if target_mode is None:
             target_mode = self._training_mode
-        use_animal = self._selected_animal if target_animal == _not_provided else target_animal
+        use_animal = target_animal if target_animal != _not_provided else self._selected_animal
         animal = self._selected_animal
         if animal != use_animal:
             logger.warning("dropping set_training_plan with selected_animal changed: %s vs %s", animal, use_animal)
+            if callback is not None:
+                callback(False, error="superseded")
             return None
         previous_plan = self._training_plan
         if plan == previous_plan and animal == self._training_plan_animal:
@@ -1325,7 +1334,7 @@ class AppModel(ObservableObject):
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
             logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
-                self._save_animal_metadata(animal, sender="animal_current_plan_changed")
+                self.save_animal_metadata(animal, sender="animal_current_plan_changed")
         if plan is None:
             self._detach_training_plan()  # always
         elif animal is not None:
@@ -1339,11 +1348,11 @@ class AppModel(ObservableObject):
                     return False
         self._training_plan = plan
         self._training_plan_animal = animal
-        if callback is not None:
-            callback(True)
         self._on_property_changed(self.Props.TRAINING_PLAN, plan, previous_plan)
         self._event_manager.post_event_content(
             ApiEventKind.trainingPlanLoad, {'training_plan_id': None if plan is None else plan.plan_id})
+        if callback is not None:
+            callback(True)
         return True
 
     @property
@@ -1436,6 +1445,23 @@ class AppModel(ObservableObject):
         *,
         force_update: bool = False,
     ) -> Optional[bool]:
+        succeeded = False
+        try:
+            succeeded = self.__attach_training_plan(animal, plan, force_update=force_update)
+        except BaseException as err:
+            logger.exception("attach to plan %s failed: %s", err)
+        finally:
+            if not succeeded:
+                plan.detach()  # ensure always force detach after, if attach failed in any part.
+        return succeeded
+
+    def __attach_training_plan(
+        self,
+        animal: AnimalSubject,
+        plan: TrainingPlan,
+        *,
+        force_update: bool = False,
+    ) -> Optional[bool]:
         """Returns False if attach not done"""
         algo = self._behavior.algorithm
         attached = self._attached_plan
@@ -1457,8 +1483,8 @@ class AppModel(ObservableObject):
                 return False
 
         is_auto = self._training_mode == TrainingMode.AUTOMATIC
-        logger.notice("Animal %s: attaching is_auto=%s to plan %s (%s) ..",
-                       animal.name, is_auto, plan.plan_id, hex(id(plan)))
+        logger.notice("Animal %s: attaching is_auto=%s to plan %s ..",
+                       animal.name, is_auto, plan.plan_id)
         plan.is_automatic = is_auto
         pellet_dev = tunnel_dev = self._hardware
         logger.info("attaching to plan %s", plan.plan_id)
@@ -1471,13 +1497,19 @@ class AppModel(ObservableObject):
         self._attached_animal = animal
         failed = True
         try:
-            if plan.resume():
-                failed = False
-            else:
+            try:
+                resume_success = plan.resume()
+            except BaseException as err:
+                logger.exception("plan %s resume failed: %s", plan.plan_id, err)
                 self._attached_plan = prev_plan
                 self._attached_animal = prev_animal
-                logger.error("plan %s resume failed", plan.plan_id)
+                raise
+            if not resume_success:
+                self._attached_plan = prev_plan
+                self._attached_animal = prev_animal
+                logger.error("plan %s resume returned False", plan.plan_id)
                 return False
+            failed = False
         finally:
             if failed:
                 logger.verbose("detaching from failed resume plan")
@@ -1521,7 +1553,7 @@ class AppModel(ObservableObject):
                     prog = plan.serialize_progress()
                     if animal is not None:
                         animal.training.set_plan_progress(plan.plan_id, prog)
-                        self._save_animal_metadata(animal, sender="detach_plan")
+                        self.save_animal_metadata(animal, sender="detach_plan")
 
     def _detach_training_phase(self):
         phase = self._attached_phase
@@ -1555,7 +1587,7 @@ class AppModel(ObservableObject):
         if len(matching_animals) == 0:
             logger.info("Adding new animal name=%s", name)
             animal = AnimalSubject(name=name)
-            self._save_animal_metadata(animal, sender="add_animal")
+            self.save_animal_metadata(animal, sender="add_animal")
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.animalCreated, animal.to_api_status()))
 
@@ -2331,7 +2363,7 @@ class AppModel(ObservableObject):
             logger.warning("loaded animal with pellet DCS, but no diamond-triangle config, forcing to 0")
             animal.is_pellet_dcs = False
             animal.pellet_x = animal.pellet_y = animal.pellet_z = 0
-            self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
+            self.save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         if animal.is_pellet_dcs:
             assert diamond_cfg is not None
             _xyz = xyz
@@ -2347,7 +2379,7 @@ class AppModel(ObservableObject):
                 animal.pellet_y = save_xyz.y
                 animal.pellet_z = save_xyz.z
                 animal.is_pellet_dcs = True
-                self._save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
+                self.save_animal_metadata(animal, backup_previous=True, sender="selected_animal")
         hardware = self._hardware
         if not hardware.connected:
             logger.notice("Not setting animal base positions on hardware given not connected (yet?)")
@@ -2420,7 +2452,7 @@ class AppModel(ObservableObject):
         if name == det.PELLETS_CONSUMED:
             if animal is not None and value != animal.autoclamp_evasion_pellets_consumed:
                 animal.autoclamp_evasion_pellets_consumed = value
-                self._save_animal_metadata(animal, sender="autoclamp_evasion_pellets_consumed")
+                self.save_animal_metadata(animal, sender="autoclamp_evasion_pellets_consumed")
 
     def _on_intertrial_property_changed(self, name, value, _):
         if name == IntertrialMachine.Properties.STATE_PROPERTY:
@@ -2463,7 +2495,7 @@ class AppModel(ObservableObject):
                 return
             prev, animal.target_y_limit = animal.target_y_limit, value
             if prev != value:
-                self._save_animal_metadata(animal, sender="pellet_shift_y_limit")
+                self.save_animal_metadata(animal, sender="pellet_shift_y_limit")
                 self._event_manager.post_api_event(build_event(
                     ApiEventKind.animalUpdated, animal.to_api_status()))
 
@@ -2507,7 +2539,7 @@ class AppModel(ObservableObject):
             animal.pellet_x, animal.pellet_y, animal.pellet_z = xyz
             changed |= xyz != prev
             if changed:
-                self._save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
+                self.save_animal_metadata(animal, sender=f"hardware_{name}", backup_previous=pellet_dcs_changed)
 
     def _on_inference_property_changed(self, name: str, value, _):
         if name == InferenceModel.STATUS:
@@ -2600,7 +2632,7 @@ class AppModel(ObservableObject):
         day_counts.reaches += result.total_reaches
         total_counts.reaches += result.total_reaches
         if day_changed or result.successful_reaches or result.food_consumed or result.total_reaches:
-            self._save_animal_metadata(animal, sender="detection_result_ready")
+            self.save_animal_metadata(animal, sender="detection_result_ready")
             self._event_manager.post_api_event(build_event(
                 ApiEventKind.animalUpdated, animal.to_api_status()))
 
@@ -2616,12 +2648,15 @@ class AppModel(ObservableObject):
 
     def _on_training_plan_progress_updated(self):
         plan = self._attached_plan
+        if plan is None:
+            logger.warning("_on_training_plan_progress_updated but no plan attached")
+            return
         logger.debug("plan %s progress updated", plan.plan_id)
         prog = plan.serialize_progress()
         animal = self._attached_animal
         assert animal is not None
         animal.training.set_plan_progress(plan.plan_id, prog)
-        self._save_animal_metadata(animal, sender="plan-progress-updated")
+        self.save_animal_metadata(animal, sender="plan-progress-updated")
         self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
         self._event_manager.post_event_content(
             ApiEventKind.trainingProgressUpdate, dict(training_phase_id=plan.current_phase.phase_id))
@@ -2630,7 +2665,8 @@ class AppModel(ObservableObject):
         logger.debug("phase prop: %s -> %s", name, value)
         self.property_changed(self.Props.TRAINING_PHASE_PROP, (name, value), _)
 
-    def _save_animal_metadata(self, animal: AnimalSubject, *, backup_previous: bool = False, sender: str = "na"):
+    def save_animal_metadata(self, animal: AnimalSubject,
+                             *, backup_previous: bool = False, sender: str = "na"):
         prev_animals = self._animals  # in case _animals content is copied, we reset it to current animal
         for idx, prev_animal in enumerate(prev_animals):
             if prev_animal.id == animal.id:
@@ -2868,8 +2904,8 @@ class AppModel(ObservableObject):
     def _rpc_start_or_stop_acquisition(self, target: AppModelStatus) -> Any:
         errors: List[str] = []
 
-        def collect_error(title: str, message: str):
-            errors.append(f"{title}: {message}")
+        def collect_error(title: str, content: str):
+            errors.append(f"{title}: {content}")
 
         self.on_error += collect_error
         try:
@@ -3254,7 +3290,7 @@ class AppModel(ObservableObject):
             # now recopy the values from algo:
             selected.pellet_counts_day.presented = algo.pellets_presented_day
             selected.pellet_counts_total.presented = algo.pellets_presented_total
-            self._save_animal_metadata(selected, sender="on_pellet_sent")  # always
+            self.save_animal_metadata(selected, sender="on_pellet_sent")  # always
 
     def _worker_thread_run(self, cmd_queue: Queue):
         close_queue_seen = False
@@ -3282,6 +3318,7 @@ class AppModel(ObservableObject):
             execute_all = []
             dct = {}
             new_commands = []
+            # all_commands = [raw]
             for kind, func in reversed(all_commands):
                 if kind in {WorkItemKind.ADD_ANIMAL, WorkItemKind.PLAN_ADVANCE_PHASE, WorkItemKind.PLAN_FALLBACK_PHASE}:
                     execute_all.append(func)

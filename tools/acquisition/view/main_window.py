@@ -1184,6 +1184,7 @@ class MainWindow(QMainWindow):
             @invoke_method
             def cb(result, *, error=None):
                 if not result:
+                    logger.error("training mode change failed: %s", error)
                     with signals_blocked(cmb):
                         cmb.setCurrentIndex(self._training_mode_2_combo_index.get(app_model.training_mode, -1))
             app_model.set_training_mode(selected_mode, background=True, callback=cb)
@@ -1209,7 +1210,9 @@ class MainWindow(QMainWindow):
                 if not result:
                     after_plan = app_model.training_plan
                     idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
-                    self._training_plan_combo.setCurrentIndex(idx)
+                    combo = self._training_plan_combo
+                    with signals_blocked(combo):
+                        combo.setCurrentIndex(idx)
 
             self._app_model.set_training_plan(selected_plan, background=True, callback=cb)
 
@@ -1382,11 +1385,11 @@ class MainWindow(QMainWindow):
         else:
             v.close()
 
-    def _show_message(self, title: str, message: str):
+    def _show_message(self, title: str, content: str):
         if self._closing:
             return
         @invoke_method
-        def show_in_gui_thread(title=title, message=message):
+        def show_in_gui_thread(title=title, message=content):
             if self._closing:
                 return
             dlg = QMessageBox(self)
@@ -1867,9 +1870,12 @@ class MainWindow(QMainWindow):
 
     @invoke_method
     def _set_training_plans(self, plans: List[PlanInfo]):
+        with signals_blocked(self._training_plan_combo):
+            self.__set_training_plans(plans)
+
+    def __set_training_plans(self, plans):
         app_model = self._app_model
         combo = self._training_plan_combo
-        combo.blockSignals(True)
         combo.clear()
         has_some = len(plans) > 0
         empty_txt = "" if has_some else " " * 64
@@ -1888,16 +1894,13 @@ class MainWindow(QMainWindow):
         combo.addItem(empty_txt, userData=None)  # put it last
         combo_indices_map[None] = len(plans)
         combo.setItemData(len(plans), tooltip_txt, Qt.ItemDataRole.ToolTipRole)
-        combo.blockSignals(False)
         animal = app_model.selected_animal
         if animal is None:
-            with signals_blocked(combo):  # required to not induce loop
-                combo.setCurrentIndex(len(plans))
-            return
-        plan_id = animal.training.current_protocol
+            plan_id = None
+        else:
+            plan_id = animal.training.current_protocol
         plan_combo_index = self._get_training_plan_combo_index(plan_id)
-        with signals_blocked(combo):  # required to not induce loop
-            combo.setCurrentIndex(plan_combo_index)
+        combo.setCurrentIndex(plan_combo_index)
 
     @invoke_method
     def _on_app_model_configuration_loaded(self, config):
@@ -1911,19 +1914,12 @@ class MainWindow(QMainWindow):
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
 
-
+    @invoke_method
     def _on_training_plan_deserialized(self, plan: TrainingPlan, result: LoadProgressResult, *,
                                        force_update: bool = False):
         animal = self._app_model.selected_animal
-        self.__on_training_plan_deserialized(
-            plan, result, force_update=force_update, animal=animal)
-
-    @invoke_method
-    def __on_training_plan_deserialized(
-        self, plan: TrainingPlan, result: LoadProgressResult, *,
-        force_update: bool = False,
-        animal: Optional[AnimalSubject],
-    ):
+        logger.notice("training_plan deserialized: id=%s result=%s force_update=%s animal=%s",
+                    plan.plan_id, result, force_update, animal)
         app_model = self._app_model
         #
         if result == LoadProgressResult.OUT_OF_DATE:
@@ -1955,6 +1951,20 @@ class MainWindow(QMainWindow):
                 logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
             return
 
+        def cb(result, *, error = None):
+            self.__on_training_plan_deserialized2(plan, animal, msg)
+        # this first set_training_plan is routed through the app model worker thread:
+        app_model.set_training_plan(None, background=True, callback=cb,
+                                    target_animal=animal)
+
+    @invoke_method
+    def __on_training_plan_deserialized2(self, plan, animal, msg):
+        combo = self._training_plan_combo
+        idx = self._get_training_plan_combo_index(plan.plan_id)
+        with signals_blocked(combo):
+            combo.setCurrentIndex(idx)
+        self.update()
+        app_model = self._app_model
         msg_box = QMessageBox(self)
         self._add_box_to_open_dialogs(msg_box)
         msg_box.setWindowTitle("Confirmation")
@@ -1968,20 +1978,27 @@ class MainWindow(QMainWindow):
             self._open_dialogs.remove(msg_box)
         except ValueError:
             pass
-        if clicked_but == load_btn:
-            # this first set_training_plan is routed through the app model worker thread:
-            app_model.set_training_plan(None, background=True,
-                                        target_animal=animal)  # reset to None first, not supposed to fail
-            @invoke_method
-            def cb(result, *, error=None):
-                combo = self._training_plan_combo
-                if not result:
-                    plan_after = app_model.training_plan
-                    idx = self._get_training_plan_combo_index(None if plan_after is None else plan_after.plan_id)
-                    with signals_blocked(combo):
-                        combo.setCurrentIndex(idx)
-            # then this 2nd one too:
-            app_model.set_training_plan(plan, force_update=True, background=True, callback=cb, target_animal=animal)
+
+        if clicked_but != load_btn:
+            # keeping all as is, but the training plan reset to None.
+            idx = self._get_training_plan_combo_index(None)
+            with signals_blocked(combo):
+                combo.setCurrentIndex(idx)
+            return
+
+        @invoke_method
+        def cb(result, *, error=None):
+            after_plan = app_model.training_plan
+            idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
+            logger.notice("in cb: %s error=%s plan=%s ; idx=%s", result, error, after_plan, idx)
+            with signals_blocked(combo):
+                combo.setCurrentIndex(idx)
+            if result:
+                prog = plan.serialize_progress()
+                animal.training.set_plan_progress(plan.plan_id, prog)
+                app_model.save_animal_metadata(animal, sender="training_plan_deserialized_recovered")
+        # then this 2nd one too:
+        app_model.set_training_plan(plan, force_update=True, background=True, callback=cb, target_animal=animal)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model
@@ -1997,5 +2014,5 @@ class MainWindow(QMainWindow):
         if selected is not None:
             selected.pellet_counts_day = AnimalPelletCounts()
             selected.pellet_counts_total = AnimalPelletCounts()
-            self._app_model._save_animal_metadata(selected, sender="reset_animal_counts",
-                                                  backup_previous=True)
+            self._app_model.save_animal_metadata(selected, sender="reset_animal_counts",
+                                                 backup_previous=True)
