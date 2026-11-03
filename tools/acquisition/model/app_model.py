@@ -2301,12 +2301,15 @@ class AppModel(ObservableObject):
 
         wrk = self._worker_thread_long_tasks_execution
         if wrk.is_alive():
-            self._worker_thread_queue.put(None)
+            try:
+                self._worker_thread_queue.put_nowait(None)
+            except queue.Full:
+                logger.warning("Cannot put None to worker thread, queue full")
             logger.debug("joining worker thread")
-            wrk.join(3)
-            if wrk.is_alive():
-                logger.warning("worker_thread still alive")
-            clear_queue(self._worker_thread_queue, name="worker_thread")
+        wrk.join(3)
+        if wrk.is_alive():
+            logger.warning("worker thread still alive but continuing")
+        clear_queue(self._worker_thread_queue, name="worker_thread")
 
         self.refresh_main_watchdog(p_now=math.nan)
 
@@ -3303,49 +3306,22 @@ class AppModel(ObservableObject):
             callback(False, error="worker thread queue is full")
 
     def _worker_thread_run(self, cmd_queue: Queue):
-        close_queue_seen = False
-        while not close_queue_seen:
+        while True:
             if self._closing:
                 logger.verbose("exiting on _closing")
                 break
             try:
-                raw = cmd_queue.get(timeout=0.1)
+                raw = cmd_queue.get(timeout=1)
             except Empty:
                 continue
             if raw is None:
                 break
-            with self._worker_lock:
-                all_commands = [raw]
-                while True:
-                    try:
-                        raw = cmd_queue.get(block=False)
-                    except Empty:
-                        break
-                    if raw is None:
-                        close_queue_seen = True
-                        continue
-                    all_commands.append(raw)
-            execute_all = []
-            dct = {}
-            new_commands = []
-            # all_commands = [raw]
-            for kind, func in reversed(all_commands):
-                if kind in {WorkItemKind.ADD_ANIMAL, WorkItemKind.PLAN_ADVANCE_PHASE, WorkItemKind.PLAN_FALLBACK_PHASE}:
-                    execute_all.append(func)
-                else:
-                    tentative = dct.setdefault(kind, func)
-                    if tentative is func:
-                        new_commands.append(func)
-                    else:
-                        logger.verbose("dropped %s from work items, as kind %s already present in batch", func, kind)
-            # put back with orig order:
-            all_commands = list(reversed(new_commands)) + list(reversed(execute_all))
-            for func in all_commands:
-                logger.verbose("executing %s", func)
-                try:
-                    func()
-                except Exception as err:
-                    logger.exception("%s failed: %s", func, err)
+            kind, func = raw
+            logger.verbose("executing %s", kind)
+            try:
+                func()
+            except Exception as err:
+                logger.exception("%s failed: %s", kind, err)
 
     @_use_worker_lock
     def _plan_adv_or_flb_execute(self, plan, direction, method, callback):  # have to have the "self" arg for _use_worker_lock
