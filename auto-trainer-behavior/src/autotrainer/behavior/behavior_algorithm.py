@@ -140,7 +140,7 @@ _DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
 # True: safer for all
 # False: faster for caller/putter
 
-_DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT: Optional[float] = 15
+_DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT: Optional[float] = None
 # None means infinite.
 
 

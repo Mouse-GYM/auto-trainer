@@ -16,7 +16,7 @@ from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.event.event_manager import EventManager
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
-
+from autotrainer.core.queue_util import clear_queue
 
 logger = get_verbose_logger(__name__)
 
@@ -301,7 +301,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._p_started = get_perf_now()
             self._started_datetime = datetime.datetime.now()
             if self.use_daemon:
-                cmd_queue = queue.Queue(maxsize=32)
+                cmd_queue = queue.Queue(maxsize=64)
+                # relatively small queue size on purpose,
+                # all detectors check_state() and related code are supposed to be ~fast, if not then it's a bug.
+                # This also allows to use put_nowait on the queue from the different possible paths to it.
+                # If too many put to it are done in such a small time window that the daemon cannot keep with that rate,
+                # and makes the queue to become full: that's also a bug / sign of smth not good.
                 thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
@@ -373,18 +378,21 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # don't try join check thread with the lock acquired, given that can deadlock otherwise.
         if thread_queue is not None:
             thread, q = thread_queue
-            # assert isinstance(q, queue.Queue)
             if thread is threading.current_thread():
                 log.warning("%s: stop() from daemon thread, should not happen", self._name)
             else:
                 if thread.is_alive():
-                    q.put(None, timeout=1)
+                    try:
+                        q.put_nowait(None)
+                    except queue.Full:
+                        log.warning("queue is full, cannot send None for stop")
                 log.debug("Joining check thread %s", thread)
-                thread.join(3)
+                thread.join(1)
                 if thread.is_alive():
                     log.warning("check thread still alive, but continuing anyway")
                 else:
                     log.verbose("joined check thread %s", thread)
+                clear_queue(q, name=self.name)
 
     def restart(self):
         self._logger.notice("Restarting %s", self._name)
@@ -514,7 +522,7 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
             elif threading.current_thread() is not th:
                 logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
                              detector.name, name)
-                cmd_q.put((_execute_func, execute), timeout=1)
+                cmd_q.put_nowait((_execute_func, execute))
                 return
         # otherwise handle with current
         execute()
