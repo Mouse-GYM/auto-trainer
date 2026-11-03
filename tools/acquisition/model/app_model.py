@@ -339,7 +339,8 @@ MaybeOkCallBack = Optional[OkCallBackT]
 def _use_worker_lock(func):
     """Allows to ensure that all decorated functions with this,
     which are the internal methods for change of animal, training mode or plan, or add of new animal,
-    are correctly serialized, and not possibly interleaved/mixed between many different calling threads"""
+    or advance/fallback of phase, are correctly serialized, and not possibly interleaved/mixed between many different
+    calling threads"""
 
     @functools.wraps(func)
     def wrapper(self: "AppModel", *args, **kwargs):
