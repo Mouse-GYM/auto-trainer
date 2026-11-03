@@ -1126,7 +1126,10 @@ class AppModel(ObservableObject):
             if callback is not None:
                 callback(True)
             return True
+
+        previous_attached_plan = self._attached_plan
         self._detach_training_plan()  # always
+
         logger.debug("updating animal to %s (prev=%s)", animal, previous_animal)
         if previous_animal is not None:
             self.save_animal_metadata(previous_animal, sender="selected_animal_detach")  # in case of
@@ -1160,6 +1163,8 @@ class AppModel(ObservableObject):
             try:
                 if not self._set_training_plan(animal_plan):  # don't pass the callback here.
                     self._selected_animal = previous_animal  # force
+                    if previous_animal is not None and previous_attached_plan is not None:
+                        self._attach_training_plan(previous_animal, previous_attached_plan)
                     if callback is not None:
                         callback(False, error="set_training_plan returned false")
                     # NB: self.on_error() is called inside set_training_plan already.
@@ -1167,6 +1172,8 @@ class AppModel(ObservableObject):
             except BaseException as err:
                 logger.error("set_training_plan failed: %s", err)
                 self._selected_animal = previous_animal
+                if previous_animal is not None and previous_attached_plan is not None:
+                    self._attach_training_plan(previous_animal, previous_attached_plan)
                 raise
         logger.success("Switched fully to animal %s", animal)
         if callback is not None:
