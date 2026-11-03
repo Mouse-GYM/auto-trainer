@@ -355,7 +355,7 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
                 try:
                     func()
                 except Exception as err:
-                    log.exception("Error while executing %s", err)
+                    log.exception("Error while executing %s: %s", func, err)
             else:
                 log.warning("unhandled command object: %r", r)
         # end while True
