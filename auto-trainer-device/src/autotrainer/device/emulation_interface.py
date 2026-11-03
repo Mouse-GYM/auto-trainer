@@ -257,9 +257,11 @@ class EmulationInterface(DeviceInterface):
             time.sleep(0.01)
         else:
             t_now = time.time()
+            idx = round(perf_now * 1e9)
+            ts = round(t_now * 1e9)
             for msg in messages:
-                msg.index = round(perf_now * 1e9)
-                msg.timestamp_ns = round(t_now * 1e9)
+                msg.index = idx
+                msg.timestamp_ns = ts
 
         return messages
 

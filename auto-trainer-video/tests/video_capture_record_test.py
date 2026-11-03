@@ -110,7 +110,7 @@ def test_with_primary_secondary(
     for mod in (video_capture_model, video_capture_model2):
         assert mod.wait_for_capture_status(CaptureProcessStatus.RECORDING, timeout=5) is True
     #
-    time.sleep(1.5)
+    time.sleep(0.1)
     get_all_msgs_into(msg_q, received_msgs)
     assert check_cam_status_change(received_msgs, 0, CaptureProcessStatus.RECORDING) is not None
     assert check_cam_status_change(received_msgs, 1, CaptureProcessStatus.RECORDING) is not None
@@ -120,7 +120,7 @@ def test_with_primary_secondary(
         mod.on_trigger_recording(False)
     for mod in (video_capture_model, video_capture_model2):
         assert mod.wait_for_capture_status(CaptureProcessStatus.RUNNING, timeout=5) is True
-    time.sleep(1.5)  # give little extra time
+    time.sleep(0.1)  # give little extra time
     collect_log_queue_to_caplog(capture_multiprocess_logs)
     # print(caplog.text)
     #
