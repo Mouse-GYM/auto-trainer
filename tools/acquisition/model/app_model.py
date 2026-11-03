@@ -1104,11 +1104,12 @@ class AppModel(ObservableObject):
         def execute_it():
             try:
                 return self._set_selected_animal(animal, callback=callback, previous_animal=prev)
-            except BaseException as err:
+            except Exception as err:
                 if callback is not None:
                     callback(False, error=f"set_selected_animal error: {err}")
+                raise
         if background:
-            self._worker_thread_queue.put_nowait((WorkItemKind.SELECTED_ANIMAL, execute_it))
+            self._put_to_worker_thread(WorkItemKind.SELECTED_ANIMAL, execute_it, callback)
             return None
         return execute_it()
 
@@ -1205,12 +1206,12 @@ class AppModel(ObservableObject):
         def execute_it():
             try:
                 return self._set_training_mode(mode, callback=callback)
-            except BaseException as err:
+            except Exception as err:
                 if callback is not None:
                     callback(False, error=f"set_training_mode error: {err}")
                 raise
         if background:
-            self._worker_thread_queue.put_nowait((WorkItemKind.TRAINING_MODE, execute_it))
+            self._put_to_worker_thread(WorkItemKind.TRAINING_MODE, execute_it, callback)
             return None
         else:
             return execute_it()
@@ -1294,12 +1295,12 @@ class AppModel(ObservableObject):
                     plan, target_animal=use_animal,
                     force_update=force_update, callback=callback,
                 )
-            except BaseException as err:
+            except Exception as err:
                 if callback is not None:
                     callback(False, f"set_training_plan error: {err}")
                 raise
         if background:
-            self._worker_thread_queue.put_nowait((WorkItemKind.TRAINING_PLAN, execute_it))
+            self._put_to_worker_thread(WorkItemKind.TRAINING_PLAN, execute_it, callback)
             return None
         else:
             return execute_it()
@@ -1566,11 +1567,11 @@ class AppModel(ObservableObject):
 
     #
 
-    def add_animal(self, name: str, select: bool = False, *, background: bool = False) -> Optional[AnimalSubject]:
+    def add_animal(self, name: str, select: bool = False, *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[AnimalSubject]:
         def execute_add_animal():
             return self._add_animal(name, select=select)
         if background:
-            self._worker_thread_queue.put_nowait((WorkItemKind.ADD_ANIMAL, execute_add_animal))
+            self._put_to_worker_thread(WorkItemKind.ADD_ANIMAL, execute_add_animal, callback)
             return None
         else:
             return execute_add_animal()
@@ -3292,6 +3293,15 @@ class AppModel(ObservableObject):
             selected.pellet_counts_total.presented = algo.pellets_presented_total
             self.save_animal_metadata(selected, sender="on_pellet_sent")  # always
 
+    def _put_to_worker_thread(self, kind, func, callback):
+        try:
+            self._worker_thread_queue.put_nowait((kind, func))
+        except queue.Full:
+            logger.error("work thread queue is full")
+            if callback is None:
+                raise
+            callback(False, error="worker thread queue is full")
+
     def _worker_thread_run(self, cmd_queue: Queue):
         close_queue_seen = False
         while not close_queue_seen:
@@ -3366,7 +3376,7 @@ class AppModel(ObservableObject):
             self._plan_adv_or_flb_execute(plan, direction, method, callback)
 
         if background:
-            self._worker_thread_queue.put_nowait((kind, execute_it))
+            self._put_to_worker_thread(kind, execute_it, callback)
         else:
             execute_it()
 

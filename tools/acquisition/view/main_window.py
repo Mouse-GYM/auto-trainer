@@ -1629,7 +1629,11 @@ class MainWindow(QMainWindow):
         # it's triggered every time the combo is clicked in UI
         if not name or any(name == animal.name for animal in self._app_model.animals):
             return
-        self._app_model.add_animal(name, select=True, background=True)
+        @invoke_method
+        def cb(result, *, error=None):
+            if not result:
+                self._show_message("Cannot add animal", f"Failed to add animal:\n{error}")
+        self._app_model.add_animal(name, select=True, background=True, callback=cb)
 
     def _animal_changed(self, _):
         if self._animal_dropdown_combo.currentIndex() in (0, -1):
@@ -1637,7 +1641,14 @@ class MainWindow(QMainWindow):
         else:
             animal_id = self._animal_dropdown_combo.currentData()
             animal = self._app_model.get_animal_by_id(animal_id)
-        self._app_model.set_selected_animal(animal, background=True)
+        @invoke_method
+        def cb(result, *, error=None):
+            if not result:
+                self._show_message(
+                    "Cannot change animal",
+                    f"Failed to select animal {None if animal is None else animal.name}. Error:\n{error}"
+                )
+        self._app_model.set_selected_animal(animal, background=True, callback=cb)
 
     @invoke_method
     def _refresh_prev_next_phases(self):
