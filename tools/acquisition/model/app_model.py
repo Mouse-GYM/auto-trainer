@@ -1096,7 +1096,13 @@ class AppModel(ObservableObject):
     def selected_animal(self, animal: Optional[AnimalSubject]):
         self.set_selected_animal(animal)
 
-    def set_selected_animal(self, animal: Optional[AnimalSubject], *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[bool]:
+    def set_selected_animal(
+        self,
+        animal: Optional[AnimalSubject],
+        *,
+        background: bool = False,
+        callback: MaybeOkCallBack = None,
+    ) -> Optional[bool]:
         prev = self._selected_animal
         if animal == prev:
             if callback is not None:
@@ -1282,6 +1288,15 @@ class AppModel(ObservableObject):
     def training_plan(self, plan: Optional[TrainingPlan]):
         self.set_training_plan(plan)
 
+    def _plan_does_not_need_reattach(self, animal, plan, previous_plan, target_mode):
+        return (
+            plan == previous_plan
+            and animal == self._training_plan_animal
+            and (
+                (target_mode == TrainingMode.MANUAL and self._attached_plan is None)
+                or (target_mode != TrainingMode.MANUAL and self._attached_plan is plan)
+        ))
+
     def set_training_plan(
         self,
         plan: Optional[TrainingPlan],
@@ -1293,7 +1308,7 @@ class AppModel(ObservableObject):
     ) -> Optional[bool]:
         prev = self._training_plan
         use_animal = target_animal if target_animal != _not_provided else self._selected_animal
-        if plan == prev and use_animal == self._training_plan_animal:
+        if not force_update and self._plan_does_not_need_reattach(use_animal, plan, prev, self._training_mode):
             if callback is not None:
                 callback(True)
             return True
@@ -1333,28 +1348,28 @@ class AppModel(ObservableObject):
                 callback(False, error="superseded")
             return None
         previous_plan = self._training_plan
-        if plan == previous_plan and animal == self._training_plan_animal:
+        if not force_update and self._plan_does_not_need_reattach(animal, plan, previous_plan, target_mode):
             if callback is not None:
                 callback(True)
             return True
+        if animal is not None or plan is None:
+            self._detach_training_plan()  # always
         if animal is not None:
-            self._detach_training_plan()
+            if target_mode != TrainingMode.MANUAL and plan is not None:
+                if self._attach_training_plan(animal, plan, force_update=force_update) is False:
+                    if previous_plan is not None:
+                        self._attach_training_plan(animal, previous_plan)
+                    msg = (
+                        f"Could not attach to plan {plan.plan_id}\n\n"
+                        f"The current animal or the plan might be corrupted")
+                    if callback is not None:
+                        callback(False, error=msg)
+                    return False
             new_plan_id = None if plan is None else plan.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
             logger.debug("training_plan attach: animal prev_plan=%s new=%s", prev_plan_id, new_plan_id)
             if new_plan_id != prev_plan_id:
                 self.save_animal_metadata(animal, sender="animal_current_plan_changed")
-        if plan is None:
-            self._detach_training_plan()  # always
-        elif animal is not None:
-            if target_mode != TrainingMode.MANUAL:
-                if self._attach_training_plan(animal, plan, force_update=force_update) is False:
-                    msg = (
-                        f"\nCould not attach to plan {plan.plan_id}\n\n"
-                        f"The current animal or the plan might be corrupted")
-                    if callback is not None:
-                        callback(False, error=msg)
-                    return False
         self._training_plan = plan
         self._training_plan_animal = animal
         self._on_property_changed(self.Props.TRAINING_PLAN, plan, previous_plan)
@@ -1431,7 +1446,7 @@ class AppModel(ObservableObject):
             plan_id = animal.training.current_protocol
             if plan_id is not None:
                 logger.info("reattaching %s to animal", plan_id)
-                self.training_plan = self.get_training_plan_by_id(animal.training.current_protocol)
+                self.set_training_plan(self.get_training_plan_by_id(animal.training.current_protocol))
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
 
     @property
@@ -1458,9 +1473,9 @@ class AppModel(ObservableObject):
         try:
             succeeded = self.__attach_training_plan(animal, plan, force_update=force_update)
         except BaseException as err:
-            logger.exception("attach to plan %s failed: %s", err)
+            logger.exception("attach to plan %s failed: %s", plan.plan_id, err)
         finally:
-            if not succeeded:
+            if succeeded is False:
                 plan.detach()  # ensure always force detach after, if attach failed in any part.
         return succeeded
 

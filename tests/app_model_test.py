@@ -5,8 +5,11 @@ from unittest import mock
 
 
 import pytest
+from autotrainer.training import TrainingPlan, PlanInfo
 
+from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
+from autotrainer.core import AnimalSubject
 from autotrainer.device import EmulationInterface, Target
 from autotrainer.device.device_interface import Acknowledge
 from tools.acquisition.model.app_model import app_status_to_api_app_mode, app_status_to_behavior_algo_status
@@ -205,3 +208,164 @@ def test_board_reset_engage_emergency(
     assert not analysis.emergency_alarm_monitor.is_engaged
     assert not reset_det.is_engaged
     assert not app_model.behavior.algorithm.algo_paused
+
+
+class TestSelectedModeAnimalPlan:
+
+    @pytest.fixture(autouse=True)
+    def _pre_init(self, app_model, monkeypatch):
+        self._plans_by_id = {}
+        monkeypatch.setattr(
+            app_model._plan_repo,
+            app_model._plan_repo.get_plan.__name__,
+            self._plans_by_id.get,
+        )
+        assert app_model.set_training_mode(TrainingMode.MANUAL_WITH_PROTOCOL) is True
+            # need != MANUAL for attach/resume of training plan
+
+    @pytest.fixture
+    def animal1(self):
+        animal1 = AnimalSubject(name="Animal1")
+        return animal1
+
+    @pytest.fixture
+    def plan1(self, animal1, monkeypatch):
+        plan1 = self.make_plan()
+        animal1.training.current_protocol = plan1.plan_id
+        return plan1
+
+    @pytest.fixture
+    def plan1_resume_ok(self, plan1, monkeypatch):
+        plan1_resume = mock.MagicMock(side_effect=lambda: True)
+        monkeypatch.setattr(plan1, plan1.resume.__name__, plan1_resume)
+        return plan1_resume
+
+    def make_plan(self):
+        plan = TrainingPlan()
+        self._plans_by_id[plan.plan_id] = plan
+        return plan
+
+    @pytest.mark.parametrize("select", [True, False])
+    def test_add_animal(self, app_model, select):
+        callback = mock.MagicMock()
+        animal = app_model.add_animal("new animal", select=select, callback=callback)
+        assert isinstance(animal, AnimalSubject)
+        assert app_model.selected_animal is (animal if select else None)
+        assert app_model.get_animal_by_id(animal.id) is animal
+
+    @pytest.mark.parametrize("select", [True, False])
+    def test_add_empty_animal(self, app_model, animal1, select):
+        app_model.set_selected_animal(animal1)
+        assert app_model.selected_animal is animal1
+        assert app_model.add_animal("", select=select) is None
+        assert app_model.selected_animal is (None if select else animal1)
+
+    def test_set_training_plans(self, app_model, caplog, animal1, plan1, plan1_resume_ok):
+        assert app_model.set_selected_animal(animal1) is True
+        assert plan1_resume_ok.call_args_list == [mock.call()]
+        pli = PlanInfo(
+            plan_id=plan1.plan_id,
+            name=plan1.name,
+            description=plan1.description,
+        )
+        app_model.set_training_plans([pli])
+        assert f"reattaching {plan1.plan_id} to " in caplog.text
+        assert plan1_resume_ok.call_args_list == [mock.call(), mock.call()]
+
+    def test_selected_animal_mode_plan_basis(self, app_model, monkeypatch, animal1, plan1, plan1_resume_ok):
+        assert app_model.selected_animal is None
+        assert app_model.training_plan is None
+        assert app_model.attached_plan is None
+        callback = mock.MagicMock()
+        assert app_model.set_selected_animal(animal1, callback=callback) is True
+        assert app_model.selected_animal == animal1
+        assert app_model.training_plan is plan1
+        assert app_model.attached_plan is plan1
+        assert callback.call_args_list == [mock.call(True)]
+        assert plan1_resume_ok.call_args_list == [mock.call()]
+        assert app_model.set_selected_animal(None) is True
+        assert app_model.selected_animal is None
+        assert app_model.training_plan is None
+        assert app_model.attached_plan is None
+        assert app_model.set_selected_animal(animal1) is True
+        assert app_model.selected_animal is animal1
+        assert app_model.training_plan is plan1
+        assert app_model.attached_plan is plan1
+        assert app_model.set_training_mode(TrainingMode.MANUAL) is True
+        assert app_model.training_plan is plan1
+        assert app_model.attached_plan is None
+        assert app_model.set_training_mode(TrainingMode.AUTOMATIC) is True
+        assert app_model.attached_plan is plan1
+        assert app_model.set_training_mode(TrainingMode.MANUAL_WITH_PROTOCOL) is True
+        assert app_model.attached_plan is plan1
+        assert app_model.set_training_mode(TrainingMode.MANUAL) is True
+        assert app_model.attached_plan is None
+        plan2 = self.make_plan()
+        plan2_resume = mock.MagicMock(side_effect=lambda: True)
+        monkeypatch.setattr(plan2, plan2.resume.__name__, plan2_resume)
+        assert app_model.set_training_plan(plan2)
+        assert app_model.training_plan is plan2
+        assert app_model.attached_plan is None
+        assert app_model.set_training_mode(TrainingMode.AUTOMATIC) is True
+        assert app_model.attached_plan is plan2
+
+    @pytest.mark.parametrize("failed_resume", (mock.MagicMock(side_effect=RuntimeError("foobar")), mock.MagicMock(return_value=False)))
+    def test_selected_animal_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok, failed_resume):
+        animal2 = AnimalSubject()
+        plan2 = self.make_plan()
+        animal2.training.current_protocol = plan2.plan_id
+        callback = mock.MagicMock()
+        assert app_model.set_selected_animal(animal1, callback=callback) is True
+        assert app_model.selected_animal == animal1
+        assert app_model.training_plan == plan1
+        assert callback.call_args_list == [mock.call(True)]
+        assert plan1_resume_ok.call_args_list == [mock.call()]
+
+        monkeypatch.setattr(plan2, plan2.resume.__name__, failed_resume)
+        callback = mock.MagicMock()
+        assert app_model.set_selected_animal(animal2, callback=callback) is False
+        assert failed_resume.call_args_list == [mock.call()]
+        assert callback.call_args_list == [mock.call(False, error='set_training_plan returned false')]
+        assert app_model.selected_animal == animal1
+        assert app_model.training_plan == plan1
+
+    def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
+        plan2 = self.make_plan()
+        animal1.training.current_protocol = plan1.plan_id
+        assert app_model.set_selected_animal(animal1) is True
+        assert app_model.selected_animal == animal1
+        assert app_model.training_plan == plan1
+        failed_resume = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(plan2, plan2.resume.__name__, failed_resume)
+        callback = mock.MagicMock()
+        assert app_model.set_training_plan(plan2, callback=callback) is False
+        assert failed_resume.call_args_list == [mock.call()]
+        assert app_model.training_plan == plan1
+        assert app_model.attached_plan == plan1
+        assert callback.call_args_list == [mock.call(False, error=mock.ANY)]
+        assert "foobar" in caplog.text
+
+    def test_set_selected_animal_already_selected(self, app_model, animal1):
+        assert app_model.set_selected_animal(animal1) is True
+        callback = mock.MagicMock()
+        assert app_model.set_selected_animal(animal1, callback=callback) is True
+        assert app_model.selected_animal == animal1
+        assert callback.call_args_list == [mock.call(True)]
+
+    def test_set_plan_already_set(self, app_model, animal1, plan1, plan1_resume_ok):
+        assert app_model.set_selected_animal(animal1) is True
+        assert app_model.training_plan == plan1
+        callback = mock.MagicMock()
+        assert app_model.set_training_plan(plan1, callback=callback) is True
+        assert app_model.selected_animal == animal1
+        assert callback.call_args_list == [mock.call(True)]
+
+    def test_set_training_mode(self, app_model):
+        assert app_model.training_mode == TrainingMode.MANUAL_WITH_PROTOCOL
+        callback = mock.MagicMock()
+        assert app_model.set_training_mode(TrainingMode.MANUAL, callback=callback) is True
+        assert callback.call_args_list == [mock.call(True)]
+        assert app_model.training_mode == TrainingMode.MANUAL
+        callback = mock.MagicMock()
+        assert app_model.set_training_mode(TrainingMode.MANUAL, callback=callback) is True
+        assert callback.call_args_list == [mock.call(True)]
