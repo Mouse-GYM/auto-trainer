@@ -269,7 +269,7 @@ class TestSelectedModeAnimalPlan:
             description=plan1.description,
         )
         app_model.set_training_plans([pli])
-        assert f"reattaching {plan1.plan_id} to " in caplog.text
+        assert f"reattaching plan {plan1.plan_id} to " in caplog.text
         assert plan1_resume_ok.call_args_list == [mock.call(), mock.call()]
 
     def test_selected_animal_mode_plan_basis(self, app_model, monkeypatch, animal1, plan1, plan1_resume_ok):
@@ -320,7 +320,6 @@ class TestSelectedModeAnimalPlan:
         assert app_model.training_plan == plan1
         assert callback.call_args_list == [mock.call(True)]
         assert plan1_resume_ok.call_args_list == [mock.call()]
-
         monkeypatch.setattr(plan2, plan2.resume.__name__, failed_resume)
         callback = mock.MagicMock()
         assert app_model.set_selected_animal(animal2, callback=callback) is False
@@ -328,6 +327,14 @@ class TestSelectedModeAnimalPlan:
         assert callback.call_args_list == [mock.call(False, error='set_training_plan returned false')]
         assert app_model.selected_animal == animal1
         assert app_model.training_plan == plan1
+
+    def test_set_animal_error(self, app_model, monkeypatch, animal1, plan1):
+        callback = mock.MagicMock()
+        failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(app_model, app_model._set_selected_animal.__name__, failed)
+        with pytest.raises(RuntimeError, match="foobar"):
+            app_model.set_selected_animal(animal1, callback=callback)
+        assert callback.call_args_list == [mock.call(False, error='set_selected_animal error: foobar')]
 
     def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
         plan2 = self.make_plan()
@@ -345,6 +352,14 @@ class TestSelectedModeAnimalPlan:
         assert callback.call_args_list == [mock.call(False, error=mock.ANY)]
         assert "foobar" in caplog.text
 
+    def test_set_training_plan_error(self, app_model, animal1, plan1, monkeypatch):
+        failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, failed)
+        callback = mock.MagicMock()
+        with pytest.raises(RuntimeError, match="foobar"):
+            app_model.set_training_plan(plan1, callback=callback)
+        assert callback.call_args_list == [mock.call(False, 'set_training_plan error: foobar')]
+
     def test_set_selected_animal_already_selected(self, app_model, animal1):
         assert app_model.set_selected_animal(animal1) is True
         callback = mock.MagicMock()
@@ -360,7 +375,7 @@ class TestSelectedModeAnimalPlan:
         assert app_model.selected_animal == animal1
         assert callback.call_args_list == [mock.call(True)]
 
-    def test_set_training_mode(self, app_model):
+    def test_set_training_mode_basis(self, app_model, monkeypatch):
         assert app_model.training_mode == TrainingMode.MANUAL_WITH_PROTOCOL
         callback = mock.MagicMock()
         assert app_model.set_training_mode(TrainingMode.MANUAL, callback=callback) is True
@@ -369,3 +384,12 @@ class TestSelectedModeAnimalPlan:
         callback = mock.MagicMock()
         assert app_model.set_training_mode(TrainingMode.MANUAL, callback=callback) is True
         assert callback.call_args_list == [mock.call(True)]
+
+    def test_set_training_mode_error(self, app_model, monkeypatch):
+        exc = RuntimeError("foobar")
+        failed = mock.MagicMock(side_effect=exc)
+        monkeypatch.setattr(app_model, app_model._set_training_mode.__name__, failed)
+        callback = mock.MagicMock()
+        with pytest.raises(RuntimeError, match="foobar"):
+            app_model.set_training_mode(TrainingMode.AUTOMATIC, callback=callback)
+        assert callback.call_args_list == [mock.call(False, error='set_training_mode error: foobar')]

@@ -1437,16 +1437,14 @@ class AppModel(ObservableObject):
     def set_training_plans(self, value):
         self._training_plans = value
         self._training_plan_by_plan_id = {
-            plan.plan_id: plan
-            for idx, plan in enumerate(self._training_plans)
+            plan.plan_id: plan for plan in self._training_plans
         }
+        prev_plan = self._training_plan
         self._detach_training_plan()  # always
         animal = self._selected_animal
-        if animal is not None:
-            plan_id = animal.training.current_protocol
-            if plan_id is not None:
-                logger.info("reattaching %s to animal", plan_id)
-                self.set_training_plan(self.get_training_plan_by_id(animal.training.current_protocol))
+        if animal is not None and prev_plan is not None:
+            logger.info("reattaching plan %s to animal", prev_plan.plan_id)
+            self.set_training_plan(prev_plan)
         self.property_changed(self.Props.TRAINING_PLANS, value, None)
 
     @property
