@@ -1,5 +1,6 @@
 
 import math
+import queue
 import threading
 import time
 from datetime import timedelta
@@ -560,6 +561,28 @@ class TestBehaviorAlgoWithHandlerThread:
         else:
             assert duration < 0.02, ("unless test runner overloaded, "
                                      "without wait the duration should be almost 0")
+
+    def test_put_func_with_queue_full_raises(self, algo, request):
+        th_q_ = algo._handler_thread_queue
+        assert th_q_ is not None
+        algo_queue = th_q_[1]
+        def void():
+            pass
+        entered = threading.Event()
+        finished = threading.Event()
+        request.addfinalizer(finished.set)
+        def func1():
+            entered.set()
+            finished.wait(42)
+        algo.put_func_call(func1, wait=False)
+        assert entered.wait(1)
+        # we are able to put without wait up to queue maxsize:
+        for _ in range(algo_queue.maxsize):
+            algo.put_func_call(void, wait=False, put_timeout=0)
+        # then it raises:
+        with pytest.raises(queue.Full):
+            algo.put_func_call(void, wait=False, put_timeout=0)
+
 
 class TestBehaviorAlgoWithoutHandlerThread:
 

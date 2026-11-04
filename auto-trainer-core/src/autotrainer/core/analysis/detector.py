@@ -16,12 +16,13 @@ from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.event.event_manager import EventManager
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
-
+from autotrainer.core.queue_util import clear_queue
 
 logger = get_verbose_logger(__name__)
 
 
 _request_check_state = object()
+_execute_func = object()
 
 
 DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
@@ -300,7 +301,12 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             self._p_started = get_perf_now()
             self._started_datetime = datetime.datetime.now()
             if self.use_daemon:
-                cmd_queue = queue.Queue(maxsize=32)
+                cmd_queue = queue.Queue(maxsize=64)
+                # relatively small queue size on purpose,
+                # all detectors check_state() and related code are supposed to be ~fast, if not then it's a bug.
+                # This also allows to use put_nowait on the queue from the different possible paths to it.
+                # If too many put to it are done in such a small time window that the daemon cannot keep with that rate,
+                # and makes the queue to become full: that's also a bug / sign of smth not good.
                 thread = threading.Thread(name=self._name, target=self._daemon_run, daemon=True,
                                           args=(cmd_queue,))
                 self._thread_queue = thread, cmd_queue  # set before start
@@ -344,8 +350,14 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
             cmd = r[0]
             if cmd is _request_check_state:
                 force = r[1]
-                continue
-            log.warning("unhandled command object: %r", r)
+            elif cmd is _execute_func:
+                func = r[1]
+                try:
+                    func()
+                except Exception as err:
+                    log.exception("Error while executing %s: %s", func, err)
+            else:
+                log.warning("unhandled command object: %r", r)
         # end while True
         log.verbose("%s: exiting main loop", self._name)
 
@@ -366,18 +378,21 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
         # don't try join check thread with the lock acquired, given that can deadlock otherwise.
         if thread_queue is not None:
             thread, q = thread_queue
-            # assert isinstance(q, queue.Queue)
             if thread is threading.current_thread():
                 log.warning("%s: stop() from daemon thread, should not happen", self._name)
             else:
                 if thread.is_alive():
-                    q.put_nowait(None)
+                    try:
+                        q.put_nowait(None)
+                    except queue.Full:
+                        log.warning("queue is full, cannot send None for stop")
                 log.debug("Joining check thread %s", thread)
-                thread.join(3)
+                thread.join(1)
                 if thread.is_alive():
                     log.warning("check thread still alive, but continuing anyway")
                 else:
                     log.verbose("joined check thread %s", thread)
+                clear_queue(q, name=self.name)
 
     def restart(self):
         self._logger.notice("Restarting %s", self._name)
@@ -440,12 +455,26 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
     def _start(self):
         super()._start()
         for sub in self._sub_detectors.values():
-            sub.detector.start()
+            try:
+                sub.detector.start()
+            except BaseException as err:
+                self._logger.exception("could not start detector %s: %s", sub.detector.name, err,
+                                       stacklevel=3)
+                try:
+                    self.stop()
+                except BaseException as err:
+                    self._logger.warning("failed to stop after failed sub-detector start: %s", err)
+                raise
 
     def _stop(self):
-        super()._stop()
-        for sub in self._sub_detectors.values():
-            sub.detector.stop()
+        try:
+            super()._stop()
+        finally:
+            for sub in self._sub_detectors.values():
+                try:
+                    sub.detector.stop()
+                except BaseException as err:
+                    logger.warning("sub-detector %s failed to stop: %s ; but continuing", sub.detector.name, err)
 
     @property
     def sub_detectors(self) -> Dict[str, GroupSubDetectorT]:
@@ -481,6 +510,24 @@ class GroupBaseDetector(BaseDetector[DetectorConfigT], Generic[DetectorConfigT, 
         return ctx.detector
 
     def _on_sub_detector_property_changed(self, detector: GroupSubDetectorT, name: str, value, old_value):
+        th_q = self._thread_queue
+        def execute():
+            self._execute_on_sub_detector_property_changed(detector, name, value, old_value)
+        if th_q is not None:
+            th, cmd_q = th_q
+            # when a group is daemon, then forward the event to its thread (if not it)
+            if not th.is_alive():
+                logger.warning("group detector thread %s not anymore alive, "
+                               "handling sub-detector property changed inline", self.name)
+            elif threading.current_thread() is not th:
+                logger.debug("relaying _on_sub_detector_property_changed(%r, %r, ..) to its daemon",
+                             detector.name, name)
+                cmd_q.put_nowait((_execute_func, execute))
+                return
+        # otherwise handle with current
+        execute()
+
+    def _execute_on_sub_detector_property_changed(self, detector, name, value, old_value):
         self.property_changed(self.DETECTOR_PROPERTY_CHANGED, (detector, name, value), old_value)
         if name in (detector.IS_ENGAGED, detector.CONFIG):
             self.check_state()

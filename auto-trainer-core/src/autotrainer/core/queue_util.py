@@ -1,36 +1,40 @@
 import sys
+import queue
 from queue import Empty
-from multiprocessing import Queue
-from typing import Union
+import multiprocessing
+from typing import Union, Optional
 
-from autotrainer.core import FixedArrayQueue
 from autotrainer.core.logging import get_verbose_logger
 
 logger = get_verbose_logger(__name__)
 
 
-def clear_queue(queue: Union[Queue, FixedArrayQueue],
+def clear_queue(queue_or_none: Optional[Union[queue.Queue, multiprocessing.Queue]],
                 *, log_dumped: bool=False, name: str=""):
     """Empty a queue."""
-    if queue is None or sys.platform == "darwin":
+    if queue_or_none is None:
         return
-
+    is_darwin = sys.platform == "darwin"
     if not name:
-        name = str(queue)
-
+        name = str(queue_or_none)
     flushed = 0
-    task_done = getattr(queue, "task_done", lambda: None)
+    task_done = getattr(queue_or_none, "task_done", lambda: None)
     try:
-        while not queue.empty() or queue.qsize() > 0:
+        while True:
+            if not is_darwin:
+                if queue_or_none.empty() and queue_or_none.qsize() == 0:
+                    break
             try:
-                obj = queue.get_nowait()
+                obj = queue_or_none.get_nowait()
                 flushed += 1
                 task_done()
                 if log_dumped:
                     logger.debug("queue %s: flushed %s: %s", name, type(obj), obj)
             except Empty:
-                empty = queue.empty()
-                qsize = queue.qsize()
+                if is_darwin:
+                    break
+                empty = queue_or_none.empty()
+                qsize = queue_or_none.qsize()
                 if not empty or qsize > 0:
                     logger.warning("queue %s: raised Empty but empty()=%s and qsize()=%s",
                                    name, empty, qsize)
@@ -40,21 +44,3 @@ def clear_queue(queue: Union[Queue, FixedArrayQueue],
         logger.error("Could not clear queue %s: %s", name, err)
 
     logger.debug("queue %s: flushed %s items", name, flushed)
-
-
-def trim_queue(queue: Queue, limit: int) -> bool:
-    """Trim queue length to the specified limit."""
-    # unused atm
-    if queue is None or sys.platform == "darwin":
-        return False
-
-    trimmed = False
-
-    while queue.qsize() > limit:
-        try:
-            queue.get_nowait()
-            trimmed = True
-        except Empty:
-            pass
-
-    return trimmed
