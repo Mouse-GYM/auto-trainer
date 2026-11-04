@@ -72,6 +72,44 @@ class TestAutoCloseGate(MockSystemMachine):
             if enabled:
                 assert "trial duration too short, skipping auto-close-gate" in caplog.text
 
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_reopen_gate_when_load_cell_engaged_at_intertrial_end(self, machine, enabled, caplog, monkeypatch):
+        algo = machine.algorithm
+        algo.auto_close_gate_on_intertrial_config.enabled = enabled
+        topcam = algo.top_camera_presence_detection
+
+        orig = machine._consider_close_gate_during_intertrial
+        def before_consider_close_gate(*args, **kwargs):
+            topcam.last_presence_start_perf_c = self.get_current_perf_now()
+            return orig(*args, **kwargs)
+        monkeypatch.setattr(machine, "_consider_close_gate_during_intertrial", before_consider_close_gate)
+
+        self.start_trial_in_tunnel()
+        algo.update_mouse_seen(True)
+
+        def load_cell_engaged_while_gate_closed():
+            self._load_cell.is_engaged = True
+
+        caplog.set_level(logging.DEBUG)
+        with self.mock_analysis(det_conc_func=load_cell_engaged_while_gate_closed):
+            self.increment_perf_now(15)
+            self.exit_tunnel()
+
+        assert machine.state == SystemState.tunnel
+        tunnel_dev = self.tunnel_dev
+        if enabled:
+            assert "Closing tunnel gate for intertrial" in caplog.text
+            gate_calls = [call for call in tunnel_dev.method_calls
+                          if call in (mock.call.close_tunnel_gate(), mock.call.open_tunnel_gate())]
+            assert gate_calls == [mock.call.close_tunnel_gate(), mock.call.open_tunnel_gate()]
+        else:
+            assert tunnel_dev.close_tunnel_gate.call_args_list == []
+            assert tunnel_dev.open_tunnel_gate.call_args_list == []
+
+        self.exit_tunnel()
+        assert machine.state == SystemState.cage
+        assert tunnel_dev.open_tunnel_gate.call_args_list == ([mock.call()] if enabled else [])
+
     def test_when_algo_paused_before_consider(self, machine, monkeypatch, caplog):
         algo = self.algo
         orig = machine._consider_close_gate_during_intertrial
