@@ -212,6 +212,11 @@ def test_board_reset_engage_emergency(
 
 class TestSelectedModeAnimalPlan:
 
+    def make_plan(self):
+        plan = TrainingPlan()
+        self._plans_by_id[plan.plan_id] = plan
+        return plan
+
     @pytest.fixture(autouse=True)
     def _pre_init(self, app_model, monkeypatch):
         self._plans_by_id = {}
@@ -239,11 +244,6 @@ class TestSelectedModeAnimalPlan:
         plan1_resume = mock.MagicMock(side_effect=lambda: True)
         monkeypatch.setattr(plan1, plan1.resume.__name__, plan1_resume)
         return plan1_resume
-
-    def make_plan(self):
-        plan = TrainingPlan()
-        self._plans_by_id[plan.plan_id] = plan
-        return plan
 
     @pytest.mark.parametrize("select", [True, False])
     def test_add_animal(self, app_model, select):
@@ -335,6 +335,15 @@ class TestSelectedModeAnimalPlan:
         with pytest.raises(RuntimeError, match="foobar"):
             app_model.set_selected_animal(animal1, callback=callback)
         assert callback.call_args_list == [mock.call(False, error='set_selected_animal error: foobar')]
+
+    def test_set_animal_with_plan_error(self, app_model, monkeypatch, animal1, plan1):
+        callback = mock.MagicMock()
+        failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, failed)
+        with pytest.raises(RuntimeError, match="foobar"):
+            app_model.set_selected_animal(animal1, callback=callback)
+        assert callback.call_args_list == [mock.call(False, error="set_selected_animal error: foobar")]
+        assert app_model.selected_animal is None
 
     def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
         plan2 = self.make_plan()
