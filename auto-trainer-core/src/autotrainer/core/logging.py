@@ -5,7 +5,6 @@ import functools
 import itertools
 import logging
 import logging.handlers
-import math
 import multiprocessing
 import operator
 import os
@@ -689,6 +688,7 @@ def setup_logging(
     _already_setup = True
 
     install_log_exception_hook()
+    logging.captureWarnings(True)  # also logs all warnings.warn(..).
 
     return desired_logger
 
