@@ -1,7 +1,7 @@
 import dataclasses
 import enum
 from datetime import datetime
-from typing import Optional, Callable, List, Union, Tuple
+from typing import Optional, Callable, List, Union, Tuple, Protocol
 
 from autotrainer.api import ApiEmergencyStopReason, ApiEmergencyResumeReason, ApiAlarmKind
 from autotrainer.api.event import build_event, EmergencyStopContext, EmergencyResumeContext
@@ -49,6 +49,11 @@ class EmergencyResumeOutcome(enum.Enum):
     NOT_STOPPED = "not-stopped"
     REFUSED = "refused"
     FAILED = "failed"
+
+
+class EmergencyReportResumeT(Protocol):
+    def __call__(self, outcome: EmergencyResumeOutcome, detail: Optional[str] = None):
+        """Signature for emergency report func"""
 
 
 def _ignore_resume_outcome(outcome: EmergencyResumeOutcome, detail: Optional[str] = None):
@@ -338,24 +343,25 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         RESUMED means the algorithm was un-paused, even if something stopped it again before this returns.
         Must not be called from the algorithm handler thread: a call from there is queued behind the caller.
         """
-        outcome: List[Tuple[EmergencyResumeOutcome, Optional[str]]] = [
-            (EmergencyResumeOutcome.FAILED, "the resume did not run")]
+        outcome: Tuple[EmergencyResumeOutcome, Optional[str]] = (
+            EmergencyResumeOutcome.FAILED, "the resume did not run")
 
         def report(result: EmergencyResumeOutcome, detail: Optional[str] = None):
-            outcome[0] = (result, detail)
+            nonlocal outcome
+            outcome = (result, detail)
 
         try:
-            BehaviorAlgorithm.put_func_call(
+            self._system_machine.algorithm.put_func_call(
                 self._emergency_resume, (source,),
                 dict(reason_code=reason_code, resumed_alarms=resumed_alarms, report=report),
                 wait=True)
         except Exception:
             # reached only when the call runs in place (no handler thread, as in tests); the handler thread logs and
             # drops such an exception itself. A raising emergency_resumed handler must not undo a completed resume.
-            if outcome[0][0] is not EmergencyResumeOutcome.RESUMED:
+            if outcome[0] is not EmergencyResumeOutcome.RESUMED:
                 raise
             logger.exception("emergency_resumed handler failed after resuming from %s", source)
-        return outcome[0]
+        return outcome
 
     def _emergency_resume(
         self,
@@ -363,7 +369,7 @@ class BehaviorModel(ObservableObject, ProjectDependentProtocol):
         *,
         reason_code: ApiEmergencyResumeReason,
         resumed_alarms: Optional[List[ApiAlarmKind]],
-        report: Callable[..., None] = _ignore_resume_outcome,
+        report: EmergencyReportResumeT = _ignore_resume_outcome,
     ):
         algo = self._system_machine.algorithm
         logger.info("emergency_resume called: %s - current=%s", source, algo.algo_paused)
