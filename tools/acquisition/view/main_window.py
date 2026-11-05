@@ -1209,9 +1209,10 @@ class MainWindow(QMainWindow):
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
             @invoke_method
-            def cb(result, *, error=None):
+            def cb(result, *, error=None, load_result=None):
                 cmb.setEnabled(True)
-                if not result:
+                # NB: only reset to current if it's not a load_result
+                if not result and load_result is None:
                     after_plan = app_model.training_plan
                     after_idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
                     with signals_blocked(cmb):
@@ -1639,22 +1640,43 @@ class MainWindow(QMainWindow):
         self._app_model.add_animal(name, select=True, background=True, callback=cb)
 
     def _animal_changed(self, _):
+        app_model = self._app_model
         combo = self._animal_dropdown_combo
         if combo.currentIndex() in (0, -1):
             animal = None
         else:
             animal_id = combo.currentData()
-            animal = self._app_model.get_animal_by_id(animal_id)
+            animal = app_model.get_animal_by_id(animal_id)
         @invoke_method
-        def cb(result, *, error=None):
+        def cb(result, *, error=None, load_result=None):
             combo.setEnabled(True)
-            if not result:
+            if not result and load_result is not None:
                 self._show_message(
                     "Cannot change animal",
                     f"Failed to select animal {None if animal is None else animal.name}. Error:\n{error}"
                 )
+                self._refresh_animal_and_plan()
         combo.setEnabled(False)
+        # NB: also pre-set the plan/protocol in UI:
+        plan_combo = self._training_plan_combo
+        idx = self._get_training_plan_combo_index(None if animal is None else animal.training.current_protocol)
+        with signals_blocked(plan_combo):
+            plan_combo.setCurrentIndex(idx)
+        # so that it's visible if/when a plan/protocol deserialize gets an issue and ask for what to do.
         self._app_model.set_selected_animal(animal, background=True, callback=cb)
+
+    @invoke_method
+    def _refresh_animal_and_plan(self):
+        app_model = self._app_model
+        cur_plan = app_model.training_plan
+        idx = self._get_training_plan_combo_index(None if cur_plan is None else cur_plan.plan_id)
+        with signals_blocked(self._training_plan_combo):
+            self._training_plan_combo.setCurrentIndex(idx)
+        animal_combo = self._animal_dropdown_combo
+        after_animal = app_model.selected_animal
+        idx = animal_combo.findText("" if after_animal is None else after_animal.name)
+        with signals_blocked(animal_combo):
+            animal_combo.setCurrentIndex(idx)
 
     @invoke_method
     def _refresh_prev_next_phases(self):
@@ -1881,7 +1903,7 @@ class MainWindow(QMainWindow):
         # if name in (det.IS_ENGAGED, det.CONFIG, det.PELLETS_CONSUMED):
         self._set_autoclamp_evasion(det)
 
-    def _get_training_plan_combo_index(self, plan_id: Optional[str]):
+    def _get_training_plan_combo_index(self, plan_id: Optional[str]) -> int:
         dct = self._training_plan_index_by_plan_id
         return dct.get(plan_id, len(dct))  # NB: the last is the empty/none selected.
 
@@ -1931,22 +1953,22 @@ class MainWindow(QMainWindow):
         if self.show_reach_event_action.isChecked():
             self.on_show_reach_event(True)
 
-    @invoke_method
-    def _on_training_plan_deserialized(self, plan: TrainingPlan, result: LoadProgressResult, *,
+    def _on_training_plan_deserialized(self, animal: AnimalSubject, plan: TrainingPlan, result: LoadProgressResult, *,
                                        force_update: bool = False):
-        animal = self._app_model.selected_animal
-        logger.notice("training_plan deserialized: id=%s result=%s force_update=%s animal=%s",
-                    plan.plan_id, result, force_update, animal)
+        logger.notice("training_plan deserialized: id=%s (%s) result=%s force_update=%s animal=%s",
+                    plan.plan_id, plan.name, result, force_update, animal)
         app_model = self._app_model
         #
         if result == LoadProgressResult.OUT_OF_DATE:
             if force_update:  # loop detected
                 app_model.training_plan = None
                 logger.warning("detected training_plan_deserialize loop, result=%s plan=%s", result, plan)
+                # could also show message box to user
+                self._refresh_animal_and_plan()
                 return
             msg = (
-                "This training protocol has been revised since it was last used with this animal.\n"
-                "Progress for this animal for training phases that have changed will be reset for this animal."
+                f"The training protocol ({plan.name}) currently linked to the animal has been revised since it was last used.\n"
+                "Progress for this animal for training phases that have changed will be reset."
             )
 
         elif result == LoadProgressResult.UNKNOWN_ERROR:
@@ -1957,6 +1979,7 @@ class MainWindow(QMainWindow):
                     "There was an unexpected error loading progress for this training protocol with this animal.\n"
                     "It cannot be used with this animal at this time."
                 )
+                self._refresh_animal_and_plan()
                 return
             msg = (
                 "There was an unexpected error loading progress for this training protocol with this animal.\n"
@@ -1966,21 +1989,13 @@ class MainWindow(QMainWindow):
             # should be LoadProgressResult.OK
             if result != LoadProgressResult.OK:
                 logger.warning("unexpected or unhandled plan deserialize result: %s plan=%s", result, plan)
+            self._refresh_animal_and_plan()
             return
 
-        def cb(result, *, error = None):
-            self.__on_training_plan_deserialized2(plan, animal, msg)
-        # this first set_training_plan is routed through the app model worker thread:
-        app_model.set_training_plan(None, background=True, callback=cb,
-                                    target_animal=animal)
+        self.__on_training_plan_deserialized2(animal, plan, msg)
 
     @invoke_method
-    def __on_training_plan_deserialized2(self, plan, animal, msg):
-        combo = self._training_plan_combo
-        idx = self._get_training_plan_combo_index(plan.plan_id)
-        with signals_blocked(combo):
-            combo.setCurrentIndex(idx)
-        self.update()
+    def __on_training_plan_deserialized2(self, animal: AnimalSubject, plan: TrainingPlan, msg: str):
         app_model = self._app_model
         msg_box = QMessageBox(self)
         self._add_box_to_open_dialogs(msg_box)
@@ -1997,25 +2012,24 @@ class MainWindow(QMainWindow):
             pass
 
         if clicked_but != load_btn:
-            # keeping all as is, but the training plan reset to None.
-            idx = self._get_training_plan_combo_index(None)
-            with signals_blocked(combo):
-                combo.setCurrentIndex(idx)
+            self._refresh_animal_and_plan()
             return
 
-        @invoke_method
-        def cb(result, *, error=None):
-            after_plan = app_model.training_plan
-            idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
-            logger.debug("in cb: %s error=%s plan=%s ; idx=%s", result, error, after_plan, idx)
-            with signals_blocked(combo):
-                combo.setCurrentIndex(idx)
+        def final_cb(result, *, error=None):
             if result:
+                assert animal.training.current_protocol == plan.plan_id
                 prog = plan.serialize_progress()
                 animal.training.set_plan_progress(plan.plan_id, prog)
                 app_model.save_animal_metadata(animal, sender="training_plan_deserialized_recovered")
-        # then this 2nd one too:
-        app_model.set_training_plan(plan, force_update=True, background=True, callback=cb, target_animal=animal)
+            self._refresh_animal_and_plan()
+        animal.training.current_protocol = None  # temporarily
+        def cb_animal(result, *, error=None):
+            if result:
+                app_model.set_training_plan(plan, force_update=True, callback=final_cb, target_animal=animal)
+            else:
+                self._refresh_animal_and_plan()
+        # we also need to ensure selected animal:
+        app_model.set_selected_animal(animal, background=True, callback=cb_animal)
 
     def _reset_animal_pellet_counts(self):
         app_model = self._app_model

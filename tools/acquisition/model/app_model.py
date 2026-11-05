@@ -20,7 +20,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone, date, timedelta
 from functools import partial
 from multiprocessing.managers import SyncManager, ValueProxy
-from multiprocessing.sharedctypes import Synchronized
 from pathlib import Path
 from queue import Queue, Empty
 from typing import Optional, List, Dict, Callable, Any, Union, ClassVar, Protocol, Tuple, NamedTuple, Type, TypeVar, \
@@ -65,6 +64,7 @@ from autotrainer.core.analysis.alarm_monitor import EmergencyReason
 from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
+from autotrainer.core.helpers import has_kwarg
 from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
@@ -298,7 +298,7 @@ _RPC_BEHAVIOR_SETTINGS: Dict[ApiCommand, _RpcBehaviorSetting] = {
 
 
 class TrainingPlanDeserializedEvent(Protocol):
-    def __call__(self, plan: TrainingPlan, result: LoadProgressResult, *, force_update: bool):
+    def __call__(self, animal: AnimalSubject, plan: TrainingPlan, result: LoadProgressResult, *, force_update: bool):
         """Emitted when we deserialize a plan"""
 
 
@@ -327,13 +327,19 @@ class WatchdogItems(str, enum.Enum):
     POSE_DATA_MONITOR_PROC = "pose_data_monitor_proc"
 
 
-class OkCallBackT(Protocol):
+class OkCallBackT1(Protocol):
 
     def __call__(self, result: bool, *, error: Optional[str] = None):
         """For callback of set_animal_selected + set_training_mode + set_training_plan"""
 
 
-MaybeOkCallBack = Optional[OkCallBackT]
+class OkCallBackT2(Protocol):
+
+    def __call__(self, result: bool, *, error: Optional[str] = None, load_result: Optional[LoadProgressResult] = None):
+        """For callback of set_animal_selected + set_training_mode + set_training_plan"""
+
+
+MaybeOkCallBack = Optional[Union[OkCallBackT1, OkCallBackT2]]
 
 
 def _use_worker_lock(func):
@@ -1165,23 +1171,22 @@ class AppModel(ObservableObject):
         self._selected_animal = animal
         if animal_plan is not skip:
             assert isinstance(animal_plan, (TrainingPlan, type(None)))
+            ok = False
+            error = None
             try:
-                if not self._set_training_plan(animal_plan):  # don't pass the callback here.
-                    self._selected_animal = previous_animal  # force
-                    if previous_animal is not None and previous_attached_plan is not None:
-                        self._attach_training_plan(previous_animal, previous_attached_plan)
-                    if callback is not None:
-                        callback(False, error="set_training_plan returned false")
-                    # NB: self.on_error() is called inside set_training_plan already.
-                    return False
+                ok = self._set_training_plan(animal_plan)  # don't pass the callback here.
+                if not ok:
+                    error = "set_training_plan returned false"
             except BaseException as err:
                 logger.error("set_training_plan error: %s", err)
+                error = f"set_training_plan error: {err}"
+            if not ok:
                 self._selected_animal = previous_animal
                 if previous_animal is not None and previous_attached_plan is not None:
                     self._attach_training_plan(previous_animal, previous_attached_plan)
                 if callback is None:
                     raise
-                callback(False, error=f"set_training_plan error: {err}")
+                callback(False, error=error)
                 return False
         logger.success("Switched fully to animal %s", animal)
         if callback is not None:
@@ -1356,18 +1361,22 @@ class AppModel(ObservableObject):
             if callback is not None:
                 callback(True)
             return True
-        if animal is not None or plan is None:
-            self._detach_training_plan()  # always
         if animal is not None:
             if target_mode != TrainingMode.MANUAL and plan is not None:
-                if self._attach_training_plan(animal, plan, force_update=force_update) is False:
-                    if previous_plan is not None:
-                        self._attach_training_plan(animal, previous_plan)
+                attach_res = self._attach_training_plan(animal, plan, force_update=force_update)
+                if attach_res is False:
                     msg = (
                         f"Could not attach to plan {plan.plan_id}\n\n"
                         f"The current animal or the plan might be corrupted")
                     if callback is not None:
                         callback(False, error=msg)
+                    return False
+                elif isinstance(attach_res, LoadProgressResult) or attach_res is False:
+                    if callback is not None:
+                        kwargs = {}
+                        if has_kwarg(callback, "load_result"):
+                            kwargs["load_result"] = attach_res
+                        callback(False, error="load plan progress failed", **kwargs)
                     return False
             new_plan_id = None if plan is None else plan.plan_id
             prev_plan_id, animal.training.current_protocol = animal.training.current_protocol, new_plan_id
@@ -1470,32 +1479,15 @@ class AppModel(ObservableObject):
         plan: TrainingPlan,
         *,
         force_update: bool = False,
-    ) -> Optional[bool]:
-        succeeded = False
-        try:
-            succeeded = self.__attach_training_plan(animal, plan, force_update=force_update)
-        except BaseException as err:
-            logger.exception("attach to plan %s failed: %s", plan.plan_id, err)
-        finally:
-            if succeeded is False:
-                plan.detach()  # ensure always force detach after, if attach failed in any part.
-        return succeeded
-
-    def __attach_training_plan(
-        self,
-        animal: AnimalSubject,
-        plan: TrainingPlan,
-        *,
-        force_update: bool = False,
-    ) -> Optional[bool]:
+    ) -> Optional[Union[bool, LoadProgressResult]]:
         """Returns False if attach not done"""
         algo = self._behavior.algorithm
-        attached = self._attached_plan
-        if attached is not None and not force_update:
-            if attached.plan_id == plan.plan_id and animal == self._attached_animal:
+        prev_attached_plan = self._attached_plan
+        if prev_attached_plan is not None and not force_update:
+            if prev_attached_plan.plan_id == plan.plan_id and animal == self._attached_animal:
                 logger.verbose("Plan %s already attached", plan.plan_id)
                 return None
-        self._detach_training_plan()
+
         prog = animal.training.get_plan_progress(plan.plan_id)
         # if prog is None:
         #     logger.debug("plan first use, using plan.serialize_progress")
@@ -1504,9 +1496,9 @@ class AppModel(ObservableObject):
         if prog is not None:
             logger.debug("%s: deserializing plan progress: %s", animal, prog)
             load_result = plan.deserialize_progress(prog, force_update=force_update)
-            self.training_plan_deserialized(plan, load_result, force_update=force_update)
+            self.training_plan_deserialized(animal, plan, load_result, force_update=force_update)
             if load_result != LoadProgressResult.OK:
-                return False
+                return load_result
 
         is_auto = self._training_mode == TrainingMode.AUTOMATIC
         logger.notice("Animal %s: attaching is_auto=%s to plan %s ..",
@@ -1517,32 +1509,20 @@ class AppModel(ObservableObject):
         plan.attach(algo, pellet_dev, tunnel_dev)
         logger.verbose("attached to plan %s", plan.plan_id)
         logger.info("resuming plan %s", plan.plan_id)
-        prev_plan = self._attached_plan
-        prev_animal = self._attached_animal
+        ok = False
+        try:
+            ok = plan.resume()
+            if not ok:
+                logger.error("plan %s resume returned False", plan.plan_id)
+        except BaseException as err:
+            logger.exception("plan %s resume error: %s", plan.plan_id, err)
+        if not ok:
+            plan.detach()  # don't forget
+            return False
+        #
+        self._detach_training_plan()
         self._attached_plan = plan
         self._attached_animal = animal
-        failed = True
-        try:
-            got_err = None
-            try:
-                resume_success = plan.resume()
-            except BaseException as err:
-                logger.exception("plan %s resume failed: %s", plan.plan_id, err)
-                got_err = err
-                resume_success = False
-            if not resume_success:
-                self._attached_plan = prev_plan
-                self._attached_animal = prev_animal
-                if got_err is not None:
-                    raise got_err
-                logger.error("plan %s resume returned False", plan.plan_id)
-                return False
-            failed = False
-        finally:
-            if failed:
-                logger.verbose("detaching from failed resume plan")
-                plan.detach()  # don't forget
-        #
         plan.property_changed += self._on_training_plan_property_changed  # first, to be sure get everything
         plan.progress_updated += self._on_training_plan_progress_updated
         self._attach_training_phase(plan.current_phase)
@@ -2688,8 +2668,9 @@ class AppModel(ObservableObject):
         animal.training.set_plan_progress(plan.plan_id, prog)
         self.save_animal_metadata(animal, sender="plan-progress-updated")
         self.property_changed(self.Props.TRAINING_PLAN_PROP, None, None)
+        phase = plan.current_phase
         self._event_manager.post_event_content(
-            ApiEventKind.trainingProgressUpdate, dict(training_phase_id=plan.current_phase.phase_id))
+            ApiEventKind.trainingProgressUpdate, dict(training_phase_id=None if phase is None else phase.phase_id))
 
     def _on_training_phase_property_changed(self, name, value, _):
         logger.debug("phase prop: %s -> %s", name, value)
