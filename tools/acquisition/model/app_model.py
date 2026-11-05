@@ -603,7 +603,7 @@ class AppModel(ObservableObject):
             target=self._worker_thread_run, args=(self._worker_thread_queue,), daemon=True,
             name="main_worker_thread")
         thread.start()
-        self._worker_thread_long_tasks_execution = thread
+        self._worker_thread = thread
 
         self._rpc_service: Optional[RpcService] = None
         self._rpc_start_or_stop_pending = False
@@ -1371,7 +1371,8 @@ class AppModel(ObservableObject):
                     if callback is not None:
                         callback(False, error=msg)
                     return False
-                elif isinstance(attach_res, LoadProgressResult) or attach_res is False:
+                elif isinstance(attach_res, LoadProgressResult):
+                    assert attach_res != LoadProgressResult.OK
                     if callback is not None:
                         kwargs = {}
                         if has_kwarg(callback, "load_result"):
@@ -2254,7 +2255,7 @@ class AppModel(ObservableObject):
 
         self.join_rpc_threads()
 
-        wrk = self._worker_thread_long_tasks_execution
+        wrk = self._worker_thread
         if wrk.is_alive():
             try:
                 self._worker_thread_queue.put_nowait(None)
@@ -3308,7 +3309,7 @@ class AppModel(ObservableObject):
         with self._worker_submit_lock:
             if self._closing:
                 error = f"Refusing to apply {kind} when closing"
-            elif self._worker_submit_in_progress:
+            elif self._worker_submit_in_progress and threading.current_thread() != self._worker_thread:
                 error = f"Refusing to submit change of {kind} when another change already in progress (or submitted)"
             else:
                 try:

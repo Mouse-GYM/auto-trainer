@@ -438,7 +438,7 @@ class MainWindow(QMainWindow):
             target = plan.phases[phase_idx - 1]
             if not self._check_target_next_or_previous_plan_phase("fallback", target):
                 return
-        logger.info("fallback on plan %s (%s)", plan.plan_id, hex(id(plan)))
+        logger.info("fallback on plan %s (%s)", plan.name, plan.plan_id)
 
         self.set_training_phase_previous_next_phase_enabled(False)
         @invoke_method
@@ -446,6 +446,8 @@ class MainWindow(QMainWindow):
             self._refresh_prev_next_phases()
             if result:
                 self.main_content.training_plan_changed.emit(plan)
+            else:
+                self._show_message("phase fallback failed", f"error: {error}")
 
         app_model.plan_fallback_phase(plan, background=True, callback=cb)
 
@@ -467,6 +469,8 @@ class MainWindow(QMainWindow):
             self._refresh_prev_next_phases()
             if result:
                 self.main_content.training_plan_changed.emit(plan)
+            else:
+                self._show_message("phase advance failed", f"error: {error}")
         app_model.plan_advance_phase(plan, background=True, callback=cb)
 
     def _handle_diamond_triangle_calib_run(
@@ -623,11 +627,17 @@ class MainWindow(QMainWindow):
         algo.diamond_triangle_config = new_cfg
         animal = app_model.selected_animal
         # to ensure animal will get its x/y/z in DCS
+        def final_cb(result, *, error=None):
+            if not result:
+                self._show_message("animal select failed", f"error: {error}")
+
         def cb(result, *, error=None):
             if result:
                 # also use background, to ensure the first set_selected_animal(None) is completed,
                 # for this new one to be handled by the worker background thread (via its input queue)
-                app_model.set_selected_animal(animal, background=True)
+                app_model.set_selected_animal(animal, background=True, callback=final_cb)
+            else:
+                self._show_message("animal select failed", f"error: {error}")
         app_model.set_selected_animal(None, callback=cb, background=True)
 
     def _make_diamond_triangle_calib_run(self, calib_duration: float = DEFAULT_DIAMOND_TRIANGLE_CALIB_DURATION):
@@ -1185,9 +1195,10 @@ class MainWindow(QMainWindow):
             def cb(result, *, error=None):
                 cmb.setEnabled(True)
                 if not result:
-                    logger.error("training mode change failed: %s", error)
+                    self._show_message(f"training mode change failed", f"error: {error}")
                     with signals_blocked(combo):
                         cmb.setCurrentIndex(self._training_mode_2_combo_index.get(app_model.training_mode, -1))
+                    self._refresh_animal_and_plan()
             cmb.setEnabled(False)
             app_model.set_training_mode(selected_mode, background=True, callback=cb)
 
@@ -1217,6 +1228,7 @@ class MainWindow(QMainWindow):
                     after_idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
                     with signals_blocked(cmb):
                         cmb.setCurrentIndex(after_idx)
+                    self._show_message("training plan change failed", f"error: {error}")
             cmb.setEnabled(False)
             self._app_model.set_training_plan(selected_plan, background=True, callback=cb)
 
@@ -2022,12 +2034,15 @@ class MainWindow(QMainWindow):
                 prog = plan.serialize_progress()
                 animal.training.set_plan_progress(plan.plan_id, prog)
                 app_model.save_animal_metadata(animal, sender="training_plan_deserialized_recovered")
+            else:
+                self._show_message(f"Could not change plan to {plan.name}", f"error: {error}")
             self._refresh_animal_and_plan()
         animal.training.current_protocol = None  # temporarily
         def cb_animal(result, *, error=None):
             if result:
                 app_model.set_training_plan(plan, force_update=True, callback=final_cb, target_animal=animal)
             else:
+                self._show_message(f"Could not change animal to {animal.name}", f"error: {error}")
                 self._refresh_animal_and_plan()
         # we also need to ensure selected animal:
         app_model.set_selected_animal(animal, background=True, callback=cb_animal)
