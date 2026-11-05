@@ -588,8 +588,11 @@ class AppModel(ObservableObject):
         self._attached_plan: Optional[TrainingPlan] = None
         self._attached_phase: Optional[TrainingPhase] = None
         self._attached_animal: Optional[AnimalSubject] = None
-        self._worker_thread_queue = Queue(maxsize=16)
+        self._worker_thread_queue = Queue(maxsize=2)  # we are refusing to submit while a work is in progress,
+        # so 2 max items should always be good enough.
         self._worker_lock = threading.RLock()
+        self._worker_submit_lock = threading.Lock()
+        self._worker_submit_in_progress = False
         thread = threading.Thread(
             target=self._worker_thread_run, args=(self._worker_thread_queue,), daemon=True,
             name="main_worker_thread")
@@ -1110,24 +1113,21 @@ class AppModel(ObservableObject):
             return True
         def execute_it():
             try:
-                return self._set_selected_animal(animal, callback=callback, previous_animal=prev)
+                return self._set_selected_animal(animal, callback=callback)
             except Exception as err:
-                if callback is not None:
-                    callback(False, error=f"set_selected_animal error: {err}")
-                raise
+                logger.exception("_set_selected_animal: %s", err)
+                if callback is None:
+                    raise
+                callback(False, error=f"set_selected_animal error: {err}")
+                return False
         if background:
-            self._put_to_worker_thread(WorkItemKind.SELECTED_ANIMAL, execute_it, callback)
-            return None
+            return self._put_to_worker_thread(WorkItemKind.SELECTED_ANIMAL, execute_it, callback)
         return execute_it()
 
     @_use_worker_lock
-    def _set_selected_animal(self, animal: Optional[AnimalSubject], *, callback: MaybeOkCallBack, previous_animal: Optional[AnimalSubject]):
-        if previous_animal != self._selected_animal:
-            logger.warning("dropping set_selected_animal to %s as changed between, new=%s", animal, self._selected_animal)
-            if callback is not None:
-                callback(False, error="animal changed")
-            return None
-        if animal == self._selected_animal:
+    def _set_selected_animal(self, animal: Optional[AnimalSubject], *, callback: MaybeOkCallBack):
+        previous_animal = self._selected_animal
+        if animal == previous_animal:
             logger.debug("already set on %s", animal)
             if callback is not None:
                 callback(True)
@@ -1136,7 +1136,6 @@ class AppModel(ObservableObject):
         previous_attached_plan = self._attached_plan
         self._detach_training_plan()  # always
 
-        logger.debug("updating animal to %s (prev=%s)", animal, previous_animal)
         if previous_animal is not None:
             self.save_animal_metadata(previous_animal, sender="selected_animal_detach")  # in case of
         #
@@ -1176,11 +1175,14 @@ class AppModel(ObservableObject):
                     # NB: self.on_error() is called inside set_training_plan already.
                     return False
             except BaseException as err:
-                logger.error("set_training_plan failed: %s", err)
+                logger.error("set_training_plan error: %s", err)
                 self._selected_animal = previous_animal
                 if previous_animal is not None and previous_attached_plan is not None:
                     self._attach_training_plan(previous_animal, previous_attached_plan)
-                raise
+                if callback is None:
+                    raise
+                callback(False, error=f"set_training_plan error: {err}")
+                return False
         logger.success("Switched fully to animal %s", animal)
         if callback is not None:
             callback(True)
@@ -1221,12 +1223,13 @@ class AppModel(ObservableObject):
             try:
                 return self._set_training_mode(mode, callback=callback)
             except Exception as err:
-                if callback is not None:
-                    callback(False, error=f"set_training_mode error: {err}")
-                raise
+                logger.exception("_set_training_mode: %s", err)
+                if callback is None:
+                    raise
+                callback(False, error=f"set_training_mode error: {err}")
+                return False
         if background:
-            self._put_to_worker_thread(WorkItemKind.TRAINING_MODE, execute_it, callback)
-            return None
+            return self._put_to_worker_thread(WorkItemKind.TRAINING_MODE, execute_it, callback)
         else:
             return execute_it()
 
@@ -1319,12 +1322,13 @@ class AppModel(ObservableObject):
                     force_update=force_update, callback=callback,
                 )
             except Exception as err:
-                if callback is not None:
-                    callback(False, f"set_training_plan error: {err}")
-                raise
+                logger.exception("_set_training_plan: %s", err)
+                if callback is None:
+                    raise
+                callback(False, f"set_training_plan error: {err}")
+                return False
         if background:
-            self._put_to_worker_thread(WorkItemKind.TRAINING_PLAN, execute_it, callback)
-            return None
+            return self._put_to_worker_thread(WorkItemKind.TRAINING_PLAN, execute_it, callback)
         else:
             return execute_it()
 
@@ -1519,16 +1523,18 @@ class AppModel(ObservableObject):
         self._attached_animal = animal
         failed = True
         try:
+            got_err = None
             try:
                 resume_success = plan.resume()
             except BaseException as err:
                 logger.exception("plan %s resume failed: %s", plan.plan_id, err)
-                self._attached_plan = prev_plan
-                self._attached_animal = prev_animal
-                raise
+                got_err = err
+                resume_success = False
             if not resume_success:
                 self._attached_plan = prev_plan
                 self._attached_animal = prev_animal
+                if got_err is not None:
+                    raise got_err
                 logger.error("plan %s resume returned False", plan.plan_id)
                 return False
             failed = False
@@ -1592,8 +1598,7 @@ class AppModel(ObservableObject):
         def execute_add_animal():
             return self._add_animal(name, select=select)
         if background:
-            self._put_to_worker_thread(WorkItemKind.ADD_ANIMAL, execute_add_animal, callback)
-            return None
+            return self._put_to_worker_thread(WorkItemKind.ADD_ANIMAL, execute_add_animal, callback)
         else:
             return execute_add_animal()
 
@@ -3318,18 +3323,25 @@ class AppModel(ObservableObject):
             self.save_animal_metadata(selected, sender="on_pellet_sent")  # always
 
     def _put_to_worker_thread(self, kind, func, callback):
-        try:
-            self._worker_thread_queue.put_nowait((kind, func))
-        except queue.Full:
-            logger.error("work thread queue is full")
-            if callback is None:
-                raise
-            callback(False, error="worker thread queue is full")
+        with self._worker_submit_lock:
+            if self._worker_submit_in_progress:
+                error = f"Refusing to submit change of {kind} when another change already in progress (or submitted)"
+            else:
+                try:
+                    self._worker_thread_queue.put_nowait((kind, func))
+                except queue.Full:  # should not happen though now.
+                    error = "worker thread queue is full"
+                else:
+                    self._worker_submit_in_progress = True
+                    return None
+        if callback is None:
+            raise RuntimeError(error)
+        callback(False, error=error)
+        return False
 
     def _worker_thread_run(self, cmd_queue: Queue):
         while True:
             if self._closing:
-                logger.verbose("exiting on _closing")
                 break
             try:
                 raw = cmd_queue.get(timeout=1)
@@ -3343,6 +3355,8 @@ class AppModel(ObservableObject):
                 func()
             except Exception as err:
                 logger.exception("%s failed: %s", kind, err)
+            self._worker_submit_in_progress = False
+        logger.verbose("exiting")
 
     @_use_worker_lock
     def _plan_adv_or_flb_execute(self, plan, direction, method, callback):  # have to have the "self" arg for _use_worker_lock

@@ -1183,10 +1183,12 @@ class MainWindow(QMainWindow):
             selected_mode = cmb.currentData()[0]  # unpack from tuple, see above.
             @invoke_method
             def cb(result, *, error=None):
+                cmb.setEnabled(True)
                 if not result:
                     logger.error("training mode change failed: %s", error)
-                    with signals_blocked(cmb):
+                    with signals_blocked(combo):
                         cmb.setCurrentIndex(self._training_mode_2_combo_index.get(app_model.training_mode, -1))
+            cmb.setEnabled(False)
             app_model.set_training_mode(selected_mode, background=True, callback=cb)
 
         combo.currentIndexChanged.connect(training_mode_index_changed)
@@ -1202,18 +1204,19 @@ class MainWindow(QMainWindow):
         layout.addWidget(combo)
 
         def training_plan_index_changed(_):
-            plan_id = self._training_plan_combo.currentData()
+            cmb = self._training_plan_combo
+            plan_id = cmb.currentData()
             selected_plan: Optional[TrainingPlan] = app_model.get_training_plan_by_id(plan_id)
             logger.debug("plan changed: %s -> %s", plan_id, selected_plan)
             @invoke_method
             def cb(result, *, error=None):
+                cmb.setEnabled(True)
                 if not result:
                     after_plan = app_model.training_plan
-                    idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
-                    combo = self._training_plan_combo
-                    with signals_blocked(combo):
-                        combo.setCurrentIndex(idx)
-
+                    after_idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
+                    with signals_blocked(cmb):
+                        cmb.setCurrentIndex(after_idx)
+            cmb.setEnabled(False)
             self._app_model.set_training_plan(selected_plan, background=True, callback=cb)
 
         combo.currentIndexChanged.connect(training_plan_index_changed)
@@ -1636,18 +1639,21 @@ class MainWindow(QMainWindow):
         self._app_model.add_animal(name, select=True, background=True, callback=cb)
 
     def _animal_changed(self, _):
-        if self._animal_dropdown_combo.currentIndex() in (0, -1):
+        combo = self._animal_dropdown_combo
+        if combo.currentIndex() in (0, -1):
             animal = None
         else:
-            animal_id = self._animal_dropdown_combo.currentData()
+            animal_id = combo.currentData()
             animal = self._app_model.get_animal_by_id(animal_id)
         @invoke_method
         def cb(result, *, error=None):
+            combo.setEnabled(True)
             if not result:
                 self._show_message(
                     "Cannot change animal",
                     f"Failed to select animal {None if animal is None else animal.name}. Error:\n{error}"
                 )
+        combo.setEnabled(False)
         self._app_model.set_selected_animal(animal, background=True, callback=cb)
 
     @invoke_method
@@ -2001,7 +2007,7 @@ class MainWindow(QMainWindow):
         def cb(result, *, error=None):
             after_plan = app_model.training_plan
             idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
-            logger.notice("in cb: %s error=%s plan=%s ; idx=%s", result, error, after_plan, idx)
+            logger.debug("in cb: %s error=%s plan=%s ; idx=%s", result, error, after_plan, idx)
             with signals_blocked(combo):
                 combo.setCurrentIndex(idx)
             if result:

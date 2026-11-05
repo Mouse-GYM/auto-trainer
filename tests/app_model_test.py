@@ -327,22 +327,33 @@ class TestSelectedModeAnimalPlan:
         assert callback.call_args_list == [mock.call(False, error='set_training_plan returned false')]
         assert app_model.selected_animal == animal1
         assert app_model.training_plan == plan1
+        # NB: also with _set_selected error:
+        monkeypatch.setattr(
+            app_model, app_model._set_selected_animal.__name__,
+            mock.MagicMock(side_effect=RuntimeError("baz"))
+        )
+        with pytest.raises(RuntimeError, match="baz"):
+            app_model.set_selected_animal(animal2)
+        assert app_model.selected_animal == animal1
+        assert app_model.training_plan == plan1
 
     def test_set_animal_error(self, app_model, monkeypatch, animal1, plan1):
         callback = mock.MagicMock()
         failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
         monkeypatch.setattr(app_model, app_model._set_selected_animal.__name__, failed)
+        #
         with pytest.raises(RuntimeError, match="foobar"):
-            app_model.set_selected_animal(animal1, callback=callback)
+            app_model.set_selected_animal(animal1)
+        #
+        assert app_model.set_selected_animal(animal1, callback=callback) is False
         assert callback.call_args_list == [mock.call(False, error='set_selected_animal error: foobar')]
 
     def test_set_animal_with_plan_error(self, app_model, monkeypatch, animal1, plan1):
         callback = mock.MagicMock()
         failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
         monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, failed)
-        with pytest.raises(RuntimeError, match="foobar"):
-            app_model.set_selected_animal(animal1, callback=callback)
-        assert callback.call_args_list == [mock.call(False, error="set_selected_animal error: foobar")]
+        assert app_model.set_selected_animal(animal1, callback=callback) is False
+        assert callback.call_args_list == [mock.call(False, error="set_training_plan error: foobar")]
         assert app_model.selected_animal is None
 
     def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
@@ -364,9 +375,11 @@ class TestSelectedModeAnimalPlan:
     def test_set_training_plan_error(self, app_model, animal1, plan1, monkeypatch):
         failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
         monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, failed)
-        callback = mock.MagicMock()
         with pytest.raises(RuntimeError, match="foobar"):
-            app_model.set_training_plan(plan1, callback=callback)
+            app_model.set_training_plan(plan1)
+        #
+        callback = mock.MagicMock()
+        assert app_model.set_training_plan(plan1, callback=callback) is False
         assert callback.call_args_list == [mock.call(False, 'set_training_plan error: foobar')]
 
     def test_set_selected_animal_already_selected(self, app_model, animal1):
@@ -398,7 +411,31 @@ class TestSelectedModeAnimalPlan:
         exc = RuntimeError("foobar")
         failed = mock.MagicMock(side_effect=exc)
         monkeypatch.setattr(app_model, app_model._set_training_mode.__name__, failed)
-        callback = mock.MagicMock()
+        #
         with pytest.raises(RuntimeError, match="foobar"):
-            app_model.set_training_mode(TrainingMode.AUTOMATIC, callback=callback)
+            app_model.set_training_mode(TrainingMode.AUTOMATIC)
+        #
+        callback = mock.MagicMock()
+        assert app_model.set_training_mode(TrainingMode.AUTOMATIC, callback=callback) is False
         assert callback.call_args_list == [mock.call(False, error='set_training_mode error: foobar')]
+
+    def test_set_something_while_another_in_progress(self, app_model, request, monkeypatch, animal1, plan1):
+        slow_evt = threading.Event()
+        request.addfinalizer(slow_evt.set)
+        def slow_resume():
+            slow_evt.wait(10)
+        monkeypatch.setattr(plan1, plan1.resume.__name__, slow_resume)
+        app_model.set_selected_animal(animal1, background=True)
+        # without cb:
+        with pytest.raises(RuntimeError, match="Refusing to submit change of selected_animal"):
+            app_model.set_selected_animal(animal1, background=True)
+        # with cb:
+        cb_res_err = None
+        def cb(result, *, error=None):
+            nonlocal cb_res_err
+            cb_res_err = (result, error)
+        assert app_model.set_selected_animal(animal1, background=True, callback=cb) is False
+        assert cb_res_err == (
+            False,
+            "Refusing to submit change of selected_animal when another change already in progress (or submitted)"
+        )
