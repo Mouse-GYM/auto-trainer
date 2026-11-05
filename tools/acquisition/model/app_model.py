@@ -2251,6 +2251,21 @@ class AppModel(ObservableObject):
         self._analysis.stop()
 
         self._update_led_for_stop()
+
+        self.join_rpc_threads()
+
+        wrk = self._worker_thread_long_tasks_execution
+        if wrk.is_alive():
+            try:
+                self._worker_thread_queue.put_nowait(None)
+            except queue.Full:
+                logger.warning("Cannot put None to worker thread, queue full")
+            logger.debug("joining worker thread")
+        wrk.join(3)
+        if wrk.is_alive():
+            logger.warning("worker thread still alive but continuing")
+        clear_queue(self._worker_thread_queue, name="worker_thread")
+
         self._hardware.disconnect()
 
         # ensure go back to IDLE mode + stop cameras & inference & analysis + hardware disconnect :
@@ -2302,20 +2317,6 @@ class AppModel(ObservableObject):
             logger.verbose("shutting down %s", mgr)
             mgr.shutdown()
             self._mp_manager = None
-
-        self.join_rpc_threads()
-
-        wrk = self._worker_thread_long_tasks_execution
-        if wrk.is_alive():
-            try:
-                self._worker_thread_queue.put_nowait(None)
-            except queue.Full:
-                logger.warning("Cannot put None to worker thread, queue full")
-            logger.debug("joining worker thread")
-        wrk.join(3)
-        if wrk.is_alive():
-            logger.warning("worker thread still alive but continuing")
-        clear_queue(self._worker_thread_queue, name="worker_thread")
 
         self.refresh_main_watchdog(p_now=math.nan)
 
@@ -3305,7 +3306,9 @@ class AppModel(ObservableObject):
 
     def _put_to_worker_thread(self, kind, func, callback):
         with self._worker_submit_lock:
-            if self._worker_submit_in_progress:
+            if self._closing:
+                error = f"Refusing to apply {kind} when closing"
+            elif self._worker_submit_in_progress:
                 error = f"Refusing to submit change of {kind} when another change already in progress (or submitted)"
             else:
                 try:
