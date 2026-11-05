@@ -371,18 +371,16 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         """
         return self._head_magnet_position
 
-    def update_head_magnet_intensity(self, position: Optional[float], *, force: bool=False) -> Optional[UUID]:
+    def update_head_magnet_intensity(self, position: Optional[float]) -> Optional[UUID]:
         if position is None:  # caller should not call instead eventually
             return None
         if isinstance(position, str):
             warnings.warn("Received str for update_head_magnet_intensity, please update your code", UserWarning)
             position = float(position)
-        if position != self._head_magnet_position or force:
-            logger.verbose("sending move magnet to %.3f", position)
-            # self._head_magnet_position = value  # this is set from reading the hardware status
-            return self._send_with_token(SystemCommandKind.MOVE_MAGNET_SERVO, position)
-        logger.debug("head magnet currently already at pos %.3f", position)
-        return None
+        # Always send, never skip when position matches _head_magnet_position: that value only updates from device
+        # status, so it lags a move still in flight and a release sent right after a clamp would be dropped.
+        logger.verbose("sending move magnet to %.3f", position)
+        return self._send_with_token(SystemCommandKind.MOVE_MAGNET_SERVO, position)
 
     @property
     def tunnel_gate_open_status(self) -> bool:
