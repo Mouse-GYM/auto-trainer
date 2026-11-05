@@ -103,6 +103,7 @@ class SystemMachine(StateMachine):
         self._timer_consider_end_trial_capture = no_op_timer  # this is used when pellet-load command is executed
         self._timer_consider_auto_end_trial_capture = no_op_timer  # this is used from start of trial, for trial timeout basically
         self._timer_consider_close_gate = no_op_timer
+        self._gate_closed_for_intertrial = False
 
         # TODO: should be moved to config somewhere:
         self._delay_timer_consider_end_trial: float = 1
@@ -345,12 +346,18 @@ class SystemMachine(StateMachine):
             self._pellet_machine.environment_changed()
 
     def after_exit_intertrial(self, project: ProjectInfo):
+        self._timer_consider_close_gate.cancel()
         if self._analysis.load_cell_monitor.is_engaged:
+            # the load-cell can engage after the gate was auto-closed (mouse back in the tunnel while the gate
+            # was moving, or a spurious engage), and nothing reopens the gate from the tunnel/cage states:
+            if self._gate_closed_for_intertrial:
+                self._gate_closed_for_intertrial = False
+                self._tunnel_device.open_tunnel_gate()
             with self._algorithm.set_allow_reentrant(True):
                 self.exit_intertrial_to_tunnel(project)
         else:
             # always ensure open gate on intertrial ended (to cage)
-            self._timer_consider_close_gate.cancel()
+            self._gate_closed_for_intertrial = False
             self._tunnel_device.open_tunnel_gate()
             self.execute_disengage_auto_clamp_if_in_progress()
             with self._algorithm.set_allow_reentrant(True):
@@ -1045,6 +1052,7 @@ class SystemMachine(StateMachine):
                 perf_now, load_cell_mon.last_disengaged_perf_c, load_cell_mon.last_engaged_perf_c,
                 topcam_pres.last_presence_start_perf_c,
             )
+            self._gate_closed_for_intertrial = True
             self._tunnel_device.close_tunnel_gate()
         else:
             # retry:
@@ -1095,6 +1103,7 @@ class SystemMachine(StateMachine):
                 self.cancel_timers()
             else:  # disengaged
                 if algo.status != BehaviorAlgoStatus.IDLE:
+                    self._gate_closed_for_intertrial = False
                     self._tunnel_device.open_tunnel_gate()
                     self._update_magnet_position(algo.baseline_intensity)
                 # No need of pellet_dev.send_pellet() :
