@@ -2871,7 +2871,7 @@ class AppModel(ObservableObject):
             try:
                 with hard.wait_pending_command_acked(tokens, timeout=5):
                     tok1 = hard.delay(0.1)  # pellet board
-                    tok2 = hard.update_head_magnet_intensity(0, force=True)  # magnet board
+                    tok2 = hard.update_head_magnet_intensity(0)  # magnet board
                     if tok1 is None or tok2 is None:
                         raise RuntimeError("hardware not connected")
                     tokens.add(tok1)
