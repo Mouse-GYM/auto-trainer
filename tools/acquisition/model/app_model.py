@@ -956,7 +956,7 @@ class AppModel(ObservableObject):
         # unpack args/kwargs from raw:
         if isinstance(raw, tuple):
             if len(raw) < 1:
-                logger.warning("nvalid status msg: %r", raw)
+                logger.warning("Invalid status msg: %r", raw)
                 return
             cmd = raw[0]
             if len(raw) > 1:
