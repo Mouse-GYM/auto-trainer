@@ -1579,7 +1579,8 @@ class AppModel(ObservableObject):
         def execute_add_animal():
             return self._add_animal(name, select=select)
         if background:
-            return self._put_to_worker_thread(WorkItemKind.ADD_ANIMAL, execute_add_animal, callback)
+            self._put_to_worker_thread(WorkItemKind.ADD_ANIMAL, execute_add_animal, callback)
+            return None
         else:
             return execute_add_animal()
 
