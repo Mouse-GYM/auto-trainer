@@ -1225,7 +1225,7 @@ class MainWindow(QMainWindow):
             def cb(result, *, error=None, load_result=None):
                 cmb.setEnabled(True)
                 # NB: only reset to current if it's not a load_result
-                if not result and load_result is None:
+                if not result and (load_result is None or load_result == LoadProgressResult.OK):
                     after_plan = app_model.training_plan
                     after_idx = self._get_training_plan_combo_index(None if after_plan is None else after_plan.plan_id)
                     with signals_blocked(cmb):
@@ -1665,7 +1665,7 @@ class MainWindow(QMainWindow):
         @invoke_method
         def cb(result, *, error=None, load_result=None):
             combo.setEnabled(True)
-            if not result and load_result is not None:
+            if not result and (load_result is None or load_result == LoadProgressResult.OK):
                 self._show_message(
                     "Cannot change animal",
                     f"Failed to select animal {None if animal is None else animal.name}. Error:\n{error}"
@@ -1982,7 +1982,7 @@ class MainWindow(QMainWindow):
                 self._refresh_animal_and_plan()
                 return
             msg = (
-                f"The training protocol ({plan.name}) currently linked to the animal has been revised since it was last used.\n"
+                f"The training protocol ({plan.name}) currently linked to the animal {animal.name} has been revised since it was last used.\n"
                 "Progress for this animal for training phases that have changed will be reset."
             )
 
@@ -2028,6 +2028,10 @@ class MainWindow(QMainWindow):
 
         if clicked_but != load_btn:
             self._refresh_animal_and_plan()
+            if animal == app_model.selected_animal:
+                idx = self._get_training_plan_combo_index(None)
+                with signals_blocked(self._training_plan_combo):
+                    self._training_plan_combo.setCurrentIndex(idx)
             return
 
         def final_cb(result, *, error=None):

@@ -1170,20 +1170,31 @@ class AppModel(ObservableObject):
         #
         self._selected_animal = animal
         if animal_plan is not skip:
-            assert isinstance(animal_plan, (TrainingPlan, type(None)))
+            assert animal_plan is None or isinstance(animal_plan, TrainingPlan)
+            load_result_set_plan = None
+            def cb(result, *, error=None, load_result: Optional[LoadProgressResult]=None):
+                # only capture load_result,
+                # _set_training_plan() raises or returns False if error.
+                nonlocal load_result_set_plan
+                load_result_set_plan = load_result
             try:
-                ok = self._set_training_plan(animal_plan)  # don't pass the callback here.
+                ok = self._set_training_plan(animal_plan, callback=cb)
                 error = None if ok else "set_training_plan returned false"
             except BaseException as err:
                 logger.error("set_training_plan error: %s", err)
                 error = f"set_training_plan error: {err}"
             if error is not None:
                 self._selected_animal = previous_animal
+                self._behavior.algorithm.reset_selected_animal_counts(previous_animal)
+                if self._training_mode == TrainingMode.MANUAL and previous_animal is not None:
+                    # only set animal base position if manual training mode
+                    self._set_animal_base_positions(previous_animal)
                 if previous_animal is not None and previous_attached_plan is not None:
                     self._attach_training_plan(previous_animal, previous_attached_plan)
                 if callback is None:
                     raise RuntimeError(error)
-                callback(False, error=error)
+                kw = {"load_result": load_result_set_plan} if has_kwarg(callback, "load_result") else {}
+                callback(False, error=error, **kw)
                 return False
         logger.success("Switched fully to animal %s", animal)
         if callback is not None:
@@ -1358,7 +1369,9 @@ class AppModel(ObservableObject):
             if callback is not None:
                 callback(True)
             return True
-        if animal is not None:
+        if animal is None:
+            self._detach_training_plan()
+        else:
             if target_mode != TrainingMode.MANUAL and plan is not None:
                 attach_res = self._attach_training_plan(animal, plan, force_update=force_update)
                 if attach_res is False:

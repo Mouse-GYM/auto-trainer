@@ -1,3 +1,4 @@
+import dataclasses
 import random
 import threading
 import time
@@ -5,7 +6,8 @@ from unittest import mock
 
 
 import pytest
-from autotrainer.training import TrainingPlan, PlanInfo
+from autotrainer.core.animal.animal_subject import AnimalPelletCounts
+from autotrainer.training import TrainingPlan, PlanInfo, LoadProgressResult
 
 from autotrainer.behavior import TrainingMode
 from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
@@ -231,6 +233,11 @@ class TestSelectedModeAnimalPlan:
     @pytest.fixture
     def animal1(self):
         animal1 = AnimalSubject(name="Animal1")
+        idx_cnt = random.randint(1, 1000)
+        for cnt in animal1.pellet_counts_day, animal1.pellet_counts_total:
+            for field in dataclasses.fields(cnt):
+                setattr(cnt, field.name, idx_cnt)
+                idx_cnt += 1
         return animal1
 
     @pytest.fixture
@@ -323,7 +330,16 @@ class TestSelectedModeAnimalPlan:
 
     @pytest.mark.parametrize("failed_resume", (mock.MagicMock(side_effect=RuntimeError("foobar")), mock.MagicMock(return_value=False)))
     def test_selected_animal_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok, failed_resume):
+        algo = app_model.behavior.algorithm
         animal2 = AnimalSubject()
+        cnt_idx = random.randint(1, 100)
+        for animal in (animal1, animal2):
+            for cnt in (animal.pellet_counts_day, animal.pellet_counts_total):
+                for field in dataclasses.fields(cnt):
+                    cnt_idx += 1
+                    setattr(cnt, field.name, cnt_idx)
+        assert animal1.pellet_counts_day != animal2.pellet_counts_day
+        assert animal1.pellet_counts_total != animal2.pellet_counts_total
         plan2 = self.make_plan()
         animal2.training.current_protocol = plan2.plan_id
         callback = mock.MagicMock()
@@ -332,11 +348,15 @@ class TestSelectedModeAnimalPlan:
         assert app_model.training_plan == plan1
         assert callback.call_args_list == [mock.call(True)]
         assert plan1_resume_ok.call_args_list == [mock.call()]
+        assert algo.pellet_consumed_day == animal1.pellet_counts_day.consumed
+        assert algo.pellet_consumed_total == animal1.pellet_counts_total.consumed
+        #
         monkeypatch.setattr(plan2, plan2.resume.__name__, failed_resume)
         callback = mock.MagicMock()
         assert app_model.set_selected_animal(animal2, callback=callback) is False
         assert failed_resume.call_args_list == [mock.call()]
-        assert callback.call_args_list == [mock.call(False, error='set_training_plan returned false')]
+        assert callback.call_args_list == [
+            mock.call(False, error='set_training_plan returned false', load_result=None)]
         assert app_model.selected_animal == animal1
         assert app_model.training_plan == plan1
         # NB: also with _set_selected error:
@@ -348,6 +368,8 @@ class TestSelectedModeAnimalPlan:
             app_model.set_selected_animal(animal2)
         assert app_model.selected_animal == animal1
         assert app_model.training_plan == plan1
+        assert algo.pellet_consumed_day == animal1.pellet_counts_day.consumed
+        assert algo.pellet_consumed_total == animal1.pellet_counts_total.consumed
 
     def test_set_animal_error(self, app_model, monkeypatch, animal1, plan1):
         callback = mock.MagicMock()
@@ -362,11 +384,38 @@ class TestSelectedModeAnimalPlan:
 
     def test_set_animal_with_plan_error(self, app_model, monkeypatch, animal1, plan1):
         callback = mock.MagicMock()
-        failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
-        monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, failed)
+        m_set_training_plan = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(app_model, app_model._set_training_plan.__name__, m_set_training_plan)
         assert app_model.set_selected_animal(animal1, callback=callback) is False
-        assert callback.call_args_list == [mock.call(False, error="set_training_plan error: foobar")]
+        assert callback.call_args_list == [
+            mock.call(False, error="set_training_plan error: foobar", load_result=None)]
         assert app_model.selected_animal is None
+        #
+        def set_training_plan_load_out_of_date(*args, callback=None, **kwargs):
+            callback(False, error="foobar", load_result=LoadProgressResult.OUT_OF_DATE)
+            return False
+        m_set_training_plan.reset_mock()
+        m_set_training_plan.side_effect = set_training_plan_load_out_of_date
+        callback.reset_mock()
+        assert app_model.set_selected_animal(animal1, callback=callback) is False
+        assert callback.call_args_list == [mock.call(False, error=mock.ANY, load_result=LoadProgressResult.OUT_OF_DATE)]
+
+    def test_unselect_animal_detach_plan(self, app_model, animal1, plan1, plan1_resume_ok):
+        algo = app_model.behavior.algorithm
+        assert app_model.attached_plan is None
+        assert app_model.training_plan is None
+        assert algo.pellet_consumed_total == 0
+        assert algo.pellet_consumed_day == 0
+        assert app_model.set_selected_animal(animal1) is True
+        assert app_model.attached_plan is plan1
+        assert app_model.training_plan is plan1
+        assert algo.pellet_consumed_total > 0
+        assert algo.pellet_consumed_day > 0
+        assert app_model.set_selected_animal(None) is True
+        assert app_model.attached_plan is None
+        assert app_model.training_plan is None
+        assert algo.pellet_consumed_total == 0
+        assert algo.pellet_consumed_day == 0
 
     def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
         plan2 = self.make_plan()
@@ -469,7 +518,6 @@ class TestSelectedModeAnimalPlan:
         assert filled_evt.wait(5)  # should very quick
         with pytest.raises(RuntimeError, match="worker thread queue is full"):
             app_model.set_selected_animal(animal2, background=True, callback=cb)
-
 
     @pytest.mark.parametrize("func", (AppModel.plan_advance_phase.__name__, AppModel.plan_fallback_phase.__name__))
     def test_change_phase(self, app_model, animal1, plan1, plan1_resume_ok,
