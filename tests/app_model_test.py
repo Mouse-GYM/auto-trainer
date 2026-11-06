@@ -417,6 +417,14 @@ class TestSelectedModeAnimalPlan:
         assert algo.pellet_consumed_total == 0
         assert algo.pellet_consumed_day == 0
 
+    def test_set_none_plan(self, app_model, animal1, plan1, plan1_resume_ok):
+        assert app_model.set_selected_animal(animal1) is True
+        assert app_model.attached_plan is plan1
+        assert app_model.set_training_plan(None)
+        assert app_model.attached_plan is None
+        assert app_model.training_plan is None
+        assert animal1.training.current_protocol is None  # also
+
     def test_set_training_plan_fails_restore_previous(self, app_model, monkeypatch, caplog, animal1, plan1, plan1_resume_ok):
         plan2 = self.make_plan()
         animal1.training.current_protocol = plan1.plan_id

@@ -2029,9 +2029,8 @@ class MainWindow(QMainWindow):
         if clicked_but != load_btn:
             self._refresh_animal_and_plan()
             if animal == app_model.selected_animal:
-                idx = self._get_training_plan_combo_index(None)
-                with signals_blocked(self._training_plan_combo):
-                    self._training_plan_combo.setCurrentIndex(idx)
+                # animal is currently selected already, set its current plan to None :
+                app_model.set_training_plan(None, background=True, target_animal=animal)
             return
 
         def final_cb(result, *, error=None):

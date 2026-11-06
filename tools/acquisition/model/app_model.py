@@ -1372,6 +1372,8 @@ class AppModel(ObservableObject):
         if animal is None:
             self._detach_training_plan()
         else:
+            if plan is None:
+                self._detach_training_plan()  # always
             if target_mode != TrainingMode.MANUAL and plan is not None:
                 attach_res = self._attach_training_plan(animal, plan, force_update=force_update)
                 if attach_res is False:
