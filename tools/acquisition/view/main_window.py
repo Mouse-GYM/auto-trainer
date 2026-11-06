@@ -446,8 +446,9 @@ class MainWindow(QMainWindow):
             self._refresh_prev_next_phases()
             if result:
                 self.main_content.training_plan_changed.emit(plan)
-            else:
-                self._show_message("phase fallback failed", f"error: {error}")
+            # there is app_model.on_error in the plan_fallback_phase itself.
+            # else:
+            #     self._show_message("phase fallback failed", f"error: {error}")
 
         app_model.plan_fallback_phase(plan, background=True, callback=cb)
 
@@ -469,8 +470,9 @@ class MainWindow(QMainWindow):
             self._refresh_prev_next_phases()
             if result:
                 self.main_content.training_plan_changed.emit(plan)
-            else:
-                self._show_message("phase advance failed", f"error: {error}")
+            # there is app_model.on_error in the plan_advance_phase itself.
+            # else:
+            #     self._show_message("phase advance failed", f"error: {error}")
         app_model.plan_advance_phase(plan, background=True, callback=cb)
 
     def _handle_diamond_triangle_calib_run(
