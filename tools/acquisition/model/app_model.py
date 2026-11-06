@@ -1171,21 +1171,18 @@ class AppModel(ObservableObject):
         self._selected_animal = animal
         if animal_plan is not skip:
             assert isinstance(animal_plan, (TrainingPlan, type(None)))
-            ok = False
-            error = None
             try:
                 ok = self._set_training_plan(animal_plan)  # don't pass the callback here.
-                if not ok:
-                    error = "set_training_plan returned false"
+                error = None if ok else "set_training_plan returned false"
             except BaseException as err:
                 logger.error("set_training_plan error: %s", err)
                 error = f"set_training_plan error: {err}"
-            if not ok:
+            if error is not None:
                 self._selected_animal = previous_animal
                 if previous_animal is not None and previous_attached_plan is not None:
                     self._attach_training_plan(previous_animal, previous_attached_plan)
                 if callback is None:
-                    raise
+                    raise RuntimeError(error)
                 callback(False, error=error)
                 return False
         logger.success("Switched fully to animal %s", animal)
