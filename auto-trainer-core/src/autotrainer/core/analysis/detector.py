@@ -1,6 +1,5 @@
 import dataclasses
 import datetime
-import inspect
 import math
 import queue
 import threading
@@ -14,6 +13,7 @@ from autotrainer.core import ObservableObject, get_perf_now
 from autotrainer.core.configuration.detector import DetectorConfig, GroupSubDetectorConfig
 from autotrainer.core.event import post_api_detector_event_content
 from autotrainer.core.event.event_manager import EventManager
+from autotrainer.core.helpers import has_kwarg
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core.multiproc import no_op_timer, make_daemon_timer
 from autotrainer.core.queue_util import clear_queue
@@ -29,20 +29,6 @@ DetectorConfigT = TypeVar("DetectorConfigT", bound=DetectorConfig)
 
 
 registered_detector_classes: List["BaseDetector"] = []
-
-
-def has_kwarg(func, kwarg_name):
-    # Get the function's signature
-    sig = inspect.signature(func)
-
-    # 1. Check if the specific keyword argument name exists
-    if kwarg_name in sig.parameters:
-        param = sig.parameters[kwarg_name]
-        # Ensure it's not a positional-only argument
-        return param.kind != inspect.Parameter.POSITIONAL_ONLY
-
-    # 2. Check if the function accepts arbitrary keyword arguments (**kwargs)
-    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
 
 class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
