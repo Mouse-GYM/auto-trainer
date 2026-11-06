@@ -3344,7 +3344,7 @@ class AppModel(ObservableObject):
         logger.verbose("exiting")
 
     @_use_worker_lock
-    def _plan_adv_or_flb_execute(self, plan, direction, method, callback):  # have to have the "self" arg for _use_worker_lock
+    def _plan_adv_or_flb_execute(self, plan, direction, method, callback) -> Optional[bool]:  # have to have the "self" arg for _use_worker_lock
         try:
             if not method():
                 raise RuntimeError(f"{direction}() returned False")
@@ -3354,12 +3354,14 @@ class AppModel(ObservableObject):
                 callback(False, error=f"Plan {direction} failed: {m_err}")
             self.on_error(f"Plan {direction} failed",
                           f"{plan.plan_id} could not {direction}:\n\n{m_err}")
+            return False
         else:
             if callback is not None:
                 callback(True)
+            return True
 
     def _plan_adv_or_flb_phase(self, plan: TrainingPlan, method: Callable[[], bool],
-                               *, background: bool = False, callback: MaybeOkCallBack = None):
+                               *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[bool]:
         direction = method.__name__
         if method == plan.advance:
             kind = WorkItemKind.PLAN_ADVANCE_PHASE
@@ -3369,15 +3371,15 @@ class AppModel(ObservableObject):
             raise ValueError(f"Unhandled method for plan_adv_or_flb: {method}")
 
         def execute_it():
-            self._plan_adv_or_flb_execute(plan, direction, method, callback)
+            return self._plan_adv_or_flb_execute(plan, direction, method, callback)
 
         if background:
-            self._put_to_worker_thread(kind, execute_it, callback)
+            return self._put_to_worker_thread(kind, execute_it, callback)
         else:
-            execute_it()
+            return execute_it()
 
-    def plan_advance_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack = None):
-        self._plan_adv_or_flb_phase(plan, plan.advance, background=background, callback=callback)
+    def plan_advance_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[bool]:
+        return self._plan_adv_or_flb_phase(plan, plan.advance, background=background, callback=callback)
 
-    def plan_fallback_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack):
-        self._plan_adv_or_flb_phase(plan, plan.fallback, background=background, callback=callback)
+    def plan_fallback_phase(self, plan: TrainingPlan, *, background: bool = False, callback: MaybeOkCallBack = None) -> Optional[bool]:
+        return self._plan_adv_or_flb_phase(plan, plan.fallback, background=background, callback=callback)

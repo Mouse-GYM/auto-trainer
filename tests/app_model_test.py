@@ -12,7 +12,7 @@ from autotrainer.behavior.behavior_algorithm import BehaviorAlgoStatus
 from autotrainer.core import AnimalSubject
 from autotrainer.device import EmulationInterface, Target
 from autotrainer.device.device_interface import Acknowledge
-from tools.acquisition.model.app_model import app_status_to_api_app_mode, app_status_to_behavior_algo_status
+from tools.acquisition.model.app_model import app_status_to_api_app_mode, app_status_to_behavior_algo_status, AppModel
 from tools.acquisition.model.app_model_status import AppModelStatus
 
 from autotrainer.api import ApiApplicationMode, ApiSystemStatus
@@ -234,6 +234,18 @@ class TestSelectedModeAnimalPlan:
         return animal1
 
     @pytest.fixture
+    def plan1_advance(self, plan1, monkeypatch):
+        ok = mock.MagicMock(return_value=True)
+        monkeypatch.setattr(plan1, plan1._advance.__name__, ok)
+        return ok
+
+    @pytest.fixture
+    def plan1_fallback(self, plan1, monkeypatch):
+        ok = mock.MagicMock(return_value=True)
+        monkeypatch.setattr(plan1, plan1._fallback.__name__, ok)
+        return ok
+
+    @pytest.fixture
     def plan1(self, animal1, monkeypatch):
         plan1 = self.make_plan()
         animal1.training.current_protocol = plan1.plan_id
@@ -439,3 +451,39 @@ class TestSelectedModeAnimalPlan:
             False,
             "Refusing to submit change of selected_animal when another change already in progress (or submitted)"
         )
+
+    def test_get_error_if_queue_full(self, app_model, request, monkeypatch, animal1):
+        filled_evt = threading.Event()
+        block_evt = threading.Event()
+        request.addfinalizer(block_evt.set)
+        animal2 = AnimalSubject()
+        def cb(result, *, error=None):
+            # this callback is called from the worker thread,
+            # so let's use this to fill the queue, while the worker is here:
+            for _ in range(app_model._worker_thread_queue.maxsize):
+                app_model.set_selected_animal(animal2, background=True)
+            app_model._worker_submit_in_progress = False  # fake
+            filled_evt.set()
+            block_evt.wait()
+        app_model.set_selected_animal(animal1, background=True, callback=cb)
+        assert filled_evt.wait(5)  # should very quick
+        with pytest.raises(RuntimeError, match="worker thread queue is full"):
+            app_model.set_selected_animal(animal2, background=True, callback=cb)
+
+
+    @pytest.mark.parametrize("func", (AppModel.plan_advance_phase.__name__, AppModel.plan_fallback_phase.__name__))
+    def test_change_phase(self, app_model, animal1, plan1, plan1_resume_ok,
+                           plan1_advance, plan1_fallback, func):
+        assert app_model.set_selected_animal(animal1) is True
+        #
+        method = getattr(app_model, func)
+        assert method(plan1) is True
+        done = threading.Event()
+        cb_res = None
+        def cb(result, *, error=None):
+            nonlocal cb_res
+            cb_res = (result, error)
+            done.set()
+        assert method(plan1, callback=cb, background=True) is None
+        assert done.wait(5)
+        assert cb_res == (True, None)
