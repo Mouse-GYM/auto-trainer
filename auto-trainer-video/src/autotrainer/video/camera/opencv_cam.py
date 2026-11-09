@@ -107,7 +107,7 @@ class OpenCVCam(CameraBase):
                 # current topcam process apparently cannot keep aligned with the current FPS very often,
                 # so only log with more than 1 frame drop:
                 if estimated_drop > 1:
-                    logger.verbose(  # keeping as verbose instead of warning for now
+                    logger.debug(  # keeping as debug instead of warning for now
                         "corrected frame_id to %s due to estimated_drop=%s. diff=%.4f prev_frame_perf=%.3f frame_perf=%.3f",
                         self._last_frame_id, estimated_drop, diff_prev, self._prev_frame_perf_now, perf_now)
         self._prev_frame_perf_now = perf_now

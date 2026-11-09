@@ -1,3 +1,4 @@
+import dataclasses
 
 from autotrainer.core import AnimalSubject
 from autotrainer.core.animal.animal_subject import AnimalPelletCounts
@@ -30,7 +31,7 @@ def test_save_load(tmp_path):
     animal2 = AnimalSubject.from_file(dest)
     assert animal == animal2
     # also ensure for change to any attribute:
-    for k, v in animal.__dict__.items():
+    for k, v in ((field.name, getattr(animal, field.name)) for field in dataclasses.fields(animal)):
         if k == "version":  # version special, it's forced on write to file
             continue
         if isinstance(v, bool):
@@ -42,7 +43,12 @@ def test_save_load(tmp_path):
         else:
             continue
         setattr(animal, k, v)
-        assert animal != animal2
+        def to_pure_dict(dataclass_instance):
+            return {field.name: getattr(dataclass_instance, field.name)
+                    for field in dataclasses.fields(dataclass_instance)}
+        assert to_pure_dict(animal) != to_pure_dict(animal2)
+        assert (animal == animal2) if k != "id" else (animal != animal2)
         animal.to_file(dest)
         animal2 = AnimalSubject.from_file(dest)
         assert animal == animal2, f"attribute {k} is not correctly saved/loaded"
+        assert to_pure_dict(animal) == to_pure_dict(animal2)

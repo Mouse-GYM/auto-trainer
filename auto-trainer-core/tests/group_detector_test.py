@@ -1,3 +1,4 @@
+from unittest import mock
 
 import logging
 import math
@@ -146,3 +147,43 @@ def test_engaged_perf_c_doesnt_reset_on_reasons_changed_but_state_not(group, cap
     assert group.is_engaged  # still obv
     assert group.engaged_perf_c == first_engaged_perf, "group engaged_perf_c should remain same"
     assert group.engaged_reasons == ["det1", "det2"]
+
+
+@pytest.mark.parametrize("exc_cls", (RuntimeError, KeyboardInterrupt))
+def test_start_fail_in_sub_does_stop_all(group, request, exc_cls):
+    det1 = Detector()
+    request.addfinalizer(det1.stop)
+    det2 = Detector()
+    request.addfinalizer(det2.stop)
+    exc = exc_cls("foobar")
+    det1_started = False
+    def det1_start():
+        nonlocal det1_started
+        det1_started = True
+    det1._start = det1_start
+    det2._start = mock.MagicMock(side_effect=exc)
+    # NB: sub-detectors are started/stopped in the order they are registered
+    group.register_sub_detector("det1", det1)
+    group.register_sub_detector("det2", det2)
+    with pytest.raises(type(exc), match="foobar"):
+        group.start()
+    assert det1_started, "detector1 should have been started before detector2 start failed"
+    assert not group.running and not det1.running and not det2.running
+
+
+@pytest.mark.parametrize("exc_cls", (RuntimeError, KeyboardInterrupt))
+def test_stop_fail_in_sub_does_stop_all(group, request, exc_cls, caplog):
+    det1 = Detector()
+    request.addfinalizer(det1.stop)
+    det2 = Detector()
+    request.addfinalizer(det2.stop)
+    exc = exc_cls("foobar")
+    det1._stop = mock.MagicMock(side_effect=exc)
+    # NB: sub-detectors are started/stopped in the order they are registered
+    group.register_sub_detector("det1", det1)
+    group.register_sub_detector("det2", det2)
+    group.start()
+    with caplog.at_level(logging.WARNING):
+        group.stop()
+    assert not group.running and not det1.running and not det2.running
+    assert f"sub-detector {det1.name} failed to stop: {exc} ; but continuing" in caplog.text
