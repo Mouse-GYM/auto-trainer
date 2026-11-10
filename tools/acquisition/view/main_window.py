@@ -1071,7 +1071,7 @@ class MainWindow(QMainWindow):
         action.triggered.connect(self._show_preferences)
 
         action = self._reload_hw_config_action = QAction(QIcon(qta.icon("fa5s.redo")), "Reload Motor/Move Config", self)
-        action.setToolTip("Re-read motor_config.yaml and move config files (idle only), applied on next Start")
+        action.setToolTip("Re-read motor_config.yaml and move config files (Idle: applied on next Start, Running: applied now + move home)")
         action.triggered.connect(lambda: self._app_model.reload_motor_and_move_config())
 
         tooltip = "Reset pellet and reach counts for this animal"
@@ -1818,7 +1818,7 @@ class MainWindow(QMainWindow):
 
             self.blockSignals(False)
 
-            self._reload_hw_config_action.setEnabled(value is AppModelStatus.IDLE)
+            self._reload_hw_config_action.setEnabled(value in {AppModelStatus.IDLE, AppModelStatus.ACQUIRING})
             self.main_content.set_is_capture_active(value != AppModelStatus.IDLE)
 
         elif name == props.ANIMALS:

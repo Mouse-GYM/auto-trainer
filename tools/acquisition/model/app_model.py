@@ -2209,13 +2209,20 @@ class AppModel(ObservableObject):
         self._training_plans = plan_infos
 
     def reload_motor_and_move_config(self):
-        """Re-read motor and move config files, they are sent to the boards on next hardware connect (Start)."""
+        """Re-read motor and move config files.
+
+        When idle, they are sent to the boards on next hardware connect (Start).
+        When running (no animal), they are pushed to the boards right away, followed by a move home.
+        """
         title = "Reload motor/move config error"
         with self.app_lock:
+            status = self._status
             is_idle = not (self._acquisition_started or self._acquisition_starting
-                           or self._status != AppModelStatus.IDLE)
-        if not is_idle:
-            self.on_error(title, "Motor/move config can only be reloaded while idle.")
+                           or status != AppModelStatus.IDLE)
+            is_running = (self._acquisition_started and not self._acquisition_stopping
+                          and status is AppModelStatus.ACQUIRING)
+        if not (is_idle or is_running):
+            self.on_error(title, "Motor/move config can only be reloaded while Idle or Running (no animal).")
             return
         hard = self._hardware
         try:
@@ -2227,7 +2234,38 @@ class AppModel(ObservableObject):
             return
         self._motors_config = motors_config
         self._move_config = move_config
-        logger.notice("Motor and move configs reloaded, will be applied on next hardware connect")
+        if is_idle:
+            logger.notice("Motor and move configs reloaded, will be applied on next hardware connect")
+            return
+
+        algo = self._behavior.algorithm
+
+        # same sequence as on Start: write configs, then go home
+        @algo.relay_func(wait=False)
+        def apply_to_running_boards():
+            if self._status is not AppModelStatus.ACQUIRING:
+                logger.warning("Status now %s, motor/move configs not pushed (will be on next connect)", self._status)
+                return
+            dev_conn = hard.device_connection
+            try:
+                if dev_conn is None:
+                    raise RuntimeError("hardware not connected")
+                dev_conn.use_motor_configurations(motors_config)
+                dev_conn.use_compound_movements(move_config)
+                tokens = set()
+                with hard.wait_pending_command_acked(tokens, timeout=hard.send_home_timeout):
+                    tok = hard.send_home()
+                    if tok is None:
+                        raise RuntimeError("could not request send-home")
+                    tokens.add(tok)
+                with algo.set_allow_reentrant(True):
+                    self._behavior.system_machine.pellet.move_home(force=True)
+            except Exception as err:
+                logger.exception("Could not apply motor/move config to boards: %s", err)
+                self.on_error(title, f"Could not apply motor/move config to boards:\n\n{err}")
+                return
+            logger.notice("Motor and move configs reloaded and applied to boards")
+        apply_to_running_boards()
 
     def save_configuration(self):
         if self._loaded_configuration is None:
