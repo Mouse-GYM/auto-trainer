@@ -144,19 +144,25 @@ def user_pref(
     return pref
 
 
-def collect_log_queue_to_caplog(log_queue, *, timeout: float=0.1, max_duration: float=5):
+def collect_log_queue_to_caplog(
+    log_queue,
+    *,
+    timeout: float=0.26,  # NB: the multiproc logging buffers the records for 0.25s (for sorting purpose).
+    max_duration: float=5,
+):
     """Drain the log until 1 "full" timeout occurs trying to read a record, or max_duration is reached"""
-    p_begin = time.perf_counter()
-    p_end = p_begin + max_duration
-    while True:
-        if time.perf_counter() > p_end:
-            pytest.fail("unexpected too long duration collecting log record queue")
-            break
-        try:
-            record = log_queue.get(timeout=timeout)
-        except queue.Empty:
-            break
-        logging.getLogger(record.name).handle(record)
+    p_end = time.perf_counter() + max_duration
+    def process(use_timeout):
+        while True:
+            if time.perf_counter() > p_end:
+                pytest.fail("unexpected too long duration collecting log record queue")
+            try:
+                record = log_queue.get(timeout=use_timeout)
+            except queue.Empty:
+                break
+            logging.getLogger(record.name).handle(record)
+    process(0)  # pre-loop for all already present (timeout==0),
+    process(timeout)  # then collect up to requested timeout.
 
 
 @pytest.fixture

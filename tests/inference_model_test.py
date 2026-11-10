@@ -48,6 +48,22 @@ def test_inference_recording_and_offline_processing(
     make_log_dict_multiproc,
     monkeypatch,
 ):
+
+    finished_ok = finished_error = None
+    finished_prj = None
+    finished_count = 0
+    finished_evt = threading.Event()
+
+    def seg_finished(project, success, *, error=None):
+        nonlocal finished_ok, finished_error, finished_prj, finished_count
+        finished_count += 1
+        finished_ok = success
+        finished_error = error
+        finished_prj = project
+        finished_evt.set()
+
+    inference.segmentation_finished += seg_finished
+
     fps = 50
     frame_width = inference_q.shape[1]
     frame_height = inference_q.shape[0]
@@ -89,36 +105,45 @@ def test_inference_recording_and_offline_processing(
     #
     inference_q.put_frame_index_category(frame, FrameIndexCategory.EOF_RECORDING)
     #
-    wait_stop_recorded = True
-    completed = False
     complete_ok = complete_error = None
-    evt = threading.Event()
+    complete_count = 0
+    complete_evt = threading.Event()
 
     def on_complete(success: bool, *, error: Optional[str]=None):
-        nonlocal completed, complete_ok, complete_error
-        if completed:
-            raise RuntimeError("expected only once")
-        completed = True
+        nonlocal complete_ok, complete_error, complete_count
         complete_ok = success
         complete_error = error
-        evt.set()
+        complete_count += 1
+        complete_evt.set()
 
     cfg = SegmentationConfiguration(project=project_info, frame_rate=fps, complete=on_complete)
     assert inference.perform_segmentation(cfg) is not None
 
+    wait_stop_recorded = True
+
     inference.send_message(InferenceCommandMessageKind.ProcessOffline, (project_info, wait_stop_recorded))
+
     # fake the camera stop recording sema releases:
     inference._pose_process._record_stop_sema.release()
     inference._pose_process._record_stop_sema.release()
     # inference._data_monitor_proc.stop_recorded.set()  # BUT not the data monitor one, which is really executed,
     #
-    assert evt.wait(15), "should be ~very fast"
-    assert completed
+    assert finished_evt.wait(15), "should be ~very fast"
+    assert finished_ok is True
+    assert finished_error is None
+    assert finished_prj == project_info
+    #
+    assert complete_evt.wait(15), "should be ~very fast"
     assert complete_ok is True
     assert complete_error is None
+    #
+    assert inference._intertrial_block is None
     # extra:
     inference.send_message(InferenceCommandMessageKind.SetOfflineToLive)
     inference.wait_for_status(InferenceStatus.live, timeout=5)
+    inference.terminate()
+    assert finished_count == 1
+    assert complete_count == 1
 
 
 def test_load_different_defaults(inference):
