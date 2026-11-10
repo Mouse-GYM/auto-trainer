@@ -2208,6 +2208,27 @@ class AppModel(ObservableObject):
             return
         self._training_plans = plan_infos
 
+    def reload_motor_and_move_config(self):
+        """Re-read motor and move config files, they are sent to the boards on next hardware connect (Start)."""
+        title = "Reload motor/move config error"
+        with self.app_lock:
+            is_idle = not (self._acquisition_started or self._acquisition_starting
+                           or self._status != AppModelStatus.IDLE)
+        if not is_idle:
+            self.on_error(title, "Motor/move config can only be reloaded while idle.")
+            return
+        hard = self._hardware
+        try:
+            motors_config = hard.load_default_motor_config(MotorConfigurationFile.DEFAULT_LOCATION.expanduser())
+            move_config = hard.load_default_move_config(CompoundMovements.DEFAULT_LOCATION.expanduser())
+        except Exception as err:
+            logger.exception("Could not reload motor/move config: %s", err)
+            self.on_error(title, f"Could not reload motor/move config:\n\n{err}\n\nPrevious configs are retained.")
+            return
+        self._motors_config = motors_config
+        self._move_config = move_config
+        logger.notice("Motor and move configs reloaded, will be applied on next hardware connect")
+
     def save_configuration(self):
         if self._loaded_configuration is None:
             # do not save if loaded_config is still None, which signify the load configuration failed,
