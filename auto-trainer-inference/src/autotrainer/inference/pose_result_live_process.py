@@ -14,7 +14,7 @@ from autotrainer.core import get_perf_now
 from autotrainer.core.logging import (
     get_verbose_logger,
     setup_logging,
-    install_log_exception_hook,
+    install_log_hooks,
     make_log_dict_config,
 )
 from autotrainer.core.multiproc import pool_init, get_mp_ctx
@@ -86,7 +86,7 @@ class LivePoseResultProcessWorker(multiprocessing.Process):
             setup_logging(logger_level=logging.DEBUG, extra_logger_names=("tools", "inference_algorithms"))
         else:
             logging.config.dictConfig(log_dict_config)
-            install_log_exception_hook()
+            install_log_hooks()
         # logging.getLogger("autotrainer").setLevel(logging.DEBUG)
         warn_full = False
         count_processed = 0

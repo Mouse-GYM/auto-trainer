@@ -47,12 +47,12 @@ def pool_init(log_dict_cfg=None):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     # given by default this is what is done.
     # inner-import on purpose: prevent import loop:
-    from autotrainer.core.logging import setup_logging, install_log_exception_hook
+    from autotrainer.core.logging import setup_logging, install_log_hooks
     if log_dict_cfg is None:
         setup_logging()
     else:
         logging.config.dictConfig(log_dict_cfg)
-        install_log_exception_hook()
+        install_log_hooks()
     logging.root.info("Initialized pool worker")
 
 
