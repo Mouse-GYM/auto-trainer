@@ -20,7 +20,7 @@ import numpy
 from autotrainer.core import ProjectInfo, get_perf_now
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.multiproc import get_mp_ctx, MixinMainWatchdogChecker
-from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_exception_hook, \
+from autotrainer.core.logging import get_verbose_logger, make_log_dict_config, setup_logging, install_log_hooks, \
     get_multiprocess_log_queue
 
 from autotrainer.inference import InferenceMode, PoseAlgorithm, InferenceMonitorDataMsg
@@ -142,7 +142,7 @@ class InferenceMonitorDataProc(MixinMainWatchdogChecker, multiprocessing.Process
             setup_logging()
         else:
             logging.config.dictConfig(log_dict_config)
-            install_log_exception_hook()
+            install_log_hooks()
         #
         cmd_thread = threading.Thread(target=self._monitor_cmd_queue, daemon=True, name="monitor_cmd_queue")
         cmd_thread.start()

@@ -12,6 +12,7 @@ import signal
 import threading
 import time
 import typing
+import warnings
 from pathlib import Path
 from logging import LogRecord
 from queue import Empty
@@ -296,7 +297,7 @@ class LogQueueListenerProc(Process):
         # base_logger.setLevel(cfg.root_level)
 
         # NB: must be installed AFTER the listener is started
-        install_log_exception_hook()
+        install_log_hooks()
 
         command_q = self._command_queue
         command_executed = self._command_executed.set
@@ -343,10 +344,11 @@ def thread_exception_hook(arg):
     logger.exception("Fatal unhandled thread exception: %s", arg.exc_value)
 
 
-def install_log_exception_hook():
-    """Replaces `sys.excepthook` and `threading.excepthook` for the whole process."""
+def install_log_hooks():
+    """Replaces `sys.excepthook` and `threading.excepthook` for the whole process. Also log warnings module."""
     sys.excepthook = main_exception_hook
     threading.excepthook = thread_exception_hook
+    logging.captureWarnings(True)  # also logs all warnings.warn(..).
 
 
 def get_root_handler():
@@ -424,6 +426,7 @@ def stop_multiproc_logging():
 
     if _already_setup and q_listener is not None:
         _already_setup = False
+        logging.captureWarnings(False)
         # Must remove the handler before closing it:
         for handler in _base_logger.handlers:
             if isinstance(handler, WithThreadIdQueueHandler):
@@ -687,8 +690,7 @@ def setup_logging(
 
     _already_setup = True
 
-    install_log_exception_hook()
-    logging.captureWarnings(True)  # also logs all warnings.warn(..).
+    install_log_hooks()
 
     return desired_logger
 

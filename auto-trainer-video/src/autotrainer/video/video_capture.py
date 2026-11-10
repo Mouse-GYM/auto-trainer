@@ -19,7 +19,7 @@ from typing import Callable, Dict, Union, Optional, List, Tuple, Any
 import numpy
 
 from autotrainer.core import FixedArrayMultiQueue, FixedArrayQueue, ProjectInfo, SystemStatusMessageKind, get_perf_now
-from autotrainer.core.logging import get_verbose_logger, set_logger_level, make_log_dict_config, setup_logging, install_log_exception_hook
+from autotrainer.core.logging import get_verbose_logger, set_logger_level, make_log_dict_config, setup_logging, install_log_hooks
 from autotrainer.core.frame_index import FrameIndexCategory
 from autotrainer.core.fixed_array_queue import BufferResult
 from autotrainer.core.video_detection import PresenceDetectionAttrs
@@ -242,7 +242,7 @@ class VideoCapture(MixinMainWatchdogChecker, Process):
             setup_logging(logger_level=logging.DEBUG, extra_logger_names=("tools", "inference_algorithms"))
         else:
             logging.config.dictConfig(log_dict_config)
-            install_log_exception_hook()
+            install_log_hooks()
 
         logger.info("%s: started running ; name=%s cam_index=%s primary=%s log_dict=%s",
                     self, self._attrs.camera.name, self._camera_idx, self._attrs.is_primary,
