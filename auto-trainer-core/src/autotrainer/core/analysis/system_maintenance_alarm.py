@@ -51,7 +51,7 @@ class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
         self._on_property_changed(self.MAX_PELLET_LOADED_ENGAGED, value, prev)
         if value != prev:
             self.post_detector_event(ApiDetectorKind.pelletRefillCountExceeded, value, self._config.use_max_pellet_loaded)
-            self.check_state_if_not_detector_thread()
+            self.check_state()
 
     @property
     def max_consecutive_failed_load_engaged(self):
@@ -64,7 +64,7 @@ class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
         if value != prev:
             self.post_detector_event(ApiDetectorKind.consecutivePelletLoadFailureExceeded, value,
                                      self._config.use_max_consecutive_failed_load)
-            self.check_state_if_not_detector_thread()
+            self.check_state()
 
     def set_cage_clean_next_day(self, day: date):
         self._cage_clean_next_day = day
@@ -81,7 +81,7 @@ class SystemMaintenanceAlarm(AlarmDetector[SystemMaintenanceConfig]):
         if value != prev:
             self.post_detector_event(ApiDetectorKind.cageCleaningRequired, value,
                                      self._config.use_cage_need_clean)
-            self.check_state_if_not_detector_thread()
+            self.check_state()
 
     def _check_cage_need_clean(self):
         cfg = self._config

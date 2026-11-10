@@ -195,11 +195,6 @@ class BaseDetector(ObservableObject, Generic[DetectorConfigT]):
     def _check_state(self, *, force: bool=False) -> Optional[float]:
         raise NotImplementedError
 
-    def check_state_if_not_detector_thread(self):
-        th_q = self._thread_queue
-        if th_q is None or threading.current_thread() != th_q[0]:
-            self.check_state()
-
     def _check_put_to_daemon(self, *, force: bool=False):
         th_q = self._thread_queue
         if th_q is not None:
