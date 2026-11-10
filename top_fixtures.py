@@ -155,7 +155,7 @@ def collect_log_queue_to_caplog(
     def process(use_timeout):
         while True:
             if time.perf_counter() > p_end:
-                break
+                pytest.fail("unexpected too long duration collecting log record queue")
             try:
                 record = log_queue.get(timeout=use_timeout)
             except queue.Empty:
