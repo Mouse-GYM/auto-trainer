@@ -90,7 +90,7 @@ Most of the content in `scripts` are lightweight utilities to determine if vario
 
 PyTest testing is supported and configured via `./conftest.py`.
 
-Individual namespace packages (*e.g,* `auto-trainer-core`) contain a `tests` directory.  There are also unit and functional
+Individual namespace packages (*e.g,* `auto-trainer-device`) contain a `tests` directory.  There are also unit and functional
 tests for high-level functionality in the applications and that combine elements of multiple packages.
 
 Tests that are longer or require additional configuration are marked as `@pytest.mark.functional` and are not run
@@ -122,10 +122,6 @@ To limit testing to an individual namespace package, issue still from the base r
 
 for instance. Alternatively you can `cd` into the subdir, and execute `pytest ./tests` too.
 
-Running only core's tests, with `pytest ./auto-trainer-core/tests` or `pytest` inside `auto-trainer-core/`, uses
-core's own configuration in `auto-trainer-core/pyproject.toml` rather than `./conftest.py`; runs that mix several
-packages still use the root configuration.
-
 To list all test cases, from repo base/root dir:
 
 `pytest --collect-only --quiet`
@@ -137,7 +133,23 @@ You can also give many at once.
 
 ### autotrainer.core
 
-[Core](auto-trainer-core/README.md) is base module for functions and objects that used across most or all modules and applications.
+[Core](https://github.com/Mouse-GYM/auto-trainer-core) is base module for functions and objects that used across most or all modules and applications.
+It lives in its own repository and installs from PyPI as `auto-trainer-core`, in the version range the packages here declare.
+
+After pulling the change that moved core out of this repository, re-run `pip install -e ".[test]"` (`./update.sh` does
+the same on a rig). That installs the released package and stops the editable install from pointing `autotrainer.core`
+at the deleted directory.
+
+To change core and the application together, clone `auto-trainer-core` beside this repository and install it in
+editable mode after the application, so that it replaces the released package:
+
+```bash
+pip install -e ".[test]"
+pip install -e "../auto-trainer-core[test]"
+python -c "import autotrainer.core; print(autotrainer.core.__file__)"
+```
+
+The last command prints a path inside the clone.
 
 **Autotrainer Dependencies**
 * None

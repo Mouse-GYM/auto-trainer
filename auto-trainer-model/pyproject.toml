@@ -22,6 +22,6 @@ dependencies = [
 
 [tool.setuptools_scm]
 root = ".."  # temporary while embedded in autotrainer main repo
-# also strip auto-trainer-core when moved as independent repo
+# also strip auto-trainer-model/ from write_to when moved as independent repo
 write_to = "auto-trainer-model/src/autotrainer/model/version.txt"
 git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"

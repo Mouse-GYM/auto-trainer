@@ -15,9 +15,8 @@ os.environ.setdefault("AUTOTRAINER_FORCE_CAN_EMULATION_IFACE", "1")
 
 
 pytest_plugins = [
-    # NB: having to use another name than "fixtures(.py)" given otherwise it's overridden by:
-    # ./auto-trainer-core/tests/fixtures
-    # notably/already.
+    # NB: helper module names must stay unique across every tests directory: pytest's default (prepend) import mode
+    # imports them by bare name, hence "top_fixtures" rather than "fixtures".
     # core's module comes first: top_fixtures imports helpers from it, and a plugin imported before pytest
     # registers it cannot have its asserts rewritten.
     "autotrainer.core.testing",
