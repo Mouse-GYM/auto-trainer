@@ -18,7 +18,7 @@ requires-python = ">=3.8"
 dynamic = ["version"]
 dependencies = [
 
-    "auto-trainer-core",
+    "auto-trainer-core >= 2.1.0, < 2.2",
 
     'deeplabcut >= 2.3.11, < 2.4',  # famous deeplab
 

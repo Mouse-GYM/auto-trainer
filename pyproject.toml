@@ -19,6 +19,7 @@ dynamic = ["version", "dependencies"]
 
 [project.optional-dependencies]
 test = [
+    "auto-trainer-core[test] >= 2.1.0, < 2.2",
     "pytest >= 8.2, < 9",
     "pytest-mock >= 3, < 4",
     "pytest-random-order >= 1.1, < 2",
@@ -50,7 +51,6 @@ git_describe_command = "git describe --tags --dirty --match 'v*' --abbrev=8"
 where = [
     # temporary until split in many repos:
     "auto-trainer-behavior/src",
-    "auto-trainer-core/src",
     "auto-trainer-device/src",
     "auto-trainer-inference/src",
     "auto-trainer-model/src",
