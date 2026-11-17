@@ -641,8 +641,8 @@ class MockSystemMachine:
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
 
     def make_load_cell_active(self):
-        # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
-        # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
+        # NB: this could move to core's test support (autotrainer.core.testing, in auto-trainer-core, which defines
+        # load_cell_monitor), so that core's own load cell monitor tests could reuse it.
         batch_count = self._load_cell._engaged_batch_count
         for _ in range(2 * batch_count):
             self.increment_perf_now(self._load_cell.config.threshold_duration / batch_count + 0.001)

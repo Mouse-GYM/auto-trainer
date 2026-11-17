@@ -21,7 +21,7 @@ from autotrainer.core.logging import (
     get_verbose_logger,
     make_log_dict_config,
     setup_logging,
-    install_log_exception_hook,
+    install_log_hooks,
 )
 from autotrainer.core.multiproc import get_mp_ctx, MixinMainWatchdogChecker
 from autotrainer.core.frame_index import FrameIndexCategory
@@ -133,7 +133,7 @@ class PoseProcess(MixinMainWatchdogChecker, Process):
             setup_logging()
         else:
             logging.config.dictConfig(log_dict_config)
-            install_log_exception_hook()
+            install_log_hooks()
 
         logger.debug("started with %s", log_dict_config)
         try:
