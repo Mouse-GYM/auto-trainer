@@ -22,7 +22,7 @@ concurrency:  # allow cancel if new commit pushed
 jobs:
   build-and-test:
     name: Setup env. and run tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # 3.8 not anymore available under ubuntu-latest (26.04)
     timeout-minutes: 30  # at the last noticed moment the executes takes up to max ~10-15 minutes.
     strategy:
       matrix:

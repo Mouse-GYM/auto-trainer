@@ -875,11 +875,10 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         logger.notice("received close")
         self._main_ui_watchdog_timer.stop()  # ensure doesn't race
-        with app_model.app_lock:
-            if self._closing:
-                logger.warning("already closing")
-                return
-            self._closing = True
+        if self._closing:
+            logger.warning("already closing")
+            return
+        self._closing = True
         def after_stop():
             # time.sleep(5)  debug
             app_model.on_close()
@@ -1072,7 +1071,13 @@ class MainWindow(QMainWindow):
 
         action = self._reload_hw_config_action = QAction(QIcon(qta.icon("fa5s.redo")), "Reload Motor/Move Config", self)
         action.setToolTip("Re-read motor_config.yaml and move config files (Idle: applied on next Start, Running: applied now + move home)")
-        action.triggered.connect(lambda: self._app_model.reload_motor_and_move_config())
+        def reload_motor_move_configs():
+            self._reload_hw_config_action.setEnabled(False)
+            @invoke_method
+            def cb(result, *, error=None):
+                self._reload_hw_config_action.setEnabled(True)
+            self._app_model.reload_motor_and_move_config(callback=cb, is_cancelled=lambda: self._closing)
+        action.triggered.connect(reload_motor_move_configs)
 
         tooltip = "Reset pellet and reach counts for this animal"
         action = self._reset_animal_pellet_counts_action = QAction(QIcon(qta.icon("fa5s.sync")), tooltip, self)

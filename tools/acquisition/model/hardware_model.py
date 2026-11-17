@@ -27,7 +27,7 @@ from autotrainer.device import (
     ServoConfig,
     Device,
     ColorLed,
-    CompoundMovements, MotorConfigurationFile, Target,
+    CompoundMovements, MotorConfigurationFile, Target, IsCancelledT,
 )
 from autotrainer.behavior import (
     TunnelDeviceProtocol,
@@ -559,7 +559,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         force_first_connect: bool=False,
         motors_config: Optional[MotorConfigurations] = None,
         move_config: Optional[CompoundMovements] = None,
-        is_cancelled=lambda: False,
+        is_cancelled: IsCancelledT=lambda: False,
     ):
         logger.notice("%s: connect with %s", self, cmd_queue)
 
@@ -872,7 +872,7 @@ class HardwareModel(ObservableObject, TunnelDeviceProtocol, PelletDeviceProtocol
         timeout: float = 3,
         raise_on_timeout: bool = True,
         raise_on_command_error: bool = True,
-        is_cancelled=lambda: False,
+        is_cancelled: IsCancelledT = lambda: False,
     ):
         """Forwarded to DeviceConnection.await_acknowledge"""
         dev_conn = self._device_conn

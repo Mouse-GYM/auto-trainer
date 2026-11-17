@@ -51,7 +51,6 @@ from autotrainer.core import (
     SystemConfiguration,
     CameraId,
     PersistenceConfiguration,
-    HardwareConfiguration,
     SystemStatusMessageKind,
     SensorAnalysis,
     Offset3DTuple,
@@ -65,7 +64,7 @@ from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.helpers import has_kwarg
-from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
+from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
@@ -77,7 +76,7 @@ from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.queue_util import clear_queue
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
-from autotrainer.device import CompoundMovements, MotorConfigurationFile
+from autotrainer.device import CompoundMovements, MotorConfigurationFile, IsCancelledT, default_not_cancelled
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -104,7 +103,7 @@ from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel, EmergencyControlSource, EmergencyResumeOutcome
-from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
@@ -339,7 +338,12 @@ class OkCallBackT2(Protocol):
         """For callback of set_animal_selected + set_training_mode + set_training_plan"""
 
 
-MaybeOkCallBack = Optional[Union[OkCallBackT1, OkCallBackT2]]
+OkCallBack = Union[OkCallBackT1, OkCallBackT2]
+MaybeOkCallBack = Optional[OkCallBack]
+
+
+def empty_ok_cb(result: bool, *, error=None):
+    """For default callback"""
 
 
 def _use_worker_lock(func):
@@ -428,15 +432,18 @@ class AppModel(ObservableObject):
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
-        self._status = AppModelStatus.IDLE
+        self._stop_requested = threading.Event()  # set early on capture_stop
+        self._status: AppModelStatus = AppModelStatus.IDLE
         self._start_count = 0
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
         self._loaded_config_dir_path = Path()
-        self._config_errors = []
+        self._config_errors: List[str] = []
         self._motors_config: Optional[MotorConfigurations] = None
+        self._motors_load_error: Optional[str] = None
         self._move_config: Optional[CompoundMovements] = None
+        self._move_load_error: Optional[str] = None
 
         self._project_info: Optional[ProjectInfo] = None
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
@@ -460,10 +467,10 @@ class AppModel(ObservableObject):
         self._training_mode: TrainingMode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
-        self._acquisition_starting = False
-        self._acquisition_started = False
-        self._acquisition_stopping = False
-        self._reload_plans_needed = False
+        self._acquisition_starting: bool = False
+        self._acquisition_started: bool = False
+        self._acquisition_stopping: bool = False
+        self._reload_plans_needed: bool = False
         self._prev_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_raw_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_valid_diamond_perf_c: float = -math.inf
@@ -654,7 +661,15 @@ class AppModel(ObservableObject):
 
     @property
     def config_errors(self) -> List[str]:
-        return self._config_errors
+        errs = []
+        motors_load_err = self._motors_load_error
+        if motors_load_err is not None:
+            errs.append(motors_load_err)
+        move_load_err = self._move_load_error
+        if move_load_err is not None:
+            errs.append(move_load_err)
+        errs.extend(self._config_errors)
+        return errs
 
     @property
     def main_watchdog_perf_c(self) -> float:
@@ -1650,17 +1665,29 @@ class AppModel(ObservableObject):
                       PendingDeprecationWarning, stacklevel=2)
         return self.capture_stop(**kwargs)
 
+    def _apply_send_home(self, hard: HardwareModel, *, is_cancelled: IsCancelledT =lambda: False):
+        tokens = set()
+        with hard.wait_pending_command_acked(tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
+            tok = hard.send_home()
+            if tok is None:
+                raise RuntimeError("could not request send-home")
+            tokens.add(tok)
+        if is_cancelled():
+            return
+        self._behavior.system_machine.pellet.state = PelletState.home  # also set/force it on pellet machine too.
+
     def capture_start(
         self,
         *,
         target_status: AppModelStatus = AppModelStatus.ACQUIRING,
         wait_connected: bool = True,
-        is_cancelled: Callable[[], bool] = lambda: False,
+        is_cancelled: IsCancelledT = lambda: False,
     ) -> bool:
         """Request to start the acquisition"""
         if target_status == AppModelStatus.IDLE:
             raise ValueError("AppModelStatus.IDLE not accepted as target for capture_start")
         with self.app_lock:
+            self._stop_requested.clear()
             before_status = self._status
             if target_status == before_status:
                 logger.verbose("AppModelStatus already %s", before_status)
@@ -1672,9 +1699,10 @@ class AppModel(ObservableObject):
                 self.on_error("AppModelStatus change error",
                               f"Target status {target_status} not valid for source status {before_status}")
                 return False
-            if len(self._config_errors) > 0:
+            cur_errors = self.config_errors
+            if len(cur_errors) > 0:
                 self.on_error("Refusing start-acquisition, configuration error(s)",
-                              f"Errors:\n{pprint.pformat(self._config_errors)}")
+                              f"Errors:\n{pprint.pformat(cur_errors)}")
                 return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
@@ -1849,7 +1877,6 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        pending_tokens = set()
         try:
             hard.connect(
                 self._system_message_handler.input_queue,
@@ -1896,15 +1923,8 @@ class AppModel(ObservableObject):
             return False
 
         # we want always be/go at home on acquisition start, so:
-        pending_tokens.clear()
         try:
-            with hard.wait_pending_command_acked(pending_tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
-                tok = hard.send_home()
-                if tok is None:
-                    raise RuntimeError("could not request send-home")
-                pending_tokens.add(tok)
-            self._behavior.system_machine.pellet.move_home()  # still request it on pellet machine too,
-                # to get the desired "side effects" of it (basically fully initialize the pellet machine).
+            self._apply_send_home(hard, is_cancelled=is_cancelled)
         except Exception as err:
             logger.error("Failed to move home: %s", err)
             self.capture_stop(force=True)
@@ -1956,6 +1976,10 @@ class AppModel(ObservableObject):
 
     def capture_stop(self, force: bool = False, *, update_led: bool = True):
         logger.debug("AppModel.capture_stop")
+        if self._stop_requested.is_set() and not force:
+            logger.verbose("acquisition already stopping")
+            return
+        self._stop_requested.set()
         with self.app_lock:
             if not self._acquisition_started and not force:
                 logger.verbose("acquisition not running")
@@ -1976,6 +2000,7 @@ class AppModel(ObservableObject):
             self._acquisition_started = False
             self._acquisition_stopping = False
             self._acquisition_starting = False
+            self._stop_requested.clear()
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
@@ -2140,7 +2165,7 @@ class AppModel(ObservableObject):
             self._motors_config = hard.load_default_motor_config(motors_cfg_file)
         except Exception as err:
             logger.exception("Error loading motor config: %s", err)
-            self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
+            self._motors_load_error = f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}"
             load_ok = False
         #
         self._move_config = None
@@ -2149,7 +2174,7 @@ class AppModel(ObservableObject):
             self._move_config = hard.load_default_move_config(move_config_file)
         except Exception as err:
             logger.exception("Error loading move config: %s", err)
-            self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
+            self._move_load_error = f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}"
             load_ok = False
         #
         self._loaded_configuration = configuration
@@ -2208,34 +2233,21 @@ class AppModel(ObservableObject):
             return
         self._training_plans = plan_infos
 
-    def reload_motor_and_move_config(self):
+    def reload_motor_and_move_config(self, *, callback: OkCallBack = empty_ok_cb, is_cancelled: IsCancelledT = default_not_cancelled):
         """Re-read motor and move config files.
 
         When idle, they are sent to the boards on next hardware connect (Start).
         When running (no animal), they are pushed to the boards right away, followed by a move home.
         """
         title = "Reload motor/move config error"
-        with self.app_lock:
-            status = self._status
-            is_idle = not (self._acquisition_started or self._acquisition_starting
-                           or status != AppModelStatus.IDLE)
-            is_running = (self._acquisition_started and not self._acquisition_stopping
-                          and status is AppModelStatus.ACQUIRING)
-        if not (is_idle or is_running):
-            self.on_error(title, "Motor/move config can only be reloaded while Idle or Running (no animal).")
-            return
-        hard = self._hardware
         try:
-            motors_config = hard.load_default_motor_config(MotorConfigurationFile.DEFAULT_LOCATION.expanduser())
-            move_config = hard.load_default_move_config(CompoundMovements.DEFAULT_LOCATION.expanduser())
-        except Exception as err:
-            logger.exception("Could not reload motor/move config: %s", err)
-            self.on_error(title, f"Could not reload motor/move config:\n\n{err}\n\nPrevious configs are retained.")
-            return
-        self._motors_config = motors_config
-        self._move_config = move_config
-        if is_idle:
-            logger.notice("Motor and move configs reloaded, will be applied on next hardware connect")
+            motors_config = MotorConfigurationFile.from_file(MotorConfigurationFile.DEFAULT_LOCATION)
+            move_config = CompoundMovements.from_file(CompoundMovements.DEFAULT_LOCATION)
+        except Exception as load_err:
+            logger.exception("Failed load configs: %s", load_err)
+            err_msg = f"Could not load motor/move config file from default path:\n\n{load_err}"
+            self.on_error(title, err_msg)
+            callback(False, error=err_msg)
             return
 
         algo = self._behavior.algorithm
@@ -2243,29 +2255,66 @@ class AppModel(ObservableObject):
         # same sequence as on Start: write configs, then go home
         @algo.relay_func(wait=False)
         def apply_to_running_boards():
-            if self._status is not AppModelStatus.ACQUIRING:
-                logger.warning("Status now %s, motor/move configs not pushed (will be on next connect)", self._status)
-                return
-            dev_conn = hard.device_connection
             try:
+                _apply_to_running_boards()
+            except Exception as err:
+                msg = f"{err}"
+                self.on_error(title, msg)
+                callback(False, error=msg)
+                self.capture_stop()
+            else:
+                logger.success("Motor and move configs reloaded and applied to boards")
+                callback(True)
+
+        def _apply_to_running_boards(upper_cancelled=is_cancelled):
+            status = self._status  # nb: status is only modified with app_lock taken,
+            # app_lock is same than algo lock, so we're safe to use this local "status" here all along.
+            is_idle = not (self._acquisition_started or self._acquisition_starting
+                           or status != AppModelStatus.IDLE)
+            is_running = (self._acquisition_started and not self._acquisition_stopping
+                          and status is AppModelStatus.ACQUIRING)
+            if not (is_idle or is_running):
+                raise RuntimeError("Motor/move config can only be reloaded while Idle or Running (no animal).")
+            if self._emergency_source is not None:
+                raise RuntimeError(f"Refusing reload while emergency source ({self._emergency_source} engaged.")
+            hard = self._hardware
+            self._motors_config = motors_config
+            self._move_config = move_config
+            post_msg = "motor/move configs will be applied on next connect"
+            if status is not AppModelStatus.ACQUIRING:
+                raise RuntimeError(f"Not acquiring ({status}). {post_msg}")
+            def inner_cancelled() -> bool:
+                ret = (
+                    self._stop_requested.is_set()
+                    or self._acquisition_stopping  # nb: both must be checked, given _stop_requested is cleared after.
+                    or self._closing
+                    or self._status is not AppModelStatus.ACQUIRING
+                    or upper_cancelled()
+                )
+                if ret:
+                    raise RuntimeError(f"Acquisition stopped.")
+                return False
+            try:
+                dev_conn = hard.device_connection
                 if dev_conn is None:
-                    raise RuntimeError("hardware not connected")
-                dev_conn.use_motor_configurations(motors_config)
-                dev_conn.use_compound_movements(move_config)
-                tokens = set()
-                with hard.wait_pending_command_acked(tokens, timeout=hard.send_home_timeout):
-                    tok = hard.send_home()
-                    if tok is None:
-                        raise RuntimeError("could not request send-home")
-                    tokens.add(tok)
-                with algo.set_allow_reentrant(True):
-                    self._behavior.system_machine.pellet.move_home(force=True)
+                    raise RuntimeError(f"hardware not connected.")
+                # p_end = time.perf_counter() + 15
+                # while time.perf_counter() < p_end:
+                #     time.sleep(0.001)
+                #     inner_cancelled()
+                dev_conn.use_motor_configurations(motors_config, is_cancelled=inner_cancelled)
+                self._motors_load_error = None
+                dev_conn.use_compound_movements(move_config, is_cancelled=inner_cancelled)
+                self._move_load_error = None
+                self._apply_send_home(hard, is_cancelled=inner_cancelled)
             except Exception as err:
                 logger.exception("Could not apply motor/move config to boards: %s", err)
-                self.on_error(title, f"Could not apply motor/move config to boards:\n\n{err}")
-                return
-            logger.notice("Motor and move configs reloaded and applied to boards")
-        apply_to_running_boards()
+                raise RuntimeError(f"Apply motor/move config failed: {err}. {post_msg}")
+
+        try:
+            apply_to_running_boards()
+        except Exception as submit_err:
+            callback(False, error=f"Cannot call apply_to_running_boards: {submit_err}")
 
     def save_configuration(self):
         if self._loaded_configuration is None:
