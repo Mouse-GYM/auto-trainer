@@ -492,6 +492,44 @@ class TestSetApplicationMode:
         assert after.result == ApiCommandRequestResult.SUCCESS
         assert after.data == {"mode": ApiApplicationMode.IDLE}
 
+    def test_can_reload_is_off_from_an_accepted_request_until_it_completes(self, app_model, rpc_service,
+                                                                            monkeypatch):
+        workers: List[Callable[[], None]] = []
+        monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", partial(_DeferredThread, workers=workers))
+        events: List[bool] = []
+
+        def on_changed(name, value, _prev):
+            if name == app_model.Props.CAN_RELOAD_HW_CONFIG:
+                events.append(value)
+
+        app_model.property_changed += on_changed
+        during_start: List[bool] = []
+        hard = app_model.hardware
+        orig_connect = hard.connect
+
+        def connect(*args, **kwargs):
+            during_start.append(app_model.can_reload_hw_config)
+            return orig_connect(*args, **kwargs)
+
+        monkeypatch.setattr(hard, "connect", connect)
+
+        response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        assert app_model.can_reload_hw_config is False
+        assert events[-1] is False
+        workers[0]()
+        assert during_start == [False]
+        assert app_model.status == AppModelStatus.ACQUIRING
+        assert app_model.can_reload_hw_config is True
+
+        response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.IDLE))
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        assert app_model.can_reload_hw_config is False
+        with _advancing_perf_now():
+            workers[1]()
+        assert app_model.status == AppModelStatus.IDLE
+        assert app_model.can_reload_hw_config is True
+
     def test_a_launch_failure_releases_the_reservation(self, app_model, rpc_service, capture_stubs, monkeypatch):
         monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", _FailingThread)
         response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))

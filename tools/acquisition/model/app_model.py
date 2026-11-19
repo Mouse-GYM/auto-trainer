@@ -51,7 +51,6 @@ from autotrainer.core import (
     SystemConfiguration,
     CameraId,
     PersistenceConfiguration,
-    HardwareConfiguration,
     SystemStatusMessageKind,
     SensorAnalysis,
     Offset3DTuple,
@@ -65,7 +64,7 @@ from autotrainer.core.analysis.detector import GroupBaseDetector
 from autotrainer.core.analysis.system_fault_monitor import SystemFaultReason
 from autotrainer.core.configuration.json_compat import SystemConfigurationJSONEncoder
 from autotrainer.core.helpers import has_kwarg
-from autotrainer.core.interfaces import RecordingEndingReason, CaptureAnalysisResult
+from autotrainer.core.interfaces import RecordingEndingReason
 from autotrainer.core.observable_object import EventHandler
 from autotrainer.core.project import ProjectInfo, ProjectDependentProtocol
 from autotrainer.core.configuration import SystemConfigurationDumper, DEFAULT_3D_CALIB_DIR_NAME
@@ -77,7 +76,7 @@ from autotrainer.core.project.project_info import DATE_TIME_FORMAT
 from autotrainer.core.queue_util import clear_queue
 from autotrainer.core.video_detection import PresenceDetectionAttrs
 from autotrainer.core.analysis.alarm_detector import AlarmDetector
-from autotrainer.device import CompoundMovements, MotorConfigurationFile
+from autotrainer.device import CompoundMovements, MotorConfigurationFile, IsCancelledT, default_not_cancelled
 
 from autotrainer.inference import (
     PoseAlgorithm,
@@ -104,7 +103,7 @@ from tools.acquisition.model.helpers import get_config_location
 from tools.acquisition.model.hardware_model import HardwareModel
 from tools.acquisition.model.inference_model import InferenceModel
 from tools.acquisition.model.behavior_model import BehaviorModel, EmergencyControlSource, EmergencyResumeOutcome
-from tools.acquisition.model.user_preferences import UserPreferences, get_default_animals_location
+from tools.acquisition.model.user_preferences import UserPreferences
 from tools.acquisition.model.video_capture_model import VideoCaptureModel
 
 logger = get_verbose_logger(__name__)
@@ -171,6 +170,14 @@ def _parse_rpc_enum(enum_type: Type[_IntEnumT], value: Any) -> Optional[_IntEnum
 
 class InvalidTargetAppModelStatus(Exception):
     """When trying to switch to invalid, or disabled, target app model status"""
+
+
+class _ReloadRefused(Exception):
+    """The motor/move config reload was refused before anything reached the boards: reported, no stop."""
+
+
+class _ReloadCanceled(Exception):
+    """A Stop or close is underway, and it takes care of the boards: logged only, no dialog, no stop."""
 
 
 def app_status_is_target_status_valid(self: AppModelStatus, target: AppModelStatus):
@@ -254,11 +261,28 @@ _CALIBRATION_STATUSES = frozenset({AppModelStatus.CALIBRATION_3D, AppModelStatus
 # the states in which the main window disables its training-mode selector
 _TRAINING_MODE_LOCKED_STATUSES = frozenset({AppModelStatus.ANIMAL_IN_TRAINING, *_CALIBRATION_STATUSES})
 
+_BLOCKED_DURING_HW_CONFIG_RELOAD = frozenset({
+    AppModelStatus.ANIMAL_IN_DEVICE,
+    AppModelStatus.ANIMAL_IN_TRAINING,
+    AppModelStatus.CALIBRATION_DCS,
+})
+
 
 class _RpcBehaviorSetting(NamedTuple):
     owner: Callable[["AppModel"], Any]
     attribute: str
     on_changed: Optional[Callable[["AppModel", bool], None]] = None
+
+
+class _HwConfigLoad(NamedTuple):
+    motors_config: Optional[MotorConfigurations]
+    move_config: Optional[CompoundMovements]
+    motors_error: Optional[str]
+    move_error: Optional[str]
+
+    @property
+    def errors(self) -> List[str]:
+        return [err for err in (self.motors_error, self.move_error) if err is not None]
 
 
 def _on_auto_clamp_enabled_changed(app: "AppModel", enabled: bool):
@@ -339,7 +363,12 @@ class OkCallBackT2(Protocol):
         """For callback of set_animal_selected + set_training_mode + set_training_plan"""
 
 
-MaybeOkCallBack = Optional[Union[OkCallBackT1, OkCallBackT2]]
+OkCallBack = Union[OkCallBackT1, OkCallBackT2]
+MaybeOkCallBack = Optional[OkCallBack]
+
+
+def empty_ok_cb(result: bool, *, error=None):
+    """For default callback"""
 
 
 def _use_worker_lock(func):
@@ -378,6 +407,8 @@ class AppModel(ObservableObject):
 
         STATUS = "status"
         ACQUISITION_RUNNING = "acquisition_running"  # False / True
+        CAN_RELOAD_HW_CONFIG = "can_reload_hw_config"  # False / True
+        HW_CONFIG_RELOAD_IN_PROGRESS = "hw_config_reload_in_progress"  # False / True
 
         ANIMALS = "animals"
         SELECTED_ANIMAL = "selected_animal"
@@ -428,15 +459,21 @@ class AppModel(ObservableObject):
         # otherwise (new) shared values can only be inherited from newly spawned sub-process(es) and not from already
         # existing sub-process(es).
 
-        self._status = AppModelStatus.IDLE
+        self._stop_requested = threading.Event()  # set early on capture_stop
+        self._status: AppModelStatus = AppModelStatus.IDLE
         self._start_count = 0
 
         self._preferences = preferences
         self._loaded_configuration: Optional[SystemConfiguration] = None
         self._loaded_config_dir_path = Path()
-        self._config_errors = []
+        self._config_errors: List[str] = []
         self._motors_config: Optional[MotorConfigurations] = None
+        self._motors_load_error: Optional[str] = None
         self._move_config: Optional[CompoundMovements] = None
+        self._move_load_error: Optional[str] = None
+        self._hw_config_reload_lock = threading.Lock()
+        self._hw_config_reload_in_progress = False
+        self._can_reload_hw_config_last = True  # Idle, nothing in progress
 
         self._project_info: Optional[ProjectInfo] = None
         self._output_location = PersistenceConfiguration.get_default_output_path().as_posix()
@@ -460,10 +497,10 @@ class AppModel(ObservableObject):
         self._training_mode: TrainingMode = TrainingMode.MANUAL
         self._training_plan: Optional[TrainingPlan] = None
         self._training_plan_animal: Optional[AnimalSubject] = None
-        self._acquisition_starting = False
-        self._acquisition_started = False
-        self._acquisition_stopping = False
-        self._reload_plans_needed = False
+        self._acquisition_starting: bool = False
+        self._acquisition_started: bool = False
+        self._acquisition_stopping: bool = False
+        self._reload_plans_needed: bool = False
         self._prev_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_raw_diamond_coord: Offset3DTuple = Offset3DTuple(math.nan, math.nan, math.nan)
         self._prev_valid_diamond_perf_c: float = -math.inf
@@ -654,7 +691,15 @@ class AppModel(ObservableObject):
 
     @property
     def config_errors(self) -> List[str]:
-        return self._config_errors
+        errs = []
+        motors_load_err = self._motors_load_error
+        if motors_load_err is not None:
+            errs.append(motors_load_err)
+        move_load_err = self._move_load_error
+        if move_load_err is not None:
+            errs.append(move_load_err)
+        errs.extend(self._config_errors)
+        return errs
 
     @property
     def main_watchdog_perf_c(self) -> float:
@@ -717,12 +762,65 @@ class AppModel(ObservableObject):
     def acquisition_started(self):
         return self._acquisition_started
 
+    @property
+    def hw_config_reload_in_progress(self) -> bool:
+        return self._hw_config_reload_in_progress
+
+    @property
+    def can_reload_hw_config(self) -> bool:
+        """Whether reload_motor_and_move_config would be accepted now, outside any Start/Stop window."""
+        # an accepted API Start/Stop sets only _rpc_start_or_stop_pending until its worker reaches the capture method
+        if self._hw_config_reload_in_progress or self._rpc_start_or_stop_pending:
+            return False
+        return self._hw_config_reload_idle() or self._hw_config_reload_running()
+
+    def _hw_config_reload_idle(self) -> bool:
+        # _acquisition_starting stays True for the whole session, so this also excludes a running acquisition
+        return (not (self._acquisition_started or self._acquisition_starting)
+                and self._status is AppModelStatus.IDLE)
+
+    def _hw_config_reload_running(self) -> bool:
+        return (self._acquisition_started and not self._stop_underway()
+                and self._status is AppModelStatus.ACQUIRING)
+
+    def _stop_underway(self) -> bool:
+        # _stop_requested is set before capture_stop waits for app_lock, so it is the only trace of a Stop queued
+        # behind a job holding that lock
+        return self._acquisition_stopping or self._stop_requested.is_set()
+
+    def _refresh_can_reload_hw_config(self):
+        with self._hw_config_reload_lock:
+            value = self.can_reload_hw_config
+            prev = self._can_reload_hw_config_last
+            if value == prev:
+                return
+            self._can_reload_hw_config_last = value
+        self.property_changed(self.Props.CAN_RELOAD_HW_CONFIG, value, prev)
+
+    def _begin_hw_config_reload(self) -> bool:
+        with self._hw_config_reload_lock:
+            if self._hw_config_reload_in_progress:
+                return False
+            self._hw_config_reload_in_progress = True
+        self.property_changed(self.Props.HW_CONFIG_RELOAD_IN_PROGRESS, True, False)
+        self._refresh_can_reload_hw_config()
+        return True
+
+    def _end_hw_config_reload(self):
+        with self._hw_config_reload_lock:
+            self._hw_config_reload_in_progress = False
+        self.property_changed(self.Props.HW_CONFIG_RELOAD_IN_PROGRESS, False, True)
+        self._refresh_can_reload_hw_config()
+
     def check_target_status_valid(self, target: AppModelStatus):
         current_status = self._status
         if target != current_status:
             valid = app_status_is_target_status_valid(current_status, target)
             if not valid:
                 raise InvalidTargetAppModelStatus(f"New status {target} not valid for current status {current_status}")
+            if self._hw_config_reload_in_progress and target in _BLOCKED_DURING_HW_CONFIG_RELOAD:
+                raise InvalidTargetAppModelStatus(
+                    f"New status {target} refused while the motor/move config reload is in progress")
         if target == AppModelStatus.ANIMAL_IN_TRAINING:
             dcs_cfg = self._behavior.algorithm.diamond_triangle_config
             valid_dcs = dcs_cfg is not None and dcs_cfg.fully_valid
@@ -756,6 +854,7 @@ class AppModel(ObservableObject):
         self._event_manager.post_api_event(build_event(
             ApiEventKind.applicationModeChanged, ApplicationModeContext(mode=app_status_to_api_app_mode(status))))
         self.property_changed(self.Props.STATUS, status, prev)
+        self._refresh_can_reload_hw_config()
         is_from_start = status in {AppModelStatus.ACQUIRING, AppModelStatus.IDLE}
         for cam in self._cameras:
             if status == AppModelStatus.ANIMAL_IN_DEVICE:
@@ -1650,17 +1749,29 @@ class AppModel(ObservableObject):
                       PendingDeprecationWarning, stacklevel=2)
         return self.capture_stop(**kwargs)
 
+    def _apply_send_home(self, hard: HardwareModel, *, is_cancelled: IsCancelledT =lambda: False):
+        tokens = set()
+        with hard.wait_pending_command_acked(tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
+            tok = hard.send_home()
+            if tok is None:
+                raise RuntimeError("could not request send-home")
+            tokens.add(tok)
+        if is_cancelled():
+            return
+        self._behavior.system_machine.pellet.state = PelletState.home  # also set/force it on pellet machine too.
+
     def capture_start(
         self,
         *,
         target_status: AppModelStatus = AppModelStatus.ACQUIRING,
         wait_connected: bool = True,
-        is_cancelled: Callable[[], bool] = lambda: False,
+        is_cancelled: IsCancelledT = lambda: False,
     ) -> bool:
         """Request to start the acquisition"""
         if target_status == AppModelStatus.IDLE:
             raise ValueError("AppModelStatus.IDLE not accepted as target for capture_start")
         with self.app_lock:
+            self._stop_requested.clear()
             before_status = self._status
             if target_status == before_status:
                 logger.verbose("AppModelStatus already %s", before_status)
@@ -1672,15 +1783,17 @@ class AppModel(ObservableObject):
                 self.on_error("AppModelStatus change error",
                               f"Target status {target_status} not valid for source status {before_status}")
                 return False
-            if len(self._config_errors) > 0:
+            cur_errors = self.config_errors
+            if len(cur_errors) > 0:
                 self.on_error("Refusing start-acquisition, configuration error(s)",
-                              f"Errors:\n{pprint.pformat(self._config_errors)}")
+                              f"Errors:\n{pprint.pformat(cur_errors)}")
                 return False
             if self._acquisition_starting:
                 logger.warning("Acquisition already starting")
                 return False
             self._acquisition_starting = True
             self._start_count += 1
+        self._refresh_can_reload_hw_config()
 
         algo = self._behavior.algorithm
         analysis = self._analysis
@@ -1849,7 +1962,6 @@ class AppModel(ObservableObject):
         # so that any movement pre-applied should be visible on camera(s).
         logger.debug("connecting hardware ...")
         hard = self._hardware
-        pending_tokens = set()
         try:
             hard.connect(
                 self._system_message_handler.input_queue,
@@ -1896,15 +2008,8 @@ class AppModel(ObservableObject):
             return False
 
         # we want always be/go at home on acquisition start, so:
-        pending_tokens.clear()
         try:
-            with hard.wait_pending_command_acked(pending_tokens, timeout=hard.send_home_timeout, is_cancelled=is_cancelled):
-                tok = hard.send_home()
-                if tok is None:
-                    raise RuntimeError("could not request send-home")
-                pending_tokens.add(tok)
-            self._behavior.system_machine.pellet.move_home()  # still request it on pellet machine too,
-                # to get the desired "side effects" of it (basically fully initialize the pellet machine).
+            self._apply_send_home(hard, is_cancelled=is_cancelled)
         except Exception as err:
             logger.error("Failed to move home: %s", err)
             self.capture_stop(force=True)
@@ -1956,9 +2061,15 @@ class AppModel(ObservableObject):
 
     def capture_stop(self, force: bool = False, *, update_led: bool = True):
         logger.debug("AppModel.capture_stop")
+        if self._stop_requested.is_set() and not force:
+            logger.verbose("acquisition already stopping")
+            return
+        self._stop_requested.set()
+        self._refresh_can_reload_hw_config()
         with self.app_lock:
             if not self._acquisition_started and not force:
                 logger.verbose("acquisition not running")
+                self._stop_requested.clear()  # nothing to stop: the request must not outlive this call
                 return
             if self._acquisition_stopping:
                 logger.verbose("acquisition already stopping")
@@ -1976,6 +2087,7 @@ class AppModel(ObservableObject):
             self._acquisition_started = False
             self._acquisition_stopping = False
             self._acquisition_starting = False
+            self._stop_requested.clear()
             analysis = self._analysis
             analysis.project_info = None
             self.status = AppModelStatus.IDLE
@@ -1986,6 +2098,7 @@ class AppModel(ObservableObject):
                 self._reload_plans_needed = False
                 self.reload_training_plans(refresh=True)
             self.property_changed(self.Props.ACQUISITION_RUNNING, False, True)
+            self._refresh_can_reload_hw_config()
 
     def _update_led_for_stop(self):
         tokens = set()
@@ -2077,6 +2190,41 @@ class AppModel(ObservableObject):
             self._config_errors.append(new_err)
             return False
 
+    def _load_hw_configs(self, *, missing_ok: bool) -> _HwConfigLoad:
+        """Read the motor and move config files without touching the model.
+
+        missing_ok=True falls back to the built-in defaults for a missing file (startup);
+        missing_ok=False treats a missing file as a load error (Reload).
+        """
+        motors_path = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
+        move_path = CompoundMovements.DEFAULT_LOCATION.expanduser()
+        if missing_ok:
+            load_motors = self._hardware.load_default_motor_config
+            load_move = self._hardware.load_default_move_config
+        else:
+            load_motors = MotorConfigurationFile.from_file
+            load_move = CompoundMovements.from_file
+        motors_config = move_config = None
+        motors_error = move_error = None
+        try:
+            motors_config = load_motors(motors_path)
+        except Exception as err:
+            logger.exception("Error loading motor config: %s", err)
+            motors_error = f"Cannot load motor cfg file {motors_path.as_posix()!r}: {err}"
+        try:
+            move_config = load_move(move_path)
+        except Exception as err:
+            logger.exception("Error loading move config: %s", err)
+            move_error = f"Cannot load move cfg file {move_path.as_posix()!r}: {err}"
+        return _HwConfigLoad(motors_config, move_config, motors_error, move_error)
+
+    def _commit_hw_configs(self, load: _HwConfigLoad):
+        # the only writer of these four fields after __init__; Reload commits only a load without errors
+        self._motors_config = load.motors_config
+        self._motors_load_error = load.motors_error
+        self._move_config = load.move_config
+        self._move_load_error = load.move_error
+
     def _load_configuration(self, location):
         self._config_errors.clear()
         load_ok = True  # preset, is set to False if some sub-config file(s) fail to load
@@ -2131,27 +2279,11 @@ class AppModel(ObservableObject):
         analysis = self._analysis
         analysis.watchdog_monitor.config = configuration.watchdog
 
-        # ensure motor and move config files are valid
-        hard = self._hardware
-        #
-        motors_cfg_file = MotorConfigurationFile.DEFAULT_LOCATION.expanduser()
-        self._motors_config = None
-        try:
-            self._motors_config = hard.load_default_motor_config(motors_cfg_file)
-        except Exception as err:
-            logger.exception("Error loading motor config: %s", err)
-            self._config_errors.append(f"Cannot load motor cfg file {motors_cfg_file.as_posix()!r}: {err}")
+        hw_load = self._load_hw_configs(missing_ok=True)
+        self._commit_hw_configs(hw_load)
+        if hw_load.errors:
             load_ok = False
-        #
-        self._move_config = None
-        move_config_file = CompoundMovements.DEFAULT_LOCATION.expanduser()
-        try:
-            self._move_config = hard.load_default_move_config(move_config_file)
-        except Exception as err:
-            logger.exception("Error loading move config: %s", err)
-            self._config_errors.append(f"Cannot load move cfg file {move_config_file.as_posix()!r}: {err}")
-            load_ok = False
-        #
+
         self._loaded_configuration = configuration
         self._loaded_config_dir_path = location.parent.resolve()
 
@@ -2207,6 +2339,107 @@ class AppModel(ObservableObject):
                           f"{err}\n\nPrevious plans are retained.")
             return
         self._training_plans = plan_infos
+
+    def reload_motor_and_move_config(self, *, callback: OkCallBack = empty_ok_cb,
+                                     is_cancelled: IsCancelledT = default_not_cancelled):
+        """Re-read the motor and move config files.
+
+        Idle: the configs are applied on the next Start. Running (no animal): they are also pushed to the boards,
+        followed by a move home. A file that cannot be read leaves the previous configs in place.
+        """
+        title = "Reload motor/move config error"
+        load = self._load_hw_configs(missing_ok=False)
+        if load.errors:
+            err_msg = ("Could not reload the motor/move config; the previous configs are retained:\n\n"
+                       + "\n\n".join(load.errors))
+            self.on_error(title, err_msg)
+            callback(False, error=err_msg)
+            return
+        if not self._begin_hw_config_reload():
+            err_msg = "A motor/move config reload is already in progress."
+            self.on_error(title, err_msg)
+            callback(False, error=err_msg)
+            return
+
+        algo = self._behavior.algorithm
+
+        @algo.relay_func(wait=False)
+        def run_reload():
+            self._run_hw_config_reload(load, callback=callback, is_cancelled=is_cancelled)
+
+        try:
+            run_reload()
+        except Exception as submit_err:
+            self._end_hw_config_reload()
+            callback(False, error=f"Cannot queue the motor/move config reload: {submit_err}")
+
+    def _run_hw_config_reload(self, load: _HwConfigLoad, *, callback: OkCallBack, is_cancelled: IsCancelledT):
+        """Runs on the algo thread, under app_lock."""
+        title = "Reload motor/move config error"
+        next_connect_msg = "the reloaded configs will be applied when the boards next connect"
+        writes_started = False
+
+        def stop_or_close_underway() -> bool:
+            return self._closing or is_cancelled() or self._stop_underway()
+
+        def push_is_canceled() -> bool:
+            nonlocal writes_started
+            if stop_or_close_underway():
+                raise _ReloadCanceled("a Stop or close is underway")
+            if self._status is not AppModelStatus.ACQUIRING:
+                raise RuntimeError(f"the application mode changed to {self._status.value}")
+            # the device helpers call this right before each write, so the first False return precedes the first write
+            writes_started = True
+            return False
+
+        error: Optional[str] = None
+        try:
+            if stop_or_close_underway():
+                raise _ReloadCanceled("a Stop or close is underway")
+            is_idle = self._hw_config_reload_idle()
+            if not (is_idle or self._hw_config_reload_running()):
+                raise _ReloadRefused("Motor/move config can only be reloaded while Idle or Running (no animal).")
+            if self._emergency_source is not None:
+                raise _ReloadRefused(
+                    f"Motor/move config cannot be reloaded while the emergency stop is engaged "
+                    f"({self._emergency_source}).")
+            self._commit_hw_configs(load)
+            if is_idle:
+                logger.notice("Motor and move configs reloaded; %s", next_connect_msg)
+            else:
+                hard = self._hardware
+                dev_conn = hard.device_connection
+                if dev_conn is None:
+                    raise RuntimeError("hardware not connected")
+                dev_conn.use_motor_configurations(load.motors_config, is_cancelled=push_is_canceled)
+                dev_conn.use_compound_movements(load.move_config, is_cancelled=push_is_canceled)
+                push_is_canceled()  # _apply_send_home sends SEND_HOME before its ack wait first checks the predicate
+                self._apply_send_home(hard, is_cancelled=push_is_canceled)
+                logger.success("Motor and move configs reloaded and applied to boards")
+        except _ReloadCanceled as err:
+            error = f"Reload canceled: {err}."
+            logger.verbose("Motor/move config reload canceled: %s", err)
+        except _ReloadRefused as err:
+            error = str(err)
+            self.on_error(title, error)
+        except Exception as err:
+            logger.exception("Could not apply motor/move config to boards: %s", err)
+            if writes_started:
+                error = (f"Applying the motor/move config to the boards failed: {err}\n\n"
+                         f"The boards may hold a partial configuration, so acquisition is stopped; "
+                         f"{next_connect_msg}.")
+                self.on_error(title, error)
+                self.capture_stop()
+            else:
+                error = (f"The motor/move config could not be applied to the boards: {err}\n\n"
+                         f"Nothing was written; {next_connect_msg}.")
+                self.on_error(title, error)
+        finally:
+            self._end_hw_config_reload()
+        if error is None:
+            callback(True)
+        else:
+            callback(False, error=error)
 
     def save_configuration(self):
         if self._loaded_configuration is None:
@@ -2920,11 +3153,13 @@ class AppModel(ObservableObject):
                 return dict(mode=app_status_to_api_app_mode(self._status))
             # capture_start/capture_stop set their own flags only once the worker runs; the next request may come first
             self._rpc_start_or_stop_pending = True
+        self._refresh_can_reload_hw_config()
         try:
             return self._handle_rpc_async_command(request, partial(self._rpc_start_or_stop_acquisition, target))
         except BaseException:
             # no worker will run to release it
             self._rpc_start_or_stop_pending = False
+            self._refresh_can_reload_hw_config()
             raise
 
     def _rpc_start_or_stop_acquisition(self, target: AppModelStatus) -> Any:
@@ -2945,6 +3180,7 @@ class AppModel(ObservableObject):
             # after the mode is read, so no later request changes it first; before the final result is sent, so a
             # client acting on that result is not refused
             self._rpc_start_or_stop_pending = False
+            self._refresh_can_reload_hw_config()
         if current == target:
             return dict(mode=app_status_to_api_app_mode(current))
         cause = "; ".join(errors) if errors else "see the application log"

@@ -109,18 +109,15 @@ class MotorConfigurationFile(MotorConfigurations):
         Args:
             filename (str or Path): Filename to load from
         """
-        filename: Path = Path(filename)
-        if filename.exists():
-            try:
-                with filename.open("r") as fh:
-                    loaded = self._convert(yaml.safe_load(fh), source=filename.as_posix())
-            except Exception as e:
-                logger.error(f"Alogus motor configuration file {filename}: {e}")
-                raise
-            else:
-                logger.notice("Config %s, loaded: %s", filename, loaded)
+        filename: Path = Path(filename).expanduser()
+        try:
+            with filename.open("r") as fh:
+                loaded = self._convert(yaml.safe_load(fh), source=filename.as_posix())
+        except Exception as e:
+            logger.error(f"Alogus motor configuration file {filename}: {e}")
+            raise
         else:
-            logger.error(f"Alogus motor configuration file {filename}: No such file")
+            logger.notice("Config %s, loaded: %s", filename, loaded)
 
     def _convert(self, yaml_dict, *, source: Optional[str]="NA"):
         """

@@ -22,6 +22,7 @@ from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.message import SystemDataArgsKwargs
 
 import autotrainer.device
+from autotrainer.device import IsCancelledT
 
 from .can_device import HAVE_CAN_DEVICE
 from .compound_movement_file import CompoundMovementKind
@@ -167,9 +168,10 @@ class DeviceConnection(DeviceConnectionProtocol):
     @contextlib.contextmanager
     def await_acknowledge(
         self, tokens: Set, *,
+        timeout: float = 1,
+        raise_on_timeout: bool=True,
         raise_on_command_error: bool = True,
-        timeout: float=1, raise_on_timeout=True,
-        is_cancelled=lambda: False,
+        is_cancelled: IsCancelledT=lambda: False,
     ):
         tokens_acked = {}
         def cb(kind, context):
@@ -220,7 +222,7 @@ class DeviceConnection(DeviceConnectionProtocol):
         post_api_event_content(ApiEventKind.deviceCommandSend, data=dict(context=context))
         self._device.notify_message(kind, data, context)
 
-    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None, *, is_cancelled=lambda: False):
+    def use_compound_movements(self, data: Optional[CompoundMovementDataSet] = None, *, is_cancelled: IsCancelledT = lambda: False):
         move_config = data
         if move_config is None:
             move_config = self.load_default_move_config()
@@ -235,7 +237,7 @@ class DeviceConnection(DeviceConnectionProtocol):
                 self.set_steps_procedure(name, steps)
         return move_config
 
-    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled=lambda: False) -> MotorConfigurations:
+    def use_motor_configurations(self, data: Optional[MotorConfigurations] = None, *, is_cancelled: IsCancelledT = lambda: False) -> MotorConfigurations:
         cfgs = data
         if cfgs is None:
             cfgs = self.load_default_motor_config()

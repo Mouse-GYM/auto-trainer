@@ -144,6 +144,7 @@ class MainWindow(QMainWindow):
         self._start_capture_thread: Optional[threading.Thread] = None
         self._stop_capture_thread: Optional[threading.Thread] = None
         self._stopping = False
+        self._status_combo_blocked_by_config_errors = False
 
         self.setWindowTitle(self._title)
 
@@ -271,6 +272,7 @@ class MainWindow(QMainWindow):
         self.animal_in_device_action.setEnabled(False)
         self.animal_in_training_action.setEnabled(False)
         self._app_model_status_combo.setEnabled(False)
+        self._reload_hw_config_action.setEnabled(False)
         self.running_status_changed.emit(is_toggled)
         if is_toggled:
             self._check_diamond_triangle_config()
@@ -297,6 +299,7 @@ class MainWindow(QMainWindow):
                     self.animal_in_device_action.setEnabled(True)
                     self.animal_in_training_action.setEnabled(True)
                     self._app_model_status_combo.setEnabled(True)
+                    self._update_reload_hw_config_action()
                 try:
                     after_callback()
                 finally:
@@ -335,11 +338,39 @@ class MainWindow(QMainWindow):
                 self.animal_in_device_action.setEnabled(True)
                 self.animal_in_training_action.setEnabled(True)
                 self._app_model_status_combo.setEnabled(True)
+                self._update_reload_hw_config_action()
                 self._status_label.setText("")
 
             thread = threading.Thread(target=exec_stop, daemon=True, name="stopper_thread")
             self._stop_capture_thread = thread
             thread.start()
+
+    def _update_reload_hw_config_action(self):
+        self._reload_hw_config_action.setEnabled(self._app_model.can_reload_hw_config)
+
+    def _update_actions_for_hw_config_reload(self):
+        app_model = self._app_model
+        actions = (
+            (self.animal_in_device_action, AppModelStatus.ANIMAL_IN_DEVICE),
+            (self.animal_in_training_action, AppModelStatus.ANIMAL_IN_TRAINING),
+            (self.calib_diamond_triangle_action, AppModelStatus.CALIBRATION_DCS),
+        )
+        if app_model.hw_config_reload_in_progress:
+            for action, _ in actions:
+                action.setEnabled(False)
+            return
+        start_thread = self._start_capture_thread
+        if self._stopping or (start_thread is not None and start_thread.is_alive()):
+            return  # _on_capture_start_stop disabled these; after_exec_start / after_exec_stop re-enable them
+        for action, target in actions:
+            action.setEnabled(app_model.is_target_status_valid(target))
+
+    def _release_status_combo_after_config_errors(self):
+        app_model = self._app_model
+        if (self._status_combo_blocked_by_config_errors
+                and app_model.loaded_configuration is not None and not app_model.config_errors):
+            self._status_combo_blocked_by_config_errors = False
+            self._app_model_status_combo.setEnabled(True)
 
     def _on_system_mode_combo_changed(self, idx: int):
         status = self._app_model_status_combo.itemData(idx)
@@ -725,9 +756,11 @@ class MainWindow(QMainWindow):
         app_status = app_model.status
         loaded_cfg = app_model.loaded_configuration
         if loaded_cfg is None or len(app_model.config_errors) > 0:
+            self._status_combo_blocked_by_config_errors = True
             self._app_model_status_combo.setEnabled(False)
             self._show_message("No config loaded or invalid config(s) detected. auto-start skipped",
-                               f"You must restart the app after fix the config_errors:\n\n"
+                               f"Fix the config errors below. Motor/move config file errors can be fixed and applied with "
+                               f"\"{self._reload_hw_config_action.text()}\"; any other error requires restarting the app.\n\n"
                                f"{pprint.pformat(app_model.config_errors)}")
         else:
             if app_status == AppModelStatus.IDLE:
@@ -875,11 +908,10 @@ class MainWindow(QMainWindow):
         app_model = self._app_model
         logger.notice("received close")
         self._main_ui_watchdog_timer.stop()  # ensure doesn't race
-        with app_model.app_lock:
-            if self._closing:
-                logger.warning("already closing")
-                return
-            self._closing = True
+        if self._closing:
+            logger.warning("already closing")
+            return
+        self._closing = True
         def after_stop():
             # time.sleep(5)  debug
             app_model.on_close()
@@ -1070,6 +1102,17 @@ class MainWindow(QMainWindow):
         action = self.preferences_action = QAction(QIcon(qta.icon("fa5s.cog")), "Preferences", self)
         action.triggered.connect(self._show_preferences)
 
+        action = self._reload_hw_config_action = QAction(QIcon(qta.icon("fa5s.redo")), "Reload Motor/Move Config", self)
+        action.setToolTip("Re-read motor_config.yaml and move config files (Idle: applied on next Start, Running: applied now + move home)")
+        def reload_motor_move_configs():
+            @invoke_method
+            def on_reload_done(result, *, error=None):
+                self._update_reload_hw_config_action()
+                if result:
+                    self._release_status_combo_after_config_errors()
+            self._app_model.reload_motor_and_move_config(callback=on_reload_done, is_cancelled=lambda: self._closing)
+        action.triggered.connect(reload_motor_move_configs)
+
         tooltip = "Reset pellet and reach counts for this animal"
         action = self._reset_animal_pellet_counts_action = QAction(QIcon(qta.icon("fa5s.sync")), tooltip, self)
         action.triggered.connect(self._reset_animal_pellet_counts)
@@ -1122,16 +1165,21 @@ class MainWindow(QMainWindow):
         combo.addItem("Animal in training", userData=AppModelStatus.ANIMAL_IN_TRAINING)
         combo.currentIndexChanged.connect(self._on_system_mode_combo_changed)
         def show_app_model_status_combo(combo=combo, orig_show=combo.showPopup):
-            in_training_idx = combo.findData(AppModelStatus.ANIMAL_IN_TRAINING)
-            item = combo.model().item(in_training_idx)
-            prev_flags = item.flags()
             try:
                 dcs_cfg = app_model.behavior.algorithm.load_diamond_triangle_config()
             except Exception as err:
                 logger.verbose("Cannot load diamond-triangle config: %s", err)
                 dcs_cfg = None
-            item.setFlags((prev_flags | Qt.ItemFlag.ItemIsEnabled) if dcs_cfg is not None and dcs_cfg.fully_valid
-                          else (prev_flags & ~Qt.ItemFlag.ItemIsEnabled))
+            reload_in_progress = app_model.hw_config_reload_in_progress
+            for status, enabled in (
+                (AppModelStatus.ANIMAL_IN_DEVICE, not reload_in_progress),
+                (AppModelStatus.ANIMAL_IN_TRAINING,
+                 not reload_in_progress and dcs_cfg is not None and dcs_cfg.fully_valid),
+            ):
+                item = combo.model().item(combo.findData(status))
+                prev_flags = item.flags()
+                item.setFlags((prev_flags | Qt.ItemFlag.ItemIsEnabled) if enabled
+                              else (prev_flags & ~Qt.ItemFlag.ItemIsEnabled))
             orig_show()
         combo.showPopup = show_app_model_status_combo
         toolbar.addWidget(combo)
@@ -1258,6 +1306,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         toolbar.addAction(self.preferences_action)
+        toolbar.addAction(self._reload_hw_config_action)
 
         toolbar.addSeparator()
 
@@ -1813,7 +1862,16 @@ class MainWindow(QMainWindow):
 
             self.blockSignals(False)
 
+            self._update_reload_hw_config_action()
             self.main_content.set_is_capture_active(value != AppModelStatus.IDLE)
+            if self._app_model.hw_config_reload_in_progress:
+                self._update_actions_for_hw_config_reload()
+
+        elif name == props.CAN_RELOAD_HW_CONFIG:
+            self._update_reload_hw_config_action()
+
+        elif name == props.HW_CONFIG_RELOAD_IN_PROGRESS:
+            self._update_actions_for_hw_config_reload()
 
         elif name == props.ANIMALS:
             self._reload_animals(value)
