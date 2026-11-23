@@ -37,4 +37,15 @@ echo
 echo "Starting acquisition application .."
 echo
 
+
+load_env_script="${HOME}/.load_autotrainer_env.sh"
+# NB: this $HOME script is copied from device-deployment repo.
+if ! test -e "${load_env_script}"
+then
+  echo "ERROR: ${load_env_script} missing, refusing to launch app" >&2
+  exit 1
+fi
+
+. "${load_env_script}"
+
 python -m tools.acquisition.gui "${@}"
