@@ -1,3 +1,4 @@
+import logging
 import math
 import datetime as dtm
 import threading
@@ -218,6 +219,55 @@ class TestEmergency(MockSystemMachine):
         assert outcome is EmergencyResumeOutcome.FAILED
         assert "probe failed" in detail
         assert behavior.algorithm.algo_paused
+
+    def test_try_resume_put_func_call_fails(self, monkeypatch):
+        behavior = self._behavior
+        algo = behavior.algorithm
+        behavior.emergency_stop(source="testing")
+        failed = mock.MagicMock(side_effect=RuntimeError("foobar"))
+        monkeypatch.setattr(algo, algo.put_func_call.__name__, failed)
+        with pytest.raises(RuntimeError, match="foobar"):
+            behavior.try_emergency_resume("testing")
+        assert behavior.algorithm.algo_paused
+
+    def test_try_resume_put_func_call_error_but_resumed_succeed(self, monkeypatch, caplog):
+        behavior = self._behavior
+        algo = behavior.algorithm
+        orig_put_func = algo.put_func_call
+        #
+        behavior.emergency_stop(source="testing")
+        def put_func_error_after_resume(func, args, kwargs, *, wait=False):
+            algo.put_func_call = orig_put_func  # need restore it before the normal resume procedure
+            func(*args, **kwargs)
+            raise RuntimeError("baz")
+        mock_put = mock.MagicMock(side_effect=put_func_error_after_resume)
+        monkeypatch.setattr(algo, algo.put_func_call.__name__, mock_put)
+        outcome = behavior.try_emergency_resume("testing")
+        assert outcome[0] is EmergencyResumeOutcome.RESUMED
+        assert not behavior.algorithm.algo_paused
+        assert "emergency_resumed handler failed after resuming from testing" in caplog.text
+
+    def test_double_same_stop(self):
+        behavior = self._behavior
+        stopped = []
+        def on_stopped(source):
+            stopped.append(source)
+        behavior.emergency_stopped += on_stopped
+        behavior.emergency_stop(source="testing")
+        behavior.emergency_stop(source="testing")
+        assert stopped == ["testing"]  # only once
+
+    def test_double_stop_with_admin_first(self, caplog):
+        behavior = self._behavior
+        stopped = []
+        def on_stopped(source):
+            stopped.append(source)
+        behavior.emergency_stopped += on_stopped
+        behavior.emergency_stop(source=EmergencyControlSource.USER_BUTTON)
+        with caplog.at_level(logging.DEBUG):
+            behavior.emergency_stop(source="testing")
+        assert stopped == [EmergencyControlSource.USER_BUTTON]  # only once
+        assert "ignoring stop emergency from" in caplog.text
 
 
 mid_day = dtm.datetime(2026,1,1, 12, 0)

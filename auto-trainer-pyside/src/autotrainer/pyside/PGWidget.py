@@ -1,86 +1,105 @@
+from typing import List, Tuple, Optional
+
+import numpy
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
 
 pg.ViewBox.suggestPadding = lambda *_: 0.02
 
 
+PlotXYValues = List[Tuple[float, float]]
+
+
 class PGWidget(PlotWidget):
+
+    x_window_size = 10  # how long is the rolling window on X axis.
+    x_loop_back: Optional[float] = 60  # if not None, how far to go into X before reset to first(0).
+    max_points = 1000  # max nbr of previous data points to keep in window
+
     def __init__(self, parent=None):
         super().__init__(
             parent=parent,
             axisItems={"top": pg.AxisItem(orientation="top", showValues=False),
                        "right": pg.AxisItem(orientation="right", showValues=False)})
-
         self.x = []
         self.y = []
-
-        self.scale_x = 1
-
+        self._cache: PlotXYValues = []
         self._replace = False
-
+        self._x_first: Optional[float] = None  # to put/use first X value as zero-reference.
         pen = pg.mkPen(color=(0, 0, 255), width=1)
         self._pen = pen
         self._data_line = self.plot(self.x, self.y, pen=pen)
 
-        self._cache = list()
-
     def reset(self, default=0, length=0):
         self.x = []
         self.y = []
-
+        self._x_first = 0
         for idx in range(length):
             self.x.append(idx)
             self.y.append(default)
-
         self._data_line.setData(self.x, self.y)
 
-    def replace(self, values):
-        self.x = []
-        self.y = []
-
-        self.x.extend(range(len(values)))
-        self.y.extend(values)
-
-        self._data_line.setData(self.x, self.y)
-
-    def update_plot(self, values):
-        add_len = len(values)
-
-        if add_len >= 500:
-            self.x = []
-            self.y = []
-            values = values[add_len - 500:]
-            add_len = len(values)
-        elif len(self.x) + add_len > 500:
-            self.x = self.x[add_len:]
-            self.y = self.y[add_len:]
-
-        first_x = -1 if len(self.x) == 0 else int(self.x[-1] * self.scale_x)
-
-        x_list = list(range(first_x + 1, first_x + add_len + 1))
-
-        if self.scale_x != 1:
-            x_list_2 = [float(x) / self.scale_x for x in x_list]
-        else:
-            x_list_2 = x_list
-
-        self.x.extend(x_list_2)
-        self.y.extend(values)
-
-        self._data_line.setData(self.x, self.y)
-
-    def cache_data(self, values):
-        self._cache += values
+    def replace(self, values: PlotXYValues):
+        """Completely replace current set of data with given values"""
         self._replace = False
+        if len(values) < 1:
+            return
+        x_f = self._x_first = values[0][0]
+        x = []
+        x_add = x.append
+        y = []
+        y_add = y.append
+        for xv, yv in values:
+            x_add(xv - x_f)
+            y_add(yv)
+        self._data_line.setData(x, y)
+        self.x = x
+        self.y = y
 
-    def replace_cache(self, values):
+    def update_plot(self, values: PlotXYValues):
+        if len(values) < 1:
+            return
+        x_f = self._x_first
+        if x_f is None:
+            x_f = values[0][0]
+        x_add = self.x.append
+        y_add = self.y.append
+        for xv, yv in values:
+            x_add(xv - x_f)
+            y_add(yv)
+        x = numpy.asarray(self.x)
+        x_last = x[-1]
+        idx = numpy.argmax(x_last - x <= self.x_window_size)
+        if idx > 0:
+            x = x[idx:]
+            del self.y[:idx]
+        max_pt = self.max_points
+        if len(x) > max_pt:
+            x = x[-max_pt:]
+            self.y = self.y[-max_pt:]
+        loop_back = self.x_loop_back
+        if loop_back is not None and x[0] > loop_back:
+            self._x_first = x_f + x[0]
+            x -= x[0]
+        self.x = x.tolist()
+        self._data_line.setData(self.x, self.y)
+
+    def cache_data(self, values: PlotXYValues):
+        if len(values) < 1:
+            return
+        x_f = self._x_first
+        if x_f is None:
+            self._x_first = values[0][0]
+        self._cache.extend(values)
+
+    def replace_cache(self, values: PlotXYValues):
         self._cache = values
         self._replace = True
 
     def use_cache(self):
         if len(self._cache) > 0:
             values = self._cache
-            self._cache = list()
+            self._cache = []
             if self._replace:
                 self.replace(values)
             else:

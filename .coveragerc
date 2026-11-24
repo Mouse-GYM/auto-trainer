@@ -1,9 +1,25 @@
+
+[paths]
+source =
+    */src/auto-trainer-device
+    */src/auto-trainer-video
+    */src/auto-trainer-inference
+    */src/auto-trainer-model
+    */src/auto-trainer-behavior
+    */src/auto-trainer-pyside
+    tools/
+    */site-packages/auto-trainer-device
+    */site-packages/auto-trainer-video
+    */site-packages/auto-trainer-inference
+    */site-packages/auto-trainer-model
+    */site-packages/auto-trainer-behavior
+    */site-packages/auto-trainer-pyside
+
 [run]
 # branch = true
 relative_files = true
 
 source_pkgs =
-    autotrainer.core
     autotrainer.device
     autotrainer.behavior
     autotrainer.inference
@@ -21,7 +37,6 @@ omit =
     signature_bootstrap.py
     */tests/*
     */auto-trainer-api/*
-    */autotrainer/core/testing.py
 
 # allow coverage in python sub-processes (subprocess):
 # patch = subprocess  # only valid from coverage 7.10+ but one for py3.8 is stuck lower.
@@ -39,6 +54,9 @@ parallel = true
 
 sigterm = true
 
+disable_warnings = module-not-imported
+# do not care when one of auto-trainer-* is not imported during a test.
+
 [report]
 show_missing = true
 include_namespace_packages = true
@@ -50,4 +68,3 @@ omit =
     signature_bootstrap.py
     */tests/*
     */auto-trainer-api/*
-    */autotrainer/core/testing.py

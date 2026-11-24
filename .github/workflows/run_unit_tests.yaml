@@ -22,7 +22,7 @@ concurrency:  # allow cancel if new commit pushed
 jobs:
   build-and-test:
     name: Setup env. and run tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # 3.8 not anymore available under ubuntu-latest (26.04)
     timeout-minutes: 30  # at the last noticed moment the executes takes up to max ~10-15 minutes.
     strategy:
       matrix:
@@ -61,14 +61,17 @@ jobs:
         run: python -m setuptools_scm
       - name: Show auto-trainer and ensure we don't use sub-projects wheel(s)
         run: ./.check_sub_projects_not_installed.sh
+      - name: Prepare
+        run: |
+          set -xv
+          site_pkgs_dir=$(python -c "import site; print(site.getsitepackages()[0])")
+          # echo "import coverage; coverage.process_startup()" > "${site_pkgs_dir}/usercustomize.pth"
       - name: Test with pytest
         run: |
-          set -x
+          set -xv
           export PYTEST_ADDOPTS="--color=yes"
           export COVERAGE_PROCESS_START="$PWD/.coveragerc"
-          site_pkgs_dir=$(python -c "import site; print(site.getsitepackages()[0])")
-          echo "import coverage; coverage.process_startup()" > "${site_pkgs_dir}/usercustomize.pth"
-          coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
+          python -m coverage run -m pytest -v -s ${{ github.event.inputs.pytest_extra_args }}
       - name: Coverage
         run: |
           set -x
@@ -108,40 +111,3 @@ jobs:
             pytest -xvs || true  # TODO: top_fixtures contains everything mixed...
             popd
           done
-  core-standalone:
-    name: auto-trainer-core installed alone
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.10"]
-    env:
-      FORCE_COLOR: '1'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # setuptools_scm needs the core-v* tags
-          fetch-tags: true
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install auto-trainer-core alone, non-editable, with its test extra
-        run: |
-          set -x
-          pip install --upgrade pip
-          pip install "./auto-trainer-core[test]"
-          pip list
-      - name: Check that the installed core is the one under test
-        working-directory: auto-trainer-core
-        run: |
-          python - <<'EOF'
-          import autotrainer.core
-          version = autotrainer.core.__version__
-          print(autotrainer.core.__file__, version)
-          assert "site-packages" in autotrainer.core.__file__
-          assert not version.startswith(("0.0.0", "0.1.dev")), version
-          EOF
-      - name: Test auto-trainer-core
-        working-directory: auto-trainer-core
-        run: pytest -v --color=yes

@@ -1,4 +1,3 @@
-auto-trainer-core
 auto-trainer-device
 auto-trainer-video
 auto-trainer-inference

@@ -49,6 +49,11 @@ class DiagnosticsContent(QWidget):
         layout.addWidget(self._card_widget)
         self.setLayout(layout)
 
+    def setVisible(self, visible: bool):
+        logger.verbose("setting visible=%s log text box handler", visible)
+        self._textbox_handler.setVisible(visible)
+        super().setVisible(visible)
+
     def close(self):
         handler = self._textbox_handler
         logger.debug("removing log handler %s", handler)

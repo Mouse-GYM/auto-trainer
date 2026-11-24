@@ -378,5 +378,10 @@ class TestWithBatch(BaseTrainingPlan):
         # assert has_event(ApiEventKind.protocolPhaseEvent)
         assert has_event(ApiEventKind.trainingPlanLoad)
         assert has_event(ApiEventKind.trainingPhaseEnter)
-        assert has_event(ApiEventKind.trainingPhaseExit)
+        assert not has_event(ApiEventKind.trainingPhaseExit)
+        # don't think trainingPhaseExit should be emitted here
         assert has_event(ApiEventKind.trainingProgressUpdate)
+        # now if we change of mode back to manual:
+        app_model.set_training_mode(TrainingMode.MANUAL)
+        assert has_event(ApiEventKind.trainingPhaseExit)
+        # then yes.

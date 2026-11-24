@@ -33,7 +33,7 @@ def process_data(file: str, batch_size: int = 20):
         if len(measurement_buffer) == batch_size:
             while not queue.empty():
                 time.sleep(0.01)
-            queue.put((SystemStatusMessageKind.MEASUREMENT, measurement_buffer))
+            queue.put((SystemStatusMessageKind.MEASUREMENTS, measurement_buffer))
             measurement_buffer = []
 
     reader.request_terminate()

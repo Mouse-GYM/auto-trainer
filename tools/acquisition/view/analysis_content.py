@@ -6,6 +6,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QLabel, QLineEdit, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QStackedLayout, \
     QDoubleSpinBox, QComboBox
 
+from autotrainer.core.analysis.head_fix_measurement import HeadFixMeasurement
 from autotrainer.core.logging import get_verbose_logger
 from autotrainer.core import PerfMonitor, SensorAnalysis, LoadCellMonitor, Offset3DTuple, SystemMessageHandler
 from autotrainer.pyside import PGWidget, CardWidget, QtIndicator
@@ -80,7 +81,6 @@ def _make_graph_plot(graph: _GraphItem):
     plot = PGWidget(widget)
     plot.setBackground("w")
     plot.setMinimumHeight(140)
-    plot.scale_x = 100.0
     if graph.ticks is None:
         plot.getAxis("bottom").setLabel("Time (s)")
     else:
@@ -252,23 +252,33 @@ class AnalysisContent(ContentWidget):
             logger.warning("graph None")
 
     @invoke_method
-    def _measurement_received(self, measurements: Tuple[List[float], List[bool], List[float], List[float], List[float]]):
+    def _measurement_received(
+        self,
+        measurements: List[HeadFixMeasurement],
+    ):
         # weight_vals, switch_vals, pressure_vals, temperature_vals, humidity_vals
-        values = measurements[_weight_graph.measure_idx]
-        self._perf_monitor.add_cycles(len(values))
+        d = ["weight", "switch", "pressure", "temperature", "humidity"]
+        #
+        self._perf_monitor.add_cycles(len(measurements))
         #
         selected = self._selected_graph
+        if selected is None:
+            return
         for plot_name, plot in self._measurement_plots.items():
             graph = _graph_by_name[plot_name]
-            if graph.measure_idx >= 0 and selected is not None and graph.name == selected.name:
-                plot.cache_data(measurements[graph.measure_idx])
+            if graph.measure_idx >= 0 and graph.name == selected.name:
+                attr = d[selected.measure_idx]
+                values = [(m.timestamp / 1e9, getattr(m, attr)) for m in measurements]
+                plot.cache_data(values)
+                break
 
     @invoke_method
     def _audio_received(self, spectrum):
         selected = self._selected_graph
         if selected is not None and selected.name == _audio_graph.name:
             audio_plot = self._measurement_plots[_audio_graph.name]
-            audio_plot.replace_cache(spectrum)
+            audio_plot.replace_cache(
+                [(idx, v) for idx, v in enumerate(spectrum)])
 
     @invoke_method
     def _load_cell_monitor_property_changed(self, name, value, _):

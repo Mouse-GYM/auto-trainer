@@ -1,9 +1,9 @@
 
 import math
+import queue
 import threading
 import time
 from datetime import timedelta
-from functools import partial
 from unittest import mock
 
 import numpy
@@ -533,6 +533,55 @@ class TestBehaviorAlgoWithHandlerThread:
             algo.put_func_call(func1)
         assert not inner_event.is_set()
         assert inner_event.wait(1) is True
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_set_force_wait(self, algo, enabled):
+        wait_dur = 0.25
+        seen_force_wait = None
+
+        @algo.relay_func(wait=not enabled)
+        def foobar():
+            time.sleep(wait_dur)
+
+        algo.foobar = foobar
+        unique = object()
+        before_force_wait = getattr(algo._thread_locals, "force_wait", unique)
+        assert before_force_wait is unique
+        with algo.set_force_wait_mode(enabled):
+            seen_force_wait = getattr(algo._thread_locals, "force_wait", unique)
+            p_before = time.perf_counter()
+            algo.foobar()
+            p_after = time.perf_counter()
+        after_force_wait = getattr(algo._thread_locals, "force_wait", unique)
+        assert seen_force_wait is enabled
+        assert after_force_wait is unique
+        duration = p_after - p_before
+        if enabled:
+            assert duration >= wait_dur
+        else:
+            assert duration < 0.02, ("unless test runner overloaded, "
+                                     "without wait the duration should be almost 0")
+
+    def test_put_func_with_queue_full_raises(self, algo, request):
+        th_q_ = algo._handler_thread_queue
+        assert th_q_ is not None
+        algo_queue = th_q_[1]
+        def void():
+            pass
+        entered = threading.Event()
+        finished = threading.Event()
+        request.addfinalizer(finished.set)
+        def func1():
+            entered.set()
+            finished.wait(42)
+        algo.put_func_call(func1, wait=False)
+        assert entered.wait(1)
+        # we are able to put without wait up to queue maxsize:
+        for _ in range(algo_queue.maxsize):
+            algo.put_func_call(void, wait=False, put_timeout=0)
+        # then it raises:
+        with pytest.raises(queue.Full):
+            algo.put_func_call(void, wait=False, put_timeout=0)
 
 
 class TestBehaviorAlgoWithoutHandlerThread:

@@ -144,19 +144,25 @@ def user_pref(
     return pref
 
 
-def collect_log_queue_to_caplog(log_queue, *, timeout: float=0.1, max_duration: float=5):
+def collect_log_queue_to_caplog(
+    log_queue,
+    *,
+    timeout: float=0.26,  # NB: the multiproc logging buffers the records for 0.25s (for sorting purpose).
+    max_duration: float=5,
+):
     """Drain the log until 1 "full" timeout occurs trying to read a record, or max_duration is reached"""
-    p_begin = time.perf_counter()
-    p_end = p_begin + max_duration
-    while True:
-        if time.perf_counter() > p_end:
-            pytest.fail("unexpected too long duration collecting log record queue")
-            break
-        try:
-            record = log_queue.get(timeout=timeout)
-        except queue.Empty:
-            break
-        logging.getLogger(record.name).handle(record)
+    p_end = time.perf_counter() + max_duration
+    def process(use_timeout):
+        while True:
+            if time.perf_counter() > p_end:
+                pytest.fail("unexpected too long duration collecting log record queue")
+            try:
+                record = log_queue.get(timeout=use_timeout)
+            except queue.Empty:
+                break
+            logging.getLogger(record.name).handle(record)
+    process(0)  # pre-loop for all already present (timeout==0),
+    process(timeout)  # then collect up to requested timeout.
 
 
 @pytest.fixture
@@ -461,12 +467,18 @@ class MockSystemMachine:
     def msg_handler(self) -> MessageHandler:
         return self._machine._msg_handler
 
-    @property
-    def tunnel_dev(self) -> Union[mock.MagicMock, TunnelDeviceProtocol]:
-        return self._machine._tunnel_device
+    class _MockedTunnelDev(TunnelDeviceProtocol, mock.MagicMock):
+        pass  # for help type hints
 
     @property
-    def pellet_dev(self) -> Union[mock.MagicMock, PelletDeviceProtocol]:
+    def tunnel_dev(self) -> _MockedTunnelDev:
+        return self._machine._tunnel_device
+
+    class _MockedPelletDev(PelletDeviceProtocol, mock.MagicMock):
+        pass
+
+    @property
+    def pellet_dev(self) -> _MockedPelletDev:
         return self._machine._pellet_device
 
     #
@@ -605,7 +617,7 @@ class MockSystemMachine:
         assert self.pellet.state == PelletState.covering
         self.mock_pellet_ack()
 
-    def mock_pellet_ack(self, until_none: bool=False, max_limit: int=45):
+    def mock_pellet_ack(self, *, until_none: bool=False, max_limit: int=45, success: bool=True):
         """Ack the previous sent pellet command"""
         cur_ack = 0
         while True:
@@ -616,7 +628,7 @@ class MockSystemMachine:
             self.increment_perf_now(1e-9)
             (# self.pellet._pellet_device_ack_received
             self.msg_handler.ack_received
-             (token, CommandResult(succeeded=True)))
+             (token, CommandResult(succeeded=success)))
             if not until_none:
                 break
             if cur_ack > max_limit:
@@ -629,8 +641,8 @@ class MockSystemMachine:
         self.mock_pose_response(pellet_seen=False, mouse_seen=mouse_seen)
 
     def make_load_cell_active(self):
-        # NB: this could be moved to auto-trainer-core (where load_cell_monitor is defined),
-        # so to be reused by auto-trainer-core/tests dedicated to load cell monitor.
+        # NB: this could move to core's test support (autotrainer.core.testing, in auto-trainer-core, which defines
+        # load_cell_monitor), so that core's own load cell monitor tests could reuse it.
         batch_count = self._load_cell._engaged_batch_count
         for _ in range(2 * batch_count):
             self.increment_perf_now(self._load_cell.config.threshold_duration / batch_count + 0.001)

@@ -2,7 +2,7 @@ import contextlib
 import threading
 import time
 from functools import partial
-from typing import Any, Callable, Iterator, List, Optional
+from typing import Any, Callable, Iterator, List, Optional, Union
 from unittest import mock
 
 import pytest
@@ -33,36 +33,59 @@ def _use_mock_event_manager(mock_event_manager):
     pass
 
 
-class _InlineThread:
+class _InlineThread(threading.Thread):
 
-    def __init__(self, target, daemon=None, name=None):
-        self._target = target
+    def __init__(self, group=None, target=None, daemon=None, name=None):
+        super().__init__(group, target=target, daemon=daemon, name=name)
+        self._orig_target = target
+        self._started = False
+        self._stopped = False
 
     def start(self):
-        self._target()
+        if self._started:
+            raise RuntimeError("already started")
+        self._started = True
+        self._orig_target()
+        self._stopped = True
+
+    def join(self, timeout=None):
+        if not self._started:
+            raise RuntimeError("not started")
+        if not self._stopped:
+            raise RuntimeError("still running")
+
+    def is_alive(self):
+        return self._started and not self._stopped
 
 
-class _DeferredThread:
+class _DeferredThread(_InlineThread):
 
-    def __init__(self, target, daemon=None, name=None, *, workers: List[Callable[[], None]]):
-        self._target = target
+    def __init__(self, *args, target=None, workers: List[Callable[[], None]], **kwargs):
+        super().__init__(*args, **kwargs)
+        self._orig_target = target
         self._workers = workers
 
     def start(self):
-        self._workers.append(self._target)
+        self._started = True
+        self._workers.append(self.run)
+
+    def run(self):
+        self._orig_target()
+        self._stopped = True
 
 
-class _FailingThread:
-
-    def __init__(self, target, daemon=None, name=None):
-        pass
+class _FailingThread(_InlineThread):
 
     def start(self):
         raise RuntimeError("can't start new thread")
 
 
+class MockedRpcService(mock.MagicMock, RpcService):
+    pass
+
+
 @pytest.fixture
-def rpc_service(app_model, monkeypatch) -> mock.MagicMock:
+def rpc_service(app_model, monkeypatch) -> MockedRpcService:
     monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", _InlineThread)
     service = mock.MagicMock(spec=RpcService)
     app_model.rpc_service = service
@@ -319,10 +342,17 @@ class TestGetAnimals:
 
 class TestTrainingMode:
 
-    def test_it_sets_the_training_mode(self, app_model, mock_event_manager):
+    def test_it_sets_the_training_mode(self, app_model, mock_event_manager, rpc_service):
         response = _send(app_model, ApiCommand.SET_TRAINING_MODE, {"mode": int(ApiTrainingMode.AUTOMATIC)})
-        assert response.result == ApiCommandRequestResult.SUCCESS
-        assert response.data == {"mode": ApiTrainingMode.AUTOMATIC}
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        app_model.join_rpc_threads()
+        xp = ApiCommandRequestResponse(
+            result=ApiCommandRequestResult.SUCCESS,
+            data={'mode': ApiTrainingMode.AUTOMATIC},
+            error_code=0, error_message=None,
+            command=ApiCommand.SET_TRAINING_MODE,
+            nonce=mock.ANY)
+        assert mock.call.send_command_result(xp) in rpc_service.method_calls
         assert app_model.training_mode is TrainingMode.AUTOMATIC
         contexts = _event_contexts(mock_event_manager, ApiEventKind.trainingModeChanged)
         assert contexts == [{"training_mode": ApiTrainingMode.AUTOMATIC}]
@@ -462,6 +492,44 @@ class TestSetApplicationMode:
         assert after.result == ApiCommandRequestResult.SUCCESS
         assert after.data == {"mode": ApiApplicationMode.IDLE}
 
+    def test_can_reload_is_off_from_an_accepted_request_until_it_completes(self, app_model, rpc_service,
+                                                                            monkeypatch):
+        workers: List[Callable[[], None]] = []
+        monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", partial(_DeferredThread, workers=workers))
+        events: List[bool] = []
+
+        def on_changed(name, value, _prev):
+            if name == app_model.Props.CAN_RELOAD_HW_CONFIG:
+                events.append(value)
+
+        app_model.property_changed += on_changed
+        during_start: List[bool] = []
+        hard = app_model.hardware
+        orig_connect = hard.connect
+
+        def connect(*args, **kwargs):
+            during_start.append(app_model.can_reload_hw_config)
+            return orig_connect(*args, **kwargs)
+
+        monkeypatch.setattr(hard, "connect", connect)
+
+        response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        assert app_model.can_reload_hw_config is False
+        assert events[-1] is False
+        workers[0]()
+        assert during_start == [False]
+        assert app_model.status == AppModelStatus.ACQUIRING
+        assert app_model.can_reload_hw_config is True
+
+        response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.IDLE))
+        assert response.result == ApiCommandRequestResult.PENDING_WITH_NOTIFICATION
+        assert app_model.can_reload_hw_config is False
+        with _advancing_perf_now():
+            workers[1]()
+        assert app_model.status == AppModelStatus.IDLE
+        assert app_model.can_reload_hw_config is True
+
     def test_a_launch_failure_releases_the_reservation(self, app_model, rpc_service, capture_stubs, monkeypatch):
         monkeypatch.setattr(app_model_module, "_make_rpc_command_thread", _FailingThread)
         response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
@@ -509,8 +577,10 @@ class TestSetApplicationMode:
         _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))
         is_cancelled = captured[0]
         assert is_cancelled() is False
-        app_model._closing = True
-        assert is_cancelled() is True
+        with mock.patch.object(app_model, "_closing", True):
+            # nb: need it restored to False/previous value when test ends,
+            # so that app_model on_close will be executed by the fixture providing it.
+            assert is_cancelled() is True
 
     def test_it_moves_through_the_running_modes(self, app_model, rpc_service, mock_event_manager):
         response = _send(app_model, ApiCommand.SET_APPLICATION_MODE, _mode(ApiApplicationMode.RUNNING))

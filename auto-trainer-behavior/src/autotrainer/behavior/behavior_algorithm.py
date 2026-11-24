@@ -10,7 +10,7 @@ import math
 import queue
 import threading
 import time
-from datetime import datetime, date
+from datetime import date
 from functools import partial
 from pathlib import Path
 from typing import Optional, Tuple, ClassVar, Any, Dict, Deque, List
@@ -140,6 +140,9 @@ _DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE = True
 # True: safer for all
 # False: faster for caller/putter
 
+_DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT: Optional[float] = None
+# None means infinite.
+
 
 def _relay_func(func: Callable, *, wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE) -> Callable:
     """See BehaviorAlgorithm.relay_func()"""
@@ -189,6 +192,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         self._event_manager = EventManager.default()  # for posting events
 
         self._thread_lock = threading.RLock()
+
         if project_info is None:
             project_info = ProjectInfo.get_null_project()
         self._project_info: ProjectInfo = project_info
@@ -299,7 +303,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
             return
         if handler_queue is None:
             logger.info("Creating algo handler thread ..")
-            handler_queue = queue.Queue(maxsize=64)
+            handler_queue = queue.Queue(maxsize=128)  # atm under normal condition we have ~35 msgs / s
             # reentrant_list = []  # re-use the previous for now
             handler_thread = threading.Thread(
                 target=cls._handler_thread_run, args=(handler_queue, thread_lock, reentrant_list),
@@ -375,10 +379,9 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     prev_tot_msgs = tot_msgs
                 prev_perf_c_report = p_now
             # always consume re-entrant list before input_queue:
-            raw = None
             if len(reentrant_list) > 0:
                 raw = reentrant_list.pop(0)
-            if raw is None:
+            else:
                 try:
                     raw = input_queue.get(timeout=1)
                 except queue.Empty:
@@ -427,7 +430,10 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         try:
             yield
         finally:
-            t_locals.force_wait = prev
+            if prev is not None:
+                t_locals.force_wait = prev
+            else:
+                del t_locals.force_wait
 
     @classmethod
     def put_func_call(
@@ -437,6 +443,7 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
         kwargs: Optional[Dict]=None,
         *,
         wait: bool=_DEFAULT_ALGO_HANDLER_THREAD_CALL_SYNC_WAIT_MODE,
+        put_timeout: Optional[float] = _DEFAULT_ALGO_HANDLER_THREAD_QUEUE_PUT_TIMEOUT,  # None means infinite.
     ):
         """Put a function call request to the algo dedicated thread, and eventually wait on its completion.
         See also `BehaviorAlgorithm.set_put_func_call_mode`.
@@ -484,10 +491,15 @@ class BehaviorAlgorithm(ObservableObject, BehaviorAlgorithmProtocol):
                     event = cls._thread_locals.event = threading.Event()
             else:
                 event = None
-            handler_queue.put((func, args, kwargs, event))
-            if event is not None:
-                event.wait()
-                event.clear()  # need always clear after used
+            try:
+                handler_queue.put((func, args, kwargs, event), timeout=put_timeout)
+            except queue.Full:
+                logger.error("could not put %s to behavior algo thread, queue full", func)
+                raise
+            else:
+                if event is not None:
+                    event.wait()
+                    event.clear()  # need always clear after used
 
     @property
     def thread_lock(self):

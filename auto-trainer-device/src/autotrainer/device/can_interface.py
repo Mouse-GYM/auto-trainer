@@ -227,6 +227,24 @@ def _motor_to_axis_idx(
     return value
 
 
+# Bits of the stepper status byte (jerrycan_stepper_status_flags_t in auto-trainer-hardware);
+# 0 means no fault. Firmware up to v1.2.7 always reports 0.
+_STEPPER_FAULT_BITS = (
+    (0x01, "DRIVER_UART_FAULT"),
+    (0x02, "DRIVER_WRITE_LOST"),
+    (0x04, "DRIVER_READBACK_FAULT"),
+    (0x08, "OVERTEMP_WARNING"),
+    (0x10, "OVERTEMP"),
+    (0x20, "MOVE_TIMEOUT"),
+    (0x40, "DRIVER_COMM_LOST"),
+    (0x80, "DRIVER_DISABLED"),
+)
+
+
+def _stepper_fault_names(bits: int) -> str:
+    return "|".join(name for bit, name in _STEPPER_FAULT_BITS if bits & bit) or "none"
+
+
 _servo_motors = {
     Motor.TUNNEL_MAGNET_SERVO,
     Motor.TUNNEL_GATE_SERVO,
@@ -440,6 +458,7 @@ class CanInterface(DeviceInterface):
 
         self._last_positions = Offset3DTuple.get_nan()
         self._prev_send_pos = Offset3DTuple.get_nan()
+        self._last_stepper_fault_bits: Dict[Motor, int] = {}
 
         self._last_gpio_status_perf: Dict[int, Tuple[
             Union[PelletDigitalInputs, MagnetDigitalInputs], int]] = {}
@@ -1976,6 +1995,14 @@ class CanInterface(DeviceInterface):
         status = self._translate_stepper_status(message)
         if status is None:
             return None
+        fault_bits = message.stepper_status.status
+        prev_fault_bits = self._last_stepper_fault_bits.get(status.motor, 0)
+        if fault_bits != prev_fault_bits:
+            (logger.warning if fault_bits else logger.info)(
+                "%s fault status: 0x%02X (%s) -> 0x%02X (%s)", status.motor,
+                prev_fault_bits, _stepper_fault_names(prev_fault_bits),
+                fault_bits, _stepper_fault_names(fault_bits))
+            self._last_stepper_fault_bits[status.motor] = fault_bits
         motor_idx = _motor_to_axis_idx_map.get(status.motor, None)
         if motor_idx is not None:
             new_pos = list(self._last_positions)
