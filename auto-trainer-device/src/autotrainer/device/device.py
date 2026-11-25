@@ -78,7 +78,8 @@ class Device(ObservableObject):
         :param context: A value to be returned to caller upon completion of the message
         """
 
-    def _acknowledge_command(self, token, *, perf_c: Optional[float]=None, error: Optional[Any] = None):
+    def _acknowledge_command(self, token, *, perf_c: Optional[float]=None, error: Optional[Any] = None,
+                             skipped: bool = False):
         cmd_res = self._command_token_2_command_result.pop(token, None)  # always pop
         if token is None:  # if a caller has given a None token, it means it doesn't want to get the ack,
             # so makes that.
@@ -94,6 +95,7 @@ class Device(ObservableObject):
             cmd_res = CommandResult()
         cmd_res.succeeded = error is None
         cmd_res.error = error
+        cmd_res.skipped = skipped
         (logger.verbose if cmd_res.succeeded else logger.error)(
             "sending command ack: %s perf_c=%.3f result=%s", token, perf_c, cmd_res)
         api.send_message(SystemStatusMessageKind.ACKNOWLEDGE, (token, perf_c, cmd_res))
