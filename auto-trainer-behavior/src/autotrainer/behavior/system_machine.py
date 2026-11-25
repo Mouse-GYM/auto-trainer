@@ -3,6 +3,7 @@ from functools import partial
 from itertools import chain
 from pathlib import Path
 from typing import Optional, List
+from uuid import UUID
 
 from transitions import Machine
 
@@ -14,6 +15,7 @@ from autotrainer.api import ApiEventKind, build_event
 from autotrainer.core import (ProjectInfo, SensorAnalysis, LoadCellMonitor, Offset3DTuple,
                               HeadbarPressureMonitor, transitions_allow_functions, SystemMessageHandler, get_perf_now)
 from autotrainer.core.logging import get_verbose_logger
+from autotrainer.core.message.message_handler import CommandResult
 from autotrainer.core.interfaces import (CaptureAnalysisResult, RecordingEndingReason)
 from autotrainer.core.pose_elements import SceneElement, AllHandsParts
 from autotrainer.core.multiproc import make_daemon_timer, no_op_timer
@@ -126,6 +128,11 @@ class SystemMachine(StateMachine):
         self._pellet_device = pellet_device
         self._tunnel_device = tunnel_device
         self._msg_handler = msg_handler
+        # Request order. The device answers tare requests in the order it takes them in, so when a token's ACK
+        # arrives, every token recorded before it has already been answered.
+        self._auto_tare_tokens: List[UUID] = []
+        if msg_handler is not None:
+            msg_handler.ack_received += self._on_device_ack_received
 
         algo = self._algorithm = BehaviorAlgorithm(
             project_info=self._project_info,
@@ -744,11 +751,29 @@ class SystemMachine(StateMachine):
     @BehaviorAlgorithm.relay_func(wait=False)
     def _on_load_cell_tare_requested(self, *, force: bool = False):
         if force or not self._algorithm.is_in_trial_capture:
-            self._tunnel_device.tare_load_cell()
-            self._event_manager.post_event_content(ApiEventKind.headfixAutoTare)
+            token = self._tunnel_device.tare_load_cell()
+            if token is not None:
+                self._auto_tare_tokens.append(token)
         else:
             logger.notice("skipping tare given algo.is_in_trial and not forced")
         return False
+
+    # Relayed like the tare request itself, so a token's ACK is always handled after the request recorded it, even
+    # when the device answers a skipped request immediately. Don't filter tokens before relaying.
+    @BehaviorAlgorithm.relay_func(wait=False)
+    def _on_device_ack_received(self, token: UUID, result: CommandResult, *, perf_c: Optional[float] = None):
+        tokens = self._auto_tare_tokens
+        if token not in tokens:
+            return
+        position = tokens.index(token)
+        unanswered = tokens[:position]
+        del tokens[:position + 1]
+        if unanswered:
+            logger.warning("auto-tare token(s) %s were never acknowledged before %s", unanswered, token)
+        if result.succeeded and not result.skipped:
+            self._event_manager.post_event_content(ApiEventKind.headfixAutoTare)
+        else:
+            logger.verbose("auto-tare %s did not tare the load cell: %s", token, result)
 
     def _evaluate_home_on_excessive_drift(self):
         # might be todo: convert to a detector

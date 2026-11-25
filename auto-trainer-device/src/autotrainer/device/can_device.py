@@ -165,6 +165,29 @@ class _BoardPendingContext:
         )
 
 
+class _AdmittedTareToken:
+    """Context of the one tare in flight.
+
+    Requester tokens can repeat ("tare") or be None, so the admitted tare travels under this unique token instead;
+    acknowledging it is then the single point where the tare ends, whichever path ends it.
+    """
+
+    __slots__ = ("ctx",)
+
+    def __init__(self, ctx: Optional[Any]):
+        self.ctx = ctx
+
+    def __repr__(self) -> str:
+        return f"tare:{self.ctx}"
+
+
+@dataclasses.dataclass
+class _TareGate:
+    admitted: Optional[_AdmittedTareToken] = None
+    coalesced_contexts: List[Any] = dataclasses.field(default_factory=list)
+    cooldown_end_perf_c: float = -math.inf
+
+
 def _make_proc_access(name: str):
     def wrapped(self: "CanDevice"):
         return self._steps_procedures[name]
@@ -187,6 +210,9 @@ class CanDevice(Device):
 
     default_command_write_failed_repeat_count: int = 3
     default_command_ack_timeout_duration: float = 3  # seconds
+    default_tare_cooldown_duration: float = 3  # seconds, from the end of one tare to the earliest next one
+    # Must stay above the auto-tare monitor's re-trigger interval (~2.6 s with its 2.0 s buffer), or the monitor's
+    # reaction to its own tare gets through as a second hardware tare.
 
     default_command_ack_timeout_repeat_count: int = 3
     default_max_failed_command_count: int = 1  # failed command is command with uuid having been NACKed
@@ -304,6 +330,7 @@ class CanDevice(Device):
                 uuid_ack_timeout_engaged_property_name=self.MAGNET_UUID_ACK_TIMEOUT_ENGAGED,
             ),
         }
+        self._tare_gate = _TareGate()  # only touched from the command handler thread
 
     _load_pellet = _make_proc_access("load_pellet")
     _send_pellet = _make_proc_access("send_pellet")
@@ -339,6 +366,22 @@ class CanDevice(Device):
             board = self._boards_pending_ctx[tgt]
             board.last_command_is_tare = True
         return success
+
+    def _admit_tare_request(self, ctx) -> Optional[_AdmittedTareToken]:
+        """Return the token to dispatch this tare under, or None when the request was merged or skipped."""
+        gate = self._tare_gate
+        if gate.admitted is not None:
+            logger.verbose("skipping tare request ctx=%s: merged into pending %s", ctx, gate.admitted)
+            gate.coalesced_contexts.append(ctx)
+            return None
+        cooldown_left = gate.cooldown_end_perf_c - get_perf_now()
+        if cooldown_left > 0:
+            logger.verbose("skipping tare request ctx=%s: %.2fs of tare cooldown left", ctx, cooldown_left)
+            if ctx is not None:
+                self._acknowledge_command(ctx, error=None, skipped=True)
+            return None
+        gate.admitted = _AdmittedTareToken(ctx)
+        return gate.admitted
 
     def _handle_delay(self, duration: float):
         success = self._interface.delay(duration)
@@ -681,6 +724,33 @@ class CanDevice(Device):
             perf_c = get_perf_now()
         self._acknowledge_command(ctx, perf_c=perf_c, error=error)
 
+    def _acknowledge_command(self, token, *, perf_c: Optional[float] = None, error: Optional[Any] = None,
+                             skipped: bool = False):
+        if isinstance(token, _AdmittedTareToken):
+            self._conclude_admitted_tare(token, perf_c=perf_c, error=error)
+            return
+        super()._acknowledge_command(token, perf_c=perf_c, error=error, skipped=skipped)
+
+    def _conclude_admitted_tare(self, token: _AdmittedTareToken, *, perf_c: Optional[float], error: Optional[Any]):
+        gate = self._tare_gate
+        result = self._command_token_2_command_result.pop(token, None)
+        coalesced_contexts: List[Any] = []
+        if token is gate.admitted:
+            coalesced_contexts, gate.coalesced_contexts = gate.coalesced_contexts, []
+            gate.admitted = None
+            gate.cooldown_end_perf_c = get_perf_now() + self.default_tare_cooldown_duration
+            logger.verbose("%s ended (error=%s): answering %s merged request(s), cooldown %.1fs",
+                           token, error, len(coalesced_contexts), self.default_tare_cooldown_duration)
+        else:
+            logger.warning("acknowledging %s, which is not the pending tare %s", token, gate.admitted)
+        if token.ctx is not None:
+            if result is not None:
+                self._command_token_2_command_result[token.ctx] = result
+            super()._acknowledge_command(token.ctx, perf_c=perf_c, error=error)
+        for coalesced_ctx in coalesced_contexts:
+            if coalesced_ctx is not None:
+                super()._acknowledge_command(coalesced_ctx, perf_c=perf_c, error=error, skipped=True)
+
     def _perform_next_compound(self, board: _BoardPendingContext, ctx, steps: Optional[List[Dict]]) -> bool:
         if steps is None or len(steps) == 0:
             logger.warning("Got empty compound steps. board=%s kind=%s ctx=%s",
@@ -700,6 +770,11 @@ class CanDevice(Device):
         return False
 
     def __command_handler(self):
+        leftover = self._tare_gate.admitted
+        if leftover is not None:
+            # only after a crashed handler thread: a normal exit acknowledges the admitted tare
+            self._conclude_admitted_tare(
+                leftover, perf_c=None, error="CAN command handler restarted before the tare finished")
         cur_commands = []
         input_q = self._commands_queue
         has_read_from_queue = False
@@ -751,6 +826,11 @@ class CanDevice(Device):
                 logger.verbose("received exit sentinel, exiting main loop ..")
                 break
             kind, data, ctx = raw
+            if kind == SystemCommandKind.UPDATE_SCALE_TARE:
+                admitted = self._admit_tare_request(ctx)
+                if admitted is None:
+                    continue
+                ctx = admitted
             if kind not in {_uuid_ack, _retry_full, _retry_compound, _next_compound, None}:
                 # legit new command
                 # if ctx is not None:

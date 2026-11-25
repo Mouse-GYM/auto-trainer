@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from functools import partial
-from typing import Union, Any, Optional
+from typing import Union, Any, Optional, List, Tuple
 from unittest import mock
 
 import pytest
@@ -37,7 +37,7 @@ from autotrainer.device import (
 from autotrainer.device.can_device import (
     default_move_retract,
     default_load_pellet,
-    default_send_pellet, mk_step,
+    default_send_pellet, mk_step, _AdmittedTareToken,
 )
 from autotrainer.device.device_interface import Acknowledge
 
@@ -582,3 +582,277 @@ def test_noop_action(caplog, device, device_conn, expected_tok, expected_tok_eve
         device.notify_message(SystemCommandKind.LOAD_PELLET, None, context=ctx)
     assert expected_tok_event.wait(0.5)  # should be almost immediate
     assert "executed noop for kind" in caplog.text
+
+
+@pytest.fixture
+def ack_results(device) -> queue.Queue:
+    results = queue.Queue()
+
+    def collect(kind, data):
+        if kind == SystemStatusMessageKind.ACKNOWLEDGE:
+            results.put((data[0], data[2]))
+
+    device.api.message_callback += collect
+    return results
+
+
+def _take_acks(results: queue.Queue, count: int, timeout: float = 3.0) -> List[Tuple[Any, CommandResult]]:
+    acks = []
+    deadline = time.perf_counter() + timeout
+    while len(acks) < count:
+        remaining = deadline - time.perf_counter()
+        assert remaining > 0, f"received {len(acks)} of {count} acks: {acks}"
+        try:
+            acks.append(results.get(timeout=remaining))
+        except queue.Empty:
+            pass
+    return acks
+
+
+def _wait_until(predicate, timeout: float = 3.0):
+    deadline = time.perf_counter() + timeout
+    while not predicate():
+        assert time.perf_counter() < deadline, "condition not reached in time"
+        time.sleep(0.005)
+
+
+def _send_tare(device, ctx):
+    device.notify_message(SystemCommandKind.UPDATE_SCALE_TARE, None, context=ctx)
+
+
+class _HeldTare:
+    """Stands in for the emulation tare: uses up a CAN uuid, but ACKs only when the test releases it."""
+
+    def __init__(self, iface):
+        self._iface = iface
+        self.uuids: List[int] = []
+
+    def __call__(self) -> bool:
+        self.uuids.append(self._iface.next_uuid())
+        return True
+
+    def release(self, error: int = 0):
+        self._iface._messages.append(Acknowledge(uuid=self.uuids[-1], error=error))  # noqa
+
+
+def _hold_tare(device, monkeypatch) -> _HeldTare:
+    iface = device.device_interface
+    held = _HeldTare(iface)
+    monkeypatch.setattr(iface, "tare_load_cell", held)
+    device.default_command_ack_timeout_duration = 10
+    return held
+
+
+def _record_tares(device, monkeypatch) -> List[float]:
+    iface = device.device_interface
+    orig_tare = iface.tare_load_cell
+    calls: List[float] = []
+
+    def recording_tare() -> bool:
+        calls.append(get_perf_now())
+        return orig_tare()
+
+    monkeypatch.setattr(iface, "tare_load_cell", recording_tare)
+    return calls
+
+
+def _assert_no_ack(results: queue.Queue, timeout: float = 0.3):
+    with pytest.raises(queue.Empty):
+        results.get(timeout=timeout)
+
+
+def test_tare_requests_merge_while_one_is_pending(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    ctx_a, ctx_b, ctx_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    _wait_until(lambda: len(held.uuids) == 1)
+    _send_tare(device, ctx_b)
+    _send_tare(device, ctx_c)
+    _wait_until(lambda: len(device._tare_gate.coalesced_contexts) == 2)  # noqa
+    assert ack_results.empty()
+
+    held.release()
+    acks = dict(_take_acks(ack_results, 3))
+    assert acks[ctx_a].succeeded and not acks[ctx_a].skipped
+    for ctx in (ctx_b, ctx_c):
+        assert acks[ctx].succeeded and acks[ctx].skipped
+    assert len(held.uuids) == 1
+
+
+def test_merged_tare_requests_tolerate_repeated_and_missing_tokens(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    _send_tare(device, "tare")
+    _wait_until(lambda: len(held.uuids) == 1)
+    for ctx in ("tare", None, "tare"):
+        _send_tare(device, ctx)
+    _wait_until(lambda: len(device._tare_gate.coalesced_contexts) == 3)  # noqa
+
+    held.release()
+    acks = _take_acks(ack_results, 3)
+    assert [token for token, _result in acks] == ["tare"] * 3
+    assert all(result.succeeded for _token, result in acks)
+    assert sorted(result.skipped for _token, result in acks) == [False, True, True]
+    _assert_no_ack(ack_results)
+    assert device._commands_handler_thread.is_alive()  # noqa
+
+
+def test_tare_within_cooldown_is_skipped_but_acknowledged(device, device_conn, monkeypatch, ack_results, caplog):
+    calls = _record_tares(device, monkeypatch)
+    device.default_tare_cooldown_duration = 60
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    with caplog.at_level(logging.DEBUG):
+        _send_tare(device, ctx_a)
+        [(token, result)] = _take_acks(ack_results, 1)
+        assert token == ctx_a and result.succeeded and not result.skipped
+
+        _send_tare(device, ctx_b)
+        [(token, result)] = _take_acks(ack_results, 1)
+        assert token == ctx_b and result.succeeded and result.skipped
+
+        _send_tare(device, None)
+        _assert_no_ack(ack_results)
+    assert len(calls) == 1
+    assert "skipping tare request ctx=" in caplog.text
+
+
+def test_tare_after_cooldown_is_sent(device, device_conn, monkeypatch, ack_results):
+    calls = _record_tares(device, monkeypatch)
+    device.default_tare_cooldown_duration = 0.2
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_a and not result.skipped
+    time.sleep(0.3)
+
+    _send_tare(device, ctx_b)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_b and result.succeeded and not result.skipped
+    assert len(calls) == 2
+
+
+def test_failed_tare_answers_merged_requests_and_starts_cooldown(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    device.default_tare_cooldown_duration = 60
+    ctx_a, ctx_b, ctx_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    _wait_until(lambda: len(held.uuids) == 1)
+    _send_tare(device, ctx_b)
+    _wait_until(lambda: len(device._tare_gate.coalesced_contexts) == 1)  # noqa
+
+    held.release(error=133)
+    acks = dict(_take_acks(ack_results, 2))
+    assert not acks[ctx_a].succeeded and not acks[ctx_b].succeeded
+    assert acks[ctx_a].error is not None and acks[ctx_a].error == acks[ctx_b].error
+    assert acks[ctx_a].uuid_nacks == [133] and not acks[ctx_a].skipped
+    assert acks[ctx_b].skipped
+
+    _send_tare(device, ctx_c)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_c and result.succeeded and result.skipped
+    assert len(held.uuids) == 1
+
+
+def test_timed_out_tare_starts_cooldown(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    device.default_command_ack_timeout_duration = 0.25
+    device.default_command_ack_timeout_repeat_count = 1
+    device.default_tare_cooldown_duration = 60
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_a and not result.succeeded
+
+    _send_tare(device, ctx_b)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_b and result.succeeded and result.skipped
+    assert len(held.uuids) == 1
+
+
+def test_old_firmware_tare_nack_counts_as_completion(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    device.default_tare_cooldown_duration = 60
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    _wait_until(lambda: len(held.uuids) == 1)
+
+    held.release(error=1)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_a and result.succeeded and not result.skipped
+
+    _send_tare(device, ctx_b)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_b and result.skipped
+
+    held.release()
+    _assert_no_ack(ack_results)
+
+
+def test_sustained_tare_requests_reach_hardware_at_most_once_per_cooldown(
+    device, device_conn, monkeypatch, ack_results
+):
+    calls = _record_tares(device, monkeypatch)
+    cooldown = 0.5
+    device.default_tare_cooldown_duration = cooldown
+    request_count = 16
+    for _idx in range(request_count):
+        _send_tare(device, uuid.uuid4())
+        time.sleep(0.125)
+    acks = _take_acks(ack_results, request_count)
+
+    assert len(calls) >= 2
+    gaps = [later - earlier for earlier, later in zip(calls, calls[1:])]
+    assert all(gap >= cooldown for gap in gaps), gaps
+    assert sum(1 for _token, result in acks if not result.skipped) == len(calls)
+
+
+def test_other_magnet_board_commands_are_not_held_by_the_gate(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    device.default_tare_cooldown_duration = 60
+    ctx_a, ctx_b, ctx_f, ctx_g = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    _wait_until(lambda: len(held.uuids) == 1)
+    device.notify_message(SystemCommandKind.TUNNEL_FAN_ON, None, context=ctx_f)
+    _send_tare(device, ctx_b)
+    _wait_until(lambda: len(device._tare_gate.coalesced_contexts) == 1)  # noqa
+
+    held.release()
+    acks = dict(_take_acks(ack_results, 3))
+    assert acks[ctx_f].succeeded and not acks[ctx_f].skipped
+
+    device.notify_message(SystemCommandKind.TUNNEL_FAN_OFF, None, context=ctx_g)
+    [(token, result)] = _take_acks(ack_results, 1)
+    assert token == ctx_g and result.succeeded and not result.skipped
+    assert len(held.uuids) == 1
+
+
+def test_disconnect_answers_pending_and_merged_tares(device, device_conn, monkeypatch, ack_results):
+    held = _hold_tare(device, monkeypatch)
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    _send_tare(device, ctx_a)
+    _wait_until(lambda: len(held.uuids) == 1)
+    _send_tare(device, ctx_b)
+    _wait_until(lambda: len(device._tare_gate.coalesced_contexts) == 1)  # noqa
+
+    device.disconnect()
+    acks = dict(_take_acks(ack_results, 2))
+    for ctx in (ctx_a, ctx_b):
+        assert not acks[ctx].succeeded
+        assert acks[ctx].error == "CAN device exiting"
+    assert not acks[ctx_a].skipped
+    assert acks[ctx_b].skipped
+
+
+def test_handler_start_answers_leftover_tare(device, device_conn, ack_results):
+    ctx_a, ctx_b = uuid.uuid4(), uuid.uuid4()
+    device.disconnect()
+    device._tare_gate.admitted = _AdmittedTareToken(ctx_a)  # noqa
+    device._tare_gate.coalesced_contexts = [ctx_b]  # noqa
+
+    device.connect()
+    acks = dict(_take_acks(ack_results, 2))
+    for ctx in (ctx_a, ctx_b):
+        assert not acks[ctx].succeeded
+        assert "restarted" in acks[ctx].error
+    assert not acks[ctx_a].skipped
+    assert acks[ctx_b].skipped
+    assert device._tare_gate.admitted is None  # noqa
